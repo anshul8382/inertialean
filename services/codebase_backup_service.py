@@ -173,6 +173,22 @@ def run_daily_codebase_backup(app_config: Optional[dict] = None) -> Dict[str, An
 
     size_bytes = dest.stat().st_size if dest.is_file() else 0
     prune = prune_old_backups(daily_dir)
+
+    drive_result: Optional[Dict[str, Any]] = None
+    try:
+        from services.google_drive_backup_service import (
+            drive_upload_enabled,
+            upload_file_to_drive_folder,
+        )
+
+        if drive_upload_enabled(cfg):
+            drive_result = upload_file_to_drive_folder(dest, app_config=cfg)
+            if not drive_result.get("ok"):
+                logger.warning("Drive upload failed (local backup kept): %s", drive_result.get("error"))
+    except Exception as e:
+        drive_result = {"ok": False, "error": str(e)}
+        logger.warning("Drive upload skipped: %s", e)
+
     _write_status(
         backup_root,
         ok=True,
@@ -182,14 +198,18 @@ def run_daily_codebase_backup(app_config: Optional[dict] = None) -> Dict[str, An
         source=str(source),
         started=started,
         size_bytes=size_bytes,
+        drive=drive_result,
     )
-    return {
+    out = {
         "ok": True,
         "archive": str(dest),
         "archive_name": archive_name,
         "size_bytes": size_bytes,
         "prune": prune,
     }
+    if drive_result is not None:
+        out["drive"] = drive_result
+    return out
 
 
 def _write_status(
@@ -201,6 +221,7 @@ def _write_status(
     source: str,
     started: Optional[str] = None,
     size_bytes: int = 0,
+    drive: Optional[Dict[str, Any]] = None,
 ) -> None:
     backup_root.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -215,6 +236,7 @@ def _write_status(
         "retention": "current_month_all_dailies; older_months_last_day_only",
         "last_prune_removed": (prune or {}).get("removed", []),
         "last_prune_removed_count": (prune or {}).get("removed_count", 0),
+        "drive": drive,
     }
     try:
         status_path(backup_root).write_text(json.dumps(payload, indent=2), encoding="utf-8")

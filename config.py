@@ -230,6 +230,13 @@ class Config:
     # Local codebase tar backups (see services/codebase_backup_service.py, scripts/codebase_backup.py)
     CODEBASE_BACKUP_ROOT = os.environ.get('CODEBASE_BACKUP_ROOT', '')
     CODEBASE_BACKUP_SOURCE = os.environ.get('CODEBASE_BACKUP_SOURCE', '')
+    # Optional Google Drive copy (share folder with service_account.json client_email)
+    CODEBASE_BACKUP_DRIVE_FOLDER_ID = os.environ.get('CODEBASE_BACKUP_DRIVE_FOLDER_ID', '').strip()
+    CODEBASE_BACKUP_DRIVE_ENABLED = os.environ.get('CODEBASE_BACKUP_DRIVE_ENABLED', '').strip()
+    GOOGLE_SERVICE_ACCOUNT_FILE = os.environ.get(
+        'GOOGLE_SERVICE_ACCOUNT_FILE',
+        os.environ.get('GOOGLE_APPLICATION_CREDENTIALS', ''),
+    ).strip()
 
     @staticmethod
     def init_app(app):

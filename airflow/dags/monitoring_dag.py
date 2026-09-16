@@ -1,6 +1,6 @@
 """
 Monitoring DAG
-Hourly SLA checks and daily alert reports
+SLA checks (twice daily) and daily alert / review reports.
 """
 from datetime import datetime, timedelta
 from airflow import DAG

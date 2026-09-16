@@ -10,7 +10,7 @@
       <a href="{{ url_for('airflow.dashboard') }}" class="small text-muted text-decoration-none">← Airflow</a>
       {% endif %}
       <h2 class="mt-1 mb-0"><i class="fas fa-wind text-info"></i> Scheduled jobs (Airflow)</h2>
-      <p class="text-muted small mb-0">Last run per DAG from metadata DB. Failed runs can raise alerts in the Hub.</p>
+      <p class="text-muted small mb-0">Last run per DAG from Airflow metadata (refreshed on every page load). Failed runs raise Hub alerts; successes auto-clear them.</p>
     </div>
     <div class="d-flex flex-wrap gap-2 align-items-center">
       {% if airflow_ui_base %}
@@ -104,8 +104,11 @@
       </tbody>
     </table>
   </div>
+  {% if status_refreshed_note %}
+  <p class="small text-muted mt-2 mb-0">{{ status_refreshed_note }}</p>
+  {% endif %}
   <p class="small text-muted mt-2 mb-0">
-    Use <strong>Sync failure alerts</strong> to create or update active <code>system / airflow_dag</code> alerts for failed DAGs, and to auto-resolve them when the latest run succeeds.
+    Alerts auto-sync when you open this page (or use <strong>Sync failure alerts</strong>).
     Path: <code>{{ metadata_db_path }}</code>
   </p>
   {% endif %}

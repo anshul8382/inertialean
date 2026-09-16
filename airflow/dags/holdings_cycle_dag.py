@@ -36,7 +36,10 @@ def _run_script(rel_path: str, label: str) -> None:
         env=os.environ.copy(),
     )
     if result.returncode != 0:
-        raise Exception(f"{label} failed: {result.stderr}")
+        err = (result.stderr or "").strip()
+        out = (result.stdout or "").strip()
+        detail = err or out or f"exit {result.returncode}"
+        raise RuntimeError(f"{label} failed: {detail[-4000:]}")
 
 
 def run_start_monthly_cycle():

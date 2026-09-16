@@ -49,8 +49,11 @@ uploads/
 static/agreements/
 static/uploads/
 service_account.json
+**/service_account.json
+credentials.json
 airflow/logs/
 airflow/airflow.db
+airflow/airflow.cfg
 __pycache__/
 *.pyc
 EXCL

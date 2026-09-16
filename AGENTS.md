@@ -19,7 +19,8 @@ Consolidated from overlapping rules into **coherent units**:
 | **Security (VAPT)** | `security-audit.mdc` | Static scan `agents/security_audit_agent.py` · deps `scripts/run_dependency_audit.py` (pip-audit + npm audit) · DAST `scripts/run_zap_baseline.py` (OWASP ZAP, opt-in) |
 | **UI Guidelines** | `ui-guidelines.mdc` | Templates / static / a11y |
 | **Mobile Optimiser** | `mobile-optimiser.mdc` | Capacitor shell + global mobile UI; **`run_mobile_ui_check.py`** on every user-facing change |
-| **VPS Migration** | `vps-migration-agent.mdc` | Clean AlmaLinux VPS (no cPanel), key-only SSH, Inertia cutover; skill `.cursor/skills/vps-clean-migration/`; runbook `docs/VPS_CLEAN_MIGRATION_RUNBOOK.md` |
+| **VPS Migration** | `vps-migration-agent.mdc` | Clean AlmaLinux VPS (no cPanel), key-only SSH, Inertia cutover; skill `.cursor/skills/vps-clean-migration/`; runbook `docs/VPS_CLEAN_MIGRATION_RUNBOOK.md` — **before copy:** portable paths (`from main` / `INERTIA_APP_DIR`, no `/home/inertia`); Phase 10 §F |
+| **Move install → new host** | (skill) `move-install-to-new-host` | Any **working** app directory → new server with minimal effort; same DB names/path by default, new passwords via `generate_host_env.py`; Lean/BigRock are just examples |
 
 **Mobile UI gate (user-facing changes):** `docs/MOBILE_UI_DEVELOPER_CHECKLIST.md` → implement → `python3 scripts/run_mobile_ui_check.py` → manual test on phone/Capacitor. Wired into **`run_agent_approval_loop.py`**.
 

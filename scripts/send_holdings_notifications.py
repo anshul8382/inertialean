@@ -9,9 +9,10 @@ import sys
 from datetime import datetime, timedelta, date
 from typing import Optional
 
-sys.path.insert(0, '/home/inertia/app')
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
 
-from run import create_app
+from main import create_app
 from extensions import db
 from models import Client, ReportRecipient
 from sqlalchemy import text

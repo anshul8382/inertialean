@@ -105,18 +105,30 @@ if [[ ! -d .git ]]; then
   exit 1
 fi
 
+# Preserve host secrets across pull (.env is gitignored; still backup/restore)
+PRESERVE_DIR="\$HOME/.inertia_deploy_preserve"
+mkdir -p "\$PRESERVE_DIR"
+[[ -f .env ]] && cp -a .env "\$PRESERVE_DIR/.env"
+[[ -f service_account.json ]] && cp -a service_account.json "\$PRESERVE_DIR/service_account.json"
+[[ -f airflow/airflow.cfg ]] && cp -a airflow/airflow.cfg "\$PRESERVE_DIR/airflow.cfg"
 # Never overwrite secrets / venvs via git
 git fetch origin --prune
 git checkout '$BRANCH'
 git pull --ff-only origin '$BRANCH'
 
-# Lean parallel-prod tags (idempotent)
+# Restore secrets if pull somehow touched them (or checkout created empties)
+[[ -f "\$PRESERVE_DIR/.env" ]] && cp -a "\$PRESERVE_DIR/.env" .env
+[[ -f "\$PRESERVE_DIR/service_account.json" ]] && cp -a "\$PRESERVE_DIR/service_account.json" service_account.json
+[[ -f "\$PRESERVE_DIR/airflow.cfg" ]] && cp -a "\$PRESERVE_DIR/airflow.cfg" airflow/airflow.cfg
+chmod 600 .env 2>/dev/null || true
+chmod 600 service_account.json 2>/dev/null || true
+
+# Only add missing Lean tags — never overwrite existing .env values
 touch .env
 grep -q '^EMAIL_SOURCE_TAG=' .env || echo 'EMAIL_SOURCE_TAG=Lean server' >> .env
-sed -i 's/^EMAIL_SOURCE_TAG=.*/EMAIL_SOURCE_TAG=Lean server/' .env
 grep -q '^DI_CREATE_OPS_TASKS=' .env || echo 'DI_CREATE_OPS_TASKS=false' >> .env
-sed -i 's/^DI_CREATE_OPS_TASKS=.*/DI_CREATE_OPS_TASKS=false/' .env
-grep -E '^(EMAIL_SOURCE_TAG|DI_CREATE_OPS_TASKS)=' .env || true
+echo '==> .env keys (values not printed):'
+grep -E '^(EMAIL_SOURCE_TAG|DI_CREATE_OPS_TASKS|DB_NAME|DB_USER)=' .env | sed 's/=.*/=***/' || true
 
 if [[ '$SKIP_PIP' -eq 0 ]] && [[ -x ./venv/bin/pip ]]; then
   echo '==> pip install -r requirements.txt'

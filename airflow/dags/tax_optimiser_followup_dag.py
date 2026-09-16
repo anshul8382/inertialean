@@ -2,17 +2,11 @@
 Daily: refresh tax optimiser T+N follow-up draft HTML with prevailing prices.
 """
 from datetime import datetime, timedelta
-import os
 
 from airflow import DAG
-from airflow.providers.standard.operators.bash import BashOperator
+from airflow.operators.python import PythonOperator
 
-_APP_ROOT = os.environ.get("INERTIA_APP_DIR") or os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-_VENV_PYTHON = os.environ.get("INERTIA_VENV_PYTHON") or os.path.join(
-    _APP_ROOT, "venv", "bin", "python"
-)
+from inertia_dag_utils import run_app_script
 
 default_args = {
     "owner": "inertia",
@@ -21,6 +15,11 @@ default_args = {
     "retries": 1,
     "retry_delay": timedelta(minutes=5),
 }
+
+
+def _run_followup_refresh():
+    run_app_script("scripts/tax_optimiser_followup_refresh.py")
+
 
 with DAG(
     dag_id="tax_optimiser_followup_refresh",
@@ -31,7 +30,7 @@ with DAG(
     catchup=False,
     tags=["tax", "ops"],
 ) as dag:
-    BashOperator(
+    PythonOperator(
         task_id="run_followup_refresh",
-        bash_command=f"cd {_APP_ROOT} && {_VENV_PYTHON} scripts/tax_optimiser_followup_refresh.py",
+        python_callable=_run_followup_refresh,
     )

@@ -98,10 +98,12 @@ Rebuild the tarball after meaningful commits so the next VPS/month cutover has a
 - [x] **5** Base packages + MySQL/MariaDB — MariaDB 10.11; nginx/python as needed
 - [x] **6** DB created — MySQL 8.4 + prod dump restored (138 tables); health 200
 - [x] **7** App code + venv + `.env` — Gunicorn active on `127.0.0.1:5004`; `/api/v1/health` → 200
+- [ ] **7b** **Portable paths before copy** — lean scripts/DAGs use `from main` + `INERTIA_APP_DIR`/`_ROOT`; grep-clean of `from run` / `/home/inertia` for Airflow entrypoints (agent rule §8; Phase 10 §F)
 - [x] **8** nginx + smoke — SELinux `httpd_can_network_connect`; SECRET_KEY set; SESSION_COOKIE_SECURE=false; `/` → 302
 - [ ] **9** rsync uploads / static/agreements / static/uploads
 - [x] **10a** Airflow 3 on Lean — scheduler + api-server + dag-processor active; **29 DAGs unpaused** (BigRock untouched)
 - [ ] **10b** Lean polish — `EMAIL_SOURCE_TAG=Lean server`; confirm daily_reports emails; Zoho OAuth; `FORCE_2FA` optional
+- [ ] **10c** DAG Hub green — `failed_latest=0` after portable deploy + re-trigger (Phase 10 §F)
 - [ ] **11** DNS A → new IP; certbot SSL; stop old Gunicorn (**deferred / cutover**)
 - [ ] **12** Old VPS retained ~N days; then decommission (**deferred / cutover**)
 
@@ -190,14 +192,23 @@ cd /tmp
 python3 /opt/Inertia2026v1/scripts/setup_airflow.py
 ```
 
-### C) systemd (Airflow 3 api-server + scheduler)
+### C) systemd (Airflow 3 api-server + scheduler + dag-processor)
 
 ```bash
 sudo cp /opt/Inertia2026v1/config/airflow-scheduler-lean.service /etc/systemd/system/airflow-scheduler.service
 sudo cp /opt/Inertia2026v1/config/airflow-api-server-lean.service /etc/systemd/system/airflow-api-server.service
+sudo cp /opt/Inertia2026v1/config/airflow-dag-processor-lean.service /etc/systemd/system/airflow-dag-processor.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now airflow-scheduler airflow-api-server
-sudo systemctl status airflow-scheduler airflow-api-server --no-pager
+sudo systemctl reset-failed airflow-scheduler airflow-api-server airflow-dag-processor
+sudo systemctl enable --now airflow-scheduler airflow-api-server airflow-dag-processor
+sudo systemctl is-active airflow-scheduler airflow-api-server airflow-dag-processor
+```
+
+**If `status=209/STDOUT` / “Failed to set up standard output: Permission denied”:** the unit is logging to a file `anshul` cannot write. Re-copy the lean units above (they use `StandardOutput=journal`) or set journal explicitly:
+
+```bash
+sudo systemctl edit --full airflow-scheduler   # ensure StandardOutput=journal / StandardError=journal
+# or simply re-cp from config/*-lean.service as above
 ```
 
 SSH tunnel for UI (Mac):
@@ -231,6 +242,77 @@ cd /opt/Inertia2026v1
 ```
 
 Also check Settings in the app for Zoho diagnose + Google Calendar connect for the same users.
+
+### F) Portable scripts **before** migrate + DAG health after Airflow
+
+**Policy (agent checklist — do on Mac/lean first):** During migration we must **rewrite paths for the new host layout before moving code**. Do not copy BigRock scripts and patch on the VPS afterward.
+
+### Path model: portable app code vs host install path
+
+Git deploy does **not** bake “this Lean IP” into business scripts. Two layers:
+
+| Layer | What | Portable? |
+|-------|------|-----------|
+| **App / DAGs / scripts** | `from main`, `_ROOT = dirname(...)`, `inertia_dag_utils.app_root()` → `INERTIA_APP_DIR` or auto from file location | Yes — works under any install dir |
+| **Host wiring** | systemd units (`*-lean.service`), runbook `cd` paths, Gunicorn unit | Convention: **`/opt/Inertia2026v1`** on every prod box |
+
+**Convention (preferred):** Keep the same directory name on every new server (`/opt/Inertia2026v1`). Then git-pulled systemd units work without editing. Same as BigRock live path — different machine, same folder name.
+
+**If a future box uses another path** (e.g. `/opt/Inertia2027`):
+1. Still git-deploy the app tree there.
+2. Set `INERTIA_APP_DIR=<that path>` in systemd / env (scripts/DAGs already honour it).
+3. Sed or template the `*-lean.service` files for that path (or generate units at install time) — **do not** hardcode machine-specific paths into Python entrypoints.
+4. `.env` stays **out of git** (`EMAIL_SOURCE_TAG`, DB URL, Drive IDs) — set per host.
+
+So: git syncs **portable code**; each host gets **local** `.env` + systemd path. Agent must not ship `/home/inertia` BigRock paths; it may ship `/opt/Inertia2026v1` only in install units as the agreed default.
+
+| Do on lean (Mac) first | Do not ship to VPS |
+|------------------------|--------------------|
+| `from main import create_app` | `from run import create_app` |
+| `_ROOT` / `os.path` / `INERTIA_APP_DIR` | `/home/inertia/app`, `/home/inertia/...` |
+| DAGs via `inertia_dag_utils` → app `venv` | Imports that need Flask inside `airflow_venv` |
+
+**Pre-deploy grep (must be clean for Airflow/cron entrypoints):**
+
+```bash
+cd /Users/anshulkhare/Downloads/Inertia2026-lean
+rg -n "from run |/home/inertia" scripts/ airflow/dags/ refresh_all_holdings.py \
+  daily_*.py monthly_investments.py nifty_price_update.py price_update_sheets.py 2>/dev/null || true
+```
+
+**Holdings scripts (known 2026-09-16 failure):** fix on lean, then git deploy (or `/tmp` + `sudo cp`) — `cycle_status_monitor`, `daily_holdings_processor`, `start_monthly_cycle`, `send_holdings_notifications`, `refresh_all_holdings.py`, `airflow/dags/holdings_cycle_dag.py`.
+
+**Lesson (2026-09-16):** Piecemeal Mac→VPS `scp` left VPS with BigRock-era runners while DAGs were already loaded. Hub stays red until Airflow has a **new success** run (manual script OK ≠ Hub green).
+
+**After Airflow is up:**
+
+1. Prefer one **git** deploy: `bootstrap_lean_git.sh` once, then `./scripts/deployment/deploy_lean_vps.sh` (+ `--restart-airflow` when DAGs/scripts change).
+2. Never scp straight into `/opt/Inertia2026v1/...` — use `/tmp` then `sudo cp`.
+3. Re-trigger fixed DAGs; Hub reads latest Airflow run.
+4. List DAGs whose latest run is still failed:
+   ```bash
+   export AIRFLOW_HOME=/opt/Inertia2026v1/airflow
+   python3 <<'PY'
+   import sqlite3
+   con = sqlite3.connect("/opt/Inertia2026v1/airflow/airflow.db")
+   rows = con.execute("""
+   WITH latest AS (
+     SELECT dag_id, run_id, state,
+            ROW_NUMBER() OVER (PARTITION BY dag_id ORDER BY COALESCE(end_date, start_date) DESC) rn
+     FROM dag_run
+   )
+   SELECT dag_id, state, run_id FROM latest
+   WHERE rn = 1 AND lower(state) = 'failed' ORDER BY dag_id
+   """).fetchall()
+   print(f"failed_latest={len(rows)}")
+   for r in rows: print("\t".join(r))
+   PY
+   ```
+5. Optional bulk smoke: `bash scripts/airflow_trigger_all_dags.sh`
+6. systemd: lean units with `StandardOutput=journal` (avoid `209/STDOUT`).
+7. Drive backup: Shared drive + service account (My Drive quota → 403).
+
+**Do not** treat “manual script succeeded” as Hub-green until `airflow dags list-runs <dag_id>` shows latest `success`.
 
 ---
 
@@ -348,6 +430,9 @@ Related: `config.py` `ProductionConfig`; agent skill `.cursor/skills/vps-clean-m
 - **2026-09-16 late:** Lean email tag (`EMAIL_SOURCE_TAG`), portable holdings/tax DAG paths, Airflow 3 lean systemd units, `scripts/check_external_integrations.py`. Phase 10 Airflow install commands in this runbook. BigRock DAGs left running; Lean unpauses all with same recipients.
 - **2026-09-16 morning:** DAG rationalization — `data_integrity_daily` ~05:00 IST (before `daily_reports` 05:30); SLA twice daily ~05:30+15:30 IST; `daily_alert_report` aligned to 05:30; `codebase_backup_daily` → weekly Sunday. App-venv task runner for DAGs. Test: `scripts/airflow_trigger_all_dags.sh`.
 - **2026-09-16 mid:** Client-wise advisor assignment for DI issues + open reviews (`Client.advisor_id`). `DI_CREATE_OPS_TASKS=false` (default) — no OpsTasks from DI; morning digests instead. `daily_alert_report` + new `review_workflow_daily_report` send per-advisor + consolidated manager/admin emails. Deploy: rsync `services/`, `agents/`, `scripts/airflow_task_runner.py`, `airflow/dags/`, `config.py`; ensure `.env` has `DI_CREATE_OPS_TASKS=false` and `EMAIL_SOURCE_TAG=Lean server`; trigger `task_assignment_daily` to reassign open reviews to client advisors.
+- **2026-09-16 evening (DAG Hub):** Piecemeal scp left holdings scripts on VPS with BigRock imports; Hub showed failure until lean scripts + Airflow re-trigger. `cycle_status_monitor` + `daily_holdings_processor` → success after `/tmp`+`sudo cp` and trigger. **Next migration:** Phase 10 §F — full git deploy first; never direct scp to `/opt`; list `failed_latest` then fix/retrigger. Remaining ~11 red DAGs need per-DAG diagnosis (not assumed same as holdings).
+- **SLA schedule:** `hourly_sla_check` is **twice daily** only (`0 0,10 * * *` UTC ≈ 05:30 + 15:30 IST) — not hourly. If Hub shows “02:30”, VPS still has stale `monitoring_dag.py`; redeploy that file.
+- **Move working install → new host:** skill `.cursor/skills/move-install-to-new-host/` + `scripts/deployment/generate_host_env.py` — any healthy tree (Lean/BigRock/Mac); default same DB names/app path, new passwords only; portable code + per-host `.env`.
 
 ### Phase 1–2 — commands that worked (2026-09-15)
 

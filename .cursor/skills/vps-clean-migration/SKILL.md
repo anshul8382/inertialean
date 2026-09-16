@@ -83,6 +83,8 @@ ssh -L 3307:127.0.0.1:3306 inertia-vps
 - `FORCE_2FA_FOR_ALL_USERS=true` on app
 - Do not open 3306 on firewall
 - **At DNS cutover (not during HTTP IP smoke):** `SESSION_COOKIE_SECURE=true`, `REMEMBER_COOKIE_SECURE=true`, certbot HTTPS. Until then IP smoke may use `SESSION_COOKIE_SECURE=false` — must flip when DNS goes live (see runbook Cutover cheat sheet).
+- **Before copying scripts/DAGs:** On lean, rewrite portable paths (`from main`, `INERTIA_APP_DIR` / `_ROOT`); grep-ban `from run ` and `/home/inertia` in Airflow/cron entrypoints. Then git deploy. See runbook **Phase 10 §F** and agent rule item 8.
+- **After Airflow install:** runbook **Phase 10 §F** — full git deploy (`deploy_lean_vps.sh`), never direct scp into `/opt` (use `/tmp` + `sudo cp`), Hub needs Airflow re-trigger for green, list `failed_latest` before fixing remaining DAGs.
 
 ## Old host facts (Sep 2026)
 

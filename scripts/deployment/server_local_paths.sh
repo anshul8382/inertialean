@@ -13,6 +13,7 @@ set -euo pipefail
 # shellcheck disable=SC2034
 SERVER_LOCAL_PATHS=(
   services/email_service.py
+  airflow/airflow.cfg
 )
 
 if [[ -n "${INERTIA_SERVER_LOCAL_PATHS:-}" ]]; then

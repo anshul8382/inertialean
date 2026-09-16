@@ -7,10 +7,10 @@ import os
 import sys
 from datetime import datetime, date, timedelta
 
-# Add app directory to path
-sys.path.insert(0, '/home/inertia/app')
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
 
-from run import create_app
+from main import create_app
 from extensions import db
 from models import Client
 from sqlalchemy import text

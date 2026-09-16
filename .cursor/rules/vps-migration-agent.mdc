@@ -44,6 +44,13 @@ User is setting up / migrating to a **clean VPS** (AlmaLinux, no cPanel), harden
 5. Enforce app **2FA** (`FORCE_2FA_FOR_ALL_USERS`) on the new deploy
 6. Keep **deployment package** ready: run / remind `bash scripts/deployment/build_clean_vps_package.sh`; use `deployment/clean-vps-package/README.md` for install; never put secrets in the tarball
 7. **DNS cutover reminder:** After A record → new IP and certbot HTTPS, set `SESSION_COOKIE_SECURE=true` / `REMEMBER_COOKIE_SECURE=true` (and restart). HTTP IP smoke may have used `false` — do not leave that for live prod. See runbook Cutover cheat sheet.
+8. **BEFORE copying app/Airflow scripts to the new host (mandatory):** Make paths **portable on Mac/lean first**, then deploy. Do **not** move BigRock-hardcoded scripts and “fix on VPS later.”
+   - Ban: `from run import create_app`, `/home/inertia/app`, hardcoded BigRock paths in anything Airflow or cron will run
+   - Prefer: `from main import create_app`, `_ROOT` / `INERTIA_APP_DIR`, `inertia_dag_utils.app_python()` / `run_app_task` (app `venv`, not `airflow_venv`)
+   - Grep lean tree before package/deploy: `from run ` and `/home/inertia` in `scripts/`, repo-root runners, `airflow/dags/`
+   - Holdings blockers: `cycle_status_monitor`, `daily_holdings_processor`, `start_monthly_cycle`, `send_holdings_notifications`, `refresh_all_holdings.py`, `holdings_cycle_dag.py`
+9. **Airflow / Hub after install:** Follow runbook **Phase 10 §F**. Prefer `deploy_lean_vps.sh` over piecemeal scp. scp only via `/tmp` + `sudo cp`. Hub stays red until a new Airflow **success** run — manual script OK is not enough. List `failed_latest` from `airflow.db` before fixing remaining DAGs.
+10. **Move any working install to a new host:** Use skill `.cursor/skills/move-install-to-new-host/`. Lean is only one example source. Default: same app path + same `DB_NAME`/`DB_USER`, new passwords via `scripts/deployment/generate_host_env.py`; sync code without `.env`/venvs; restore dump + uploads; smoke health (+ Airflow §F if needed).
 
 ## Out of scope unless asked
 

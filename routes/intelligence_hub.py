@@ -187,6 +187,7 @@ def airflow_runs_dashboard():
             sync_result = sync_airflow_failure_alerts(
                 db.session, current_user.id, path, airflow_home=airflow_home
             )
+            db.session.commit()
             flash(
                 "Alerts synced: "
                 f"{sync_result.get('created', 0)} created, "
@@ -196,10 +197,21 @@ def airflow_runs_dashboard():
             )
         except Exception as exc:
             logger.error("Airflow alert sync failed: %s", exc, exc_info=True)
+            db.session.rollback()
             flash(f"Could not sync alerts: {exc}", "error")
         return redirect(url_for("hub.airflow_runs_dashboard"))
 
-    ctx = build_airflow_runs_template_context(current_app.config)
+    sync_result = None
+    try:
+        sync_result = sync_airflow_failure_alerts(
+            db.session, current_user.id, path, airflow_home=airflow_home
+        )
+        db.session.commit()
+    except Exception as exc:
+        logger.warning("Airflow auto alert sync skipped: %s", exc)
+        db.session.rollback()
+
+    ctx = build_airflow_runs_template_context(current_app.config, sync_result=sync_result)
     ctx["runs_url"] = url_for("hub.airflow_runs_dashboard")
     return render_template("hub/airflow_runs.html", **ctx)
 

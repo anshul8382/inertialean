@@ -89,3 +89,4 @@ appdirs==1.4.4
 
 # Optional AI (ENABLE_AI_SERVICES=true). Hybrid report imports anthropic lazily.
 # pip install "anthropic>=0.25.0"   # only if you turn AI on
+google-api-python-client==2.169.0

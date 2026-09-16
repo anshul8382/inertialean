@@ -26,12 +26,18 @@ default_args = {
 def run_codebase_backup_job():
     script = os.path.join(_APP_ROOT, "scripts", "codebase_backup.py")
     env = os.environ.copy()
-    if "CODEBASE_BACKUP_ROOT" not in env:
-        env.setdefault(
-            "CODEBASE_BACKUP_ROOT",
-            os.path.join(os.path.dirname(_APP_ROOT), "inertia_codebase_backups"),
-        )
+    # Lean default: writable under /opt (create once: sudo mkdir + chown anshul)
+    env.setdefault("CODEBASE_BACKUP_ROOT", "/opt/inertia_codebase_backups")
     env.setdefault("CODEBASE_BACKUP_SOURCE", _APP_ROOT)
+    # Pass through Drive settings from systemd EnvironmentFile / .env if present
+    for key in (
+        "CODEBASE_BACKUP_DRIVE_FOLDER_ID",
+        "CODEBASE_BACKUP_DRIVE_ENABLED",
+        "GOOGLE_SERVICE_ACCOUNT_FILE",
+    ):
+        if key not in env:
+            # already in env from EnvironmentFile when set
+            pass
     proc = subprocess.run(
         [app_python(), script],
         cwd=_APP_ROOT,

@@ -4,6 +4,8 @@ Daily local codebase backup + retention prune.
 Configure with env:
   CODEBASE_BACKUP_ROOT   (default: <parent of app>/inertia_codebase_backups)
   CODEBASE_BACKUP_SOURCE (default: app repo root)
+  CODEBASE_BACKUP_DRIVE_FOLDER_ID  — Google Drive folder ID (share with SA email)
+  CODEBASE_BACKUP_DRIVE_ENABLED=true  — optional; auto-on when folder ID set
 
 Cron example (2:15 UTC):
   15 2 * * * cd /home/inertia/app && /usr/bin/python3 scripts/codebase_backup.py >> /var/log/inertia_codebase_backup.log 2>&1

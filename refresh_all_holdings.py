@@ -4,9 +4,11 @@ Refresh holdings for all clients using forward calculation
 This script recalculates holdings from transactions and corporate actions
 and updates the holdings table for all clients.
 """
+import os
 import sys
-sys.path.insert(0, '/home/inertia/app')
-from run import create_app
+_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _ROOT)
+from main import create_app
 from services.forward_holding_calculation_service import get_client_portfolio_by_date
 from models import db, Client, Holding, Security
 from datetime import date

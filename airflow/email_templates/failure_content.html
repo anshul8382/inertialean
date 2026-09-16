@@ -1,0 +1,18 @@
+{# Airflow 3 RuntimeTaskInstance has no mark_success_url (default templates crash). #}
+<html>
+<body style="font-family: Arial, sans-serif; font-size: 14px;">
+  <h3>[Lean server] Airflow task failed</h3>
+  <p>
+    <strong>DAG:</strong> {{ ti.dag_id }}<br/>
+    <strong>Task:</strong> {{ ti.task_id }}<br/>
+    <strong>Run:</strong> {{ ti.run_id }}<br/>
+    <strong>Try:</strong> {{ ti.try_number }}
+  </p>
+  <p>Open Airflow UI (SSH tunnel) or check <code>/opt/Inertia2026v1/airflow/logs</code>.</p>
+  {% if exception_html is defined %}
+  <pre style="background:#f5f5f5;padding:12px;overflow:auto;max-height:400px;">{{ exception_html | safe }}</pre>
+  {% elif exception is defined %}
+  <pre style="background:#f5f5f5;padding:12px;overflow:auto;max-height:400px;">{{ exception }}</pre>
+  {% endif %}
+</body>
+</html>

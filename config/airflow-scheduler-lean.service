@@ -16,6 +16,7 @@ Environment=AIRFLOW__CORE__EXECUTOR=SequentialExecutor
 Environment=AIRFLOW__CORE__DAGS_FOLDER=/opt/Inertia2026v1/airflow/dags
 Environment=AIRFLOW__LOGGING__BASE_LOG_FOLDER=/opt/Inertia2026v1/airflow/logs
 Environment=AIRFLOW__EMAIL__SUBJECT_TEMPLATE=/opt/Inertia2026v1/airflow/email_templates/failure_subject.jinja2
+Environment=AIRFLOW__EMAIL__HTML_CONTENT_TEMPLATE=/opt/Inertia2026v1/airflow/email_templates/failure_content.html
 Environment=PATH=/opt/Inertia2026v1/airflow_venv/bin:/usr/local/bin:/usr/bin:/bin
 EnvironmentFile=-/opt/Inertia2026v1/.env
 

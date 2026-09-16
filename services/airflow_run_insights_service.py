@@ -181,17 +181,41 @@ def fetch_dag_overview(
                 }
             )
 
-        # Latest run per DAG (highest dag_run.id — stable vs. logical_date ties)
+        # Latest run per DAG by activity time (then id). Avoid MAX(id)-only quirks.
         rcur = conn.execute(
             f"""
             SELECT dr.dag_id, dr.run_id, dr.{date_col}, dr.start_date, dr.end_date, dr.state
             FROM dag_run dr
-            WHERE dr.id IN (SELECT MAX(id) FROM dag_run GROUP BY dag_id)
+            WHERE dr.id = (
+                SELECT d2.id FROM dag_run d2
+                WHERE d2.dag_id = dr.dag_id
+                ORDER BY COALESCE(d2.end_date, d2.start_date, d2.{date_col}, '') DESC,
+                         d2.id DESC
+                LIMIT 1
+            )
             """
         )
         best: Dict[str, Tuple] = {}
         for row in rcur.fetchall():
             best[row[0]] = row
+
+        # Most recent completed run (success/failed) when latest is still queued/running
+        ccur = conn.execute(
+            f"""
+            SELECT dr.dag_id, dr.run_id, dr.{date_col}, dr.start_date, dr.end_date, dr.state
+            FROM dag_run dr
+            WHERE lower(COALESCE(dr.state, '')) IN ('success', 'failed')
+              AND dr.id = (
+                  SELECT d2.id FROM dag_run d2
+                  WHERE d2.dag_id = dr.dag_id
+                    AND lower(COALESCE(d2.state, '')) IN ('success', 'failed')
+                  ORDER BY COALESCE(d2.end_date, d2.start_date, d2.{date_col}, '') DESC,
+                           d2.id DESC
+                  LIMIT 1
+              )
+            """
+        )
+        last_completed: Dict[str, Tuple] = {row[0]: row for row in ccur.fetchall()}
 
         failed_tasks_by_key: Dict[Tuple[str, str], List[str]] = {}
         for dag_id, run_row in best.items():
@@ -220,6 +244,9 @@ def fetch_dag_overview(
                 d["last_state"] = None
                 d["failed_task_ids"] = []
                 d["suggestion"] = ""
+                d["last_completed_state"] = None
+                d["last_completed_run_id"] = None
+                d["last_completed_end_date"] = None
                 continue
             _, run_id, logical_d, start_d, end_d, state = br
             d["last_run_id"] = run_id
@@ -228,6 +255,15 @@ def fetch_dag_overview(
             d["last_end_date"] = end_d
             d["last_state"] = (state or "").lower()
             d["failed_task_ids"] = failed_tasks_by_key.get((did, run_id), [])
+            lc = last_completed.get(did)
+            if lc:
+                d["last_completed_state"] = (lc[5] or "").lower()
+                d["last_completed_run_id"] = lc[1]
+                d["last_completed_end_date"] = lc[4]
+            else:
+                d["last_completed_state"] = None
+                d["last_completed_run_id"] = None
+                d["last_completed_end_date"] = None
             st = d["last_state"]
             d["log_excerpt"] = ""
             if st == "failed":
@@ -252,7 +288,11 @@ def fetch_dag_overview(
         conn.close()
 
 
-def build_airflow_runs_template_context(app_config: Mapping[str, Any]) -> Dict[str, Any]:
+def build_airflow_runs_template_context(
+    app_config: Mapping[str, Any],
+    *,
+    sync_result: Optional[Dict[str, int]] = None,
+) -> Dict[str, Any]:
     """Shared kwargs for hub/airflow_runs.html (used by Hub and /airflow/scheduled-jobs)."""
     path = app_config.get("AIRFLOW_METADATA_DB_PATH")
     home = app_config.get("AIRFLOW_HOME")
@@ -268,6 +308,12 @@ def build_airflow_runs_template_context(app_config: Mapping[str, Any]) -> Dict[s
         "success_count": success_count,
         "other_count": other_count,
         "metadata_db_path": path,
+        "sync_result": sync_result,
+        "status_refreshed_note": (
+            "Status is read live from Airflow’s metadata DB on every page load. "
+            "Manual script runs outside Airflow do not clear a red badge — trigger the DAG "
+            "(or wait for the next schedule) so the latest run becomes success."
+        ),
     }
 
 

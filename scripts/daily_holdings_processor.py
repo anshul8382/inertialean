@@ -8,20 +8,22 @@ import sys
 from datetime import datetime, date
 import logging
 
-# Add app directory to path
-sys.path.insert(0, '/home/inertia/app')
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
 
-from run import create_app
+from main import create_app
 from extensions import db
 from sqlalchemy import text
 from services.forward_holding_calculation_service import audit_holdings_accuracy
 
 # Setup logging
+_log_dir = os.path.join(_ROOT, "logs")
+os.makedirs(_log_dir, exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/home/inertia/app/logs/holdings_processor.log'),
+        logging.FileHandler(os.path.join(_log_dir, "holdings_processor.log")),
         logging.StreamHandler()
     ]
 )
