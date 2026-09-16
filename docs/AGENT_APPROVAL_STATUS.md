@@ -1,6 +1,6 @@
 # Agent approval status
 
-Generated: 2026-09-16T16:50:11.457366+00:00
+Generated: 2026-09-16T17:08:47.530607+00:00
 
 | Agent | Status | Detail |
 |-------|--------|--------|
@@ -11,8 +11,10 @@ Generated: 2026-09-16T16:50:11.457366+00:00
 | Security (VAPT) | FAIL | VAPT (total    67) → docs/SECURITY_VAPT_REPORT.md |
 | Security (deps) | PASS | deps: 0 Python, 0 Node → docs/DEPENDENCY_AUDIT.md |
 | Security (ZAP) | SKIP | set ZAP_TARGET_URL=http://<staging> to enable |
-| Mobile Optimiser | FAIL | Capacitor shell + mobile-ui stack; Expo scaffold: no; JWT: yes; template audit: 3 high (standalone UIs expected) |
-| Delivery quality | SKIP | —skip-tests |
+| Mobile Optimiser | PARTIAL | Capacitor shell + mobile-ui stack; Expo scaffold: no; JWT: yes; template audit: 3 high (standalone UIs expected) |
+| Delivery quality | FAIL | pytest exit 1 |
+| Delivery quality (functional) | PASS | pytest functional exit 0 |
+| Delivery quality (functional packs) | PASS | no impacted modules |
 | Delivery quality (docs) | PASS | core docs present |
 | Live architecture map | PASS | docs/ARCHITECTURE_LIVE.md (live surfaces map) |
 

@@ -22,9 +22,12 @@ Consolidated from overlapping rules into **coherent units**:
 | **VPS Migration** | `vps-migration-agent.mdc` | Clean AlmaLinux VPS (no cPanel), key-only SSH, Inertia cutover; skill `.cursor/skills/vps-clean-migration/`; runbook `docs/VPS_CLEAN_MIGRATION_RUNBOOK.md` — **before copy:** portable paths (`from main` / `INERTIA_APP_DIR`, no `/home/inertia`); Phase 10 §F |
 | **Move install → new host** | (skill) `move-install-to-new-host` | Any **working** app directory → new server with minimal effort; same DB names/path by default, new passwords via `generate_host_env.py`; Lean/BigRock are just examples |
 
+**Lean VPS ship (approvals → commit → push → deploy):** `./scripts/deployment/ship_lean.sh`  
+(BigRock prod still uses `.local/deployment-agent/` from the shared Mac `.local` symlink — do not point that at Lean.)
+
 **Mobile UI gate (user-facing changes):** `docs/MOBILE_UI_DEVELOPER_CHECKLIST.md` → implement → `python3 scripts/run_mobile_ui_check.py` → manual test on phone/Capacitor. Wired into **`run_agent_approval_loop.py`**.
 
-**Workflow:** `docs/DEVELOP_WORKFLOW.md` · **Approval loop:** `python3 scripts/run_agent_approval_loop.py --write-status` · **Per commit:** `./scripts/install_git_hooks.sh` (pre-commit gate)
+**Workflow:** `docs/DEVELOP_WORKFLOW.md` · **Approval loop:** `python3 scripts/run_agent_approval_loop.py --write-status` · **Per commit:** `./scripts/install_git_hooks.sh` (pre-commit gate) · **Lean deploy:** `./scripts/deployment/ship_lean.sh`
 
 **DB cutover (prod schema lag):** Develop on **local** `inertia_app2025_dev` — see **`docs/DB_MIGRATION_AND_TEST_PROCESS.md`**. When code needs tables prod does not have yet — **gate + document** (`docs/DB_CUTOVER_REGISTRY.md`, `services/db_cutover.py`), do **not** run full migrations on prod mid-sprint. Cutover: migrate **`_test` then prod**, then data-only refresh `_test`. Agent: `db-cutover-status` / `db-cutover-prod`. See development gate § “Databases and migrations”.
 

@@ -140,28 +140,19 @@ if [[ -x ./venv/bin/python3 ]] && [[ -f wsgi.py || -f main.py ]]; then
   ./venv/bin/python3 -c "from main import create_app; a=create_app(); print('smoke OK')" || true
 fi
 
-if [[ '$SKIP_RESTART' -eq 0 ]]; then
-  echo '==> Restart $GUNICORN_UNIT'
-  sudo systemctl reset-failed '$GUNICORN_UNIT' 2>/dev/null || true
-  sudo systemctl restart '$GUNICORN_UNIT'
-  sudo systemctl is-active '$GUNICORN_UNIT'
-  curl -fsS -o /dev/null -w 'health %{http_code}\n' http://127.0.0.1:8000/health 2>/dev/null \
-    || curl -fsS -o /dev/null -w 'health %{http_code}\n' http://127.0.0.1/health 2>/dev/null \
-    || true
-fi
-
-if [[ '$RESTART_AIRFLOW' -eq 1 ]]; then
-  for u in airflow-scheduler airflow-api-server airflow-dag-processor; do
-    if systemctl list-unit-files "\${u}.service" 2>/dev/null | grep -q "\$u"; then
-      sudo systemctl restart "\$u" || true
-      sudo systemctl is-active "\$u" || true
-    fi
-  done
-fi
-
 echo '==> Remote HEAD:'
 git log -1 --oneline
 EOF
+
+if [[ "$SKIP_RESTART" -eq 0 ]]; then
+  echo "==> Restart services (ssh -t for sudo password if needed)"
+  RESTART_CMD="sudo systemctl reset-failed '$GUNICORN_UNIT' 2>/dev/null || true; sudo systemctl restart '$GUNICORN_UNIT'; sudo systemctl is-active '$GUNICORN_UNIT'; curl -s -o /dev/null -w 'health:%{http_code}\n' http://127.0.0.1:5004/api/v1/health || true"
+  if [[ "$RESTART_AIRFLOW" -eq 1 ]]; then
+    RESTART_CMD="$RESTART_CMD; for u in airflow-scheduler airflow-api-server airflow-dag-processor; do sudo systemctl restart \"\$u\" || true; sudo systemctl is-active \"\$u\" || true; done"
+  fi
+  # -t allocates TTY so sudo can prompt; drop BatchMode for this step
+  ssh -i "$SSH_KEY" -t -o IdentitiesOnly=yes "$HOST" "bash -lc $(printf '%q' "$RESTART_CMD")"
+fi
 
 echo "==> Deploy done."
 echo "    Optional on VPS:"

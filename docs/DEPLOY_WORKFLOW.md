@@ -6,12 +6,23 @@
 
 The **deployment agent** lives in **`.local/deployment-agent/`** (gitignored). It is for your Mac only — never pushed to GitHub or copied to the server.
 
+**BigRock live prod** (`inertiainvest.in`):
+
 ```bash
 cp .local/deployment-agent/config.example.json .local/deployment-agent/config.json
 # edit SSH settings; tune profiles/*.json (Capacitor URLs)
 python3 .local/deployment-agent/deploy_agent.py full-prod     # prod profile → push → deploy → restore local
 python3 .local/deployment-agent/deploy_agent.py profile prod  # switch configs only
 python3 .local/deployment-agent/deploy_agent.py diagnose-prod
+```
+
+**Lean parallel VPS** (`129.121.133.25`) — separate path (do not reuse BigRock `full-prod`):
+
+```bash
+# Approvals → commit → push → deploy (preserves VPS .env)
+./scripts/deployment/ship_lean.sh
+./scripts/deployment/ship_lean.sh --allow-approval-fail   # if VAPT/mobile FAIL but you still ship
+./scripts/deployment/deploy_lean_vps.sh --restart-airflow # deploy-only
 ```
 
 `full-soak` / `deploy-soak` are **deprecated aliases** (deploy live prod). Soak `:5003` was disabled after Jun 2026 cutover.
