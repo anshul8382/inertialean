@@ -1,0 +1,401 @@
+{% extends 'base.html' %}
+
+{% block head %}
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Add Transactions</h2>
+        <a href="{{ url_for('main.transactions') }}" class="btn btn-secondary">Back to Transactions</a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <!-- File Upload Section -->
+            <div class="mb-4">
+                <h5>Upload Transaction File</h5>
+                <div class="alert alert-info">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>File Format:</strong> Excel (.xlsx, .xls) or CSV file with the following columns:
+                            <ul class="mb-0 mt-2">
+                                <li><strong>Date:</strong> Transaction date (e.g., 7-Mar-2025, 2025-03-07)</li>
+                                <li><strong>Type:</strong> BUY, SELL, SPLIT, or BONUS</li>
+                                <li><strong>Stock:</strong> Stock symbol (e.g., ICICIBANK, NSE:ICICIBANK)</li>
+                                <li><strong>Transacted Units:</strong> Number of units</li>
+                                <li><strong>Transacted Price (per unit):</strong> Price per unit (e.g., ₹1,214.55, 1214.55). For SPLIT and BONUS transactions, use 0 or ₹0.00</li>
+                            </ul>
+                        </div>
+                        <div class="d-flex flex-column gap-2">
+                            <a href="{{ url_for('main.download_transaction_template') }}" class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-download"></i> Download Template
+                            </a>
+                            <a href="{{ url_for('main.quick_add_security') }}" class="btn btn-outline-success btn-sm">
+                                <i class="fas fa-plus"></i> Quick Add Security
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                
+                <form method="POST" enctype="multipart/form-data" id="fileUploadForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="file_client_id" class="form-label">Client</label>
+                            <select class="form-select searchable-select" id="file_client_id" name="client_id" required>
+                                <option value="">Search and select client...</option>
+                                {% for client in clients %}
+                                <option value="{{ client.id }}">{{ client.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="transaction_file" class="form-label">Transaction File</label>
+                            <input type="file" class="form-control" id="transaction_file" name="transaction_file" 
+                                   accept=".xlsx,.xls,.csv" required>
+                            <div class="form-text">Upload Excel or CSV file with transaction data</div>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-upload"></i> Upload Transactions
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <hr>
+            
+            <!-- Manual Entry Section -->
+            <h5>Manual Transaction Entry</h5>
+            <form method="POST" id="transactionForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="client_id" class="form-label">Client</label>
+                        <select class="form-select searchable-select" id="client_id" name="client_id" required>
+                            <option value="">Search and select client...</option>
+                            {% for client in clients %}
+                            <option value="{{ client.id }}">{{ client.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="transaction_date" class="form-label">Transaction Date</label>
+                        <input type="date" class="form-control" id="transaction_date" name="transaction_date" 
+                               value="{{ today }}" required>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table" id="transactionsTable">
+                        <thead>
+                            <tr>
+                                <th>Asset Type</th>
+                                <th>Asset Class</th>
+                                <th>Asset</th>
+                                <th>Transaction Type</th>
+                                <th>Quantity</th>
+                                <th>Price</th>
+                                <th>Total Amount</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="transaction-row">
+                                <td>
+                                    <select class="form-select asset-type" name="asset_type[]" required>
+                                        <option value="">Select Type</option>
+                                        <option value="STOCK">Stock</option>
+                                        <option value="ETF">ETF</option>
+                                        <option value="MUTUAL_FUND">Mutual Fund</option>
+                                        <option value="BOND">Bond</option>
+                                        <option value="OTHER">Other</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <select class="form-select asset-class" name="asset_class_id[]">
+                                        <option value="">Select Asset Class</option>
+                                        {% for asset_class in asset_classes %}
+                                        <option value="{{ asset_class.id }}">{{ asset_class.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td>
+                                    <select class="form-select asset-select" name="asset_id[]" required>
+                                        <option value="">Select Asset</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <select class="form-select" name="type[]" required>
+                                        <option value="BUY">Buy</option>
+                                        <option value="SELL">Sell</option>
+                                        <option value="SPLIT">Split</option>
+                                        <option value="BONUS">Bonus</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <input type="number" class="form-control quantity" name="quantity[]" 
+                                           min="1" step="1" required
+                                           title="Stocks: whole units. Mutual funds: fractional units allowed.">
+                                </td>
+                                <td>
+                                    <input type="number" class="form-control price" name="price[]" 
+                                           min="0" step="0.01" required>
+                                </td>
+                                <td>
+                                    <input type="number" class="form-control total-amount" name="total_amount[]" 
+                                           readonly>
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-danger btn-sm remove-row">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <button type="button" class="btn btn-secondary" id="addRow">Add Another Transaction</button>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <div class="form-group">
+                            <label for="grandTotal">Grand Total:</label>
+                            <input type="number" class="form-control" id="grandTotal" readonly>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3 text-end">
+                    <button type="submit" class="btn btn-primary">Save Transactions</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('transactionForm');
+    const fileUploadForm = document.getElementById('fileUploadForm');
+    const table = document.getElementById('transactionsTable');
+    const addRowBtn = document.getElementById('addRow');
+    const grandTotalInput = document.getElementById('grandTotal');
+    const securities = {{ securities|tojson_safe }};
+    
+    // Handle file upload form submission
+    fileUploadForm.addEventListener('submit', function(e) {
+        const clientId = document.getElementById('file_client_id').value;
+        const file = document.getElementById('transaction_file').files[0];
+        
+        if (!clientId) {
+            e.preventDefault();
+            alert('Please select a client');
+            return;
+        }
+        
+        if (!file) {
+            e.preventDefault();
+            alert('Please select a file');
+            return;
+        }
+        
+        // Show loading message
+        const submitBtn = this.querySelector('button[type="submit"]');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+        submitBtn.disabled = true;
+        
+        // Re-enable button after a delay in case of error
+        setTimeout(() => {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }, 10000);
+    });
+
+    // Function to calculate row total
+    function calculateRowTotal(row) {
+        const quantity = parseFloat(row.querySelector('.quantity').value) || 0;
+        const price = parseFloat(row.querySelector('.price').value) || 0;
+        const transactionType = row.querySelector('select[name="type[]"]').value;
+        
+        // For SPLIT and BONUS transactions, total amount is 0
+        let total = 0;
+        if (transactionType === 'BUY' || transactionType === 'SELL') {
+            total = quantity * price;
+        }
+        
+        row.querySelector('.total-amount').value = total.toFixed(2);
+        calculateGrandTotal();
+    }
+
+    // Function to calculate grand total
+    function calculateGrandTotal() {
+        const totals = Array.from(document.querySelectorAll('.total-amount'))
+            .map(input => parseFloat(input.value) || 0);
+        const grandTotal = totals.reduce((sum, total) => sum + total, 0);
+        grandTotalInput.value = grandTotal.toFixed(2);
+    }
+
+    function isMutualFundAssetType(assetType) {
+        const t = (assetType || '').toUpperCase().replace(/\s+/g, '_');
+        return t === 'MUTUAL_FUND' || (t.includes('MUTUAL') && t.includes('FUND'));
+    }
+
+    // Adjust quantity input and transaction types for mutual fund units (fractional NAV)
+    function applyAssetTypeRowRules(row) {
+        const assetType = row.querySelector('.asset-type').value;
+        const qtyInput = row.querySelector('.quantity');
+        const txnTypeSelect = row.querySelector('select[name="type[]"]');
+        const isMf = isMutualFundAssetType(assetType);
+
+        if (isMf) {
+            qtyInput.min = '0.001';
+            qtyInput.step = '0.001';
+            qtyInput.placeholder = 'Units (e.g. 125.532)';
+        } else {
+            qtyInput.min = '1';
+            qtyInput.step = '1';
+            qtyInput.placeholder = '';
+        }
+
+        Array.from(txnTypeSelect.options).forEach(function (opt) {
+            if (opt.value === 'SPLIT' || opt.value === 'BONUS') {
+                opt.hidden = isMf;
+                opt.disabled = isMf;
+            }
+        });
+        if (isMf && (txnTypeSelect.value === 'SPLIT' || txnTypeSelect.value === 'BONUS')) {
+            txnTypeSelect.value = 'BUY';
+        }
+    }
+
+    // Function to update asset options based on type and class
+    function updateAssetOptions(row) {
+        const assetType = row.querySelector('.asset-type').value;
+        const assetClassId = row.querySelector('.asset-class').value;
+        const assetSelect = row.querySelector('.asset-select');
+        const currentValue = assetSelect.value;
+
+        // Clear current options
+        assetSelect.innerHTML = '<option value="">Select Asset</option>';
+
+        // Filter securities based on type and class (asset class is optional)
+        const filteredSecurities = securities.filter(security => {
+            // Always filter by asset type
+            if (security.type !== assetType) {
+                return false;
+            }
+            
+            // If asset class is selected, filter by it; otherwise show all securities of that type
+            if (assetClassId && assetClassId !== '') {
+                return security.asset_class_id === parseInt(assetClassId);
+            } else {
+                return true; // Show all securities of the selected type
+            }
+        });
+
+        // Add filtered options
+        filteredSecurities.forEach(security => {
+            const option = new Option(
+                `${security.symbol} - ${security.name}`,
+                security.id
+            );
+            assetSelect.add(option);
+        });
+
+        // Restore previous value if possible
+        if (currentValue) {
+            assetSelect.value = currentValue;
+        }
+        applyAssetTypeRowRules(row);
+    }
+
+    // Add event listeners to existing row
+    function addRowEventListeners(row) {
+        row.querySelector('.quantity').addEventListener('input', () => calculateRowTotal(row));
+        row.querySelector('.price').addEventListener('input', () => calculateRowTotal(row));
+        row.querySelector('select[name="type[]"]').addEventListener('change', () => calculateRowTotal(row));
+        row.querySelector('.asset-type').addEventListener('change', () => {
+            updateAssetOptions(row);
+            applyAssetTypeRowRules(row);
+        });
+        row.querySelector('.asset-class').addEventListener('change', () => updateAssetOptions(row));
+        row.querySelector('.remove-row').addEventListener('click', () => {
+            if (document.querySelectorAll('.transaction-row').length > 1) {
+                row.remove();
+                calculateGrandTotal();
+            }
+        });
+    }
+
+    // Add event listeners to initial row
+    const initialRow = document.querySelector('.transaction-row');
+    addRowEventListeners(initialRow);
+    applyAssetTypeRowRules(initialRow);
+
+    // Add new row
+    addRowBtn.addEventListener('click', () => {
+        const newRow = document.querySelector('.transaction-row').cloneNode(true);
+        newRow.querySelectorAll('input').forEach(input => input.value = '');
+        newRow.querySelector('.asset-select').innerHTML = '<option value="">Select Asset</option>';
+        table.querySelector('tbody').appendChild(newRow);
+        addRowEventListeners(newRow);
+    });
+
+    // Form submission
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Validate form
+        const rows = document.querySelectorAll('.transaction-row');
+        let isValid = true;
+        
+        rows.forEach(row => {
+            const quantity = parseFloat(row.querySelector('.quantity').value) || 0;
+            const price = parseFloat(row.querySelector('.price').value) || 0;
+            const assetId = row.querySelector('.asset-select').value;
+            const assetType = row.querySelector('.asset-type').value;
+            const minQty = isMutualFundAssetType(assetType) ? 0.001 : 1;
+
+            if (quantity < minQty || price <= 0 || !assetId) {
+                isValid = false;
+                alert('Please enter valid quantity, price, and select an asset for all transactions.');
+            }
+        });
+
+        if (isValid) {
+            this.submit();
+        }
+    });
+    
+    // Initialize Select2 for searchable client dropdowns
+    $(document).ready(function() {
+        $('.searchable-select').select2({
+            theme: 'bootstrap-5',
+            placeholder: 'Search and select client...',
+            allowClear: true,
+            width: '100%',
+            language: {
+                noResults: function() {
+                    return "No clients found";
+                },
+                searching: function() {
+                    return "Searching...";
+                }
+            }
+        });
+    });
+});
+</script>
+
+<!-- Select2 JavaScript -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+{% endblock %} 

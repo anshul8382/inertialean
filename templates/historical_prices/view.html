@@ -1,0 +1,567 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link %}
+
+{% block title %}Historical Price Viewer{% endblock %}
+
+{% block content %}
+{{ maint_hub_open('Historical prices', 'Browse and edit prices by security.', url_for('main.maintenance_reference_data')) }}
+  {{ maint_link('fa-upload', 'Upload prices', url_for('historical_prices.upload_page')) }}
+{{ maint_hub_close('Search security and price table below.') }}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-chart-line"></i> Historical Price Viewer
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{{ url_for('historical_prices.upload_page') }}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-upload"></i> Upload Prices
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Security Selection -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <label for="securitySelect" class="form-label">Search Security:</label>
+                            <input type="text" id="securitySelect" class="form-control" placeholder="Type to search... (min 2 characters)">
+                            <div id="securityDropdown" class="dropdown-menu" style="width: 100%; max-height: 300px; overflow-y: auto;"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-end">
+                                <button id="loadPricesBtn" class="btn btn-primary" disabled>
+                                    <i class="fas fa-search"></i> Load Prices
+                                </button>
+                                <button id="addPriceBtn" class="btn btn-success ms-2" disabled>
+                                    <i class="fas fa-plus"></i> Add Price
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Date Filters -->
+                    <div class="row mb-3" id="dateFilters" style="display: none;">
+                        <div class="col-md-3">
+                            <label for="dateFrom" class="form-label">From Date:</label>
+                            <input type="date" id="dateFrom" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="dateTo" class="form-label">To Date:</label>
+                            <input type="date" id="dateTo" class="form-control">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="perPage" class="form-label">Records per page:</label>
+                            <select id="perPage" class="form-select">
+                                <option value="50">50</option>
+                                <option value="100" selected>100</option>
+                                <option value="200">200</option>
+                                <option value="500">500</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button id="applyFiltersBtn" class="btn btn-info btn-sm w-100">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Security Info -->
+                    <div id="securityInfo" class="alert alert-info" style="display: none;">
+                        <h6><i class="fas fa-info-circle"></i> Security Information</h6>
+                        <div id="securityDetails"></div>
+                    </div>
+                    <div id="benchmarkSeriesNote" class="alert alert-secondary py-2 small" style="display: none;">
+                        <i class="fas fa-database"></i>
+                        This index is stored as <strong>benchmark</strong> data (not the stock price table).
+                        To add or replace history, use <strong>Upload Prices</strong> and the <strong>Nifty</strong> upload section.
+                    </div>
+
+                    <!-- Prices Table -->
+                    <div id="pricesSection" style="display: none;">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5><i class="fas fa-table"></i> Historical Prices</h5>
+                            <div>
+                                <span id="totalCount" class="badge badge-primary"></span>
+                                <button id="refreshBtn" class="btn btn-sm btn-outline-primary ms-2">
+                                    <i class="fas fa-sync-alt"></i> Refresh
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Close Price</th>
+                                        <th>Source</th>
+                                        <th>Created</th>
+                                        <th>Updated</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pricesTableBody">
+                                    <!-- Prices will be loaded here -->
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <nav id="paginationNav" style="display: none;">
+                            <ul class="pagination justify-content-center">
+                                <!-- Pagination will be generated here -->
+                            </ul>
+                        </nav>
+                    </div>
+
+                    <!-- No Data Message -->
+                    <div id="noDataMessage" class="alert alert-warning text-center" style="display: none;">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h5>No Historical Prices Found</h5>
+                        <p id="noDataMessageBody">This security doesn't have any historical price data yet.</p>
+                        <button id="addFirstPriceBtn" class="btn btn-success">
+                            <i class="fas fa-plus"></i> Add First Price
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Price Modal -->
+<div class="modal fade" id="priceModal" tabindex="-1" role="dialog" aria-labelledby="priceModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="priceModalLabel">Add New Price</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="priceForm">
+                    <input type="hidden" id="priceId" name="price_id">
+                    <input type="hidden" id="securityId" name="security_id">
+                    
+                    <div class="form-group">
+                        <label for="priceDate">Date:</label>
+                        <input type="date" class="form-control" id="priceDate" name="date" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="priceClose">Close Price:</label>
+                        <input type="number" class="form-control" id="priceClose" name="close_price" step="0.01" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="savePriceBtn">Save Price</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Price Modal -->
+<div class="modal fade" id="editPriceModal" tabindex="-1" role="dialog" aria-labelledby="editPriceModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editPriceModalLabel">Edit Price</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="editPriceForm">
+                    <input type="hidden" id="editPriceId" name="price_id">
+                    
+                    <div class="form-group">
+                        <label for="editPriceDate">Date:</label>
+                        <input type="date" class="form-control" id="editPriceDate" name="date" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="editPriceClose">Close Price:</label>
+                        <input type="number" class="form-control" id="editPriceClose" name="close_price" step="0.01" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="updatePriceBtn">Update Price</button>
+            </div>
+        </div>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+
+<script>
+let currentSecurityId = null;
+let currentPage = 1;
+let currentPerPage = 100;
+let currentSecurityData = null;
+let searchTimeout = null;
+let seriesReadOnly = false;
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    const securitySelect = document.getElementById('securitySelect');
+    const loadPricesBtn = document.getElementById('loadPricesBtn');
+    const addPriceBtn = document.getElementById('addPriceBtn');
+    const addFirstPriceBtn = document.getElementById('addFirstPriceBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const savePriceBtn = document.getElementById('savePriceBtn');
+    const updatePriceBtn = document.getElementById('updatePriceBtn');
+    const applyFiltersBtn = document.getElementById('applyFiltersBtn');
+    const perPageSelect = document.getElementById('perPage');
+
+    // Security search with autocomplete
+    securitySelect.addEventListener('input', function() {
+        const query = this.value.trim();
+        
+        clearTimeout(searchTimeout);
+        
+        if (query.length < 2) {
+            document.getElementById('securityDropdown').innerHTML = '';
+            document.getElementById('securityDropdown').style.display = 'none';
+            return;
+        }
+        
+        searchTimeout = setTimeout(() => {
+            searchSecurities(query);
+        }, 300);
+    });
+
+    // Handle security selection from dropdown
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('security-option')) {
+            const securityId = e.target.dataset.id;
+            const symbol = e.target.dataset.symbol;
+            const name = e.target.dataset.name;
+            const type = e.target.dataset.type;
+
+            currentSecurityId = parseInt(securityId);
+            currentSecurityData = { id: securityId, symbol, name, type };
+            seriesReadOnly = false;
+            document.getElementById('benchmarkSeriesNote').style.display = 'none';
+
+            securitySelect.value = `${symbol} - ${name}`;
+            document.getElementById('securityDropdown').style.display = 'none';
+            
+            loadPricesBtn.disabled = false;
+            addPriceBtn.disabled = false;
+            addFirstPriceBtn.disabled = false;
+            
+            // Show security info
+            const securityInfo = document.getElementById('securityInfo');
+            const securityDetails = document.getElementById('securityDetails');
+            securityDetails.innerHTML = `
+                <strong>Symbol:</strong> ${symbol}<br>
+                <strong>Name:</strong> ${name}<br>
+                <strong>Type:</strong> ${type}
+            `;
+            securityInfo.style.display = 'block';
+            document.getElementById('dateFilters').style.display = 'block';
+        }
+    });
+
+    // Load prices
+    loadPricesBtn.addEventListener('click', () => {
+        currentPage = 1;
+        loadPrices();
+    });
+    refreshBtn.addEventListener('click', loadPrices);
+    addFirstPriceBtn.addEventListener('click', showAddPriceModal);
+
+    // Add price
+    addPriceBtn.addEventListener('click', showAddPriceModal);
+    savePriceBtn.addEventListener('click', savePrice);
+
+    // Update price
+    updatePriceBtn.addEventListener('click', updatePrice);
+
+    // Apply filters
+    applyFiltersBtn.addEventListener('click', () => {
+        currentPage = 1;
+        loadPrices();
+    });
+
+    // Per page change
+    perPageSelect.addEventListener('change', function() {
+        currentPerPage = parseInt(this.value);
+        currentPage = 1;
+        loadPrices();
+    });
+});
+
+function searchSecurities(query) {
+    fetch(`/historical-prices/api/securities/search?q=${encodeURIComponent(query)}`)
+        .then(response => response.json())
+        .then(data => {
+            const dropdown = document.getElementById('securityDropdown');
+            
+            if (data.securities && data.securities.length > 0) {
+                dropdown.innerHTML = data.securities.map(sec => `
+                    <a href="#" class="dropdown-item security-option" 
+                       data-id="${sec.id}" 
+                       data-symbol="${sec.symbol}" 
+                       data-name="${sec.name}" 
+                       data-type="${sec.type}">
+                        <strong>${sec.symbol}</strong> - ${sec.name} <span class="badge badge-secondary">${sec.type}</span>
+                    </a>
+                `).join('');
+                dropdown.style.display = 'block';
+            } else {
+                dropdown.innerHTML = '<div class="dropdown-item-text text-muted">No securities found</div>';
+                dropdown.style.display = 'block';
+            }
+        })
+        .catch(error => {
+            console.error('Error searching securities:', error);
+        });
+}
+
+function loadPrices() {
+    const addPriceBtn = document.getElementById('addPriceBtn');
+    const addFirstPriceBtn = document.getElementById('addFirstPriceBtn');
+    const benchmarkNote = document.getElementById('benchmarkSeriesNote');
+
+    if (!currentSecurityId) {
+        return;
+    }
+
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+
+    let url = `/historical-prices/api/security/${currentSecurityId}/prices?page=${currentPage}&per_page=${currentPerPage}`;
+
+    if (dateFrom) url += `&date_from=${dateFrom}`;
+    if (dateTo) url += `&date_to=${dateTo}`;
+
+    fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                seriesReadOnly = !!data.series_read_only;
+                benchmarkNote.style.display = seriesReadOnly ? 'block' : 'none';
+                addPriceBtn.disabled = seriesReadOnly;
+                addFirstPriceBtn.disabled = seriesReadOnly;
+                displayPrices(data.prices, data.pagination, seriesReadOnly);
+                document.getElementById('pricesSection').style.display = 'block';
+                document.getElementById('noDataMessage').style.display = 'none';
+            } else {
+                showError('Failed to load prices: ' + data.message);
+            }
+        })
+        .catch(error => {
+            showError('Error loading prices: ' + error.message);
+        });
+}
+
+function displayPrices(prices, pagination, readOnly) {
+    const tbody = document.getElementById('pricesTableBody');
+    const totalCount = document.getElementById('totalCount');
+    const noDataBody = document.getElementById('noDataMessageBody');
+    const addFirstBtn = document.getElementById('addFirstPriceBtn');
+
+    totalCount.textContent = `Showing ${prices.length} of ${pagination.total} prices`;
+
+    if (prices.length === 0) {
+        document.getElementById('pricesSection').style.display = 'none';
+        document.getElementById('noDataMessage').style.display = 'block';
+        if (readOnly) {
+            noDataBody.textContent = 'No benchmark rows in this date range. Upload Nifty history from the Upload Prices page (Nifty section).';
+            addFirstBtn.style.display = 'none';
+        } else {
+            noDataBody.textContent = "This security doesn't have any historical price data yet.";
+            addFirstBtn.style.display = '';
+        }
+        return;
+    }
+
+    noDataBody.textContent = "This security doesn't have any historical price data yet.";
+    addFirstBtn.style.display = '';
+
+    tbody.innerHTML = '';
+
+    prices.forEach(price => {
+        const row = document.createElement('tr');
+        const canEdit = !readOnly && price.id != null;
+        const actionsCell = canEdit
+            ? `<button class="btn btn-sm btn-primary" onclick="editPrice(${price.id}, '${price.date}', ${price.close_price})">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-danger" onclick="deletePrice(${price.id})">
+                    <i class="fas fa-trash"></i>
+                </button>`
+            : '<span class="text-muted">—</span>';
+        row.innerHTML = `
+            <td>${price.date}</td>
+            <td>₹${parseFloat(price.close_price).toFixed(2)}</td>
+            <td><span class="badge badge-info">${price.source}</span></td>
+            <td>${price.created_at ? new Date(price.created_at).toLocaleString() : 'N/A'}</td>
+            <td>${price.updated_at ? new Date(price.updated_at).toLocaleString() : 'N/A'}</td>
+            <td>${actionsCell}</td>
+        `;
+        tbody.appendChild(row);
+    });
+
+    // Display pagination
+    displayPagination(pagination);
+}
+
+function displayPagination(pagination) {
+    const paginationNav = document.getElementById('paginationNav');
+    
+    if (pagination.pages <= 1) {
+        paginationNav.style.display = 'none';
+        return;
+    }
+    
+    paginationNav.style.display = 'block';
+    const ul = paginationNav.querySelector('ul');
+    ul.innerHTML = '';
+    
+    // Previous button
+    const prev = document.createElement('li');
+    prev.className = `page-item ${pagination.page === 1 ? 'disabled' : ''}`;
+    prev.innerHTML = `<a class="page-link" href="#" onclick="changePage(${pagination.page - 1}); return false;">Previous</a>`;
+    ul.appendChild(prev);
+    
+    // Page numbers
+    const startPage = Math.max(1, pagination.page - 2);
+    const endPage = Math.min(pagination.pages, pagination.page + 2);
+    
+    for (let i = startPage; i <= endPage; i++) {
+        const li = document.createElement('li');
+        li.className = `page-item ${i === pagination.page ? 'active' : ''}`;
+        li.innerHTML = `<a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a>`;
+        ul.appendChild(li);
+    }
+    
+    // Next button
+    const next = document.createElement('li');
+    next.className = `page-item ${pagination.page === pagination.pages ? 'disabled' : ''}`;
+    next.innerHTML = `<a class="page-link" href="#" onclick="changePage(${pagination.page + 1}); return false;">Next</a>`;
+    ul.appendChild(next);
+}
+
+function changePage(page) {
+    currentPage = page;
+    loadPrices();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function showAddPriceModal() {
+    document.getElementById('priceModalLabel').textContent = 'Add New Price';
+    document.getElementById('priceForm').reset();
+    document.getElementById('securityId').value = currentSecurityId;
+    document.getElementById('priceDate').value = new Date().toISOString().split('T')[0];
+    $('#priceModal').modal('show');
+}
+
+function savePrice() {
+    const form = document.getElementById('priceForm');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+    
+    fetch(`/historical-prices/api/security/${currentSecurityId}/prices`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            $('#priceModal').modal('hide');
+            showSuccess('Price added successfully');
+            currentPage = 1;
+            loadPrices();
+        } else {
+            showError('Failed to add price: ' + data.message);
+        }
+    })
+    .catch(error => {
+        showError('Error adding price: ' + error.message);
+    });
+}
+
+function editPrice(priceId, date, closePrice) {
+    document.getElementById('editPriceId').value = priceId;
+    document.getElementById('editPriceDate').value = date;
+    document.getElementById('editPriceClose').value = closePrice;
+    $('#editPriceModal').modal('show');
+}
+
+function updatePrice() {
+    const form = document.getElementById('editPriceForm');
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
+    const priceId = data.price_id;
+    
+    fetch(`/historical-prices/api/price/${priceId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            $('#editPriceModal').modal('hide');
+            showSuccess('Price updated successfully');
+            currentPage = 1;
+            loadPrices();
+        } else {
+            showError('Failed to update price: ' + data.message);
+        }
+    })
+    .catch(error => {
+        showError('Error updating price: ' + error.message);
+    });
+}
+
+function deletePrice(priceId) {
+    if (confirm('Are you sure you want to delete this price?')) {
+        fetch(`/historical-prices/api/price/${priceId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showSuccess('Price deleted successfully');
+                currentPage = 1;
+                loadPrices();
+            } else {
+                showError('Failed to delete price: ' + data.message);
+            }
+        })
+        .catch(error => {
+            showError('Error deleting price: ' + error.message);
+        });
+    }
+}
+
+function showSuccess(message) {
+    // You can implement a toast notification here
+    alert('Success: ' + message);
+}
+
+function showError(message) {
+    // You can implement a toast notification here
+    alert('Error: ' + message);
+}
+</script>
+{% endblock %}

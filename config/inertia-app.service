@@ -1,0 +1,43 @@
+[Unit]
+Description=Inertia Investment App
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=inertia
+Group=inertia
+WorkingDirectory=/home/inertia/app
+# Load .env so MAIL_PASSWORD and other secrets are available (dash = don't fail if missing)
+EnvironmentFile=-/home/inertia/app/.env
+Environment="PATH=/home/inertia/app/venv/bin"
+Environment="FLASK_ENV=production"
+Environment="SERVER_NAME=inertiainvest.in"
+Environment="WHATSAPP_API_URL=https://graph.facebook.com/v22.0"
+Environment="WHATSAPP_PHONE_NUMBER_ID=950513184811659"
+Environment="WHATSAPP_WEBHOOK_URL=https://inertiainvest.in/api/v1/whatsapp/webhook"
+Environment="WHATSAPP_TEMPLATE_LANGUAGE=en_US"
+Environment="WHATSAPP_VERIFY_TOKEN=wa-verify-8f3c2e1a9b7d4c2f"
+Environment="EAAhrye5zRx0BQoxA0GsqSufQCJkmG0o3rASB3Gaz5zuUU2DyIWhZAJxJSiY2jGBZBwSEflDfZCNyswO8SZCaTjsaLV0pQvLgGUkVcsy2EcijCjlO7XJkyDtjxBqRYVhuTPwlasxLCkZCgnvmTeuSNLlSfaYOAihzjuwotQBZCEokQLHmpboXHKd2h9nceWwA01ZC85rMk3wbmjjFGsvyWdmcFDlZC48ZBkSi3mI2yYlojM2JAnXQTOyPi6ubsYLZBmXTLrLEcRrcDoIOEfmv1DZBP4ZBl7gJz5gZATcBTAdPuZCQZDZD"
+ExecStart=/home/inertia/app/venv/bin/python3 -m gunicorn -c /home/inertia/app/config/gunicorn_config_production.py wsgi:app
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=inertia-app
+TimeoutStopSec=30
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/inertia/app
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target

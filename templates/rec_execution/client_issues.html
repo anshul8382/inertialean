@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block title %}Recommendation Execution – {{ client.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <div class="page-title-right">
+                    <ol class="breadcrumb m-0">
+                        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('agents_dashboard.dashboard') }}">Agents</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('rec_execution.dashboard') }}">Recommendation Execution</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('rec_execution.by_client') }}">By Client</a></li>
+                        <li class="breadcrumb-item active">{{ client.name }}</li>
+                    </ol>
+                </div>
+                <h4 class="page-title">
+                    <i class="fas fa-user me-2"></i>{{ client.name }} – All Recommendation Execution Issues
+                </h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <p class="mb-0 text-muted">All open issues for this client (all check types merged). Resolve or create an alert from selected issues.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Client SLA</h6>
+                    <a href="{{ url_for('rec_execution.sla_settings', client_id=client.id) }}" class="btn btn-sm btn-outline-primary">SLA Settings</a>
+                    {% if exception_count and exception_count > 0 %}
+                    <span class="badge bg-light text-dark ms-1">Exceptions: {{ exception_count }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form id="resolveForm" action="{{ url_for('rec_execution.resolve_issues') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="resolution" value="fixed">
+        <div class="row mb-3">
+            <div class="col-12">
+                <button type="submit" class="btn btn-success" id="resolveBtn" disabled>
+                    <i class="fas fa-check"></i> Resolve Selected (<span id="selectedCount">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-secondary ms-2" onclick="bulkResolveAs('exception')">
+                    Mark Exception (Skip)
+                </button>
+                <button type="button" class="btn btn-outline-primary ms-2" onclick="createAlertFromSelected()">
+                    Create Alert
+                </button>
+                <a href="{{ url_for('rec_execution.by_client') }}" class="btn btn-outline-secondary ms-2">Back to By Client</a>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="header-title mb-0">
+                            <span class="badge bg-warning me-2">{{ total_issues }}</span> Open Issues
+                        </h4>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if issues %}
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th width="40"><input type="checkbox" class="form-check-input" onchange="toggleAll(this)"></th>
+                                    <th>Issue</th>
+                                    <th width="120">Check</th>
+                                    <th width="90">Severity</th>
+                                    <th width="160">Assigned To</th>
+                                    <th width="110">Date</th>
+                                    <th width="80">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for issue in issues %}
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input issue-checkbox" name="issue_ids[]" value="{{ issue.id }}" onchange="updateCount()">
+                                    </td>
+                                    <td>
+                                        <div>{{ issue.message }}</div>
+                                        {% if issue.suggested_action %}
+                                        <br><small class="text-info">
+                                            <i class="fas fa-lightbulb"></i>
+                                            {% if issue.details and issue.details.get('workflow_id') %}
+                                                <a href="{{ url_for('rec_execution.workflow_issues', id=issue.details.get('monthly_investment_id') or issue.details.workflow_id) }}">View workflow {{ issue.details.workflow_id }}</a>
+                                            {% else %}
+                                                {{ issue.suggested_action }}
+                                            {% endif %}
+                                        </small>
+                                        {% endif %}
+                                    </td>
+                                    <td><span class="badge bg-secondary">{{ issue.check_name }}</span></td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if issue.severity == 'critical' else 'warning' if issue.severity == 'warning' else 'info' }}">{{ issue.severity }}</span>
+                                    </td>
+                                    <td>
+                                        <select class="form-select form-select-sm"
+                                                aria-label="Assignee for issue {{ issue.id }}"
+                                                onchange="reassignOne({{ issue.id }}, this.value)">
+                                            <option value="0" {% if not issue.assigned_to %}selected{% endif %}>Unassigned</option>
+                                            {% for u in assignee_users %}
+                                            <option value="{{ u.id }}" {% if issue.assigned_to == u.id %}selected{% endif %}>{{ u.username }}</option>
+                                            {% endfor %}
+                                            {% if issue.assigned_to and issue.assigned_to not in assignee_user_ids %}
+                                            <option value="{{ issue.assigned_to }}" selected>
+                                                {{ issue.assigned_user.username if issue.assigned_user else ('User #' ~ issue.assigned_to) }} (inactive)
+                                            </option>
+                                            {% endif %}
+                                        </select>
+                                    </td>
+                                    <td><small>{{ issue.detected_at.strftime('%Y-%m-%d') if issue.detected_at else 'N/A' }}</small></td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-success" onclick="quickResolve({{ issue.id }}, 'fixed')" title="Mark Fixed"><i class="fas fa-check"></i></button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                            <h5>No Issues</h5>
+                            <p class="text-muted">No open Recommendation Execution issues for this client.</p>
+                            <a href="{{ url_for('rec_execution.by_client') }}" class="btn btn-outline-primary">Back to By Client</a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+function toggleAll(checkbox) {
+    document.querySelectorAll('.issue-checkbox').forEach(cb => cb.checked = checkbox.checked);
+    updateCount();
+}
+function updateCount() {
+    var n = document.querySelectorAll('.issue-checkbox:checked').length;
+    document.getElementById('selectedCount').textContent = n;
+    document.getElementById('resolveBtn').disabled = n === 0;
+}
+function reassignOne(issueId, assignedTo) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("data_integrity.reassign_issues") }}';
+    var csrf = document.createElement('input'); csrf.type = 'hidden'; csrf.name = 'csrf_token'; csrf.value = '{{ csrf_token() }}'; form.appendChild(csrf);
+    var inp = document.createElement('input'); inp.type = 'hidden'; inp.name = 'issue_ids[]'; inp.value = issueId; form.appendChild(inp);
+    var asg = document.createElement('input'); asg.type = 'hidden'; asg.name = 'assigned_to'; asg.value = assignedTo; form.appendChild(asg);
+    document.body.appendChild(form);
+    form.submit();
+}
+function quickResolve(issueId, resolution) {
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("rec_execution.resolve_issues") }}';
+    var csrf = document.createElement('input'); csrf.type = 'hidden'; csrf.name = 'csrf_token'; csrf.value = '{{ csrf_token() }}'; form.appendChild(csrf);
+    var inp = document.createElement('input'); inp.type = 'hidden'; inp.name = 'issue_ids[]'; inp.value = issueId; form.appendChild(inp);
+    var res = document.createElement('input'); res.type = 'hidden'; res.name = 'resolution'; res.value = resolution; form.appendChild(res);
+    document.body.appendChild(form);
+    form.submit();
+}
+function bulkResolveAs(resolution) {
+    var sel = document.querySelectorAll('.issue-checkbox:checked');
+    if (sel.length === 0) document.querySelectorAll('.issue-checkbox').forEach(cb => cb.checked = true);
+    updateCount();
+    document.querySelector('#resolveForm input[name="resolution"]').value = resolution;
+    document.getElementById('resolveForm').submit();
+}
+function createAlertFromSelected() {
+    var ids = Array.from(document.querySelectorAll('.issue-checkbox:checked')).map(function(cb){ return cb.value; });
+    if (ids.length === 0) ids = Array.from(document.querySelectorAll('.issue-checkbox')).map(function(cb){ return cb.value; });
+    if (ids.length === 0) return;
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("rec_execution.create_alert_from_issues") }}';
+    var csrf = document.createElement('input'); csrf.type = 'hidden'; csrf.name = 'csrf_token'; csrf.value = '{{ csrf_token() }}'; form.appendChild(csrf);
+    ids.forEach(function(id){ var i = document.createElement('input'); i.type = 'hidden'; i.name = 'issue_ids[]'; i.value = id; form.appendChild(i); });
+    document.body.appendChild(form);
+    form.submit();
+}
+window.addEventListener('load', updateCount);
+</script>
+{% endblock %}

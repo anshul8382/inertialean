@@ -1,0 +1,193 @@
+{
+  "company_basics": {
+    "name": "Inertia Investment Management",
+    "type": "Investment Management Firm",
+    "mission": "To empower people in achieving financial freedom through affordable and transparent access to investment expertise.\n",
+    "vision": "Serve as an unbiased adviser for working professionals, providing them with the confidence that their investments are being managed with the utmost care and attention by a qualified and experienced professional.\""
+  },
+  "target_segments": {
+    "primary": [
+      {
+        "segment": "Working Professionals (35-55)",
+        "description": "Mid to senior level professionals seeking to build wealth",
+        "characteristics": [
+          "Annual income: ₹15-50 lakhs",
+          "Age: 35-55 years",
+          "Tech, finance, consulting, business owners",
+          "Moderate to high risk tolerance"
+        ],
+        "needs": [
+          "Higher returns than traditional investments",
+          "Professional investment management",
+          "Transparent fee structure",
+          "Regular portfolio reviews"
+        ]
+      }
+    ],
+    "secondary": [
+      {
+        "segment": "High Net Worth Individuals (45+)",
+        "description": "Senior professionals and business owners with significant wealth",
+        "characteristics": [
+          "Annual income: ₹50 lakhs+",
+          "Age: 45+ years",
+          "Senior executives, entrepreneurs",
+          "Conservative to moderate risk tolerance"
+        ],
+        "needs": [
+          "Superior risk-adjusted returns",
+          "Holistic wealth management",
+          "Tax-efficient strategies",
+          "Personalized service"
+        ]
+      }
+    ]
+  },
+  "services": {
+    "core_services": [
+      {
+        "service": "Portfolio Management",
+        "description": "Comprehensive investment portfolio management with active monitoring",
+        "features": [
+          "Asset allocation optimization",
+          "Regular rebalancing",
+          "Risk management",
+          "Performance tracking"
+        ]
+      },
+      {
+        "service": "Investment Advisory",
+        "description": "Personalized investment advice based on client goals and risk profile",
+        "features": [
+          "Goal-based planning",
+          "Risk assessment",
+          "Investment recommendations",
+          "Regular reviews"
+        ]
+      }
+    ],
+    "specialized_services": [
+      {
+        "service": "Asset Allocation",
+        "description": "Strategic asset allocation across equity, debt, and alternative investments",
+        "features": [
+          "Model-based allocation",
+          "Risk-adjusted positioning",
+          "Market timing insights",
+          "Sector rotation strategies"
+        ]
+      },
+      {
+        "service": "Tax Optimization",
+        "description": "Tax-efficient investment strategies and portfolio structuring",
+        "features": [
+          "Tax-loss harvesting",
+          "Asset location optimization",
+          "Capital gains management",
+          "Tax planning"
+        ]
+      }
+    ]
+  },
+  "investment_philosophy": {
+    "approach": "Focus on risk adjusted returns",
+    "principles": [
+      "1. The investor should be comfortable in allocating full wallet share",
+      "2. holistic approach to investment advisory",
+      "3. Focus on what risks can be taken for the client and when market is appropriate to take those risks"
+    ]
+  },
+  "culture_framework": {
+    "core_values": [
+      "Striving For Expertise: Strive to have all the knowledge and skills required to ensure investment performance for our clients. Keep learning and improving ourselves towards achieving the same.",
+      "Keeping The Trust:  Do what we say and say what we do. Also clearly communicate what we will not do.",
+      "Making people win : Nurturing relationships by caring about our clients and associates. Being genuinely interested in their well being. Keep engaging with them to resolve any issues rather than giving up from our side.",
+      "Partnerships that work for everyone  Entering only those commercial agreements that we would deem fair even if we were on the other side of the table. Ensuring that we keep all partners well informed and on board about issues that matter to them.",
+      "Maintaining A Long Term Perspective : No short term decisions and no short cuts. Always choosing the path that will work sustainably in long term."
+    ],
+    "operating_principles": [
+      "Fiduciary duty as the highest priority",
+      "Transparent communication with clients",
+      "Continuous improvement in processes",
+      "Regulatory compliance and ethical conduct"
+    ]
+  },
+  "regulatory_framework": {
+    "primary_regulator": "Securities and Exchange Board of India (SEBI)",
+    "compliance_requirements": [
+      "SEBI Investment Adviser Regulations",
+      "SEBI Portfolio Manager Regulations",
+      "Anti-Money Laundering (AML) compliance",
+      "Know Your Customer (KYC) requirements",
+      "Data protection and privacy regulations"
+    ],
+    "fiduciary_duties": [
+      "Act in the best interest of clients",
+      "Avoid conflicts of interest",
+      "Provide full disclosure of all material information",
+      "Maintain client confidentiality",
+      "Exercise due care and diligence"
+    ]
+  },
+  "market_context": {
+    "primary_markets": [
+      "Indian equity markets",
+      "Global equity markets",
+      "Fixed income markets"
+    ],
+    "investment_universe": [
+      "Large-cap Indian equities",
+      "Mid-cap and small-cap opportunities",
+      "International equities",
+      "Government and corporate bonds",
+      "Alternative investments"
+    ],
+    "economic_focus": [
+      "Indian economic growth and development",
+      "Global economic trends and their impact",
+      "Sectoral analysis and opportunities",
+      "Currency and interest rate movements",
+      "Geopolitical factors affecting investments"
+    ]
+  },
+  "communication_style": {
+    "tone": "Professional, clear, and accessible",
+    "approach": "Educational and informative while being actionable",
+    "language": "Avoid jargon, explain complex concepts simply",
+    "format": "Structured and well-organized content",
+    "audience_awareness": "Tailor communication to client sophistication level"
+  },
+  "content_framework": {
+    "article_structure": {
+      "introduction": "Hook with relevant market insight or client challenge",
+      "body": "Data-driven analysis with practical examples",
+      "conclusion": "Actionable takeaways and next steps"
+    },
+    "key_messaging": {
+      "value_proposition": "Professional investment management for working professionals",
+      "differentiators": [
+        "Transparent fee structure",
+        "Risk-adjusted returns focus",
+        "Holistic approach to wealth building",
+        "Personalized service"
+      ],
+      "call_to_actions": [
+        "Schedule a consultation",
+        "Download our investment guide",
+        "Join our newsletter for market insights"
+      ]
+    },
+    "content_themes": [
+      "Market opportunities for working professionals",
+      "Risk management in volatile markets",
+      "Tax-efficient investment strategies",
+      "Building wealth through systematic investing",
+      "Retirement planning for professionals"
+    ]
+  },
+  "last_updated": "2025-09-21T05:45:11.959787",
+  "version": "1.0",
+  "custom_context": {
+    "test_key": "test_value"
+  }
+}

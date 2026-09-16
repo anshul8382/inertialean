@@ -1,0 +1,94 @@
+# Client Health Focus — Module Spec
+# Nightly: observations JSON → input wrapper → LLM interpret → output wrapper.
+# LLM interprets; Python ranks; output wrapper takes final call.
+# No Task Assignment / OpsTask actions. Alert create frozen (opt-in per scenario later).
+
+module:
+  name: client_health_focus
+  domain: workflows_and_ops
+  fr_ref: FR-HEALTH-FOCUS-01
+  roles: [advisor, manager, admin]
+  trigger: scheduled_night
+  interactive: false
+  local_only: true
+
+input:
+  fact_sources:
+    - api: client_health_observations_pack
+      params: {path: "var/client_health/latest_observations.json"}
+      fields: [client_id, signal_id, signal, severity, title, facts, assignee_user_id]
+    - api: data_integrity_issues_open
+      fields: [id, check_name, check_category, severity, message]
+    - api: monthly_workflows_open
+      fields: [id, current_stage, planned_amount, notes, updated_at]
+    - api: review_workflows_open
+      fields: [id, status, review_date, meeting_date, meeting_notes]
+    - api: price_accuracy_findings
+      fields: [finding_id, kind, security_id, symbol, client_id via holdings]
+  client_scoped: true
+  sample_response_ref: n/a
+
+guidelines:
+  pack: CLIENT_HEALTH_GUIDELINES
+  pack_path: docs/assistant_modules/CLIENT_HEALTH_GUIDELINES.md
+  questionnaire: docs/assistant_modules/CLIENT_HEALTH_SCENARIO_QUESTIONNAIRE.md
+  deterministic_rules:
+    - "rank by P0 > P1 > P2 using signal_id map + severity"
+    - "max 3 violations, max 3 recommendations"
+    - "A2/B1: 24-48 business hours; weekends excluded; ₹0 → 1 week grace"
+    - "emails: consolidated digests only"
+  tone: "concise advisor ops; one verb per line; no emoji spam"
+  constraints:
+    - no_invented_alerts
+    - fact_ids_must_be_from_pack
+    - no_task_assignment
+    - local_only
+
+llm:
+  model: llama3.1:8b
+  max_tokens: 320
+  temperature: 0.1
+  local_only: true
+  context_budget: 4096
+  role: interpretation_only
+
+output:
+  type: text_to_ui
+  artifacts:
+    - var/client_health/latest_observations.json
+    - var/client_health/latest_interpretations.json
+    - var/client_health/digests_*.json
+  schema:
+    violations:
+      - fact_id: str
+        title: str
+        improvement_action: str
+    recommendations: [str]
+  validation:
+    - fact_id_allowlist
+    - max_3_violations
+    - max_3_recommendations
+    - fail_closed_to_deterministic
+  actions: []  # digest send gated by CLIENT_HEALTH_SEND_DIGESTS; Alert freeze remains
+  approval: none
+  egress: local_only  # external_send only when CLIENT_HEALTH_SEND_DIGESTS=1
+  audit: [nightly_pack_written, health_copy_generated, digest_send_attempted]
+
+built:
+  - services/client_health_observations.py
+  - services/client_health_collector_service.py  # includes P1 price findings
+  - services/client_health_nightly_service.py    # digests + gated send + data_price_digest
+  - services/client_health_priority_service.py
+  - services/client_health_phrase_service.py
+  - services/client_health_dashboard_service.py  # L7 by-client grouping
+  - airflow/dags/client_health_nightly_dag.py
+  - routes/data_integrity.py data_price_by_client
+  - templates/data_integrity/by_client.html
+  - dashboard_stub data/price section
+  - ClientStatusService reads latest_interpretations for card copy
+  - docs/assistant_modules/CLIENT_HEALTH_ARCHITECTURE.md
+
+out_of_scope:
+  - Task Assignment / OpsTask
+  - Creating Alerts globally (frozen; B1/A2 48h business rule documented for later)
+  - Replacing Hub wholesale

@@ -1,0 +1,60 @@
+[Unit]
+Description=Inertia Investment App (using run.py)
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=inertia
+Group=inertia
+WorkingDirectory=/home/inertia/app
+Environment="PATH=/home/inertia/app/venv/bin:/usr/bin:/usr/local/bin"
+Environment="FLASK_ENV=production"
+Environment="SERVER_NAME=inertiainvest.in"
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONPATH=/home/inertia/app"
+Environment="WHATSAPP_API_URL=https://graph.facebook.com/v22.0"
+Environment="WHATSAPP_PHONE_NUMBER_ID=950513184811659"
+Environment="WHATSAPP_WEBHOOK_URL=https://inertiainvest.in/api/v1/whatsapp/webhook"
+Environment="WHATSAPP_TEMPLATE_LANGUAGE=en_US"
+Environment="WHATSAPP_VERIFY_TOKEN=REPLACE_WITH_RANDOM_TOKEN"
+Environment="WHATSAPP_ACCESS_TOKEN=REPLACE_WITH_REAL_TOKEN"
+
+# Use run.py with Python directly - resolve symlink first
+ExecStart=/usr/bin/python3 /home/inertia/app/run.py
+# Ensure we can change to working directory
+RuntimeDirectory=inertia-app
+
+# Auto-restart on failure
+Restart=always
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Timeouts
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=inertia-app
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/inertia/app
+ReadOnlyPaths=/home
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Resource limits (optional - adjust based on your server)
+# MemoryMax=2G
+# CPUQuota=200%
+
+[Install]
+WantedBy=multi-user.target
+

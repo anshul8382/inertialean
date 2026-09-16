@@ -1,0 +1,98 @@
+Total contaminated fills (vs neighbors >25%): 290
+CA-confirmed adjusted (exact scale match): 38
+LIKELY adjusted (scale but no CA match in master): 159
+post-fill CA factor notes: 16
+
+=== CA-CONFIRMED (corporate_actions scale matches fill) ===
+
+ASHOKLEY (sid=168) — 2 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-07-16
+  hp_id=461965 2019-05-01 fill=44.78 prev=86.95@upload next=89.55@upload vs_ref=-49.26%
+  hp_id=461966 2021-03-11 fill=61.03 prev=123.9@upload next=122.05@upload vs_ref=-50.37%
+
+AUBANK (sid=191) — 1 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2022-06-09
+  hp_id=461970 2019-05-01 fill=320.77 prev=644.65@upload next=641.55@upload vs_ref=-50.12%
+
+BAJFINANCE (sid=228) — 3 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.1 from BONUS 4@2025-06-16; SPLIT 2:1@2025-06-16
+  hp_id=462002 2019-05-01 fill=313.18 prev=3095.95@upload next=3131.75@upload vs_ref=-89.94%
+  hp_id=462003 2024-03-08 fill=643.38 prev=6421.05@upload next=6433.75@upload vs_ref=-89.99%
+  hp_id=462004 2024-04-11 fill=722.96 prev=7230.25@upload next=7229.55@upload vs_ref=-90.0%
+
+DIXON (sid=488) — 1 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.2 from SPLIT 5:1@2021-03-18
+  hp_id=462069 2019-05-01 fill=473.72 prev=2348.6@upload next=2368.6@upload vs_ref=-79.92%
+
+HDFCAMC (sid=751) — 1 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-11-26
+  hp_id=462124 2019-05-01 fill=848.78 prev=1695.05@upload next=1697.55@upload vs_ref=-49.96%
+
+HDFCBANK (sid=752) — 2 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.25 from SPLIT 2:1@2019-09-19; BONUS 1@2025-08-26
+  hp_id=462125 2019-05-01 fill=588.95 prev=2317.45@upload next=2355.8@upload vs_ref=-74.79%
+  hp_id=462126 2025-04-14 fill=932.45 prev=1806.75@upload next=1864.9@upload vs_ref=-49.21%
+
+IPCALAB (sid=893) — 4 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.5 from SPLIT 2:1@2022-01-10
+  hp_id=462169 2020-01-08 fill=598.48 prev=@ next=1291.0@cron vs_ref=-53.64%
+  hp_id=462170 2020-02-06 fill=620.23 prev=@ next=1291.0@cron vs_ref=-51.96%
+  hp_id=462172 2020-03-02 fill=717.08 prev=@ next=1291.0@cron vs_ref=-44.46%
+  hp_id=462174 2020-04-01 fill=698.88 prev=@ next=1291.0@cron vs_ref=-45.87%
+
+IRB (sid=895) — 1 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2026-03-30
+  hp_id=462188 2025-09-18 fill=22.05 prev=@ next=44.67@cron vs_ref=-50.64%
+
+KOTAKBANK (sid=1032) — 3 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.2 from SPLIT 5:1@2026-01-14
+  hp_id=462217 2019-05-01 fill=281.27 prev=1386.55@upload next=1406.35@upload vs_ref=-79.86%
+  hp_id=462218 2019-08-15 fill=299.79 prev=1491.8@upload next=1498.95@upload vs_ref=-79.95%
+  hp_id=462219 2025-11-05 fill=416.64 prev=2096.6@upload next=2083.2@upload vs_ref=-80.06%
+
+LALPATHLAB (sid=1063) — 3 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-12-19
+  hp_id=462221 2019-05-01 fill=536.55 prev=1044.3@upload next=1073.1@upload vs_ref=-49.32%
+  hp_id=462222 2024-04-11 fill=1179.2 prev=2304.3@upload next=2358.4@upload vs_ref=-49.42%
+  hp_id=462223 2025-11-05 fill=1554.0 prev=3153.7@upload next=3108.0@upload vs_ref=-50.36%
+
+LT (sid=1100) — 1 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.6667 from BONUS 0.5@2017-07-13
+  hp_id=462226 2016-11-14 fill=913.53 prev=1388.8@upload next=1370.3@upload vs_ref=-33.78%
+
+MASFIN (sid=1162) — 4 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.3333 from BONUS 2@2024-02-22
+  hp_id=462260 2020-01-01 fill=288.27 prev=@ next=870.95@upload vs_ref=-66.9%
+  hp_id=462270 2021-07-05 fill=281.13 prev=@ next=870.95@upload vs_ref=-67.72%
+  hp_id=462271 2021-07-07 fill=285.63 prev=@ next=870.95@upload vs_ref=-67.2%
+  hp_id=462272 2021-09-14 fill=261.83 prev=@ next=870.95@upload vs_ref=-69.94%
+
+NAUKRI (sid=1264) — 2 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.2 from SPLIT 5:1@2025-05-07
+  hp_id=462292 2019-05-01 fill=390.73 prev=1933.25@upload next=1953.65@upload vs_ref=-79.9%
+  hp_id=462293 2021-03-11 fill=960.72 prev=4869.8@upload next=4803.6@upload vs_ref=-80.14%
+
+NESTLEIND (sid=1286) — 1 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.05 from SPLIT 10:1@2024-01-05; BONUS 1@2025-08-08
+  hp_id=462298 2021-03-11 fill=836.12 prev=16931.45@upload next=16722.45@upload vs_ref=-95.03%
+
+PIDILITIND (sid=1418) — 3 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-09-23
+  hp_id=462315 2019-05-01 fill=614.4 prev=1234.55@upload next=1228.8@upload vs_ref=-50.12%
+  hp_id=462316 2021-03-11 fill=861.55 prev=1737.05@upload next=1723.1@upload vs_ref=-50.2%
+  hp_id=462317 2024-03-08 fill=1453.2 prev=2865.85@upload next=2906.4@upload vs_ref=-49.65%
+
+RELIANCE (sid=1) — 4 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2024-10-28
+  hp_id=461937 2018-09-13 fill=620.69 prev=1252.5@upload next=1253.15@upload vs_ref=-50.46%
+  hp_id=461938 2019-05-01 fill=695.93 prev=1392.8@upload next=1405.05@upload vs_ref=-50.25%
+  hp_id=461939 2019-08-15 fill=633.0 prev=1288.25@upload next=1278.0@upload vs_ref=-50.67%
+  hp_id=461940 2021-03-11 fill=1068.8 prev=2181.95@upload next=2137.6@upload vs_ref=-50.51%
+
+TCS (sid=1885) — 1 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2018-05-31
+  hp_id=462389 2016-11-14 fill=1060.65 prev=2101.15@upload next=2121.3@upload vs_ref=-49.76%
+
+ZYDUSWELL (sid=2122) — 1 fills
+  CA: CONFIRMED adjusted: fill≈ref×0.2 from SPLIT 5:1@2025-09-18
+  hp_id=462435 2017-05-01 fill=173.56 prev=867.35@upload next=867.8@upload vs_ref=-79.99%

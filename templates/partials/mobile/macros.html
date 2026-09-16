@@ -1,0 +1,106 @@
+{# Mobile layout macros — {% from 'partials/mobile/macros.html' import maint_hub_open, maint_link, ... %} #}
+
+{% macro mobile_page_open(title, back_url=none) %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = title %}
+  {% if back_url %}{% set mobile_back_url = back_url %}{% endif %}
+  {% include 'partials/mobile/app_header.html' %}
+{% endmacro %}
+
+{% macro mobile_page_close(collapse_desktop=true) %}
+</div>
+<div class="im-desktop-only{% if collapse_desktop %} im-collapsed-on-mobile{% endif %}">
+{% endmacro %}
+
+{% macro desktop_page_close() %}
+</div>
+{% endmacro %}
+
+{% macro hub_links_mobile(title, back_url) %}
+{{ mobile_page_open(title, back_url) }}
+  <div class="im-list-stack im-hub-links-mobile">
+    {{ caller() }}
+  </div>
+  <p class="text-muted small mt-2 px-1">Full tools and charts below.</p>
+{{ mobile_page_close() }}
+{% endmacro %}
+
+{# ── Maintenance menu mobile ── #}
+
+{% macro maint_link(icon, label, href, subtitle=none) %}
+<a href="{{ href }}" class="im-settings-link">
+  <i class="fas {{ icon }}"></i>
+  <span>{{ label }}{% if subtitle %}<small class="d-block text-muted fw-normal mt-1">{{ subtitle }}</small>{% endif %}</span>
+  <i class="fas fa-chevron-right text-muted"></i>
+</a>
+{% endmacro %}
+
+{% macro maint_section(title) %}
+<p class="im-more-menu__section-title mb-0">{{ title }}</p>
+{% endmacro %}
+
+{% macro maint_hub_open(title, intro='', back_url=none) %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = title %}
+  {% set mobile_back_url = back_url or url_for('main.data_upload_links') %}
+  {% include 'partials/mobile/app_header.html' %}
+  {% if intro %}<p class="text-muted small mb-2">{{ intro }}</p>{% endif %}
+  <div class="im-list-stack">
+{% endmacro %}
+
+{% macro maint_hub_close(hint='Full hub layout below — scroll for tables and forms.', show_crossnav=true, collapse_desktop=true) %}
+  </div>
+  {% if hint %}<p class="text-muted small mt-2">{{ hint }}</p>{% endif %}
+  {% if show_crossnav %}{% include 'partials/mobile/maintenance_crossnav.html' with context %}{% endif %}
+</div>
+<div class="im-desktop-only container-fluid{% if collapse_desktop %} im-collapsed-on-mobile{% endif %}">
+{% endmacro %}
+
+{% macro maint_child_open(title, back_url, intro='', scroll_hint='Use the form or table below.') %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = title %}
+  {% set mobile_back_url = back_url %}
+  {% include 'partials/mobile/app_header.html' %}
+  {% if intro %}<p class="text-muted small mb-2">{{ intro }}</p>{% endif %}
+  {% if scroll_hint %}<p class="text-muted small mb-2">{{ scroll_hint }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro maint_desktop_open(wrapper='container-fluid') %}
+<div class="im-desktop-only {{ wrapper }}">
+{% endmacro %}
+
+{% macro maint_desktop_close() %}
+</div>
+{% endmacro %}
+
+{# ── Unified recommendations workflow (mobile shell) ── #}
+
+{% macro rec_mobile_open(title, back_url, intro='') %}
+<div class="im-mobile-only im-mobile-page rec-workflow-mobile">
+  {% set mobile_page_title = title %}
+  {% set mobile_back_url = back_url %}
+  {% include 'partials/mobile/app_header.html' %}
+  {% if intro %}<p class="text-muted small mb-2">{{ intro }}</p>{% endif %}
+{% endmacro %}
+
+{% macro rec_mobile_close(hint='Full workflow below — scroll for tables, sections, and forms.') %}
+  {% if hint %}<p class="text-muted small mt-2 mb-0">{{ hint }}</p>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro rec_desktop_open(wrapper='container mt-4 rec-workflow-mobile') %}
+<div class="im-desktop-only {{ wrapper }}">
+{% endmacro %}
+
+{% macro rec_desktop_close() %}
+</div>
+{% endmacro %}
+
+{% macro rec_action_link(icon, label, href, btn_class='btn-secondary') %}
+<a href="{{ href }}" class="im-settings-link">
+  <i class="fas {{ icon }}"></i>
+  <span>{{ label }}</span>
+  <i class="fas fa-chevron-right text-muted"></i>
+</a>
+{% endmacro %}

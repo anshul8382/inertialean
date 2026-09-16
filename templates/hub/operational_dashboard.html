@@ -1,0 +1,297 @@
+{% extends "base.html" %}
+{% block title %}Operational Intelligence{% endblock %}
+{% block extra_css %}
+<style>
+  .operational-agent-card:hover .card { box-shadow: 0 .5rem 1rem rgba(0,0,0,.12) !important; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Operational Hub' %}
+  {% set mobile_back_url = url_for('hub.dashboard') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <div class="im-list-stack">
+    {% if tasks_url %}<a href="{{ tasks_url }}" class="im-settings-link"><i class="fas fa-tasks"></i><span>Ops tasks</span><i class="fas fa-chevron-right text-muted"></i></a>{% endif %}
+    <a href="{{ url_for('hub.issue_queue') }}" class="im-settings-link"><i class="fas fa-list"></i><span>Issue queue</span><i class="fas fa-chevron-right text-muted"></i></a>
+    <a href="{{ url_for('hub.alert_center') }}" class="im-settings-link"><i class="fas fa-bell"></i><span>Alert center</span><i class="fas fa-chevron-right text-muted"></i></a>
+    <a href="{{ url_for('data_integrity.dashboard') }}" class="im-settings-link"><i class="fas fa-shield-alt"></i><span>Data integrity</span><i class="fas fa-chevron-right text-muted"></i></a>
+    <a href="{{ url_for('rec_execution.dashboard') }}" class="im-settings-link"><i class="fas fa-check-double"></i><span>Rec execution</span><i class="fas fa-chevron-right text-muted"></i></a>
+  </div>
+  <p class="text-muted small mt-3">Agent cards and counts below — scroll for full dashboard.</p>
+</div>
+<div class="im-desktop-only im-collapsed-on-mobile container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <a href="{{ url_for('hub.dashboard') }}" class="small text-muted text-decoration-none">← Intelligence Hub</a>
+      <h2 class="mt-1 mb-0"><i class="fas fa-cogs text-secondary"></i> Operational Intelligence</h2>
+    </div>
+    <div class="d-flex flex-wrap gap-1 justify-content-end">
+      <a href="{{ url_for('hub.issue_queue') }}" class="btn btn-outline-secondary btn-sm">Issue queue</a>
+      {% if alerts_list_url %}
+      <a href="{{ alerts_list_url }}" class="btn btn-outline-secondary btn-sm">All alerts</a>
+      {% endif %}
+      {% if alerts_dash_url %}
+      <a href="{{ alerts_dash_url }}" class="btn btn-outline-secondary btn-sm">Alert dashboard</a>
+      {% endif %}
+      <a href="{{ url_for('hub.alert_center') }}" class="btn btn-outline-secondary btn-sm">Alert center</a>
+      {% if airflow_runs_url %}
+      <a href="{{ airflow_runs_url }}" class="btn btn-outline-info btn-sm">Airflow runs</a>
+      {% endif %}
+      <a href="{{ url_for('hub.performance_view') }}" class="btn btn-outline-secondary btn-sm">Performance</a>
+      {% if current_user.is_manager or current_user.is_advisor or current_user.is_ops_manager or current_user.is_admin %}
+      <a href="{{ url_for('rec_execution.sla_settings') }}" class="btn btn-outline-primary btn-sm" title="Per-client stage SLAs for the recommendation execution monitor">Rec execution SLA</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <p class="text-muted small mb-2">
+    <strong>Monitoring</strong> cards count <strong>data integrity issues</strong> by agent, except <em>Alerts / Orchestrator</em> which shows <strong>active alerts</strong>. The <em>Rec. Execution</em> card opens the issue dashboard (by check type).
+    {% if current_user.is_manager or current_user.is_advisor or current_user.is_ops_manager or current_user.is_admin %}
+    The <strong>Recommendation execution</strong> panel below links to <a href="{{ url_for('rec_execution.sla_settings') }}">SLA settings</a> (<code>/recommendation-execution/sla</code>), the full dashboard, and by-client triage.
+    {% endif %}
+  </p>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header py-2"><strong class="small text-uppercase text-muted">My work</strong></div>
+    <div class="card-body py-2 d-flex flex-wrap gap-2 align-items-center">
+      {% if tasks_url %}
+      <a href="{{ tasks_url }}" class="btn btn-sm btn-primary">Ops tasks{% if my_tasks_count %} <span class="badge bg-light text-dark">{{ my_tasks_count }}</span>{% endif %}</a>
+      {% endif %}
+      {% if alerts_list_url %}
+      <a href="{{ alerts_list_url }}" class="btn btn-sm btn-outline-primary">Active alerts <span class="badge bg-secondary">{{ my_active_alerts_count }}</span></a>
+      {% endif %}
+      <a href="{{ url_for('hub.issue_queue') }}" class="btn btn-sm btn-outline-secondary">Full issue queue</a>
+      {% if alerts_dash_url %}
+      <a href="{{ alerts_dash_url }}" class="btn btn-sm btn-outline-secondary">Alert dashboard</a>
+      {% endif %}
+      {% if not tasks_url and not alerts_list_url %}
+      <span class="text-muted small">Enable Tasks / Alerts in navigation to show shortcuts here.</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if current_user.is_manager or current_user.is_advisor or current_user.is_ops_manager or current_user.is_admin %}
+  <div class="card shadow-sm mb-3 border-start border-primary border-3">
+    <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <strong class="small text-uppercase text-muted">Recommendation execution</strong>
+      <span class="small text-muted">Ops monitoring · flags &amp; SLAs</span>
+    </div>
+    <div class="card-body py-3">
+      <p class="small text-muted mb-3 mb-md-2">
+        <strong>SLA settings</strong> define per-client stage days (FUNDS, RECOS, EXEC, stalls) used by the monitor.
+        Open the <strong>dashboard</strong> for counts by check type, or <strong>by client</strong> to triage account-by-account.
+      </p>
+      <div class="d-flex flex-wrap gap-2">
+        <a href="{{ url_for('rec_execution.sla_settings') }}" class="btn btn-sm btn-primary"><i class="fas fa-sliders-h me-1"></i>SLA settings</a>
+        <a href="{{ url_for('rec_execution.dashboard') }}" class="btn btn-sm btn-outline-secondary">Dashboard</a>
+        <a href="{{ url_for('rec_execution.by_client') }}" class="btn btn-sm btn-outline-secondary">By client</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="row mb-3">
+    {% for agent in agents %}
+    <div class="col-lg-3 col-md-6 mb-3">
+      <a href="{{ agent.detail_url }}" class="text-decoration-none text-reset d-block h-100 operational-agent-card">
+        <div class="card shadow-sm h-100 border-0">
+          <div class="card-body">
+            <div class="text-muted small">{{ agent.display }}</div>
+            {% if agent.metric_kind == 'alerts' %}
+            <div class="h5 mb-0 mt-1">{{ agent.primary_count }} active</div>
+            <div class="small text-muted">alerts</div>
+            {% else %}
+            <div class="h5 mb-0 mt-1">{{ agent.primary_count }} open</div>
+            <div class="small text-muted">issues</div>
+            {% endif %}
+            {% if agent.critical_count > 0 %}<span class="badge bg-danger mt-2">{{ agent.critical_count }} critical</span>{% endif %}
+            <div class="small text-muted mt-2">{% if agent.last_run %}Last run: {{ agent.last_run.started_at.strftime('%b %d %H:%M') }}{% else %}Never run{% endif %}</div>
+            <div class="small text-primary mt-2 mb-0"><i class="fas fa-external-link-alt"></i> Open</div>
+          </div>
+        </div>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <strong><i class="fas fa-chart-bar text-secondary me-1"></i> Daily workflow report</strong>
+        <span class="small text-muted ms-2">Same email as the scheduled job; uses recipients from Report recipients (<code>daily_workflow_report</code>).</span>
+      </div>
+      {% if current_user.is_manager or current_user.is_advisor or current_user.is_ops_manager or current_user.is_admin %}
+      <form method="post" action="{{ hub_operational_daily_workflow_report_post_url }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('Send the daily workflow report email now to all configured recipients?');">
+          Send report now
+        </button>
+      </form>
+      {% endif %}
+    </div>
+    <div class="card-body small py-2">
+      <a href="{{ url_for('main.daily_workflow_report') }}" class="btn btn-sm btn-outline-secondary">View in-app report</a>
+      {% if not (current_user.is_manager or current_user.is_advisor or current_user.is_ops_manager or current_user.is_admin) %}
+      <span class="text-muted ms-2">On-demand send is available to managers, advisors, ops managers, and admins.</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <strong><i class="fas fa-archive text-secondary me-1"></i> Codebase backup</strong>
+        <span class="small text-muted ms-2">Daily tarball; older months keep only the last calendar day.</span>
+      </div>
+      <form method="post" action="{{ operational_backup_post_url }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button type="submit" class="btn btn-sm btn-primary">Run backup now</button>
+      </form>
+    </div>
+    <div class="card-body small">
+      <div class="row">
+        <div class="col-md-6 mb-2">
+          <div class="text-muted">Last run (UTC)</div>
+          <div>{% if codebase_backup_status.last_run_utc %}{{ codebase_backup_status.last_run_utc }}{% else %}—{% endif %}</div>
+          <div class="mt-2 text-muted">Status</div>
+          <div>
+            {% if codebase_backup_status.last_ok == true %}
+              <span class="badge bg-success">OK</span>
+            {% elif codebase_backup_status.last_ok == false %}
+              <span class="badge bg-danger">Failed</span>
+            {% else %}
+              <span class="badge bg-secondary">Unknown</span>
+            {% endif %}
+            {% if codebase_backup_status.last_archive_relative %}
+              <span class="ms-1">Archive: <code>{{ codebase_backup_status.last_archive_relative }}</code></span>
+            {% endif %}
+          </div>
+          {% if codebase_backup_status.last_error %}
+          <div class="mt-2 text-danger">{{ codebase_backup_status.last_error[:500] }}</div>
+          {% endif %}
+        </div>
+        <div class="col-md-6 mb-2">
+          <div class="text-muted">Backup root</div>
+          <div class="text-break"><code>{{ codebase_backup_status.backup_root }}</code></div>
+          {% if (codebase_backup_status.last_prune_removed_count|default(0)) > 0 %}
+          <div class="mt-2 text-muted">Last prune removed {{ codebase_backup_status.last_prune_removed_count }} file(s)</div>
+          {% endif %}
+          <div class="mt-2 text-muted">DAG</div>
+          <div><code>codebase_backup_daily</code> (02:15 UTC) — or cron <code>scripts/codebase_backup.py</code></div>
+        </div>
+      </div>
+      {% if codebase_recent %}
+      <div class="mt-3">
+        <div class="text-muted mb-1">Recent archives</div>
+        <ul class="mb-0 ps-3">
+          {% for b in codebase_recent %}
+          <li><code>{{ b.name }}</code> — {{ (b.size_bytes // 1024) }} KB</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if current_user.is_authenticated and current_user.is_admin %}
+  <div class="card shadow-sm mb-3 border-warning">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div>
+        <strong><i class="fas fa-project-diagram text-warning me-1"></i> Alerts &amp; tasks pipeline</strong>
+        <span class="small text-muted ms-2">Reconcile stale items, workflow SLA backfill, auto-close. Optional: assignee backfill + orchestrator.</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{{ hub_operational_pipeline_post_url }}" class="row g-3 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="col-md-8">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="refresh" value="1" id="hubPipelineRefresh">
+            <label class="form-check-label" for="hubPipelineRefresh">
+              <strong>Also run task-assignment backfill + consolidated alert orchestrator</strong>
+              <span class="d-block small text-muted">Matches <code>python scripts/reconcile_alerts_tasks.py --refresh</code>. May create OpsTasks and new consolidated alerts where rules allow.</span>
+            </label>
+          </div>
+        </div>
+        <div class="col-md-4 text-md-end">
+          <button type="submit" class="btn btn-warning" onclick="return confirm('Run full reconcile on production data?');">
+            Run pipeline now
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if ai_suggestions %}
+  <div class="card shadow-sm mb-3">
+    <div class="card-header"><strong>AI Suggestions</strong></div>
+    <div class="card-body p-0">
+      {% for rec in ai_suggestions %}
+      <div class="border-bottom p-3">
+        <div class="d-flex justify-content-between">
+          <div>
+            <span class="badge bg-secondary">{{ rec.action|replace('_',' ') }}</span>
+            <span class="badge bg-{% if rec.priority == 'high' %}danger{% elif rec.priority == 'medium' %}warning{% else %}secondary{% endif %}">{{ rec.priority }}</span>
+            <strong class="ms-1">{{ rec.title }}</strong>
+            {% if rec.client_name %}<span class="small text-muted ms-1">{{ rec.client_name }}</span>{% endif %}
+          </div>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-success" onclick="approveRec({{ rec|tojson|e }})">Approve</button>
+            <button class="btn btn-outline-secondary" onclick="skipRec({{ rec.issue_id }})">Skip</button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header d-flex justify-content-between">
+      <strong>Priority Issues</strong>
+      <button class="btn btn-sm btn-primary" onclick="runAIAnalysis()">Analyze Top Issues</button>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Client</th><th>Check</th><th>Severity</th><th>Age</th><th></th></tr></thead>
+        <tbody>
+          {% for issue in priority_issues %}
+          <tr>
+            <td><a href="{{ url_for('hub.client_view', client_id=issue.client_id) }}">{{ issue.client.name if issue.client else issue.client_id }}</a></td>
+            <td>{{ issue.check_name }}</td>
+            <td>{{ issue.severity }}</td>
+            <td>{{ issue.detected_at | age_days }}d</td>
+            <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('hub.client_view', client_id=issue.client_id) }}">Open</a></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-center text-muted py-3">No open issues</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+function runAIAnalysis() {
+  const fd = new FormData();
+  fd.append('csrf_token', csrfToken);
+  fetch('{{ url_for("hub.ai_analyze") }}', {method: 'POST', body: fd}).then(r => r.json()).then(() => location.reload());
+}
+function approveRec(rec) {
+  const fd = new FormData();
+  fd.append('csrf_token', csrfToken);
+  fd.append('recommendation', JSON.stringify(rec));
+  fetch('{{ url_for("hub.ai_approve") }}', {method: 'POST', body: fd}).then(() => location.reload());
+}
+function skipRec(issueId) {
+  const fd = new FormData();
+  fd.append('csrf_token', csrfToken);
+  fd.append('issue_id', issueId);
+  fetch('{{ url_for("hub.ai_skip") }}', {method: 'POST', body: fd}).then(() => location.reload());
+}
+</script>
+{% endblock %}

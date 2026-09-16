@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if head else 'Add' }} Credit/Debit Head{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1><i class="fas fa-tag"></i> {{ 'Edit' if head else 'Add' }} Credit/Debit Head</h1>
+    <div class="card mt-3">
+        <div class="card-body">
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name *</label>
+                    <input type="text" class="form-control" id="name" name="name" required
+                           value="{{ head.name if head else '' }}" placeholder="e.g. Salary, Rent, UPI Payments">
+                </div>
+                {% if not head %}
+                <div class="mb-3">
+                    <label for="head_type" class="form-label">Type</label>
+                    <select class="form-select" id="head_type" name="head_type">
+                        <option value="credit" {{ 'selected' if head and head.head_type == 'credit' else '' }}>Credit</option>
+                        <option value="debit" {{ 'selected' if not head or head.head_type == 'debit' else '' }}>Debit</option>
+                    </select>
+                </div>
+                {% endif %}
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description (optional)</label>
+                    <textarea class="form-control" id="description" name="description" rows="2">{{ head.description if head else '' }}</textarea>
+                </div>
+                {% if head %}
+                <div class="mb-3 form-check">
+                    <input type="checkbox" class="form-check-input" id="is_active" name="is_active" {{ 'checked' if head.is_active else '' }}>
+                    <label class="form-check-label" for="is_active">Active</label>
+                </div>
+                {% endif %}
+                <button type="submit" class="btn btn-primary">Save</button>
+                <a href="{{ url_for('account_management.heads_list') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

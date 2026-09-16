@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+
+{% block title %}Monthly Salary Calculation{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h3 class="card-title mb-0">
+                            <i class="fas fa-calculator"></i> Monthly Salary Calculation
+                        </h3>
+                        <div>
+                            <button class="btn btn-success" onclick="calculateAllSalaries()">
+                                <i class="fas fa-calculator"></i> Calculate All Salaries
+                            </button>
+                            <button class="btn btn-warning" onclick="closeMonth()" data-bs-toggle="modal" data-bs-target="#closeMonthModal">
+                                <i class="fas fa-lock"></i> Close Month
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Month/Year Selector -->
+                    <form method="GET" action="{{ url_for('attendance.admin_salary_calculation') }}" class="row align-items-end">
+                        <div class="col-md-4">
+                            <label for="month" class="form-label">Month</label>
+                            <select class="form-control" id="month" name="month" onchange="this.form.submit()">
+                                <option value="1" {% if selected_month == 1 %}selected{% endif %}>January</option>
+                                <option value="2" {% if selected_month == 2 %}selected{% endif %}>February</option>
+                                <option value="3" {% if selected_month == 3 %}selected{% endif %}>March</option>
+                                <option value="4" {% if selected_month == 4 %}selected{% endif %}>April</option>
+                                <option value="5" {% if selected_month == 5 %}selected{% endif %}>May</option>
+                                <option value="6" {% if selected_month == 6 %}selected{% endif %}>June</option>
+                                <option value="7" {% if selected_month == 7 %}selected{% endif %}>July</option>
+                                <option value="8" {% if selected_month == 8 %}selected{% endif %}>August</option>
+                                <option value="9" {% if selected_month == 9 %}selected{% endif %}>September</option>
+                                <option value="10" {% if selected_month == 10 %}selected{% endif %}>October</option>
+                                <option value="11" {% if selected_month == 11 %}selected{% endif %}>November</option>
+                                <option value="12" {% if selected_month == 12 %}selected{% endif %}>December</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="year" class="form-label">Year</label>
+                            <select class="form-control" id="year" name="year" onchange="this.form.submit()">
+                                {% for year in year_range %}
+                                <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="card-body">
+                    {% if users %}
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>User</th>
+                                    <th>Status</th>
+                                    <th>Total Days</th>
+                                    <th>Full Days</th>
+                                    <th>Half Days</th>
+                                    <th>Leave Days</th>
+                                    <th>Base Stipend</th>
+                                    <th>Sales Inc.</th>
+                                    <th>Internal Inc.</th>
+                                    <th>Approved Claims</th>
+                                    <th>Total Salary</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user in users %}
+                                {% set salary = monthly_salaries.get(user.id) %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ user.username }}</strong><br>
+                                        <small class="text-muted">{{ user.email }}</small>
+                                    </td>
+                                    <td>
+                                        {% if salary %}
+                                            {% if salary.status == 'calculated' %}
+                                                <span class="badge bg-info">Calculated</span>
+                                            {% elif salary.status == 'paid' %}
+                                                <span class="badge bg-success">Paid</span>
+                                            {% elif salary.status == 'closed' %}
+                                                <span class="badge bg-secondary">Closed</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="badge bg-warning">Not Calculated</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ salary.total_days if salary else 0 }}</td>
+                                    <td>{{ salary.full_days if salary else 0 }}</td>
+                                    <td>{{ salary.half_days if salary else 0 }}</td>
+                                    <td>{{ salary.leave_days if salary else 0 }}</td>
+                                    <td>
+                                        {% if salary %}
+                                            Rs. {{ "%.2f"|format(salary.base_stipend) }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if salary %}
+                                            Rs. {{ "%.2f"|format(salary.sales_incentive or 0) }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if salary %}
+                                            Rs. {{ "%.2f"|format(salary.internal_incentive or 0) }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if salary %}
+                                            Rs. {{ "%.2f"|format(salary.approved_claims) }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if salary %}
+                                            <strong>Rs. {{ "%.2f"|format(salary.total_salary) }}</strong>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if not salary or salary.status == 'calculated' %}
+                                            <a href="{{ url_for('attendance.calculate_monthly_salary', user_id=user.id, year=current_year, month=current_month) }}" 
+                                               class="btn btn-sm btn-primary">
+                                                <i class="fas fa-calculator"></i> Calculate
+                                            </a>
+                                        {% endif %}
+                                        {% if salary and salary.status == 'calculated' %}
+                                            <button class="btn btn-sm btn-success" onclick="markAsPaid({{ salary.id }})">
+                                                <i class="fas fa-check"></i> Mark Paid
+                                            </button>
+                                        {% endif %}
+                                        <a href="{{ url_for('attendance.admin_salary_detail', user_id=user.id, year=current_year, month=current_month) }}" 
+                                           class="btn btn-sm btn-info">
+                                            <i class="fas fa-eye"></i> Detail
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No users found.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Mark as Paid Modal -->
+<div class="modal fade" id="markPaidModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Mark Salary as Paid</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="markPaidForm" method="POST">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="admin_notes" class="form-label">Admin Notes (Optional)</label>
+                        <textarea class="form-control" id="admin_notes" name="admin_notes" rows="3" 
+                                  placeholder="Add any notes about the payment..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Mark as Paid</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Close Month Modal -->
+<div class="modal fade" id="closeMonthModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Close Month {{ month_name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to close the month {{ month_name }}?</p>
+                <p class="text-warning">
+                    <i class="fas fa-exclamation-triangle"></i> 
+                    This will mark all calculated salaries as "closed" and prevent further modifications.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('attendance.close_month', year=current_year, month=current_month) }}" style="display: inline;">
+                    <button type="submit" class="btn btn-warning">Close Month</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function calculateAllSalaries() {
+    if (confirm('Calculate salaries for all users? This will update existing calculations.')) {
+        // Calculate for each user
+        {% for user in users %}
+        {% if not monthly_salaries.get(user.id) or monthly_salaries.get(user.id).status == 'calculated' %}
+        window.open('{{ url_for("attendance.calculate_monthly_salary", user_id=user.id, year=current_year, month=current_month) }}', '_blank');
+        {% endif %}
+        {% endfor %}
+        // Reload page after a short delay
+        setTimeout(() => {
+            location.reload();
+        }, 2000);
+    }
+}
+
+function markAsPaid(salaryId) {
+    document.getElementById('markPaidForm').action = '{{ url_for("attendance.mark_salary_paid", salary_id=0) }}'.replace('0', salaryId);
+    new bootstrap.Modal(document.getElementById('markPaidModal')).show();
+}
+
+function closeMonth() {
+    // Modal is handled by Bootstrap
+}
+</script>
+{% endblock %}

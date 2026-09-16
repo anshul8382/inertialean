@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit Task' if task else 'New Task' }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-clipboard-list"></i> {{ 'Edit Task' if task else 'New Task' }}</h1>
+        <a href="{{ url_for('tasks.list_tasks') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Tasks
+        </a>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('tasks.edit_task', task_id=task.id) if task else url_for('tasks.new_task') }}">
+                {{ form.hidden_tag() }}
+                <div class="mb-3">
+                    {{ form.name.label(class="form-label") }}
+                    {{ form.name(class="form-control", placeholder="Task name") }}
+                    {% if form.name.errors %}
+                    <div class="text-danger">{{ form.name.errors[0] }}</div>
+                    {% endif %}
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.deadline.label(class="form-label") }}
+                        {{ form.deadline(class="form-control") }}
+                        {% if form.deadline.errors %}
+                        <div class="text-danger">{{ form.deadline.errors[0] }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ form.assigned_to.label(class="form-label") }}
+                        {{ form.assigned_to(class="form-select") }}
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.priority.label(class="form-label") }}
+                        {{ form.priority(class="form-select") }}
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        {{ form.client_id.label(class="form-label") }}
+                        {{ form.client_id(class="form-select") }}
+                    </div>
+                </div>
+                {% if task %}
+                <div class="mb-3">
+                    {{ form.status.label(class="form-label") }}
+                    {{ form.status(class="form-select") }}
+                </div>
+                {% endif %}
+                <div class="mb-3">
+                    {{ form.notes.label(class="form-label") }}
+                    {{ form.notes(class="form-control", rows=4, placeholder="Optional notes") }}
+                </div>
+                <button type="submit" class="btn btn-primary">{{ 'Update Task' if task else 'Create Task' }}</button>
+                <a href="{{ url_for('tasks.list_tasks') }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

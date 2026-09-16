@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block title %}Alert Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Alert Dashboard</h1>
+        <div>
+            <a href="{{ url_for('alerts.list_alerts') }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-list"></i> View All Alerts
+            </a>
+            <a href="{{ url_for('alerts.check_sla') }}" class="btn btn-warning btn-sm">
+                <i class="fas fa-sync"></i> Check SLA Now
+            </a>
+            <button type="button" class="btn btn-danger btn-sm" onclick="resetAlerts()">
+                <i class="fas fa-trash-alt"></i> Reset & Regenerate Alerts
+            </button>
+        </div>
+    </div>
+
+    <!-- Alert Statistics Cards -->
+    <div class="row">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Critical Alerts</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ critical_alerts }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Warning Alerts</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ warning_alerts }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-circle fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Info Alerts</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ info_alerts }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-info-circle fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Total Alerts</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_alerts }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-bell fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Overview and Recent Alerts -->
+    <div class="row">
+        <!-- Alert Type Breakdown -->
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Alert Types</h6>
+                </div>
+                <div class="card-body">
+                    {% if alert_types %}
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Alert Type</th>
+                                        <th>Count</th>
+                                        <th>Percentage</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for alert_type in alert_types %}
+                                    <tr>
+                                        <td>{{ alert_type.alert_type|title }}</td>
+                                        <td>{{ alert_type.count }}</td>
+                                        <td>{{ "%.1f"|format(alert_type.count / total_alerts * 100) if total_alerts > 0 else 0 }}%</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No alert type data available.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Alerts -->
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Recent Alerts</h6>
+                </div>
+                <div class="card-body">
+                    {% if recent_alerts %}
+                        {% for alert in recent_alerts[:5] %}
+                        <div class="mb-3 p-3 border-left-{% if alert.severity == 'critical' %}danger{% elif alert.severity == 'warning' %}warning{% else %}info{% endif %} border-left-4">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1">{{ alert.title }}</h6>
+                                    {% if alert.client %}
+                                        <p class="small mb-1">
+                                            <strong>Client:</strong> 
+                                            <a href="{{ url_for('clients.client_details', client_id=alert.client.id) }}" class="text-primary">
+                                                {{ alert.client.name }}
+                                            </a>
+                                        </p>
+                                    {% endif %}
+                                    <p class="small mb-1 text-muted">{{ alert.description[:100] }}{% if alert.description|length > 100 %}...{% endif %}</p>
+                                    <small class="text-muted">{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                </div>
+                                <div>
+                                    {% if alert.severity == 'critical' %}
+                                        <span class="badge badge-danger">Critical</span>
+                                    {% elif alert.severity == 'warning' %}
+                                        <span class="badge badge-warning">Warning</span>
+                                    {% else %}
+                                        <span class="badge badge-info">Info</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% if recent_alerts|length > 5 %}
+                            <div class="text-center">
+                                <a href="{{ url_for('alerts.list_alerts') }}" class="btn btn-sm btn-primary">View All Alerts</a>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                            <h5>No Recent Alerts</h5>
+                            <p class="text-muted">All systems are running smoothly!</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLA Compliance Chart -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">SLA Compliance Overview</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="slaChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('alerts.list_alerts') }}" class="btn btn-primary btn-block">
+                                <i class="fas fa-list"></i> View All Alerts
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('alerts.check_sla') }}" class="btn btn-warning btn-block">
+                                <i class="fas fa-sync"></i> Run SLA Check
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('alerts.initialize_sla') }}" class="btn btn-info btn-block">
+                                <i class="fas fa-cog"></i> Initialize SLA
+                            </a>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary btn-block">
+                                <i class="fas fa-home"></i> Main Dashboard
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// SLA Compliance Chart
+const ctx = document.getElementById('slaChart').getContext('2d');
+new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Critical Alerts', 'Warning Alerts', 'Info Alerts', 'No Alerts'],
+        datasets: [{
+            data: [{{ critical_alerts }}, {{ warning_alerts }}, {{ info_alerts }}, {{ total_alerts - critical_alerts - warning_alerts - info_alerts }}],
+            backgroundColor: [
+                '#e74a3b',
+                '#f6c23e',
+                '#36b9cc',
+                '#1cc88a'
+            ],
+            borderWidth: 2,
+            borderColor: '#fff'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                        const percentage = ((context.parsed / total) * 100).toFixed(1);
+                        return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
+                    }
+                }
+            }
+        }
+    }
+});
+
+function resetAlerts() {
+    if (!confirm('Are you sure you want to delete all old alerts and regenerate alerts based on current SLA breaches? This action cannot be undone.')) {
+        return;
+    }
+    
+    // Show loading state
+    const btn = event.target.closest('button');
+    const originalText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resetting...';
+    
+    // Make API call
+    fetch('{{ url_for("alerts.reset_alerts") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            delete_all: true
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Success! Deleted ${data.deleted_count} old alerts and generated ${data.new_alerts_count} new alerts.`);
+            // Reload page to show new alerts
+            window.location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to reset alerts'));
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error resetting alerts: ' + error.message);
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    });
+}
+</script>
+{% endblock %}

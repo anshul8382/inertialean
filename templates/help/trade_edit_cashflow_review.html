@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Trade edit — cashflow review{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <div>
+            <h1 class="h3 mb-1">Trade edit — cashflow review</h1>
+            <p class="text-muted mb-0 small">What to do after changing a BUY/SELL trade</p>
+        </div>
+        <a href="javascript:history.back()" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left" aria-hidden="true"></i> Back
+        </a>
+    </div>
+
+    <div class="card card-app mb-4 border-warning">
+        <div class="card-body">
+            <p class="mb-0">
+                <strong>Trades and cashflows are separate.</strong>
+                <strong>Adding a new trade</strong> still writes a cashflow line.
+                <strong>Editing</strong> a trade updates holdings only — cashflow rows stay as they are.
+                After an edit, open Cashflows (detail view) and use <strong>Edit</strong> on the matching row.
+            </p>
+        </div>
+    </div>
+
+    <div class="card card-app mb-4">
+        <div class="card-header section-title">Checklist after you save a trade</div>
+        <div class="card-body">
+            <ol class="mb-0">
+                <li class="mb-2">Note the <strong>client</strong> and <strong>trade date</strong>.</li>
+                <li class="mb-2">Open <strong>Cashflows</strong> for that client (detail view) and use <strong>Edit</strong> on the matching row.</li>
+                <li class="mb-2">Find matching rows — advisor notes, <code>BUY … shares of …</code>, or <code>Net cashflow for …</code>.</li>
+                <li class="mb-2">Update amounts so they match the corrected trade:
+                    <ul class="mt-1 mb-0">
+                        <li><strong>BUY</strong> — money into portfolio (typically negative / INFLOW)</li>
+                        <li><strong>SELL</strong> — proceeds out (typically positive / OUTFLOW)</li>
+                    </ul>
+                </li>
+                <li class="mb-2">If the <strong>date changed</strong>, check cashflows on both the old and new dates.</li>
+                <li class="mb-0">Optional: use the client’s <strong>Cashflow ↔ trades</strong> playbook to verify.</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="card card-app mb-4">
+        <div class="card-header section-title">Same day, multiple cashflows</div>
+        <div class="card-body">
+            <p class="mb-0">
+                You may have more than one cashflow on the same calendar day (split advisor notes).
+                Use the cashflows <strong>detail</strong> view to edit the specific line — not only the netted summary.
+            </p>
+        </div>
+    </div>
+
+    <div class="card card-app mb-4">
+        <div class="card-header section-title">Do not assume</div>
+        <div class="card-body">
+            <ul class="mb-0">
+                <li>Holdings may update while cashflow stays wrong.</li>
+                <li>XIRR and period reports use <strong>cashflows</strong> — fix cashflow before trusting performance.</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="action-bar">
+        <a href="{{ url_for('main.list_cashflows') }}" class="btn btn-primary">
+            <i class="fas fa-money-bill-wave" aria-hidden="true"></i> Open cashflows
+        </a>
+        <a href="{{ url_for('main.transactions') }}" class="btn btn-outline-secondary">Transactions</a>
+    </div>
+</div>
+{% endblock %}

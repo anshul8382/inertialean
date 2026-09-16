@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}Financial Analytics{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-chart-line"></i> Financial Analytics</h1>
+        <a href="{{ url_for('financial_analytics.dashboard') }}" class="btn btn-secondary">
+            <i class="fas fa-refresh"></i> Reset
+        </a>
+    </div>
+    
+    <div class="row">
+        <!-- Configuration Panel -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5><i class="fas fa-cog"></i> Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form id="analyticsForm" method="POST" action="{{ url_for('financial_analytics.calculate_metrics_ui') }}">
+                        <!-- Client Selection -->
+                        <div class="mb-3">
+                            <label class="form-label"><strong>Client</strong></label>
+                            <select name="client_id" class="form-select" required>
+                                <option value="">Select Client</option>
+                                {% for client in clients %}
+                                <option value="{{ client.id }}" {% if selected_client_id and client.id == selected_client_id %}selected{% endif %}>
+                                    {{ client.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <!-- Validation Options -->
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" 
+                                       type="checkbox" 
+                                       name="validate_before_calculate" 
+                                       id="validate_before_calculate" 
+                                       checked>
+                                <label class="form-check-label" for="validate_before_calculate">
+                                    <strong>Validate data before calculation</strong>
+                                    <small class="text-muted d-block">
+                                        Check data availability and inform about missing data
+                                    </small>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" 
+                                       type="checkbox" 
+                                       name="override_validation" 
+                                       id="override_validation">
+                                <label class="form-check-label" for="override_validation">
+                                    <strong>Override validation</strong>
+                                    <small class="text-muted d-block">
+                                        Calculate even with missing data (results may be inaccurate)
+                                    </small>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <!-- Metric Configuration -->
+                        <div class="metric-config-section">
+                            <h6 class="mb-3"><i class="fas fa-list"></i> Select Metrics</h6>
+                            
+                            <!-- Beta -->
+                            <div class="metric-config-item mb-3 border-bottom pb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input metric-checkbox" 
+                                           type="checkbox" 
+                                           name="metric_beta_enabled" 
+                                           id="metric_beta_enabled"
+                                           data-metric="beta">
+                                    <label class="form-check-label" for="metric_beta_enabled">
+                                        <strong>Beta</strong> - Portfolio sensitivity to market
+                                    </label>
+                                </div>
+                                <div class="metric-options mt-2" style="display: none;">
+                                    <select name="metric_beta_period_type" class="form-select form-select-sm period-type-select">
+                                        <option value="days">Period (Days)</option>
+                                        <option value="custom">Custom Date Range</option>
+                                    </select>
+                                    <input type="number" name="metric_beta_period_days" 
+                                           class="form-control form-control-sm mt-2 period-days-input" 
+                                           placeholder="Days (default: 365)"
+                                           value="365">
+                                    <div class="custom-dates mt-2" style="display: none;">
+                                        <input type="date" name="metric_beta_start_date" 
+                                               class="form-control form-control-sm mb-2">
+                                        <input type="date" name="metric_beta_end_date" 
+                                               class="form-control form-control-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Alpha -->
+                            <div class="metric-config-item mb-3 border-bottom pb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input metric-checkbox" 
+                                           type="checkbox" 
+                                           name="metric_alpha_enabled" 
+                                           id="metric_alpha_enabled"
+                                           data-metric="alpha">
+                                    <label class="form-check-label" for="metric_alpha_enabled">
+                                        <strong>Alpha</strong> - Excess return vs expected
+                                    </label>
+                                </div>
+                                <div class="metric-options mt-2" style="display: none;">
+                                    <select name="metric_alpha_period_type" class="form-select form-select-sm period-type-select">
+                                        <option value="days">Period (Days)</option>
+                                        <option value="custom">Custom Date Range</option>
+                                    </select>
+                                    <input type="number" name="metric_alpha_period_days" 
+                                           class="form-control form-control-sm mt-2 period-days-input" 
+                                           placeholder="Days (default: 365)"
+                                           value="365">
+                                    <div class="custom-dates mt-2" style="display: none;">
+                                        <input type="date" name="metric_alpha_start_date" 
+                                               class="form-control form-control-sm mb-2">
+                                        <input type="date" name="metric_alpha_end_date" 
+                                               class="form-control form-control-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Sharpe Ratio -->
+                            <div class="metric-config-item mb-3 border-bottom pb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input metric-checkbox" 
+                                           type="checkbox" 
+                                           name="metric_sharpe_ratio_enabled" 
+                                           id="metric_sharpe_ratio_enabled"
+                                           data-metric="sharpe_ratio">
+                                    <label class="form-check-label" for="metric_sharpe_ratio_enabled">
+                                        <strong>Sharpe Ratio</strong> - Risk-adjusted return
+                                    </label>
+                                </div>
+                                <div class="metric-options mt-2" style="display: none;">
+                                    <select name="metric_sharpe_ratio_period_type" class="form-select form-select-sm period-type-select">
+                                        <option value="days">Period (Days)</option>
+                                        <option value="custom">Custom Date Range</option>
+                                    </select>
+                                    <input type="number" name="metric_sharpe_ratio_period_days" 
+                                           class="form-control form-control-sm mt-2 period-days-input" 
+                                           placeholder="Days (default: 365)"
+                                           value="365">
+                                    <div class="custom-dates mt-2" style="display: none;">
+                                        <input type="date" name="metric_sharpe_ratio_start_date" 
+                                               class="form-control form-control-sm mb-2">
+                                        <input type="date" name="metric_sharpe_ratio_end_date" 
+                                               class="form-control form-control-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Capture Ratio -->
+                            <div class="metric-config-item mb-3 border-bottom pb-2">
+                                <div class="form-check">
+                                    <input class="form-check-input metric-checkbox" 
+                                           type="checkbox" 
+                                           name="metric_capture_ratio_enabled" 
+                                           id="metric_capture_ratio_enabled"
+                                           data-metric="capture_ratio">
+                                    <label class="form-check-label" for="metric_capture_ratio_enabled">
+                                        <strong>Capture Ratio</strong> - Upside & Downside performance
+                                    </label>
+                                </div>
+                                <div class="metric-options mt-2" style="display: none;">
+                                    <select name="metric_capture_ratio_period_type" class="form-select form-select-sm period-type-select">
+                                        <option value="days">Period (Days)</option>
+                                        <option value="custom">Custom Date Range</option>
+                                    </select>
+                                    <input type="number" name="metric_capture_ratio_period_days" 
+                                           class="form-control form-control-sm mt-2 period-days-input" 
+                                           placeholder="Days (default: 365)"
+                                           value="365">
+                                    <div class="custom-dates mt-2" style="display: none;">
+                                        <input type="date" name="metric_capture_ratio_start_date" 
+                                               class="form-control form-control-sm mb-2">
+                                        <input type="date" name="metric_capture_ratio_end_date" 
+                                               class="form-control form-control-sm">
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Add more metrics as needed -->
+                            
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-lg w-100 mt-3">
+                            <i class="fas fa-calculator"></i> Calculate Metrics
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Results Panel -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5><i class="fas fa-chart-bar"></i> Results</h5>
+                </div>
+                <div class="card-body" id="resultsContainer">
+                    <p class="text-muted text-center py-5">
+                        <i class="fas fa-info-circle fa-3x mb-3"></i><br>
+                        Select metrics and click Calculate to see results
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// JavaScript for dynamic form handling
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle metric checkbox changes
+    document.querySelectorAll('.metric-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const optionsDiv = this.closest('.metric-config-item').querySelector('.metric-options');
+            optionsDiv.style.display = this.checked ? 'block' : 'none';
+        });
+    });
+    
+    // Handle period type changes
+    document.querySelectorAll('.period-type-select').forEach(select => {
+        select.addEventListener('change', function() {
+            const parent = this.closest('.metric-options');
+            const periodInput = parent.querySelector('.period-days-input');
+            const customDates = parent.querySelector('.custom-dates');
+            
+            if (this.value === 'custom') {
+                periodInput.style.display = 'none';
+                customDates.style.display = 'block';
+            } else {
+                periodInput.style.display = 'block';
+                customDates.style.display = 'none';
+            }
+        });
+    });
+    
+    // Set default end date to today for custom date ranges
+    document.querySelectorAll('input[type="date"][name$="_end_date"]').forEach(input => {
+        if (!input.value) {
+            const today = new Date().toISOString().split('T')[0];
+            input.value = today;
+        }
+    });
+});
+</script>
+{% endblock %}
+

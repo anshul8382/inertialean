@@ -1,0 +1,327 @@
+/**
+ * Mobile / Capacitor layout — site-wide horizontal overflow fixes.
+ * Applies to narrow viewports (phones/tablets) and Capacitor shell.
+ */
+
+/* ==========================================================================
+   Viewport containment — all mobile / Capacitor pages
+   ========================================================================== */
+@media (max-width: 991.98px) {
+  html {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
+  body.modern-app,
+  body.mobile-viewport {
+    overflow-x: hidden;
+    max-width: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Flex/grid children must be allowed to shrink below content width */
+  body.modern-app .row > [class*="col"],
+  body.modern-app [class*="col-"] {
+    min-width: 0;
+  }
+
+  body.modern-app main.container-fluid,
+  body.modern-app main .container,
+  body.modern-app .container,
+  body.modern-app .container-fluid {
+    max-width: 100%;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    overflow-x: visible;
+  }
+
+  body.modern-app .row {
+    --bs-gutter-x: 0.75rem;
+    max-width: 100%;
+  }
+
+  /* Sections that commonly overflow */
+  body.modern-app section,
+  body.modern-app article,
+  body.modern-app .card,
+  body.modern-app .card-body,
+  body.modern-app .card-header,
+  body.modern-app .tab-content,
+  body.modern-app .tab-pane,
+  body.modern-app .modal-body,
+  body.modern-app .offcanvas-body,
+  body.modern-app .accordion-body,
+  body.modern-app .list-group-item,
+  body.modern-app .alert,
+  body.modern-app .panel,
+  body.modern-app .well,
+  body.modern-app .content-wrapper,
+  body.modern-app .page-content,
+  body.modern-app .dashboard-card,
+  body.modern-app .chart-container,
+  body.modern-app .plotly-graph-div,
+  body.modern-app .dataTables_wrapper,
+  body.modern-app .dt-scroll-body,
+  body.modern-app .preview-table,
+  body.modern-app .table-wrapper,
+  body.modern-app .inertia-scroll-x,
+  body.modern-app .inertia-auto-wrap {
+    max-width: 100%;
+  }
+
+  body.modern-app .card-body,
+  body.modern-app .modal-body,
+  body.modern-app .tab-pane,
+  body.modern-app .accordion-body {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  body.modern-app .card-body {
+    padding: 1rem;
+  }
+
+  /* Typography */
+  body.modern-app h1 {
+    font-size: 1.35rem;
+    word-break: break-word;
+  }
+
+  body.modern-app h2 {
+    font-size: 1.2rem;
+    word-break: break-word;
+  }
+
+  /* Media & embeds */
+  body.modern-app img,
+  body.modern-app video,
+  body.modern-app canvas,
+  body.modern-app svg,
+  body.modern-app iframe,
+  body.modern-app embed,
+  body.modern-app object {
+    max-width: 100%;
+    height: auto;
+  }
+
+  body.modern-app iframe {
+    width: 100%;
+  }
+
+  /* Code / logs */
+  body.modern-app pre,
+  body.modern-app code,
+  body.modern-app .log-container,
+  body.modern-app .notes-history {
+    max-width: 100%;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  /* Forms */
+  body.modern-app input,
+  body.modern-app select,
+  body.modern-app textarea,
+  body.modern-app .form-control,
+  body.modern-app .form-select {
+    max-width: 100%;
+  }
+
+  body.modern-app .input-group {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  body.modern-app .input-group > .form-control,
+  body.modern-app .input-group > .form-select {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 1%;
+  }
+
+  /* Toolbars & button rows */
+  body.modern-app .d-flex,
+  body.modern-app .btn-toolbar,
+  body.modern-app .btn-group,
+  body.modern-app .page-actions,
+  body.modern-app .card-header .d-flex,
+  body.modern-app .card-header .btn-group {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    max-width: 100%;
+  }
+
+  body.modern-app .btn-group-vertical {
+    max-width: 100%;
+  }
+
+  /* Pagination */
+  body.modern-app .pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  /* Nav tabs — scroll sideways instead of clipping */
+  body.modern-app .nav-tabs,
+  body.modern-app .nav-pills.flex-nowrap {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  body.modern-app .nav-tabs .nav-link {
+    white-space: nowrap;
+  }
+
+  /* Breadcrumb */
+  body.modern-app .breadcrumb {
+    flex-wrap: wrap;
+  }
+
+  /* Dropdown menus */
+  body.modern-app .dropdown-menu {
+    max-width: min(100vw - 1.5rem, 320px);
+  }
+
+  /* Modals */
+  body.modern-app .modal-dialog {
+    margin: 0.5rem;
+    max-width: calc(100% - 1rem);
+  }
+
+  body.modern-app .modal-xl,
+  body.modern-app .modal-lg {
+    max-width: calc(100% - 1rem);
+  }
+
+  /* Stacked flex columns that use min-width in inline styles (period analysis etc.) */
+  body.modern-app .d-flex > [style*="min-width"],
+  body.modern-app .d-flex > div[style*="flex:"] {
+    min-width: 0 !important;
+    flex: 1 1 100% !important;
+    max-width: 100%;
+  }
+
+  /* Page headers with title + buttons */
+  body.modern-app .d-flex.justify-content-between {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  body.modern-app .d-flex.justify-content-between > h1,
+  body.modern-app .d-flex.justify-content-between > h2,
+  body.modern-app .d-flex.justify-content-between > .h1,
+  body.modern-app .d-flex.justify-content-between > .h2 {
+    flex: 1 1 100%;
+  }
+}
+
+/* ==========================================================================
+   Tables — horizontal scroll, never clip
+   ========================================================================== */
+@media (max-width: 991.98px) {
+  body.modern-app .table-responsive,
+  body.modern-app .inertia-auto-wrap {
+    overflow-x: auto !important;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    display: block;
+    width: 100%;
+    scrollbar-width: thin;
+  }
+
+  body.modern-app .table-responsive > .table,
+  body.modern-app .inertia-auto-wrap > .table,
+  body.modern-app .inertia-auto-wrap > table {
+    margin-bottom: 0;
+    width: max-content;
+    min-width: 100%;
+  }
+
+  /* DataTables */
+  body.modern-app .dataTables_wrapper .dataTables_scroll {
+    overflow-x: auto !important;
+  }
+
+  body.modern-app .dataTables_wrapper .dataTables_scrollBody {
+    overflow-x: auto !important;
+  }
+}
+
+/* Capacitor shell — same rules always apply (WebView width varies) */
+body.mobile-app.modern-app,
+body.mobile-app.mobile-viewport {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+body.mobile-app.modern-app .table-responsive,
+body.mobile-app.modern-app .inertia-auto-wrap {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.mobile-app.modern-app main.container-fluid,
+body.mobile-app.modern-app .container,
+body.mobile-app.modern-app .container-fluid {
+  max-width: 100%;
+}
+
+/* Dynamic / injected content blocks (reviews, hub, analytics) */
+body.modern-app [id*="analysis"],
+body.modern-app [id*="Analysis"],
+body.modern-app [id*="review"],
+body.modern-app [id*="Review"],
+body.modern-app [id*="result"],
+body.modern-app [id*="output"],
+body.modern-app [id*="chart"],
+body.modern-app [class*="analysis-"],
+body.modern-app [class*="timeline-"],
+body.modern-app #reviewReportOutput,
+body.modern-app .period-analysis-content {
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Utility: opt-in horizontal scroll region in templates */
+.inertia-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+/* Hint for swipeable tables on touch devices */
+@media (max-width: 991.98px) {
+  body.modern-app .table-responsive::after,
+  body.modern-app .inertia-auto-wrap::after {
+    content: "";
+    display: block;
+    height: 0;
+    clear: both;
+  }
+}
+
+/* Small phones */
+@media (max-width: 575.98px) {
+  body.modern-app main.container-fluid,
+  body.modern-app .container,
+  body.modern-app .container-fluid {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+
+  body.modern-app .table thead th,
+  body.modern-app .table tbody td {
+    font-size: 0.8rem;
+    padding: 0.35rem 0.45rem;
+  }
+
+  body.modern-app .btn-sm {
+    font-size: 0.75rem;
+  }
+}

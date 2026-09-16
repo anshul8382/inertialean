@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link %}
+
+{% block extra_css %}
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+{% endblock %}
+
+{% block content %}
+{{ maint_hub_open('Securities', 'Manage securities, hot stocks, and uploads.', url_for('main.maintenance_reference_data')) }}
+  {{ maint_link('fa-fire', 'Hot stocks', url_for('main.hot_stocks')) }}
+  {{ maint_link('fa-upload', 'Upload securities', url_for('main.upload_securities')) }}
+  {{ maint_link('fa-plus', 'Add security', url_for('main.add_security')) }}
+{{ maint_hub_close('Search and securities table below.') }}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Securities</h2>
+        <div>
+            <a href="{{ url_for('main.hot_stocks') }}" class="btn btn-warning me-2">
+                <i class="fas fa-fire"></i> Manage Hot Stocks
+            </a>
+            <a href="{{ url_for('main.upload_securities') }}" class="btn btn-primary me-2">
+                <i class="fas fa-upload"></i> Upload Securities
+            </a>
+            <a href="{{ url_for('main.add_security') }}" class="btn btn-success">
+                <i class="fas fa-plus"></i> Add Security
+            </a>
+        </div>
+    </div>
+    
+    <!-- Global Search -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="fas fa-search"></i>
+                </span>
+                <input type="text" class="form-control" id="securitiesSearch" placeholder="Search by symbol, name, asset class, or type...">
+                <button class="btn btn-outline-secondary" type="button" id="clearSecuritiesSearch" style="display: none;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Daily Update Status -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-calendar-check"></i> Daily Update Status - {{ today.strftime('%Y-%m-%d') }}
+            </h5>
+        </div>
+        <div class="card-body">
+            {% if daily_update %}
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-1">
+                            <strong>Status:</strong> 
+                            <span class="badge badge-success">Updates Performed</span>
+                        </p>
+                        <p class="mb-1">
+                            <strong>Type:</strong> {{ daily_update.update_type|title }}
+                        </p>
+                        <p class="mb-1">
+                            <strong>Securities Updated:</strong> {{ daily_update.updated_securities_count }}
+                        </p>
+                        <p class="mb-1">
+                            <strong>Time:</strong> {{ daily_update.created_at.strftime('%H:%M:%S') }}
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            <strong>Market Hours Restriction Active:</strong> 
+                            Security price updates are now restricted to market hours (9:15 AM - 3:30 PM IST) 
+                            since same-day updates have been performed.
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-1">
+                            <strong>Status:</strong> 
+                            <span class="badge badge-warning">No Updates Performed</span>
+                        </p>
+                        <p class="mb-1">
+                            <strong>Market Hours Restriction:</strong> 
+                            <span class="text-success">Inactive</span>
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>No Restrictions:</strong> 
+                            Security prices can be updated at any time since no same-day updates have been recorded.
+                        </div>
+                        <form method="POST" action="{{ url_for('main.record_market_close_update') }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-primary btn-sm">
+                                <i class="fas fa-clock"></i> Record Market Close Update
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped" id="securitiesTable">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Name</th>
+                            <th>Asset Class</th>
+                            <th>Type</th>
+                            <th>Current Price</th>
+                            <th>Last Updated</th>
+                            <th>Refresh Interval</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for security in securities %}
+                        <tr class="{{ 'table-warning' if security.is_hot_stock else '' }}">
+                            <td>
+                                {{ security.symbol }}
+                                {% if security.is_hot_stock %}
+                                    <i class="fas fa-fire text-danger" title="Hot Stock - Research Team Preferred"></i>
+                                {% endif %}
+                            </td>
+                            <td>{{ security.name }}</td>
+                            <td>{{ security.asset_class.name }}</td>
+                            <td>{{ security.security_type }}</td>
+                            <td>₹{{ "%.2f"|format(security.current_price) if security.current_price else 'N/A' }}</td>
+                            <td>{{ security.last_updated.strftime('%Y-%m-%d %H:%M:%S') if security.last_updated else 'Never' }}</td>
+                            <td>{{ security.refresh_interval }} seconds</td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <form method="POST" action="{{ url_for('main.refresh_security', security_id=security.id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-sm btn-info" 
+                                                {% if daily_update %}title="Market hours restriction active"{% endif %}>
+                                            <i class="fas fa-sync"></i>
+                                        </button>
+                                    </form>
+                                    <a href="{{ url_for('main.edit_security', security_id=security.id) }}" class="btn btn-sm btn-warning">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-danger" onclick="confirmDelete({{ security.id }})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script>
+$(document).ready(function() {
+    console.log('Document ready, initializing DataTables...');
+    
+    // Check if table exists
+    if ($('#securitiesTable').length === 0) {
+        console.error('Table #securitiesTable not found!');
+        return;
+    }
+    
+    // Check if DataTables is loaded
+    if (typeof $.fn.DataTable === 'undefined') {
+        console.error('DataTables plugin not loaded!');
+        return;
+    }
+    
+    // Initialize DataTables
+    var securitiesTable = $('#securitiesTable').DataTable({
+        "order": [[0, "asc"]],
+        "pageLength": 25,
+        "searching": true,
+        "dom": 'lrtip', // Remove default search box from layout
+        "columnDefs": [
+            {
+                "targets": [7], // Actions column
+                "orderable": false,
+                "searchable": false
+            }
+        ],
+        "language": {
+            "search": "",
+            "lengthMenu": "Show _MENU_ securities per page",
+            "info": "Showing _START_ to _END_ of _TOTAL_ securities",
+            "emptyTable": "No securities found"
+        }
+    });
+    
+    console.log('DataTables initialized successfully');
+    
+    // Custom search input
+    $('#securitiesSearch').on('keyup', function() {
+        var searchValue = $(this).val();
+        console.log('Search value:', searchValue);
+        securitiesTable.search(searchValue).draw();
+        if (searchValue) {
+            $('#clearSecuritiesSearch').show();
+        } else {
+            $('#clearSecuritiesSearch').hide();
+        }
+    });
+    
+    // Clear search button
+    $('#clearSecuritiesSearch').on('click', function() {
+        $('#securitiesSearch').val('');
+        securitiesTable.search('').draw();
+        $(this).hide();
+    });
+});
+
+function confirmDelete(securityId) {
+    if (confirm('Are you sure you want to delete this security?')) {
+        fetch(`/security/${securityId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('Error deleting security');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting security');
+        });
+    }
+}
+</script>
+{% endblock %} 

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Monthly Investment{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Edit Monthly Investment</h1>
+        <a href="{{ url_for('main.view_monthly_investment', id=investment.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Investment Details
+        </a>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <table class="table">
+                        <tr>
+                            <th>Client</th>
+                            <td>{{ investment.client.name if investment.client else 'Unknown Client' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Investment Date</th>
+                            <td>
+                                {% if investment.investment_date %}
+                                    {{ investment.investment_date.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Status</th>
+                            <td>
+                                <span class="badge bg-{{ investment.status_color }}">
+                                    {{ investment.status }}
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <form method="POST" action="{{ url_for('main.edit_monthly_investment', id=investment.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="mb-3">
+                    <label for="planned_amount" class="form-label">
+                        <strong>Planned Amount</strong> <span class="text-danger">*</span>
+                    </label>
+                    <div class="input-group">
+                        <span class="input-group-text">₹</span>
+                        <input type="number" 
+                               class="form-control" 
+                               id="planned_amount" 
+                               name="planned_amount" 
+                               step="0.01" 
+                               min="-999999999" 
+                               value="{{ investment.planned_amount }}" 
+                               required>
+                    </div>
+                    <div class="form-text">You can set 0 to skip or negative for withdrawal if enabled</div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Update Amount
+                    </button>
+                    <a href="{{ url_for('main.view_monthly_investment', id=investment.id) }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

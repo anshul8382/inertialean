@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Recommendation Execution - Client SLA Settings{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <div class="page-title-right">
+                    <ol class="breadcrumb m-0">
+                        {% if config.get('NAV_INTELLIGENCE_HUB_ENABLED') %}
+                        <li class="breadcrumb-item"><a href="{{ url_for('hub.operational_dashboard') }}">Operational intelligence</a></li>
+                        {% else %}
+                        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                        {% endif %}
+                        <li class="breadcrumb-item"><a href="{{ url_for('rec_execution.dashboard') }}">Recommendation execution</a></li>
+                        <li class="breadcrumb-item active">Client SLA settings</li>
+                    </ol>
+                </div>
+                <h4 class="page-title">
+                    <i class="fas fa-sliders-h me-2"></i>Client SLA Settings
+                </h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        These values control when the Recommendation Execution Monitor raises issues for a client.
+                        Defaults are shown if a client override is not set.
+                    </p>
+
+                    <form method="GET" class="row g-2 align-items-end">
+                        <div class="col-md-8">
+                            <label class="form-label">Client</label>
+                            <select name="client_id" class="form-select" onchange="this.form.submit()">
+                                <option value="">Select client…</option>
+                                {% for c in clients %}
+                                <option value="{{ c.id }}" {% if client and client.id == c.id %}selected{% endif %}>
+                                    {{ c.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <a class="btn btn-outline-secondary w-100" href="{{ url_for('rec_execution.sla_settings') }}">
+                                Clear
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Defaults (days)</h6>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="badge bg-light text-dark">FUNDS: 3</span>
+                        <span class="badge bg-light text-dark">RECOS: 2</span>
+                        <span class="badge bg-light text-dark">EXEC: 5</span>
+                        <span class="badge bg-light text-dark">STALL_ANY: 7</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if client %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="header-title mb-0">Override for {{ client.name }}</h4>
+                    <div class="d-flex align-items-center gap-2">
+                        {% if stage_sla and stage_sla|length > 0 %}
+                        <span class="badge bg-primary">Override ON</span>
+                        {% else %}
+                        <span class="badge bg-light text-dark">No override yet</span>
+                        {% endif %}
+                        {% if exception_count and exception_count > 0 %}
+                        <span class="badge bg-light text-dark">Exceptions: {{ exception_count }}</span>
+                        {% endif %}
+                        <small class="text-muted">Saved as a client pattern</small>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('rec_execution.set_client_sla', client_id=client.id) }}" class="row g-3">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                        <div class="col-md-3">
+                            <label class="form-label">FUNDS (days)</label>
+                            <input class="form-control" type="number" min="0" max="60" name="sla_FUNDS" value="{{ stage_sla.get('FUNDS', 3) }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">RECOS (days)</label>
+                            <input class="form-control" type="number" min="0" max="60" name="sla_RECOS" value="{{ stage_sla.get('RECOS', 2) }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">EXEC (days)</label>
+                            <input class="form-control" type="number" min="0" max="60" name="sla_EXEC" value="{{ stage_sla.get('EXEC', 5) }}">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">STALL_ANY (days)</label>
+                            <input class="form-control" type="number" min="0" max="60" name="sla_STALL_ANY" value="{{ stage_sla.get('STALL_ANY', 7) }}">
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Notes (optional)</label>
+                            <input class="form-control" type="text" name="notes" placeholder="Why these SLAs for this client?">
+                        </div>
+
+                        <div class="col-12 d-flex gap-2">
+                            <button class="btn btn-primary" type="submit">
+                                <i class="fas fa-save me-1"></i>Save SLA Override
+                            </button>
+                            <a class="btn btn-outline-primary" href="{{ url_for('rec_execution.workflow_issues', id=0) }}" style="display:none"></a>
+                            <a class="btn btn-outline-secondary" href="{{ url_for('rec_execution.dashboard') }}">
+                                Back to dashboard
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-info">
+                Select a client to configure SLA overrides.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+

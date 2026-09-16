@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Asset Edit</title>
+</head>
+<body>
+    <h1>Test Asset Edit Page</h1>
+    <p>Model ID: {{ model.id }}</p>
+    <p>Model Name: {{ model.name }}</p>
+    
+    <form method="POST" action="{{ url_for('main.edit_asset_model', model_id=model.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        
+        <label>Name:</label>
+        <input type="text" name="name" value="{{ model.name }}" required><br><br>
+        
+        <label>Description:</label>
+        <textarea name="description">{{ model.description }}</textarea><br><br>
+        
+        <label>Risk Profile:</label>
+        <select name="risk_level" required>
+            <option value="Conservative" {% if model.risk_profile == 'Conservative' %}selected{% endif %}>Conservative</option>
+            <option value="Moderate" {% if model.risk_profile == 'Moderate' %}selected{% endif %}>Moderate</option>
+            <option value="Aggressive" {% if model.risk_profile == 'Aggressive' %}selected{% endif %}>Aggressive</option>
+        </select><br><br>
+        
+        <h3>Asset Classes ({{ asset_classes|length }} available):</h3>
+        {% for asset_class in asset_classes %}
+            <div>
+                <input type="checkbox" name="asset_class_id[]" value="{{ asset_class.id }}">
+                <label>{{ asset_class.name }}</label>
+                <input type="number" name="allocation_percentage[]" placeholder="%" step="0.01" min="0" max="100">
+            </div>
+        {% endfor %}
+        
+        <br><br>
+        <button type="submit">Save Changes</button>
+    </form>
+    
+    <br><br>
+    <a href="{{ url_for('main.models') }}">Back to Models</a>
+</body>
+</html>

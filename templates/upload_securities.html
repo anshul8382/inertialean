@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_child_open, maint_desktop_open, maint_desktop_close %}
+
+{% block title %}Upload Securities{% endblock %}
+
+{% block content %}
+{{ maint_child_open('Securities upload', url_for('main.maintenance_reference_data'), 'Upload a CSV of security information.') }}
+{{ maint_desktop_open('container') }}
+<div class="container">
+    <h1 class="mb-4">Upload Securities</h1>
+    
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Upload CSV File</h5>
+                    <p class="card-text">Upload a CSV file containing security information. The file should have the following columns:</p>
+                    <ul>
+                        <li>symbol (required)</li>
+                        <li>name (required)</li>
+                        <li>asset_class (required)</li>
+                        <li>description (optional)</li>
+                        <li>currency (required)</li>
+                        <li>exchange (required)</li>
+                        <li>sector (optional)</li>
+                        <li>industry (optional)</li>
+                    </ul>
+                    
+                    <form method="POST" action="{{ url_for('main.upload_securities') }}" enctype="multipart/form-data" class="needs-validation" novalidate>
+                        {{ form.csrf_token }}
+                        
+                        <div class="mb-3">
+                            <label for="file" class="form-label">CSV File</label>
+                            <input type="file" class="form-control" id="file" name="file" accept=".csv" required>
+                            <div class="invalid-feedback">
+                                Please select a CSV file.
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="has_header" name="has_header" checked>
+                                <label class="form-check-label" for="has_header">
+                                    File has header row
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary">Upload</button>
+                        <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">Cancel</a>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Download Template</h5>
+                    <p class="card-text">Download a template CSV file to help you format your data correctly.</p>
+                    <a href="{{ url_for('static', filename='templates/securities_template.csv') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-download"></i> Download Template
+                    </a>
+                </div>
+            </div>
+            
+            {% if upload_results %}
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h5 class="card-title">Upload Results</h5>
+                    <div class="alert alert-success">
+                        <p>Successfully processed {{ upload_results.success_count }} securities.</p>
+                        {% if upload_results.error_count > 0 %}
+                        <p>Failed to process {{ upload_results.error_count }} securities.</p>
+                        {% endif %}
+                    </div>
+                    
+                    {% if upload_results.errors %}
+                    <div class="mt-3">
+                        <h6>Errors:</h6>
+                        <ul class="list-group">
+                            {% for error in upload_results.errors %}
+                            <li class="list-group-item list-group-item-danger">{{ error }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+
+{% block scripts %}
+<script>
+// Form validation
+(function () {
+    'use strict'
+    var forms = document.querySelectorAll('.needs-validation')
+    Array.prototype.slice.call(forms).forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            if (!form.checkValidity()) {
+                event.preventDefault()
+                event.stopPropagation()
+            }
+            form.classList.add('was-validated')
+        }, false)
+    })
+})()
+</script>
+{% endblock %}
+{% endblock %} 

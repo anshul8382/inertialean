@@ -1,0 +1,111 @@
+{% macro render_metric_commentary(metric_type, result) %}
+{% set commentary = [] %}
+{% set suggestions = [] %}
+
+{% if metric_type == 'beta' %}
+    {% if result.value is number %}
+        {% if result.value < 0.8 %}
+            {% set commentary = commentary + ['Beta below 0.8 indicates lower volatility than the market.'] %}
+            {% set suggestions = suggestions + ['If returns lag, consider adding selective growth names or increasing exposure to cyclical sectors.'] %}
+        {% elif result.value <= 1.2 %}
+            {% set commentary = commentary + ['Beta between 0.8 and 1.2 is broadly in-line with market volatility.'] %}
+            {% set suggestions = suggestions + ['Maintain diversification; monitor sector skews so beta stays aligned with risk profile.'] %}
+        {% else %}
+            {% set commentary = commentary + ['Beta above 1.2 signals higher volatility than the Nifty.'] %}
+            {% set suggestions = suggestions + ['Tighten position sizing, add defensive allocations, or hedge concentrated bets.'] %}
+        {% endif %}
+    {% else %}
+        {% set commentary = commentary + ['Beta unavailable – we need consistent daily prices for all holdings.'] %}
+    {% endif %}
+
+{% elif metric_type == 'alpha' %}
+    {% if result.value is number %}
+        {% if result.value > 2 %}
+            {% set commentary = commentary + ['Positive alpha shows portfolio returns are beating risk-adjusted expectations.'] %}
+            {% set suggestions = suggestions + ['Keep the current positioning but continue monitoring contribution by security.'] %}
+        {% elif result.value >= -2 %}
+            {% set commentary = commentary + ['Alpha near zero means performance is broadly in line with risk exposure.'] %}
+            {% set suggestions = suggestions + ['Review high-fee positions and ensure active bets still carry conviction.'] %}
+        {% else %}
+            {% set commentary = commentary + ['Negative alpha indicates underperformance versus expected return.'] %}
+            {% set suggestions = suggestions + ['Look at lagging holdings, reassess active bets, or rotate into stronger trend sectors.'] %}
+        {% endif %}
+    {% else %}
+        {% set commentary = commentary + ['Alpha unavailable – confirm historical price and benchmark data for the full period.'] %}
+    {% endif %}
+
+{% elif metric_type == 'sharpe_ratio' %}
+    {% if result.value is number %}
+        {% if result.value >= 1 %}
+            {% set commentary = commentary + ['Sharpe above 1.0 implies attractive risk-adjusted returns.'] %}
+            {% set suggestions = suggestions + ['Maintain current allocation; continue capturing upside while monitoring volatility.'] %}
+        {% elif result.value >= 0.5 %}
+            {% set commentary = commentary + ['Sharpe between 0.5 and 1.0 is acceptable but can be improved.'] %}
+            {% set suggestions = suggestions + ['Trim underperformers or diversify to smooth volatility and lift Sharpe.'] %}
+        {% else %}
+            {% set commentary = commentary + ['Sharpe below 0.5 suggests returns are not compensating for risk.'] %}
+            {% set suggestions = suggestions + ['Reduce exposure to volatile laggards, boost quality/defensive names, or lower leverage.'] %}
+        {% endif %}
+    {% else %}
+        {% set commentary = commentary + ['Sharpe ratio unavailable – need daily return history to calculate volatility.'] %}
+    {% endif %}
+
+{% elif metric_type == 'capture_ratio' %}
+    {% if result.value is mapping %}
+        {% set upside = result.value.upside if result.value.upside is defined else None %}
+        {% set downside = result.value.downside if result.value.downside is defined else None %}
+
+        {% if upside is number %}
+            {% if upside > 120 %}
+                {% set commentary = commentary + ['Upside capture above 120% shows strong participation in rallies.'] %}
+            {% elif upside >= 90 %}
+                {% set commentary = commentary + ['Upside capture near 100% means the portfolio keeps pace in rising markets.'] %}
+            {% else %}
+                {% set commentary = commentary + ['Upside capture below 90% indicates muted participation in up markets.'] %}
+                {% set suggestions = suggestions + ['Increase allocation to winners or add momentum-oriented positions to boost upside.'] %}
+            {% endif %}
+        {% else %}
+            {% set commentary = commentary + ['Upside capture unavailable – review historical return series.'] %}
+        {% endif %}
+
+        {% if downside is number %}
+            {% if downside < 80 %}
+                {% set commentary = commentary + ['Downside capture below 80% signals good capital protection in drawdowns.'] %}
+            {% elif downside <= 100 %}
+                {% set commentary = commentary + ['Downside capture around 100% means pullbacks mirror the market.'] %}
+                {% set suggestions = suggestions + ['Consider hedges or defensive sectors to cushion future selloffs.'] %}
+            {% else %}
+                {% set commentary = commentary + ['Downside capture above 100% shows losses exceed market drawdowns.'] %}
+                {% set suggestions = suggestions + ['Rebalance toward defensive holdings, raise cash buffers, or trim high-beta names.'] %}
+            {% endif %}
+        {% else %}
+            {% set commentary = commentary + ['Downside capture unavailable – review historical return series.'] %}
+        {% endif %}
+    {% else %}
+        {% set commentary = commentary + ['Capture ratio unavailable – ensure upside/downside return series are computed.'] %}
+    {% endif %}
+
+{% endif %}
+
+{% if commentary or suggestions %}
+<div class="alert alert-info mt-3">
+    {% if commentary %}
+    <ul class="mb-2">
+        {% for note in commentary %}
+        <li>{{ note }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% if suggestions %}
+    <small><strong>Next steps:</strong>
+        <ul class="mb-0">
+            {% for tip in suggestions %}
+            <li>{{ tip }}</li>
+            {% endfor %}
+        </ul>
+    </small>
+    {% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+

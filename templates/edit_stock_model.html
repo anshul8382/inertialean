@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title mb-0">Edit Stock Allocation Model</h2>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Model Name</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ model.name }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description</label>
+                    <textarea class="form-control" id="description" name="description" rows="2">{{ model.description }}</textarea>
+                </div>
+                <div id="stock-allocations">
+                    <label class="form-label">Stock Allocations</label>
+                    {% for allocation in model.allocations %}
+                    <div class="row mb-2 stock-row">
+                        <div class="col-md-6">
+                            <select class="form-select stock-select" name="stock_id[]" required>
+                                <option value="">Select Stock</option>
+                                {% for stock in stocks %}
+                                <option value="{{ stock.id }}" {% if stock.id == allocation.stock_id %}selected{% endif %}>
+                                    {{ stock.symbol }} - {{ stock.company_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <input type="number" class="form-control allocation-input" name="allocation_percentage[]" 
+                                   value="{{ allocation.allocation_percentage }}" min="0" max="100" step="0.01" required>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-danger remove-stock"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mb-3">
+                    <button type="button" class="btn btn-secondary" id="add-stock">Add Stock</button>
+                </div>
+                <div class="mb-3">
+                    <strong>Total Allocation: <span id="total-allocation">0</span>%</strong>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('settings') }}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Update Model</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const allocationsDiv = document.getElementById('stock-allocations');
+    const addStockBtn = document.getElementById('add-stock');
+    
+    // Get the stock options HTML
+    const stockOptions = `
+        <option value="">Select Stock</option>
+        {% for stock in stocks %}
+        <option value="{{ stock.id }}">{{ stock.symbol }} - {{ stock.company_name }}</option>
+        {% endfor %}
+    `;
+
+    function updateTotal() {
+        let total = 0;
+        document.querySelectorAll('.allocation-input').forEach(function(input) {
+            total += parseFloat(input.value) || 0;
+        });
+        document.getElementById('total-allocation').textContent = total.toFixed(2);
+    }
+
+    function addStockRow() {
+        const row = document.createElement('div');
+        row.className = 'row mb-2 stock-row';
+        row.innerHTML = `
+            <div class="col-md-6">
+                <select class="form-select stock-select" name="stock_id[]" required>
+                    ${stockOptions}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <input type="number" class="form-control allocation-input" name="allocation_percentage[]" value="0" min="0" max="100" step="0.01" required>
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-danger remove-stock"><i class="fas fa-trash"></i></button>
+            </div>
+        `;
+        allocationsDiv.appendChild(row);
+
+        // Add event listeners
+        row.querySelector('.remove-stock').addEventListener('click', function() {
+            row.remove();
+            updateTotal();
+        });
+
+        row.querySelector('.allocation-input').addEventListener('input', updateTotal);
+    }
+
+    // Add event listeners
+    addStockBtn.addEventListener('click', addStockRow);
+
+    // Add event listeners to existing rows
+    document.querySelectorAll('.stock-row').forEach(function(row) {
+        row.querySelector('.remove-stock').addEventListener('click', function() {
+            row.remove();
+            updateTotal();
+        });
+        row.querySelector('.allocation-input').addEventListener('input', updateTotal);
+    });
+
+    // Initial total calculation
+    updateTotal();
+});
+</script>
+{% endblock %} 

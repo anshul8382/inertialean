@@ -1,0 +1,339 @@
+{% extends "base.html" %}
+
+{% block title %}AI Model Feedback - Natural Language{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">
+                        <i class="fas fa-comments"></i> 
+                        Natural Language Feedback for AI Model Improvement
+                    </h4>
+                    <p class="card-subtitle text-muted">
+                        Help us improve our AI models by providing feedback in your own words
+                    </p>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <!-- Feedback Form -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Submit Your Feedback</h5>
+                                </div>
+                                <div class="card-body">
+                                    <form id="feedbackForm">
+                                        <div class="mb-3">
+                                            <label for="feedbackType" class="form-label">Feedback Type</label>
+                                            <select class="form-select" id="feedbackType" name="feedbackType">
+                                                <option value="">Select feedback type...</option>
+                                                <option value="commentary">Market Commentary</option>
+                                                <option value="recommendations">ML Recommendations</option>
+                                                <option value="analysis">Portfolio Analysis</option>
+                                                <option value="general">General AI Performance</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="feedbackText" class="form-label">Your Feedback</label>
+                                            <textarea class="form-control" id="feedbackText" name="feedbackText" 
+                                                      rows="6" placeholder="Describe your feedback in natural language...&#10;&#10;Examples:&#10;- 'The commentary is too generic, need more specific stock analysis'&#10;- 'ITC analysis is wrong - regulatory issues are temporary'&#10;- 'Add more focus on sector rotation opportunities'&#10;- 'Risk assessment seems too conservative for this client'&#10;- 'Missing international market impact on Indian stocks'"></textarea>
+                                            <div class="form-text">
+                                                Be specific about what you'd like to see improved. The AI will learn from your feedback!
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="priority" class="form-label">Priority Level</label>
+                                            <select class="form-select" id="priority" name="priority">
+                                                <option value="low">Low - Minor improvement</option>
+                                                <option value="medium" selected>Medium - Standard feedback</option>
+                                                <option value="high">High - Important improvement</option>
+                                                <option value="critical">Critical - Major issue</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="context" class="form-label">Additional Context (Optional)</label>
+                                            <textarea class="form-control" id="context" name="context" 
+                                                      rows="3" placeholder="Any additional context that might help us understand your feedback better..."></textarea>
+                                        </div>
+                                        
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-paper-plane"></i> Submit Feedback
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <!-- Feedback Guidelines -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Feedback Guidelines</h5>
+                                </div>
+                                <div class="card-body">
+                                    <h6>What the AI Can Understand:</h6>
+                                    <ul class="list-unstyled">
+                                        <li><i class="fas fa-check text-success"></i> Accuracy corrections</li>
+                                        <li><i class="fas fa-check text-success"></i> Detail level adjustments</li>
+                                        <li><i class="fas fa-check text-success"></i> Focus area changes</li>
+                                        <li><i class="fas fa-check text-success"></i> Tone modifications</li>
+                                        <li><i class="fas fa-check text-success"></i> Content additions</li>
+                                    </ul>
+                                    
+                                    <h6>Examples of Good Feedback:</h6>
+                                    <div class="alert alert-info">
+                                        <small>
+                                            <strong>Accuracy:</strong> "HDFC Bank analysis is incorrect - they actually reported strong Q3 results"<br><br>
+                                            <strong>Detail:</strong> "Need more specific sector analysis, too generic right now"<br><br>
+                                            <strong>Focus:</strong> "Add more emphasis on regulatory changes affecting banking stocks"<br><br>
+                                            <strong>Tone:</strong> "Risk assessment is too conservative for aggressive clients"
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Recent Learning -->
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h5>Recent AI Learning</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="recentLearning">
+                                        <div class="text-center">
+                                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                                            <small class="text-muted">Loading recent learning...</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Feedback Processing Results -->
+                    <div class="row mt-4" id="feedbackResults" style="display: none;">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Feedback Processing Results</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div id="processingResults"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Feedback Processing Modal -->
+<div class="modal fade" id="processingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Processing Your Feedback</h5>
+            </div>
+            <div class="modal-body text-center">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-3">Analyzing your feedback and extracting learning insights...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // Load recent learning insights
+    loadRecentLearning();
+    
+    // Handle form submission
+    $('#feedbackForm').on('submit', function(e) {
+        e.preventDefault();
+        submitFeedback();
+    });
+    
+    // Character counter for feedback text
+    $('#feedbackText').on('input', function() {
+        const maxLength = 1000;
+        const currentLength = $(this).val().length;
+        const remaining = maxLength - currentLength;
+        
+        if (remaining < 0) {
+            $(this).val($(this).val().substring(0, maxLength));
+        }
+    });
+});
+
+function loadRecentLearning() {
+    $.ajax({
+        url: '/api/ml/feedback-learning-insights',
+        method: 'GET',
+        success: function(response) {
+            if (response.success) {
+                displayRecentLearning(response.insights);
+            } else {
+                $('#recentLearning').html('<div class="text-muted">Unable to load recent learning</div>');
+            }
+        },
+        error: function() {
+            $('#recentLearning').html('<div class="text-muted">Unable to load recent learning</div>');
+        }
+    });
+}
+
+function displayRecentLearning(insights) {
+    let html = '';
+    
+    if (insights.common_issues && insights.common_issues.length > 0) {
+        html += '<h6>Common Issues Addressed:</h6>';
+        html += '<ul class="list-unstyled">';
+        insights.common_issues.forEach(issue => {
+            html += `<li><i class="fas fa-exclamation-triangle text-warning"></i> ${issue}</li>`;
+        });
+        html += '</ul>';
+    }
+    
+    if (insights.improvement_areas && insights.improvement_areas.length > 0) {
+        html += '<h6>Recent Improvements:</h6>';
+        html += '<ul class="list-unstyled">';
+        insights.improvement_areas.forEach(area => {
+            html += `<li><i class="fas fa-check-circle text-success"></i> ${area}</li>`;
+        });
+        html += '</ul>';
+    }
+    
+    if (!html) {
+        html = '<div class="text-muted">No recent learning data available</div>';
+    }
+    
+    $('#recentLearning').html(html);
+}
+
+function submitFeedback() {
+    const feedbackText = $('#feedbackText').val().trim();
+    const feedbackType = $('#feedbackType').val();
+    const priority = $('#priority').val();
+    const context = $('#context').val().trim();
+    
+    if (!feedbackText) {
+        alert('Please enter your feedback');
+        return;
+    }
+    
+    // Show processing modal
+    $('#processingModal').modal('show');
+    
+    const data = {
+        feedback_text: feedbackText,
+        context: {
+            feedback_type: feedbackType,
+            priority: priority,
+            additional_context: context
+        }
+    };
+    
+    $.ajax({
+        url: '/api/ml/natural-language-feedback',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            $('#processingModal').modal('hide');
+            
+            if (response.success) {
+                displayProcessingResults(response);
+                $('#feedbackForm')[0].reset();
+                loadRecentLearning(); // Refresh learning insights
+            } else {
+                alert('Error: ' + response.error);
+            }
+        },
+        error: function(xhr) {
+            $('#processingModal').modal('hide');
+            let errorMsg = 'An error occurred while processing your feedback';
+            if (xhr.responseJSON && xhr.responseJSON.error) {
+                errorMsg = xhr.responseJSON.error;
+            }
+            alert('Error: ' + errorMsg);
+        }
+    });
+}
+
+function displayProcessingResults(response) {
+    const insights = response.insights;
+    let html = `
+        <div class="alert alert-success">
+            <h6><i class="fas fa-check-circle"></i> Feedback Processed Successfully!</h6>
+            <p>${response.message}</p>
+        </div>
+    `;
+    
+    if (insights.learning_summary) {
+        html += `
+            <div class="card">
+                <div class="card-header">
+                    <h6>AI Learning Summary</h6>
+                </div>
+                <div class="card-body">
+                    <p>${insights.learning_summary}</p>
+                </div>
+            </div>
+        `;
+    }
+    
+    if (insights.feedback_type) {
+        html += `
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6>Feedback Analysis</h6>
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-unstyled">
+                                <li><strong>Type:</strong> ${insights.feedback_type.replace('_', ' ').toUpperCase()}</li>
+                                <li><strong>Sentiment:</strong> ${insights.sentiment}</li>
+                                <li><strong>Priority:</strong> ${insights.priority}</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6>Extracted Insights</h6>
+                        </div>
+                        <div class="card-body">
+                            ${insights.specific_issues && insights.specific_issues.length > 0 ? 
+                                `<p><strong>Issues:</strong> ${insights.specific_issues.join(', ')}</p>` : ''}
+                            ${insights.suggested_actions && insights.suggested_actions.length > 0 ? 
+                                `<p><strong>Actions:</strong> ${insights.suggested_actions.join(', ')}</p>` : ''}
+                            ${insights.stock_mentions && insights.stock_mentions.length > 0 ? 
+                                `<p><strong>Stocks:</strong> ${insights.stock_mentions.join(', ')}</p>` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    $('#processingResults').html(html);
+    $('#feedbackResults').show();
+    
+    // Scroll to results
+    $('html, body').animate({
+        scrollTop: $('#feedbackResults').offset().top - 100
+    }, 500);
+}
+</script>
+{% endblock %}

@@ -1,0 +1,984 @@
+{% extends 'base.html' %}
+{# Cache bust: Updated 2025-11-15 - Fixed API URLs to use /clients prefix #}
+{% from 'partials/mobile/macros.html' import maint_child_open, maint_desktop_open, maint_desktop_close %}
+
+{% block title %}MProfit Trade Upload{% endblock %}
+
+{% block extra_css %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+.preview-table { max-height: 420px; overflow-y: auto; }
+.mapping-card { border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 1.25rem; margin-bottom: 1rem; background: #f8fafc; }
+.mapping-card.resolved { border-color: #198754; background: #eaf6ec; }
+.mapping-card h6 { margin-bottom: 0.5rem; }
+.mapping-actions button { margin-right: 0.5rem; margin-top: 0.25rem; }
+.suggestions-list button { margin-right: 0.4rem; margin-bottom: 0.4rem; }
+.preview-table thead th { position: sticky; top: 0; background: #0d6efd; color: #fff; }
+.status-pill { display: inline-flex; align-items: center; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 999px; }
+.status-pill.resolved { background: #d1e7dd; color: #0f5132; }
+.status-pill.pending { background: #fff3cd; color: #856404; }
+.status-pill.error { background: #f8d7da; color: #842029; }
+</style>
+{% endblock %}
+
+{% block content %}
+{{ maint_child_open('MProfit trade upload', url_for('main.data_upload_links'), 'For MProfit export files only.') }}
+{{ maint_desktop_open('container') }}
+<div class="container">
+    <div class="d-flex align-items-center mb-4">
+        <div>
+            <h3 class="mb-0"><i class="fas fa-file-upload"></i> MProfit Trade Upload</h3>
+            <p class="text-muted mb-0">
+                <strong>For MProfit export files only.</strong> 
+                This uploader converts MProfit format (company names) to NSE symbols automatically.
+                For standard format files, use <a href="{{ url_for('main.trade_upload') }}">Regular Trade Upload</a>.
+            </p>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form id="mprofitUploadForm" onsubmit="return false;">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="clientSelect" class="form-label fw-semibold">Client</label>
+                        <select id="clientSelect" class="form-select" required>
+                            <option value="">Select Client</option>
+                            {% for c in clients %}
+                            <option value="{{ c.id }}">{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label for="mprofitFileInput" class="form-label fw-semibold">MProfit File</label>
+                        <input type="file" id="mprofitFileInput" accept=".xlsx,.xls,.csv" class="form-control" required>
+                        <div class="form-text">Expected columns: Date, Trans. Type, Asset Type, Asset, Qty, Price, Amount</div>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" id="uploadBtn" class="btn btn-primary w-100">
+                            <i class="fas fa-upload"></i> Upload &amp; Convert
+                        </button>
+                    </div>
+                </div>
+            </form>
+            <div id="uploadStatus" class="mt-3"></div>
+        </div>
+    </div>
+
+    <div id="conversionSummary" class="alert alert-secondary d-none"></div>
+
+    <div id="autoMatchedSymbolsSection" class="mb-4 d-none">
+        <div class="card shadow-sm border-success">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="fas fa-check-circle"></i> Auto-Matched Symbols</h5>
+                <small>These company names were automatically matched to NSE symbols</small>
+            </div>
+            <div class="card-body">
+                <div id="autoMatchedSymbolsContainer" class="row g-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="conversionErrors" class="alert alert-warning d-none">
+        <strong><i class="fas fa-exclamation-triangle"></i> Conversion warnings:</strong>
+        <ul id="conversionErrorsList" class="mb-0 mt-2"></ul>
+    </div>
+
+    <div id="missingSymbolsSection" class="mb-4 d-none">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0"><i class="fas fa-question-circle"></i> Resolve Missing Symbols</h5>
+                    <small class="text-muted">Map each MProfit asset name to the correct NSE symbol. Saved mappings will auto-fill next time.</small>
+                </div>
+                <div>
+                    <span id="missingResolutionStatus" class="status-pill pending">Pending</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="missingSymbolsContainer"></div>
+                <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="text-muted small">
+                        <i class="fas fa-info-circle"></i> If the stock is missing from suggestions, use manual entry or search.
+                    </div>
+                    <div>
+                        <button type="button" id="retryConversionBtn" class="btn btn-success" disabled>
+                            <i class="fas fa-sync-alt"></i> Save &amp; Retry Conversion
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="previewSection" class="d-none">
+        <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h5 class="mb-0"><i class="fas fa-table"></i> Preview Converted Trades</h5>
+                    <small class="text-muted">Review and deselect trades before uploading to the client portfolio.</small>
+                </div>
+                <div class="d-flex align-items-center">
+                    <span id="previewStats" class="badge bg-secondary me-3">0 trades</span>
+                    <button type="button" id="processSelectedBtn" class="btn btn-success">
+                        <i class="fas fa-check"></i> Process Selected
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="previewWarnings" class="alert alert-warning d-none"></div>
+                <div class="preview-table">
+                    <table class="table table-sm table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th width="40">
+                                    <input type="checkbox" id="selectAllPreview">
+                                </th>
+                                <th>#</th>
+                                <th>Date</th>
+                                <th>Type</th>
+                                <th>Symbol</th>
+                                <th>Quantity</th>
+                                <th>Price</th>
+                                <th>Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody id="previewTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+    const uploadBtn = document.getElementById('uploadBtn');
+    const retryBtn = document.getElementById('retryConversionBtn');
+    const processBtn = document.getElementById('processSelectedBtn');
+    const selectAllPreview = document.getElementById('selectAllPreview');
+
+    let currentClientId = null;
+    let selectedFile = null;
+    let pendingResolutions = {};
+    let missingSymbols = [];
+    let previewTransactions = [];
+    let lastSummary = null;
+
+    function showStatus(containerId, message, type = 'info') {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const alertClass = {
+            info: 'alert-info',
+            success: 'alert-success',
+            warning: 'alert-warning',
+            error: 'alert-danger'
+        }[type] || 'alert-info';
+        container.className = `alert ${alertClass}`;
+        container.innerHTML = `
+            <div class="d-flex align-items-center">
+                <span>${message}</span>
+            </div>
+        `;
+    }
+
+    function resetState() {
+        document.getElementById('conversionSummary').classList.add('d-none');
+        document.getElementById('conversionErrors').classList.add('d-none');
+        document.getElementById('autoMatchedSymbolsSection').classList.add('d-none');
+        document.getElementById('missingSymbolsSection').classList.add('d-none');
+        document.getElementById('previewSection').classList.add('d-none');
+        document.getElementById('uploadStatus').innerHTML = '';
+        document.getElementById('autoMatchedSymbolsContainer').innerHTML = '';
+        document.getElementById('missingSymbolsContainer').innerHTML = '';
+        document.getElementById('previewTableBody').innerHTML = '';
+        document.getElementById('previewWarnings').classList.add('d-none');
+        document.getElementById('previewWarnings').innerHTML = '';
+        pendingResolutions = {};
+        missingSymbols = [];
+        previewTransactions = [];
+        lastSummary = null;
+        retryBtn.disabled = true;
+        updateResolutionStatus();
+    }
+
+    function uploadAndConvert() {
+        const clientSelect = document.getElementById('clientSelect');
+        const fileInput = document.getElementById('mprofitFileInput');
+        if (!clientSelect.value) {
+            showStatus('uploadStatus', 'Please select a client before uploading.', 'error');
+            return;
+        }
+        if (!fileInput.files || fileInput.files.length === 0) {
+            showStatus('uploadStatus', 'Please choose an MProfit export file.', 'error');
+            return;
+        }
+
+        currentClientId = parseInt(clientSelect.value, 10);
+        selectedFile = fileInput.files[0];
+
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+        if (Object.keys(pendingResolutions).length > 0) {
+            formData.append('resolutions', JSON.stringify(pendingResolutions));
+        }
+
+        showStatus('uploadStatus', '<i class="fas fa-spinner fa-spin"></i> Converting file...', 'info');
+
+        fetch(`/api/v1/clients/${currentClientId}/transactions/upload-mprofit`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        })
+        .then(resp => resp.json())
+        .then(result => {
+            if (!result.success) {
+                throw new Error(result.message || 'Conversion failed.');
+            }
+            handleConversionResponse(result.data, result.message);
+            showStatus('uploadStatus', `<i class="fas fa-check-circle"></i> ${result.message}`, 'success');
+        })
+        .catch(err => {
+            console.error(err);
+            showStatus('uploadStatus', `<i class="fas fa-times-circle"></i> ${err.message}`, 'error');
+        });
+    }
+
+    function handleConversionResponse(data, message) {
+        if (!data) return;
+
+        if (data.summary) {
+            lastSummary = data.summary;
+            renderSummary(data.summary);
+        }
+
+        renderConversionWarnings(data.conversion_errors || []);
+
+        // Show auto-matched symbols if available
+        if (data.auto_matched_symbols && data.auto_matched_symbols.length > 0) {
+            renderAutoMatchedSymbols(data.auto_matched_symbols);
+        }
+
+        if (data.status === 'needs_resolution') {
+            // Show symbol resolution UI
+            missingSymbols = data.missing_symbols || [];
+            renderMissingSymbols();
+            document.getElementById('previewSection').classList.add('d-none');
+        } else if (data.status === 'preview_ready') {
+            // Show preview for user review before final upload
+            missingSymbols = [];
+            renderMissingSymbols();
+            renderPreview(data.valid_transactions || [], data.validation_errors || []);
+            showToast('File converted successfully. Please review the transactions below.', 'info');
+        } else if (data.processed_count !== undefined) {
+            // Success! Transactions were processed after user confirmation
+            showToast(`Successfully processed ${data.processed_count} transactions from MProfit file!`, 'success');
+            resetState();
+            document.getElementById('mprofitUploadForm').reset();
+            
+            // Optionally redirect to transactions page after a delay
+            setTimeout(() => {
+                window.location.href = '/transactions';
+            }, 2000);
+        }
+    }
+
+    function renderSummary(summary) {
+        const container = document.getElementById('conversionSummary');
+        if (!summary) {
+            container.classList.add('d-none');
+            return;
+        }
+        container.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="fas fa-info-circle me-2"></i>
+                <div>
+                    <div><strong>Total rows:</strong> ${summary.total_rows}</div>
+                    <div><strong>Converted trades:</strong> ${summary.converted_rows}</div>
+                    <div><strong>Missing symbols:</strong> ${summary.missing_symbol_count}</div>
+                    <div><strong>Conversion errors:</strong> ${summary.conversion_error_count}</div>
+                </div>
+            </div>
+        `;
+        container.classList.remove('d-none');
+    }
+
+    function renderConversionWarnings(errors) {
+        const container = document.getElementById('conversionErrors');
+        const list = document.getElementById('conversionErrorsList');
+        if (!errors || errors.length === 0) {
+            container.classList.add('d-none');
+            list.innerHTML = '';
+            return;
+        }
+        list.innerHTML = errors.map(err => `<li>${err}</li>`).join('');
+        container.classList.remove('d-none');
+    }
+
+    function renderAutoMatchedSymbols(autoMatched) {
+        const section = document.getElementById('autoMatchedSymbolsSection');
+        const container = document.getElementById('autoMatchedSymbolsContainer');
+        
+        if (!autoMatched || autoMatched.length === 0) {
+            section.classList.add('d-none');
+            return;
+        }
+        
+        // Group by raw_name to show unique matches
+        const grouped = {};
+        autoMatched.forEach(item => {
+            const key = item.raw_name;
+            if (!grouped[key]) {
+                grouped[key] = {
+                    raw_name: item.raw_name,
+                    nse_symbol: item.nse_symbol,
+                    security_name: item.security_name,
+                    mapping_id: item.mapping_id || null,
+                    count: item.count || 1
+                };
+            } else {
+                grouped[key].count += (item.count || 1);
+                // Preserve mapping_id if not already set
+                if (!grouped[key].mapping_id && item.mapping_id) {
+                    grouped[key].mapping_id = item.mapping_id;
+                }
+            }
+        });
+        
+        container.innerHTML = Object.values(grouped).map(item => `
+            <div class="col-md-6 col-lg-4">
+                <div class="card border-success mb-2">
+                    <div class="card-body p-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <strong class="text-success">${htmlEscape(item.raw_name)}</strong>
+                                <div class="small text-muted">→ <strong class="text-primary">${htmlEscape(item.nse_symbol)}</strong></div>
+                                <div class="small text-muted">${htmlEscape(item.security_name || '')}</div>
+                            </div>
+                            <span class="badge bg-success">${item.count} trade${item.count > 1 ? 's' : ''}</span>
+                        </div>
+                        <div class="mt-2">
+                            <button class="btn btn-outline-warning btn-sm correct-auto-match-btn" type="button" 
+                                data-action="correct-auto-match"
+                                data-raw="${htmlEscape(item.raw_name)}"
+                                data-mapping-id="${item.mapping_id || ''}"
+                                title="If this mapping is incorrect, click to correct it manually">
+                                <i class="fas fa-edit"></i> Correct if Wrong
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        // Attach event listeners to all "Correct if Wrong" buttons
+        container.querySelectorAll('.correct-auto-match-btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                e.preventDefault();
+                const rawName = this.dataset.raw;
+                const mappingId = this.dataset.mappingId || null;
+                correctAutoMatch(rawName, mappingId);
+            });
+        });
+        
+        section.classList.remove('d-none');
+    }
+
+    function renderMissingSymbols() {
+        const section = document.getElementById('missingSymbolsSection');
+        const container = document.getElementById('missingSymbolsContainer');
+        container.innerHTML = '';
+        if (!missingSymbols || missingSymbols.length === 0) {
+            section.classList.add('d-none');
+            updateResolutionStatus();
+            return;
+        }
+        missingSymbols.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'mapping-card';
+            card.id = `mapping-${cssSafeKey(item.raw_name)}`;
+            card.innerHTML = `
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-1">${item.raw_name}</h6>
+                        <div class="text-muted small mb-2">Normalized: ${item.normalized_name || '-'}</div>
+                        ${renderTradeRows(item.rows)}
+                    </div>
+                    <div class="text-end">
+                        <div class="status-pill pending" id="status-pill-${cssSafeKey(item.raw_name)}">Pending</div>
+                    </div>
+                </div>
+                <div class="mapping-actions mt-3">
+                    <label class="form-label small fw-semibold"><i class="fas fa-lightbulb text-warning"></i> Suggested NSE Symbols</label>
+                    <div class="suggestions-list mb-3" id="suggestions-${cssSafeKey(item.raw_name)}">
+                        ${renderSuggestions(item)}
+                    </div>
+                    <label class="form-label small fw-semibold"><i class="fas fa-edit"></i> Manual Entry - Type NSE Code</label>
+                    <div class="input-group input-group-sm mb-2">
+                        <input type="text" class="form-control mapping-input" placeholder="Type NSE symbol (e.g. TCS, RELIANCE, CONCOR)" data-raw="${htmlEscape(item.raw_name)}" data-mapping-id="${item.mapping_id || ''}">
+                        <button class="btn btn-outline-primary" type="button" data-action="manual-set"><i class="fas fa-save"></i> Save</button>
+                    </div>
+                    <div class="text-muted small mb-2"><i class="fas fa-info-circle"></i> Enter the NSE symbol directly if you know it. The system will look it up and save the mapping.</div>
+                    <div class="d-flex align-items-center mb-2">
+                        <input type="text" class="form-control form-control-sm me-2 search-input" placeholder="Search by symbol or company name" data-raw="${htmlEscape(item.raw_name)}">
+                        <button class="btn btn-outline-primary btn-sm" type="button" data-action="search"><i class="fas fa-search"></i> Search</button>
+                    </div>
+                </div>
+            `;
+            card.addEventListener('click', handleMappingCardClick);
+            container.appendChild(card);
+        });
+        section.classList.remove('d-none');
+        updateResolutionStatus();
+    }
+
+    function renderTradeRows(rows) {
+        if (!rows || rows.length === 0) return '<div class="text-muted small fst-italic">No sample trades available.</div>';
+        const items = rows.slice(0, 3).map(r => `
+            <div class="text-muted small">
+                <i class="far fa-dot-circle"></i>
+                ${r.date || 'N/A'} · ${r.type} · Qty ${r.quantity} @ ${r.price}
+            </div>
+        `).join('');
+        const more = rows.length > 3 ? `<div class="text-muted small">+${rows.length - 3} more trades</div>` : '';
+        return items + more;
+    }
+
+    function renderSuggestions(item) {
+        if (!item.suggestions || item.suggestions.length === 0) {
+            return `<div class="text-muted small">No suggestions yet. Try searching.</div>`;
+        }
+        return item.suggestions.map(s => `
+            <button class="btn btn-outline-success btn-sm mb-1 me-1" type="button"
+                data-action="suggestion"
+                data-raw="${htmlEscape(item.raw_name)}"
+                data-mapping-id="${item.mapping_id || ''}"
+                data-symbol="${htmlEscape(s.symbol)}"
+                data-security-id="${s.security_id}">
+                <strong>${htmlEscape(s.symbol)}</strong><br>
+                <small>${htmlEscape(s.name)}</small>
+            </button>
+        `).join('');
+    }
+
+    function handleMappingCardClick(event) {
+        const target = event.target;
+        if (target.dataset.action === 'manual-set') {
+            const input = target.closest('.input-group').querySelector('.mapping-input');
+            const symbol = input.value.trim().toUpperCase();
+            const rawName = input.dataset.raw;
+            const mappingId = input.dataset.mappingId || null;
+            if (!symbol) {
+                showToast('Please enter an NSE symbol before saving.', 'warning');
+                return;
+            }
+            // Validate symbol format (basic check - alphanumeric, no spaces)
+            if (!/^[A-Z0-9]+$/.test(symbol)) {
+                showToast('Invalid NSE symbol format. Use only letters and numbers (e.g., TCS, RELIANCE, EBBETF0431).', 'error');
+                return;
+            }
+            // Show loading state
+            const button = target;
+            const originalText = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            
+            resolveSymbol(rawName, mappingId, symbol, null);
+            
+            // Re-enable button after a delay (will be handled in resolveSymbol callback)
+            setTimeout(() => {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }, 2000);
+        } else if (target.dataset.action === 'search') {
+            const searchInput = target.closest('.mapping-actions').querySelector('.search-input');
+            const rawName = searchInput.dataset.raw;
+            const query = searchInput.value.trim() || rawName;
+            performSecuritySearch(rawName, query);
+        } else if (target.dataset.action === 'suggestion') {
+            const rawName = target.dataset.raw;
+            const mappingId = target.dataset.mappingId || null;
+            const symbol = target.dataset.symbol;
+            const securityId = target.dataset.securityId;
+            resolveSymbol(rawName, mappingId, symbol, securityId);
+        } else if (target.dataset.action === 'correct-auto-match') {
+            const rawName = target.dataset.raw;
+            const mappingId = target.dataset.mappingId || null;
+            correctAutoMatch(rawName, mappingId);
+        }
+    }
+
+    function correctAutoMatch(rawName, mappingId) {
+        if (!confirm(`Do you want to correct the auto-match for "${rawName}"? It will be moved to manual resolution.`)) {
+            return;
+        }
+        
+        // If mapping ID is not provided, try to find it from the database
+        if (!mappingId || mappingId === 'null' || mappingId === '') {
+            // Try to find the mapping by raw_name
+            fetch(`/api/v1/clients/mprofit-symbols/pending?q=${encodeURIComponent(rawName)}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                credentials: 'same-origin'
+            })
+            .then(resp => resp.json())
+            .then(result => {
+                if (result.success && result.data && result.data.length > 0) {
+                    const mapping = result.data.find(m => m.raw_name === rawName);
+                    if (mapping && mapping.id) {
+                        // Found mapping, proceed with correction
+                        proceedWithCorrection(rawName, mapping.id);
+                    } else {
+                        showToast('Cannot correct: mapping not found in database. Please refresh and try again.', 'error');
+                    }
+                } else {
+                    showToast('Cannot correct: mapping not found. The mapping may have been deleted. Please refresh the page.', 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error finding mapping:', err);
+                showToast('Cannot correct: unable to find mapping. Please refresh and try again.', 'error');
+            });
+            return;
+        }
+        
+        proceedWithCorrection(rawName, mappingId);
+    }
+    
+    function proceedWithCorrection(rawName, mappingId) {
+        // Clear the mapping in the database
+        fetch(`/api/v1/clients/mprofit-symbols/${mappingId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            credentials: 'same-origin'
+        })
+        .then(resp => {
+            const contentType = resp.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                return resp.text().then(text => {
+                    throw new Error('Server returned non-JSON response.');
+                });
+            }
+            return resp.json();
+        })
+        .then(result => {
+            if (!result.success) throw new Error(result.message || 'Failed to clear mapping');
+            
+            // Use the mapping data from DELETE response directly
+            const mappingData = result.data;
+            
+            showToast(`✅ "${rawName}" moved to manual resolution. Please correct it below.`, 'success');
+            
+            // Remove from auto-matched section
+            const autoMatchedContainer = document.getElementById('autoMatchedSymbolsContainer');
+            const cards = autoMatchedContainer.querySelectorAll('.col-md-6, .col-lg-4');
+            cards.forEach(card => {
+                const button = card.querySelector(`[data-raw="${htmlEscape(rawName)}"]`);
+                if (button) {
+                    card.remove();
+                }
+            });
+            
+            // If no more auto-matched symbols, hide the section
+            if (autoMatchedContainer.children.length === 0) {
+                document.getElementById('autoMatchedSymbolsSection').classList.add('d-none');
+            }
+            
+            // Add to missing symbols array using the data from DELETE response
+            if (!missingSymbols) missingSymbols = [];
+            
+            // Check if already exists
+            const exists = missingSymbols.find(m => m.raw_name === rawName);
+            if (!exists) {
+                missingSymbols.push({
+                    raw_name: mappingData.raw_name,
+                    normalized_name: mappingData.normalized_name,
+                    mapping_id: mappingData.id,
+                    rows: [],
+                    suggestions: []
+                });
+            }
+            
+            // Re-render missing symbols and SHOW the section
+            renderMissingSymbols();
+            document.getElementById('missingSymbolsSection').classList.remove('d-none');
+        })
+        .catch(err => {
+            console.error('Error correcting auto-match:', err);
+            showToast(err.message || 'Failed to correct auto-match. Please try again.', 'error');
+        });
+    }
+
+    function performSecuritySearch(rawName, query) {
+        const suggestionsContainer = document.getElementById(`suggestions-${cssSafeKey(rawName)}`);
+        suggestionsContainer.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin"></i> Searching...</div>';
+        
+        fetch(`/api/v1/clients/mprofit-symbols/securities?q=${encodeURIComponent(query)}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            credentials: 'same-origin'
+        })
+            .then(resp => {
+                // Check if response is JSON
+                const contentType = resp.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    return resp.text().then(text => {
+                        throw new Error('Server returned non-JSON response. Please refresh the page and try again.');
+                    });
+                }
+                return resp.json();
+            })
+            .then(result => {
+                if (!result.success) throw new Error(result.message || 'Search failed.');
+                const matches = result.data || [];
+                if (matches.length === 0) {
+                    suggestionsContainer.innerHTML = '<div class="text-muted small">No matches found. Try a different search term.</div>';
+                    return;
+                }
+                suggestionsContainer.innerHTML = matches.map(s => `
+                    <button class="btn btn-outline-success btn-sm mb-1 me-1" type="button"
+                        data-action="suggestion"
+                        data-raw="${htmlEscape(rawName)}"
+                        data-mapping-id="${getMappingId(rawName)}"
+                        data-symbol="${htmlEscape(s.symbol)}"
+                        data-security-id="${s.security_id}">
+                        <strong>${htmlEscape(s.symbol)}</strong><br>
+                        <small>${htmlEscape(s.name)}</small>
+                    </button>
+                `).join('');
+            })
+            .catch(err => {
+                console.error('Search error:', err);
+                suggestionsContainer.innerHTML = `<div class="text-danger small"><i class="fas fa-exclamation-triangle"></i> ${err.message}</div>`;
+            });
+    }
+
+    function resolveSymbol(rawName, mappingId, symbol, securityId) {
+        const card = document.getElementById(`mapping-${cssSafeKey(rawName)}`);
+        const statusPill = document.getElementById(`status-pill-${cssSafeKey(rawName)}`);
+        if (!card) return;
+
+        statusPill.textContent = 'Saving...';
+        statusPill.className = 'status-pill pending';
+
+        const payload = securityId ? { security_id: parseInt(securityId, 10) } : { nse_symbol: symbol };
+        if (!mappingId) {
+            // No mapping ID yet (should be rare) – just store override locally.
+            pendingResolutions[rawName] = symbol;
+            markResolvedCard(card, statusPill, symbol, false);
+            updateResolutionStatus();
+            return;
+        }
+
+        fetch(`/api/v1/clients/mprofit-symbols/${mappingId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload)
+        })
+        .then(resp => {
+            // Check if response is JSON
+            const contentType = resp.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                return resp.text().then(text => {
+                    throw new Error('Server returned non-JSON response. Please refresh the page and try again.');
+                });
+            }
+            return resp.json();
+        })
+        .then(result => {
+            if (!result.success) {
+                // Show detailed error message
+                const errorMsg = result.message || result.error || 'Failed to update mapping';
+                statusPill.textContent = 'Error';
+                statusPill.className = 'status-pill error';
+                showToast(`❌ ${errorMsg}`, 'error');
+                throw new Error(errorMsg);
+            }
+            pendingResolutions[rawName] = result.data.nse_symbol || symbol;
+            markResolvedCard(card, statusPill, pendingResolutions[rawName], true);
+            updateResolutionStatus();
+            showToast(`✅ Successfully mapped "${rawName}" to ${result.data.nse_symbol}`, 'success');
+            
+            // Clear the input field
+            const input = card.querySelector('.mapping-input');
+            if (input) input.value = '';
+        })
+        .catch(err => {
+            console.error('Resolve symbol error:', err);
+            statusPill.textContent = 'Error';
+            statusPill.className = 'status-pill error';
+            // Show detailed error message - check if it contains suggestions
+            const errorMsg = err.message || 'Failed to save mapping. Please try again.';
+            // Show toast for longer if it contains suggestions (indicated by "Did you mean")
+            const duration = errorMsg.includes('Did you mean') ? 15000 : 5000;
+            showToast(`❌ ${errorMsg}`, 'error', duration);
+            
+            // Re-enable the button
+            const button = card.querySelector('[data-action="manual-set"]');
+            if (button) {
+                button.disabled = false;
+                button.innerHTML = '<i class="fas fa-save"></i> Save';
+            }
+        });
+    }
+
+    function markResolvedCard(card, statusPill, symbol, persisted) {
+        card.classList.add('resolved');
+        statusPill.textContent = persisted ? `Resolved · ${symbol}` : `Selected · ${symbol}`;
+        statusPill.className = 'status-pill resolved';
+    }
+
+    function updateResolutionStatus() {
+        const pill = document.getElementById('missingResolutionStatus');
+        if (!missingSymbols || missingSymbols.length === 0) {
+            pill.textContent = 'No pending symbols';
+            pill.className = 'status-pill resolved';
+            retryBtn.disabled = false;
+            return;
+        }
+        const unresolved = missingSymbols.filter(item => !pendingResolutions[item.raw_name]);
+        if (unresolved.length === 0) {
+            pill.textContent = 'All symbols resolved';
+            pill.className = 'status-pill resolved';
+            retryBtn.disabled = false;
+        } else {
+            pill.textContent = `${unresolved.length} pending`;
+            pill.className = 'status-pill pending';
+            retryBtn.disabled = true;
+        }
+    }
+
+    function retryConversion() {
+        if (!selectedFile) {
+            showToast('Please upload the original file again.', 'warning');
+            return;
+        }
+        uploadAndConvert();
+    }
+
+    function renderPreview(validTransactions, validationErrors) {
+        const section = document.getElementById('previewSection');
+        const tbody = document.getElementById('previewTableBody');
+        const warnings = document.getElementById('previewWarnings');
+
+        previewTransactions = (validTransactions || []).map((txn, idx) => ({
+            ...txn,
+            index: idx + 1,
+            selected: true,
+            transaction_date: normalizeDate(txn.transaction_date),
+            price: Number(txn.price || 0),
+            quantity: Number(txn.quantity || 0),
+            amount: Number((txn.quantity || 0) * (txn.price || 0))
+        }));
+
+        tbody.innerHTML = previewTransactions.map((txn, i) => `
+            <tr data-index="${i}">
+                <td><input type="checkbox" class="form-check-input preview-checkbox" checked></td>
+                <td>${txn.index}</td>
+                <td>${txn.transaction_date || '-'}</td>
+                <td>${txn.type}</td>
+                <td>${txn.security_symbol || txn.stock || '-'}</td>
+                <td>${txn.quantity.toFixed(2)}</td>
+                <td>${txn.price.toFixed(2)}</td>
+                <td>${txn.amount.toFixed(2)}</td>
+            </tr>
+        `).join('');
+
+        selectAllPreview.checked = true;
+        updatePreviewStats();
+
+        if (validationErrors && validationErrors.length > 0) {
+            warnings.innerHTML = `
+                <strong>Validation warnings:</strong>
+                <ul class="mb-0 mt-2">
+                    ${validationErrors.map(err => `<li>${formatValidationError(err)}</li>`).join('')}
+                </ul>
+            `;
+            warnings.classList.remove('d-none');
+        } else {
+            warnings.classList.add('d-none');
+            warnings.innerHTML = '';
+        }
+
+        section.classList.remove('d-none');
+        document.getElementById('missingSymbolsSection').classList.add('d-none');
+    }
+
+    function processSelectedTransactions() {
+        if (!currentClientId) {
+            showToast('Select a client and upload before processing.', 'warning');
+            return;
+        }
+        const selected = previewTransactions.filter(txn => txn.selected);
+        if (selected.length === 0) {
+            showToast('No trades selected for processing.', 'warning');
+            return;
+        }
+        const payload = {
+            transactions: selected.map(txn => ({
+                security_id: txn.security_id,
+                type: txn.type,
+                quantity: txn.quantity,
+                price: txn.price,
+                transaction_date: txn.transaction_date,
+                notes: `Uploaded via MProfit import (${selectedFile ? selectedFile.name : 'file'})`
+            }))
+        };
+
+        processBtn.disabled = true;
+        processBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+        fetch(`/api/v1/clients/${currentClientId}/transactions/process`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(resp => resp.json())
+        .then(result => {
+            if (!result.success) throw new Error(result.message || 'Processing failed.');
+            showToast(`Successfully processed ${selected.length} transactions.`, 'success');
+            resetState();
+            document.getElementById('mprofitUploadForm').reset();
+        })
+        .catch(err => {
+            console.error(err);
+            showToast(err.message, 'error');
+        })
+        .finally(() => {
+            processBtn.disabled = false;
+            processBtn.innerHTML = '<i class="fas fa-check"></i> Process Selected';
+        });
+    }
+
+    function updatePreviewStats() {
+        const stats = document.getElementById('previewStats');
+        const selected = previewTransactions.filter(txn => txn.selected).length;
+        stats.textContent = `${selected}/${previewTransactions.length} selected`;
+    }
+
+    function handlePreviewToggle(event) {
+        if (event.target.classList.contains('preview-checkbox')) {
+            const row = event.target.closest('tr');
+            const index = parseInt(row.dataset.index, 10);
+            previewTransactions[index].selected = event.target.checked;
+            updatePreviewStats();
+        }
+    }
+
+    function toggleSelectAll(event) {
+        const checked = event.target.checked;
+        document.querySelectorAll('.preview-checkbox').forEach(cb => {
+            cb.checked = checked;
+        });
+        previewTransactions = previewTransactions.map(txn => ({ ...txn, selected: checked }));
+        updatePreviewStats();
+    }
+
+    function formatValidationError(error) {
+        if (typeof error === 'string') return error;
+        if (!error || typeof error !== 'object') return 'Unknown validation issue.';
+        let message = error.message || 'Validation issue.';
+        if (error.row) message = `Row ${error.row}: ${message}`;
+        if (error.suggestion) message += ` (${error.suggestion})`;
+        return message;
+    }
+
+    function normalizeDate(value) {
+        if (!value) return null;
+        if (typeof value === 'string') {
+            return value.length > 10 ? value.substring(0, 10) : value;
+        }
+        try {
+            const date = new Date(value);
+            if (!isNaN(date.getTime())) {
+                return date.toISOString().split('T')[0];
+            }
+        } catch (e) {
+            // ignore
+        }
+        return null;
+    }
+
+    function htmlEscape(str) {
+        if (!str) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    function cssSafeKey(str) {
+        return String(str)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '') || 'item';
+    }
+
+    function getMappingId(rawName) {
+        const item = missingSymbols.find(ms => ms.raw_name === rawName);
+        return item ? item.mapping_id : '';
+    }
+
+    function showToast(message, type = 'info', duration = 5000) {
+        const toast = document.createElement('div');
+        const bgClass = {
+            info: 'bg-primary',
+            success: 'bg-success',
+            warning: 'bg-warning text-dark',
+            error: 'bg-danger'
+        }[type] || 'bg-primary';
+        toast.className = `toast align-items-center text-white ${bgClass} border-0`;
+        toast.role = 'alert';
+        toast.innerHTML = `
+            <div class="d-flex">
+                <div class="toast-body">${message}</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close notification"></button>
+            </div>
+        `;
+        document.body.appendChild(toast);
+        const bsToast = new bootstrap.Toast(toast, { autohide: true, delay: duration });
+        bsToast.show();
+        toast.addEventListener('hidden.bs.toast', () => toast.remove());
+    }
+
+    uploadBtn.addEventListener('click', () => {
+        pendingResolutions = {};
+        uploadAndConvert();
+    });
+
+    retryBtn.addEventListener('click', retryConversion);
+    processBtn.addEventListener('click', processSelectedTransactions);
+    document.getElementById('previewTableBody').addEventListener('change', handlePreviewToggle);
+    selectAllPreview.addEventListener('change', toggleSelectAll);
+    document.getElementById('mprofitFileInput').addEventListener('change', () => {
+        selectedFile = document.getElementById('mprofitFileInput').files[0] || null;
+        pendingResolutions = {};
+    });
+})();
+</script>
+{% endblock %}
+
+

@@ -1,0 +1,22 @@
+[Unit]
+Description=Inertia 2026v1 Gunicorn (clean VPS)
+After=network.target mysqld.service mariadb.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=anshul
+Group=anshul
+WorkingDirectory=/opt/Inertia2026v1
+EnvironmentFile=-/opt/Inertia2026v1/.env
+Environment=PATH=/opt/Inertia2026v1/venv/bin
+ExecStart=/opt/Inertia2026v1/venv/bin/python3 -m gunicorn -c /opt/Inertia2026v1/config/gunicorn_parallel_v2026.py wsgi:app
+Restart=always
+RestartSec=3
+# Harden a bit
+NoNewPrivileges=true
+PrivateTmp=true
+ReadWritePaths=/opt/Inertia2026v1
+
+[Install]
+WantedBy=multi-user.target

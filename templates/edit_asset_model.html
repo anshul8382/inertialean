@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Asset Model{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Edit Asset Model (ID: {{ model.id }})</h1>
+        <div>
+            <a href="{{ url_for('main.models') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Models
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Edit Model Information</h6>
+        </div>
+        <div class="card-body">
+            <form method="POST" id="editAssetModelForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ model.name }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description</label>
+                    <textarea class="form-control" id="description" name="description" rows="3">{{ model.description }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="risk_level" class="form-label">Risk Profile</label>
+                    <select class="form-select" id="risk_level" name="risk_level" required>
+                        <option value="Conservative" {% if model.risk_profile == 'Conservative' %}selected{% endif %}>Conservative</option>
+                        <option value="Moderately Conservative" {% if model.risk_profile == 'Moderately Conservative' %}selected{% endif %}>Moderately Conservative</option>
+                        <option value="Moderate" {% if model.risk_profile == 'Moderate' %}selected{% endif %}>Moderate</option>
+                        <option value="Moderately Aggressive" {% if model.risk_profile == 'Moderately Aggressive' %}selected{% endif %}>Moderately Aggressive</option>
+                        <option value="Aggressive" {% if model.risk_profile == 'Aggressive' %}selected{% endif %}>Aggressive</option>
+                    </select>
+                </div>
+
+                <h5 class="mt-4 mb-3">
+                    Asset Class Allocations 
+                    <span class="badge bg-primary" id="allocations-count">{{ allocations|length }}</span>
+                </h5>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> 
+                    <strong>Instructions:</strong> Select asset classes and set allocation percentages. Total must equal 100%. 
+                    You can also set minimum and maximum allocation constraints.
+                </div>
+                
+                <div id="asset-allocations">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="allocations-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Asset Class</th>
+                                    <th>Allocation %</th>
+                                    <th>Min %</th>
+                                    <th>Max %</th>
+                                    <th>Description</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="allocations-tbody">
+                                {% for allocation in allocations %}
+                                <tr class="allocation-row">
+                                    <td>
+                                        <select class="form-control asset-class-select" name="asset_class_id[]" required>
+                                            <option value="">Select Asset Class</option>
+                                            {% for asset_class in asset_classes %}
+                                            <option value="{{ asset_class.id }}" 
+                                                    {% if asset_class.id == allocation[0] %}selected{% endif %}>
+                                                {{ asset_class.name }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="number" class="form-control allocation-input" name="allocation_percentage[]"
+                                               step="0.01" min="0" max="100"
+                                               value="{{ allocation[1] }}">
+                                    </td>
+                                    <td>
+                                        <input type="number" class="form-control min-allocation-input" name="min_allocation[]"
+                                               step="0.01" min="0" max="100"
+                                               value="{{ allocation[2] or '' }}">
+                                    </td>
+                                    <td>
+                                        <input type="number" class="form-control max-allocation-input" name="max_allocation[]"
+                                               step="0.01" min="0" max="100"
+                                               value="{{ allocation[3] or '' }}">
+                                    </td>
+                                    <td>
+                                        <input type="text" class="form-control description-input" name="description[]"
+                                               value="">
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
+                                            <i class="fas fa-trash"></i> Remove
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-success" id="addAssetClassBtn">
+                            <i class="fas fa-plus"></i> Add Asset Class
+                        </button>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="alert alert-warning">
+                                <strong>Total Allocation:</strong> 
+                                <span id="total-allocation">0.00</span>% / 100%
+                                <br>
+                                <strong>Remaining:</strong> 
+                                <span id="remaining-allocation">100.00</span>%
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <button type="button" class="btn btn-info" onclick="autoDistribute()">
+                                <i class="fas fa-magic"></i> Auto-Distribute Remaining
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Changes
+                    </button>
+                    <a href="{{ url_for('main.models') }}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize total allocation display
+    updateTotalAllocation();
+    
+    // Add event listeners for allocation inputs
+    const allocationInputs = document.querySelectorAll('.allocation-input');
+    allocationInputs.forEach(input => {
+        input.addEventListener('change', updateTotalAllocation);
+    });
+    
+    // Add event listener for the Add Asset Class button
+    const addAssetClassBtn = document.getElementById('addAssetClassBtn');
+    if (addAssetClassBtn) {
+        addAssetClassBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            addRow();
+        });
+    }
+    
+    // Add form validation before submission
+    const form = document.getElementById('editAssetModelForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (!validateTotalAllocation()) {
+                e.preventDefault();
+                alert('Total allocation must equal 100%. Current total: ' + getTotalAllocation().toFixed(2) + '%');
+                return false;
+            }
+        });
+    }
+});
+
+function updateTotalAllocation() {
+    const total = getTotalAllocation();
+    
+    document.getElementById('total-allocation').textContent = total.toFixed(2);
+    document.getElementById('remaining-allocation').textContent = (100 - total).toFixed(2);
+    
+    // Update color based on total
+    const totalElement = document.getElementById('total-allocation');
+    if (Math.abs(total - 100) < 0.01) {
+        totalElement.style.color = 'green';
+    } else if (total > 100) {
+        totalElement.style.color = 'red';
+    } else {
+        totalElement.style.color = 'orange';
+    }
+}
+
+function getTotalAllocation() {
+    const allocationInputs = document.querySelectorAll('.allocation-input');
+    let total = 0;
+    allocationInputs.forEach(input => {
+        total += parseFloat(input.value || 0);
+    });
+    return total;
+}
+
+function validateTotalAllocation() {
+    const total = getTotalAllocation();
+    return Math.abs(total - 100) < 0.01;
+}
+
+// Auto-distribute remaining allocation
+function autoDistribute() {
+    const allocationInputs = document.querySelectorAll('.allocation-input');
+    let total = 0;
+    let filledInputs = 0;
+    
+    allocationInputs.forEach(input => {
+        const value = parseFloat(input.value || 0);
+        total += value;
+        if (value > 0) filledInputs++;
+    });
+    
+    const remaining = 100 - total;
+    if (remaining > 0 && filledInputs > 0) {
+        const perInput = remaining / filledInputs;
+        allocationInputs.forEach(input => {
+            const value = parseFloat(input.value || 0);
+            if (value > 0) {
+                input.value = (value + perInput).toFixed(2);
+            }
+        });
+        updateTotalAllocation();
+    }
+}
+
+// Add new row
+function addRow() {
+    const tbody = document.getElementById('allocations-tbody');
+    if (!tbody) return;
+    
+    const newRow = document.createElement('tr');
+    newRow.className = 'allocation-row';
+
+    // Create the select element with options
+    const selectCell = document.createElement('td');
+    const select = document.createElement('select');
+    select.className = 'form-control asset-class-select';
+    select.name = 'asset_class_id[]';
+    select.required = true;
+    
+    // Add default option
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Select Asset Class';
+    select.appendChild(defaultOption);
+    
+    // Add asset class options from existing dropdown
+    const existingSelect = document.querySelector('.asset-class-select');
+    if (existingSelect) {
+        Array.from(existingSelect.options).forEach(option => {
+            if (option.value !== '') {
+                const newOption = document.createElement('option');
+                newOption.value = option.value;
+                newOption.textContent = option.textContent;
+                select.appendChild(newOption);
+            }
+        });
+    }
+    
+    selectCell.appendChild(select);
+    
+    // Create other cells
+    const allocationCell = document.createElement('td');
+    const allocationInput = document.createElement('input');
+    allocationInput.type = 'number';
+    allocationInput.className = 'form-control allocation-input';
+    allocationInput.name = 'allocation_percentage[]';
+    allocationInput.step = '0.01';
+    allocationInput.min = '0';
+    allocationInput.max = '100';
+    allocationInput.value = '0';
+    allocationInput.addEventListener('change', updateTotalAllocation);
+    allocationCell.appendChild(allocationInput);
+    
+    const minCell = document.createElement('td');
+    const minInput = document.createElement('input');
+    minInput.type = 'number';
+    minInput.className = 'form-control min-allocation-input';
+    minInput.name = 'min_allocation[]';
+    minInput.step = '0.01';
+    minInput.min = '0';
+    minInput.max = '100';
+    minCell.appendChild(minInput);
+    
+    const maxCell = document.createElement('td');
+    const maxInput = document.createElement('input');
+    maxInput.type = 'number';
+    maxInput.className = 'form-control max-allocation-input';
+    maxInput.name = 'max_allocation[]';
+    maxInput.step = '0.01';
+    maxInput.min = '0';
+    maxInput.max = '100';
+    maxCell.appendChild(maxInput);
+    
+    const descCell = document.createElement('td');
+    const descInput = document.createElement('input');
+    descInput.type = 'text';
+    descInput.className = 'form-control description-input';
+    descInput.name = 'description[]';
+    descInput.placeholder = 'Optional description (not saved)';
+    descCell.appendChild(descInput);
+    
+    const actionCell = document.createElement('td');
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'btn btn-sm btn-danger';
+    removeBtn.onclick = function() { removeRow(this); };
+    removeBtn.innerHTML = '<i class="fas fa-trash"></i> Remove';
+    actionCell.appendChild(removeBtn);
+    
+    // Append all cells to the row
+    newRow.appendChild(selectCell);
+    newRow.appendChild(allocationCell);
+    newRow.appendChild(minCell);
+    newRow.appendChild(maxCell);
+    newRow.appendChild(descCell);
+    newRow.appendChild(actionCell);
+    
+    // Append the row to the tbody
+    tbody.appendChild(newRow);
+    
+    // Update the allocations count
+    const countElement = document.getElementById('allocations-count');
+    if (countElement) {
+        countElement.textContent = tbody.children.length;
+    }
+    
+    // Update total allocation
+    updateTotalAllocation();
+}
+
+// Remove row
+function removeRow(button) {
+    const row = button.closest('tr');
+    if (row) {
+        row.remove();
+        
+        // Update the allocations count
+        const tbody = document.getElementById('allocations-tbody');
+        const countElement = document.getElementById('allocations-count');
+        if (countElement && tbody) {
+            countElement.textContent = tbody.children.length;
+        }
+        
+        // Update total allocation
+        updateTotalAllocation();
+    }
+}
+</script>
+{% endblock %} 

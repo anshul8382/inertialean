@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link %}
+
+{% block title %}Cashflows{% endblock %}
+
+{% block content %}
+{{ maint_hub_open('Cashflows', 'Filter and manage client cashflows.', url_for('main.maintenance_trade_data')) }}
+  {{ maint_link('fa-plus', 'Add cashflow', url_for('main.add_cashflow')) }}
+  {{ maint_link('fa-upload', 'Upload file', url_for('main.cashflow_upload')) }}
+{{ maint_hub_close('Filters and cashflow table below.') }}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                <h1 class="h3 mb-0">Cashflows</h1>
+                <div class="btn-group mobile-action-stack">
+                    <a href="{{ url_for('main.add_cashflow') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Cashflow
+                    </a>
+                    <a href="{{ url_for('main.cashflow_upload') }}" class="btn btn-outline-primary">
+                        <i class="fas fa-upload"></i> Upload File
+                    </a>
+                </div>
+            </div>
+
+            <!-- Filter Form -->
+            <div class="card card-app mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Filters</h5>
+                </div>
+                <div class="card-body">
+                    <form method="GET" class="row g-3" id="cashflow-filter-form">
+                        <div class="col-md-3">
+                            <label for="client_id" class="form-label">Client</label>
+                            <select class="form-select" id="client_id" name="client_id">
+                                <option value="">All Clients</option>
+                                {% for client in clients %}
+                                <option value="{{ client.id }}" {% if selected_client_id == client.id %}selected{% endif %}>
+                                    {{ client.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="type" class="form-label">Type</label>
+                            <select class="form-select" id="type" name="type">
+                                <option value="">All Types</option>
+                                <option value="INFLOW" {% if selected_type == 'INFLOW' %}selected{% endif %}>Inflow</option>
+                                <option value="OUTFLOW" {% if selected_type == 'OUTFLOW' %}selected{% endif %}>Outflow</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="start_date" class="form-label">Start Date</label>
+                            <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date or '' }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="end_date" class="form-label">End Date</label>
+                            <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date or '' }}">
+                        </div>
+                        <div class="col-12">
+                            <fieldset class="border rounded p-3">
+                                <legend class="float-none w-auto px-2 fs-6 mb-0">View</legend>
+                                <div class="d-flex flex-wrap gap-3" role="radiogroup" aria-label="Cashflow view mode">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="view" id="view_detail" value="detail"
+                                               {% if view_mode == 'detail' %}checked{% endif %}>
+                                        <label class="form-check-label" for="view_detail">Detail</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="view" id="view_date" value="date"
+                                               {% if view_mode == 'date' %}checked{% endif %}>
+                                        <label class="form-check-label" for="view_date">By date</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="view" id="view_month" value="month"
+                                               {% if view_mode == 'month' %}checked{% endif %}>
+                                        <label class="form-check-label" for="view_month">By month (netted)</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="view" id="view_year" value="year"
+                                               {% if view_mode == 'year' %}checked{% endif %}>
+                                        <label class="form-check-label" for="view_year">By year (netted)</label>
+                                    </div>
+                                </div>
+                                {% if not selected_client_id and view_mode != 'detail' %}
+                                <p class="form-text mb-0 mt-2">With All Clients selected, amounts are netted across clients in each {{ view_mode }}.</p>
+                                {% elif view_mode in ('month', 'year', 'date') %}
+                                <p class="form-text mb-0 mt-2">Cashflows in the same {{ view_mode }} are netted into one row.</p>
+                                {% endif %}
+                            </fieldset>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button type="submit" class="btn btn-secondary me-2">
+                                <i class="fas fa-filter"></i> Filter
+                            </button>
+                            <a href="{{ url_for('main.list_cashflows') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Clear
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Filter Summary -->
+            {% if selected_client_id or selected_type or start_date or end_date or view_mode != 'detail' %}
+            <div class="alert alert-info mb-4">
+                <strong>Filtered by:</strong>
+                {% if selected_client_id %}
+                    {% set client = clients|selectattr('id', 'equalto', selected_client_id)|first %}
+                    {% if client %}Client: {{ client.name }}{% endif %}
+                {% else %}
+                    Client: All
+                {% endif %}
+                {% if selected_type %} · Type: {{ selected_type }}{% endif %}
+                {% if start_date %} · From: {{ start_date }}{% endif %}
+                {% if end_date %} · To: {{ end_date }}{% endif %}
+                {% if view_mode != 'detail' %} · View: By {{ view_mode }} (netted){% endif %}
+            </div>
+            {% endif %}
+
+            {% if view_mode == 'detail' %}
+            <!-- Detail Cashflows Table -->
+            <div class="card card-app">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h5 class="mb-0">Cashflows ({{ cashflows|length }})</h5>
+                        <div id="bulk-actions" style="display: none;">
+                            <button type="button" class="btn btn-danger btn-sm" onclick="confirmBulkDelete()">
+                                <i class="fas fa-trash"></i> Delete Selected
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if cashflows %}
+                    <div class="table-responsive">
+                        <table class="table table-app table-striped table-hover" data-mobile-table="scroll">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        <input type="checkbox" id="select-all" class="form-check-input" aria-label="Select all cashflows">
+                                    </th>
+                                    <th scope="col">Date</th>
+                                    <th scope="col">Client</th>
+                                    <th scope="col">Type</th>
+                                    <th scope="col" class="text-num">Amount</th>
+                                    <th scope="col">Description</th>
+                                    <th scope="col">Created By</th>
+                                    <th scope="col">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cashflow in cashflows %}
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input cashflow-checkbox" value="{{ cashflow.id }}" aria-label="Select cashflow {{ cashflow.id }}">
+                                    </td>
+                                    <td>
+                                        {% if cashflow.date %}
+                                            {{ cashflow.date.strftime('%Y-%m-%d') }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ cashflow.client.name }}</td>
+                                    <td>
+                                        <span class="badge {% if cashflow.type == 'INFLOW' %}bg-success{% else %}bg-danger{% endif %}">
+                                            {{ cashflow.type }}
+                                        </span>
+                                    </td>
+                                    <td class="text-num {% if cashflow.type == 'INFLOW' %}text-success{% else %}text-danger{% endif %}">
+                                        ₹{{ "%.2f"|format(cashflow.amount) }}
+                                    </td>
+                                    <td>{{ (cashflow.description or '')[:50] }}{% if (cashflow.description or '')|length > 50 %}...{% endif %}</td>
+                                    <td>{{ cashflow.creator.username if cashflow.creator else 'Unknown' }}</td>
+                                    <td>
+                                        <div class="d-flex flex-wrap gap-1">
+                                            <a href="{{ url_for('main.edit_cashflow', cashflow_id=cashflow.id) }}" class="btn btn-outline-primary btn-sm" aria-label="Edit cashflow {{ cashflow.id }}">
+                                                <i class="fas fa-pen" aria-hidden="true"></i> Edit
+                                            </a>
+                                            <button type="button" class="btn btn-danger btn-sm" onclick="deleteCashflow({{ cashflow.id }})" aria-label="Delete cashflow {{ cashflow.id }}">
+                                                <i class="fas fa-trash" aria-hidden="true"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-money-bill-wave fa-3x text-muted mb-3" aria-hidden="true"></i>
+                        <h5 class="text-muted">No cashflows found</h5>
+                        <p class="text-muted">No cashflows match your current filters.</p>
+                        <a href="{{ url_for('main.add_cashflow') }}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Add First Cashflow
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <!-- Aggregate Cashflows Table -->
+            <div class="card card-app">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        Net cashflows by {{ view_mode }}
+                        ({{ aggregates|length }})
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if aggregates %}
+                    <div class="table-responsive">
+                        <table class="table table-app table-striped table-hover" data-mobile-table="scroll">
+                            <thead>
+                                <tr>
+                                    <th scope="col">
+                                        {% if view_mode == 'date' %}Date{% elif view_mode == 'month' %}Month{% else %}Year{% endif %}
+                                    </th>
+                                    <th scope="col">Client</th>
+                                    <th scope="col">Type</th>
+                                    <th scope="col" class="text-num">Net amount</th>
+                                    <th scope="col" class="text-num">Rows netted</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in aggregates %}
+                                <tr>
+                                    <td>{{ row.period_label }}</td>
+                                    <td>{{ row.client_name }}</td>
+                                    <td>
+                                        <span class="badge {% if row.type == 'INFLOW' %}bg-success{% else %}bg-danger{% endif %}">
+                                            {{ row.type }}
+                                        </span>
+                                    </td>
+                                    <td class="text-num {% if row.type == 'INFLOW' %}text-success{% else %}text-danger{% endif %}">
+                                        ₹{{ "%.2f"|format(row.net_amount) }}
+                                    </td>
+                                    <td class="text-num">{{ row.row_count }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-money-bill-wave fa-3x text-muted mb-3" aria-hidden="true"></i>
+                        <h5 class="text-muted">No net cashflows</h5>
+                        <p class="text-muted">No non-zero net cashflows for this {{ view_mode }} view with current filters.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if view_mode == 'detail' %}
+<!-- Bulk Delete Confirmation Modal -->
+<div class="modal fade" id="bulkDeleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Bulk Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete the selected cashflows? This action cannot be undone.</p>
+                <p><strong>Selected cashflows: <span id="selected-count">0</span></strong></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" action="{{ url_for('main.bulk_delete_cashflows') }}" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="cashflow_ids" id="cashflow-ids">
+                    <button type="submit" class="btn btn-danger">Delete Selected</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Single Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this cashflow? This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form method="POST" id="delete-form" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{{ maint_desktop_close() }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const form = document.getElementById('cashflow-filter-form');
+    if (form) {
+        form.querySelectorAll('input[name="view"]').forEach(function (radio) {
+            radio.addEventListener('change', function () {
+                form.submit();
+            });
+        });
+    }
+
+    {% if view_mode == 'detail' %}
+    let selectedCashflows = [];
+
+    const selectAllEl = document.getElementById('select-all');
+    if (selectAllEl) {
+        selectAllEl.addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('.cashflow-checkbox');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+            updateBulkActions();
+        });
+    }
+
+    document.querySelectorAll('.cashflow-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', updateBulkActions);
+    });
+
+    function updateBulkActions() {
+        const checkboxes = document.querySelectorAll('.cashflow-checkbox:checked');
+        const bulkActions = document.getElementById('bulk-actions');
+
+        if (checkboxes.length > 0) {
+            bulkActions.style.display = 'block';
+            selectedCashflows = Array.from(checkboxes).map(cb => cb.value);
+        } else {
+            bulkActions.style.display = 'none';
+            selectedCashflows = [];
+        }
+    }
+
+    window.confirmBulkDelete = function () {
+        document.getElementById('selected-count').textContent = selectedCashflows.length;
+        document.getElementById('cashflow-ids').value = selectedCashflows.join(',');
+        new bootstrap.Modal(document.getElementById('bulkDeleteModal')).show();
+    };
+
+    window.deleteCashflow = function (cashflowId) {
+        const formEl = document.getElementById('delete-form');
+        formEl.action = `/cashflow/${cashflowId}/delete`;
+        new bootstrap.Modal(document.getElementById('deleteModal')).show();
+    };
+    {% endif %}
+})();
+</script>
+{% endblock %}

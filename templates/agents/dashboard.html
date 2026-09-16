@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}Agents Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if db_error %}
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <strong>Agent tables not available.</strong> {{ db_error }}
+        <br><small>Run database migrations (e.g. <code>flask db upgrade</code> or create <code>agent_run</code>, <code>data_integrity_issue</code> tables) to enable the agents dashboard.</small>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <div class="page-title-right">
+                    <ol class="breadcrumb m-0">
+                        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                        <li class="breadcrumb-item active">AI Agents</li>
+                    </ol>
+                </div>
+                <h4 class="page-title">
+                    <i class="fas fa-brain me-2"></i>AI Agents Dashboard
+                </h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card widget-flat border-primary border-start border-3">
+                <div class="card-body">
+                    <div class="float-end">
+                        <i class="fas fa-robot text-primary fa-2x"></i>
+                    </div>
+                    <h5 class="text-muted fw-normal mt-0">Active Agents</h5>
+                    <h3 class="mt-3 mb-3 text-primary">{{ agents|length }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card widget-flat border-warning border-start border-3">
+                <div class="card-body">
+                    <div class="float-end">
+                        <i class="fas fa-exclamation-triangle text-warning fa-2x"></i>
+                    </div>
+                    <h5 class="text-muted fw-normal mt-0">Open Issues</h5>
+                    <h3 class="mt-3 mb-3 text-warning">{{ total_issues }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card widget-flat border-info border-start border-3">
+                <div class="card-body">
+                    <div class="float-end">
+                        <i class="fas fa-history text-info fa-2x"></i>
+                    </div>
+                    <h5 class="text-muted fw-normal mt-0">Total Runs</h5>
+                    <h3 class="mt-3 mb-3 text-info">{{ total_runs }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card widget-flat border-success border-start border-3">
+                <div class="card-body">
+                    <div class="float-end">
+                        <i class="fas fa-check-circle text-success fa-2x"></i>
+                    </div>
+                    <h5 class="text-muted fw-normal mt-0">Status</h5>
+                    <h6 class="mt-3 mb-1 text-success">All Systems Operational</h6>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agents by group -->
+    {% for group in agent_groups %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card mb-3">
+                <div class="card-header bg-light">
+                    <h4 class="header-title mb-0">{{ group.display_name }}</h4>
+                    {% if group.description %}<p class="text-muted mb-0 small">{{ group.description }}</p>{% endif %}
+                </div>
+                <div class="card-body">
+                    {% for agent in group.agents %}
+                    <div class="border-bottom p-3 mb-3">
+                        <div class="d-flex align-items-start">
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center mb-2">
+                                    <h5 class="mb-0 me-3">{{ agent.display_name }}</h5>
+                                    <span class="badge bg-{{ 'success' if agent.status == 'active' else 'secondary' }}">
+                                        {{ agent.status }}
+                                    </span>
+                                    <span class="badge bg-light text-dark ms-2">{% if agent.version and agent.version != '—' %}v{{ agent.version }}{% endif %}</span>
+                                    {% if agent.kind == 'scheduled_job' %}<span class="badge bg-info text-dark ms-1">scheduled</span>{% elif agent.kind == 'standalone_tool' %}<span class="badge bg-secondary ms-1">tool</span>{% endif %}
+                                </div>
+                                <p class="text-muted mb-2">{{ agent.description }}</p>
+                                {% if agent.script %}<p class="small text-muted mb-2"><code>{{ agent.script }}</code></p>{% endif %}
+                                {% if agent.service %}<p class="small text-muted mb-2"><code>{{ agent.service }}</code></p>{% endif %}
+                                <div class="row mt-2">
+                                    <div class="col-md-3">
+                                        <small class="text-muted">Last Run:</small><br>
+                                        <strong>
+                                            {% if agent.last_run_time %}
+                                                {{ agent.last_run_time.strftime('%b %d, %H:%M') }}
+                                            {% else %}
+                                                Never
+                                            {% endif %}
+                                        </strong>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <small class="text-muted">Status:</small><br>
+                                        <span class="badge bg-{{ 'success' if agent.last_run_status == 'completed' else 'warning' if agent.last_run_status == 'running' else 'secondary' }}">
+                                            {{ agent.last_run_status }}
+                                        </span>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <small class="text-muted">Issues Found:</small><br>
+                                        <strong>{{ agent.last_run_issues }}</strong>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <small class="text-muted">Open Issues:</small><br>
+                                        <strong class="text-{{ 'danger' if agent.open_issues > 0 else 'success' }}">
+                                            {{ agent.open_issues }}
+                                        </strong>
+                                    </div>
+                                    <div class="col-md-3 text-end">
+                                        {% if agent.name == 'data_integrity_manager' and has_blueprint('data_integrity') %}
+                                        <a href="{{ url_for('data_integrity.dashboard') }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-chart-line"></i> View Dashboard
+                                        </a>
+                                        {% elif agent.name == 'rec_exec_monitor' and has_blueprint('rec_execution') %}
+                                        <a href="{{ url_for('rec_execution.dashboard') }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-chart-line"></i> View Dashboard
+                                        </a>
+                                        {% elif agent.name == 'alert_orchestrator' and has_blueprint('orchestrator') %}
+                                        <a href="{{ url_for('orchestrator.dashboard') }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-project-diagram"></i> View Dashboard
+                                        </a>
+                                        {% elif agent.name == 'portfolio_performance_monitor' and has_blueprint('portfolio_performance') %}
+                                        <a href="{{ url_for('portfolio_performance.dashboard') }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-chart-line"></i> View Dashboard
+                                        </a>
+                                        {% elif agent.name == 'task_assignment_agent' and has_blueprint('task_assignment_rules') %}
+                                        <a href="{{ url_for('task_assignment_rules.list_rules') }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-tasks"></i> Assignment Rules
+                                        </a>
+                                        {% elif agent.name == 'security_audit_agent' %}
+                                        <span class="text-muted small">CLI: scripts/run_security_audit.py</span>
+                                        {% endif %}
+                                        {% if agent.kind == 'operational' %}
+                                        <form action="{{ url_for('agents_dashboard.trigger_agent', agent_name=agent.name) }}" method="POST" class="d-inline ms-2">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-play"></i> Run Backfill
+                                            </button>
+                                        </form>
+                                        {% elif agent.kind in ['base_agent', 'orchestrator'] %}
+                                        <div class="btn-group btn-group-sm ms-2">
+                                            <button type="button" class="btn btn-outline-primary dropdown-toggle" 
+                                                    data-bs-toggle="dropdown">
+                                                <i class="fas fa-play"></i> Run
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li>
+                                                    <form action="{{ url_for('agents_dashboard.trigger_agent', agent_name=agent.name) }}" method="POST" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <input type="hidden" name="mode" value="incremental">
+                                                        <button type="submit" class="dropdown-item" title="Clients with recent activity (last 7 days)">
+                                                            <i class="fas fa-sync"></i> Refresh client checks
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                                <li>
+                                                    <form action="{{ url_for('agents_dashboard.trigger_agent', agent_name=agent.name) }}" method="POST" class="d-inline">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                                        <input type="hidden" name="mode" value="full">
+                                                        <button type="submit" class="dropdown-item" title="All accessible clients">
+                                                            <i class="fas fa-sync"></i> Refresh client checks
+                                                        </button>
+                                                    </form>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Recent Runs -->
+    <div class="row mt-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="header-title">Recent Runs</h4>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Agent</th>
+                                    <th>Run ID</th>
+                                    <th>Mode</th>
+                                    <th>Status</th>
+                                    <th>Issues</th>
+                                    <th>Duration</th>
+                                    <th>Started</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for run in recent_runs %}
+                                <tr>
+                                    <td>
+                                        <span class="badge bg-light text-dark">{{ run.agent_name }}</span>
+                                    </td>
+                                    <td>
+                                        <small class="font-monospace">{{ run.run_id[:30] }}...</small>
+                                    </td>
+                                    <td>{{ run.run_mode }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if run.status == 'completed' else 'warning' if run.status == 'running' else 'danger' }}">
+                                            {{ run.status }}
+                                        </span>
+                                    </td>
+                                    <td>{{ run.issues_found }}</td>
+                                    <td>{{ "%.1f"|format(run.duration_seconds or 0) }}s</td>
+                                    <td>
+                                        <small>{{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else 'N/A' }}</small>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,39 @@
+{# Content intelligence — collapsible annual profile (Campaign Studio matching) #}
+<div class="col-12 mb-4" id="ic-profile-card">
+    <div class="card shadow">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <button class="btn btn-link text-decoration-none text-start p-0 flex-grow-1 d-flex align-items-center gap-2"
+                    type="button"
+                    data-bs-toggle="collapse" data-bs-target="#icProfileCollapse"
+                    data-toggle="collapse" data-target="#icProfileCollapse"
+                    aria-expanded="false" aria-controls="icProfileCollapse"
+                    id="ic-profile-toggle">
+                <i class="fas fa-chevron-right ic-collapse-chevron text-muted" aria-hidden="true"></i>
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-bullseye"></i> Content intelligence profile
+                </h6>
+                <span class="badge bg-light text-dark border small ms-1 d-none" id="ic-profile-summary"></span>
+            </button>
+        </div>
+        <div class="collapse" id="icProfileCollapse">
+            <div class="card-body border-top">
+                <p class="text-muted small mb-3">
+                    {% if ic_is_lead %}
+                    Annual profile for Campaign Studio matching (saved with this lead). Questionnaire and behavioural tags are stored in lead notes for matching before conversion.
+                    {% else %}
+                    Annual profile for Campaign Studio matching. System values are prefilled; adjust dropdowns and save.
+                    {% endif %}
+                </p>
+                <div id="ic-profile-root"
+                     data-person-id="{{ ic_person_id|default('', true) }}"
+                     data-use-page-holdings="{{ 'false' if ic_is_lead else 'true' }}">
+                    <div class="text-muted small">Loading profile…</div>
+                </div>
+                {% if ic_profile_seed is defined and ic_profile_seed %}
+                <script type="application/json" id="ic-profile-seed">{{ ic_profile_seed | tojson_safe }}</script>
+                {% endif %}
+                <script src="{{ url_for('static', filename='js/content-intelligence-profile.js') }}?v=ci12"></script>
+            </div>
+        </div>
+    </div>
+</div>

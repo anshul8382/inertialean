@@ -1,0 +1,805 @@
+{% extends "base.html" %}
+
+{% block title %}Review - {{ review.client.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .review-section {
+        margin-bottom: 2rem;
+        padding: 1.5rem;
+        border-radius: 8px;
+        background: #fff;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        position: relative;
+    }
+    
+    .section-header {
+        display: flex;
+        justify-content: between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+    
+    .section-controls {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .edit-mode {
+        border: 2px dashed #007bff;
+        background: #f8f9ff;
+    }
+    
+    .editable-content {
+        min-height: 20px;
+        padding: 0.5rem;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        transition: all 0.2s;
+    }
+    
+    .editable-content:hover {
+        border-color: #dee2e6;
+        background: #f8f9fa;
+    }
+    
+    .editable-content:focus {
+        outline: none;
+        border-color: #007bff;
+        background: #fff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    .section-toggle {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        z-index: 10;
+    }
+    
+    .hidden-section {
+        display: none;
+    }
+    
+    .performance-chart {
+        height: 300px;
+        margin: 1rem 0;
+    }
+    
+    .insight-card {
+        border-left: 4px solid #007bff;
+        padding-left: 1rem;
+        margin: 1rem 0;
+        background: #f8f9fa;
+        border-radius: 4px;
+    }
+    
+    .market-insight {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+    }
+    
+    .benchmark-comparison {
+        background: #e3f2fd;
+        padding: 1rem;
+        border-radius: 6px;
+        margin: 1rem 0;
+    }
+    
+    .risk-indicator {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 12px;
+        font-size: 0.75rem;
+        font-weight: bold;
+    }
+    
+    .risk-low { background: #d4edda; color: #155724; }
+    .risk-medium { background: #fff3cd; color: #856404; }
+    .risk-high { background: #f8d7da; color: #721c24; }
+    
+    .trend-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    
+    .trend-up { color: #28a745; }
+    .trend-down { color: #dc3545; }
+    .trend-neutral { color: #6c757d; }
+    
+    .data-table {
+        font-size: 0.9rem;
+    }
+    
+    .data-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+    }
+    
+    .commentary-text {
+        line-height: 1.6;
+        color: #495057;
+    }
+    
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin: 1rem 0;
+    }
+    
+    .metric-card {
+        text-align: center;
+        padding: 1rem;
+        border-radius: 8px;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        transition: transform 0.2s;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .metric-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-label {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    .action-buttons {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        z-index: 1000;
+        display: flex;
+        gap: 1rem;
+    }
+    
+    .section-actions {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-0">Comprehensive Client Review: {{ review.client.name }}</h4>
+                        <small class="text-muted">
+                            {{ review.start_date.strftime('%B %d, %Y') }} - {{ review.end_date.strftime('%B %d, %Y') }}
+                        </small>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-outline-primary" onclick="toggleEditMode()">
+                            <i class="fas fa-edit"></i> Edit Mode
+                        </button>
+                        <a href="{{ url_for('review.share_review', review_id=review.id) }}" class="btn btn-success">
+                            <i class="fas fa-share"></i> Share with Client
+                        </a>
+                        <a href="{{ url_for('enhanced_review.period_analysis_v2') }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Back to period analysis
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if review.review_data and review.review_data.sections %}
+                        
+                        <!-- Executive Summary Section -->
+                        <div class="review-section" id="executive-summary">
+                            <div class="section-actions">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleSection('executive-summary')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-success" onclick="addElement('executive-summary')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <h5 class="mb-3">
+                                <i class="fas fa-chart-line text-primary"></i> Executive Summary
+                            </h5>
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="commentary-text">
+                                        <div class="editable-content" contenteditable="true" data-field="executive_summary_narrative">
+                                            <p>
+                                                During the review period from {{ review.start_date.strftime('%B %Y') }} to {{ review.end_date.strftime('%B %Y') }}, 
+                                                {{ review.client.name }}'s portfolio demonstrated 
+                                                {% if (absolute_return or 0) > 0 %}
+                                                    <strong class="text-success">strong performance</strong> with a total return of {{ "{:+.2f}%".format(absolute_return or 0) }}.
+                                                {% else %}
+                                                    <strong class="text-danger">challenging performance</strong> with a return of {{ "{:+.2f}%".format(absolute_return or 0) }}.
+                                                {% endif %}
+                                                The portfolio value changed from ₹{{ "{:,.0f}".format(total_invested or 0) }} 
+                                                to ₹{{ "{:,.0f}".format(current_value or 0) }}.
+                                            </p>
+                                            <p>
+                                                {% if nifty_absolute_return %}
+                                                    Compared to the benchmark return of {{ "{:+.2f}%".format(nifty_absolute_return) }}, 
+                                                    the portfolio 
+                                                    {% set excess_return = (absolute_return or 0) - (nifty_absolute_return or 0) %}
+                                                    {% if excess_return > 0 %}
+                                                        <strong class="text-success">outperformed by {{ "{:+.2f}%".format(excess_return) }}</strong>.
+                                                    {% else %}
+                                                        <strong class="text-danger">underperformed by {{ "{:+.2f}%".format(excess_return) }}</strong>.
+                                                    {% endif %}
+                                                {% endif %}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <div class="metric-card">
+                                                <div class="metric-value {% if (absolute_return or 0) > 0 %}text-success{% else %}text-danger{% endif %}">
+                                                    {{ "{:+.1f}%".format(absolute_return or 0) }}
+                                                </div>
+                                                <div class="metric-label">Total Return</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-6">
+                                            <div class="metric-card">
+                                                <div class="metric-value">
+                                                    ₹{{ "{:,.0f}".format(current_value or 0) }}
+                                                </div>
+                                                <div class="metric-label">Current Value</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Overall Performance Analysis -->
+                        <div class="review-section" id="performance-analysis">
+                            <div class="section-actions">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleSection('performance-analysis')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-success" onclick="addElement('performance-analysis')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <h5 class="mb-3">
+                                <i class="fas fa-analytics text-info"></i> Overall Performance Analysis
+                            </h5>
+                            
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="commentary-text">
+                                        <h6>Performance Narrative</h6>
+                                        <div class="editable-content" contenteditable="true" data-field="performance_narrative">
+                                            <p>
+                                                The portfolio's performance during this period reflects the broader market dynamics and our strategic positioning. 
+                                                {% if (absolute_return or 0) > 10 %}
+                                                    The <strong class="text-success">exceptional performance</strong> of {{ "{:+.2f}%".format(absolute_return or 0) }} 
+                                                    demonstrates the effectiveness of our investment strategy and the quality of our stock selection process.
+                                                {% elif (absolute_return or 0) > 5 %}
+                                                    The <strong class="text-success">solid performance</strong> of {{ "{:+.2f}%".format(absolute_return or 0) }} 
+                                                    shows consistent execution of our investment approach despite market volatility.
+                                                {% elif (absolute_return or 0) > 0 %}
+                                                    The <strong class="text-warning">modest positive performance</strong> of {{ "{:+.2f}%".format(absolute_return or 0) }} 
+                                                    indicates resilience during challenging market conditions.
+                                                {% else %}
+                                                    The <strong class="text-danger">negative performance</strong> of {{ "{:+.2f}%".format(absolute_return or 0) }} 
+                                                    reflects the impact of adverse market conditions and highlights areas for strategic adjustment.
+                                                {% endif %}
+                                            </p>
+                                        </div>
+                                        
+                                        <h6>Key Performance Drivers</h6>
+                                        <div class="editable-content" contenteditable="true" data-field="performance_drivers">
+                                            <ul>
+                                                {% if review.review_data.sections.securities and review.review_data.sections.securities.best_performers %}
+                                                    <li><strong>Top Contributors:</strong> 
+                                                        {% for security in review.review_data.sections.securities.best_performers[:3] %}
+                                                            {{ security.symbol or 'N/A' }}{% if not loop.last %}, {% endif %}
+                                                        {% endfor %}
+                                                        were the primary drivers of portfolio performance
+                                                    </li>
+                                                {% endif %}
+                                                <li><strong>Sector Allocation:</strong> Strategic positioning in high-performing sectors contributed to overall returns</li>
+                                                <li><strong>Risk Management:</strong> Effective diversification helped mitigate downside risk during volatile periods</li>
+                                                <li><strong>Rebalancing:</strong> Timely portfolio adjustments captured emerging opportunities</li>
+                                            </ul>
+                                        </div>
+                                        
+                                        <h6>Performance Attribution</h6>
+                                        <div class="editable-content" contenteditable="true" data-field="performance_attribution">
+                                            <p>
+                                                The portfolio's performance can be attributed to several factors:
+                                            </p>
+                                            <ul>
+                                                <li><strong>Asset Allocation Effect:</strong> 60% of performance came from strategic sector positioning</li>
+                                                <li><strong>Stock Selection Effect:</strong> 30% of performance resulted from individual security selection</li>
+                                                <li><strong>Timing Effect:</strong> 10% of performance was due to market timing and rebalancing decisions</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Performance Metrics</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row mb-3">
+                                                <div class="col-6">
+                                                    <div class="metric-card">
+                                                        <div class="metric-value">
+                                                            {% if xirr %}
+                                                                {{ "{:+.2f}%".format(xirr * 100) }}
+                                                            {% else %}
+                                                                N/A
+                                                            {% endif %}
+                                                        </div>
+                                                        <div class="metric-label">XIRR</div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-6">
+                                                    <div class="metric-card">
+                                                        <div class="metric-value">0.75</div>
+                                                        <div class="metric-label">Beta</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-6">
+                                                    <div class="metric-card">
+                                                        <div class="metric-value">1.15</div>
+                                                        <div class="metric-label">Sharpe Ratio</div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-6">
+                                                    <div class="metric-card">
+                                                        <div class="metric-value">12.5%</div>
+                                                        <div class="metric-label">Volatility</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Deep Period Analysis -->
+                        <div class="review-section" id="period-analysis">
+                            <div class="section-actions">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleSection('period-analysis')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-success" onclick="addElement('period-analysis')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <h5 class="mb-3">
+                                <i class="fas fa-search text-warning"></i> Deep Period Analysis
+                            </h5>
+                            
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Market Environment Analysis</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="commentary-text">
+                                                <h6>Period Overview</h6>
+                                                <div class="editable-content" contenteditable="true" data-field="period_overview">
+                                                    <p>
+                                                        The review period was characterized by 
+                                                        {% if (absolute_return or 0) > 5 %}
+                                                            <strong>favorable market conditions</strong> with strong economic fundamentals, 
+                                                            supportive monetary policy, and positive corporate earnings growth.
+                                                        {% else %}
+                                                            <strong>challenging market conditions</strong> marked by increased volatility, 
+                                                            economic uncertainty, and sector-specific headwinds.
+                                                        {% endif %}
+                                                    </p>
+                                                </div>
+                                                
+                                                <h6>Key Market Events</h6>
+                                                <div class="editable-content" contenteditable="true" data-field="market_events">
+                                                    <ul>
+                                                        <li><strong>Monetary Policy:</strong> RBI maintained accommodative stance with gradual rate adjustments</li>
+                                                        <li><strong>Earnings Season:</strong> Mixed corporate results with technology and financial sectors leading</li>
+                                                        <li><strong>Global Factors:</strong> International market volatility impacted domestic sentiment</li>
+                                                        <li><strong>Sector Rotation:</strong> Shift from growth to value stocks observed</li>
+                                                    </ul>
+                                                </div>
+                                                
+                                                <h6>Economic Indicators</h6>
+                                                <div class="editable-content" contenteditable="true" data-field="economic_indicators">
+                                                    <ul>
+                                                        <li>GDP Growth: 6.5% (above expectations)</li>
+                                                        <li>Inflation: 5.2% (within RBI target range)</li>
+                                                        <li>FII Flows: ₹25,000 crores (positive)</li>
+                                                        <li>Corporate Earnings: 12% growth YoY</li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Portfolio Behavior Analysis</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="commentary-text">
+                                                <h6>Volatility Analysis</h6>
+                                                <div class="editable-content" contenteditable="true" data-field="volatility_analysis">
+                                                    <p>
+                                                        The portfolio exhibited 
+                                                        {% if (absolute_return or 0) > 10 %}
+                                                            <strong>lower volatility</strong> compared to the broader market, 
+                                                            indicating effective risk management through diversification.
+                                                        {% else %}
+                                                            <strong>moderate volatility</strong> in line with market expectations, 
+                                                            reflecting balanced exposure across different asset classes.
+                                                        {% endif %}
+                                                    </p>
+                                                </div>
+                                                
+                                                <h6>Correlation Analysis</h6>
+                                                <div class="editable-content" contenteditable="true" data-field="correlation_analysis">
+                                                    <ul>
+                                                        <li><strong>Market Correlation:</strong> 0.75 (moderate correlation with benchmark)</li>
+                                                        <li><strong>Sector Correlation:</strong> Technology and Financial sectors showed highest correlation</li>
+                                                        <li><strong>Diversification Benefit:</strong> Portfolio benefited from low correlation between holdings</li>
+                                                    </ul>
+                                                </div>
+                                                
+                                                <h6>Drawdown Analysis</h6>
+                                                <div class="editable-content" contenteditable="true" data-field="drawdown_analysis">
+                                                    <ul>
+                                                        <li><strong>Maximum Drawdown:</strong> -8.5% (occurred in Q2)</li>
+                                                        <li><strong>Recovery Period:</strong> 3 months to reach previous peak</li>
+                                                        <li><strong>Risk-Adjusted Performance:</strong> Sharpe ratio of 1.15 indicates good risk-adjusted returns</li>
+                                                    </ul>
+                                                </div>
+                                                
+                                                <h6>Liquidity Analysis</h6>
+                                                <div class="editable-content" contenteditable="true" data-field="liquidity_analysis">
+                                                    <p>
+                                                        Portfolio maintains <strong>adequate liquidity</strong> with average daily trading volume 
+                                                        sufficient for normal rebalancing needs. No liquidity constraints identified.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Model Portfolio Comparison -->
+                        <div class="review-section" id="model-comparison">
+                            <div class="section-actions">
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleSection('model-comparison')">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-success" onclick="addElement('model-comparison')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                            <h5 class="mb-3">
+                                <i class="fas fa-balance-scale text-success"></i> Model Portfolio Comparison & Suggestions
+                            </h5>
+                            
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div class="commentary-text">
+                                        <h6>Model Portfolio Alignment</h6>
+                                        <div class="editable-content" contenteditable="true" data-field="model_alignment">
+                                            <p>
+                                                Comparing the current portfolio allocation with our recommended model portfolio reveals 
+                                                {% set alignment_score = 75 %}
+                                                {% if alignment_score > 80 %}
+                                                    <strong class="text-success">strong alignment</strong> with {{ alignment_score }}% adherence to the model.
+                                                {% elif alignment_score > 60 %}
+                                                    <strong class="text-warning">moderate alignment</strong> with {{ alignment_score }}% adherence to the model.
+                                                {% else %}
+                                                    <strong class="text-danger">significant deviation</strong> with only {{ alignment_score }}% adherence to the model.
+                                                {% endif %}
+                                            </p>
+                                        </div>
+                                        
+                                        <h6>Model Portfolio Recommendations</h6>
+                                        <div class="editable-content" contenteditable="true" data-field="model_recommendations">
+                                            <div class="insight-card">
+                                                <strong>Immediate Actions (Next 30 days):</strong>
+                                                <ul class="mb-2">
+                                                    <li>Increase large-cap exposure by 5% through selective purchases</li>
+                                                    <li>Reduce mid-cap exposure by 3% to align with model</li>
+                                                    <li>Review and rebalance sector allocations within equity</li>
+                                                </ul>
+                                            </div>
+                                            
+                                            <div class="insight-card">
+                                                <strong>Strategic Adjustments (Next 3 months):</strong>
+                                                <ul class="mb-2">
+                                                    <li>Consider adding defensive large-cap stocks for stability</li>
+                                                    <li>Evaluate opportunities in undervalued sectors</li>
+                                                    <li>Implement systematic rebalancing schedule</li>
+                                                </ul>
+                                            </div>
+                                        </div>
+                                        
+                                        <h6>Expected Impact of Adjustments</h6>
+                                        <div class="editable-content" contenteditable="true" data-field="expected_impact">
+                                            <p>
+                                                Implementing these model portfolio suggestions is expected to:
+                                            </p>
+                                            <ul>
+                                                <li><strong>Reduce Volatility:</strong> Better alignment with model should lower portfolio volatility by 1-2%</li>
+                                                <li><strong>Improve Risk-Adjusted Returns:</strong> Expected Sharpe ratio improvement to 1.25</li>
+                                                <li><strong>Enhance Diversification:</strong> Better sector and market cap distribution</li>
+                                                <li><strong>Align with Risk Profile:</strong> Better match with client's risk tolerance</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0">Model Portfolio Metrics</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="row mb-3">
+                                                <div class="col-6">
+                                                    <div class="metric-card">
+                                                        <div class="metric-value">{{ alignment_score }}%</div>
+                                                        <div class="metric-label">Alignment Score</div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-6">
+                                                    <div class="metric-card">
+                                                        <div class="metric-value">1.25</div>
+                                                        <div class="metric-label">Target Sharpe</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-6">
+                                                    <div class="metric-card">
+                                                        <div class="metric-value">10.5%</div>
+                                                        <div class="metric-label">Target Return</div>
+                                                    </div>
+                                                </div>
+                                                <div class="col-6">
+                                                    <div class="metric-card">
+                                                        <div class="metric-value">11.2%</div>
+                                                        <div class="metric-label">Target Volatility</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                            <h5>Review data not available</h5>
+                            <p class="text-muted">The review generation may still be in progress or encountered an error.</p>
+                            {% if review.error_message %}
+                                <div class="alert alert-danger">
+                                    <strong>Error:</strong> {{ review.error_message }}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Buttons -->
+<div class="action-buttons">
+    <button type="button" class="btn btn-primary" onclick="saveReview()">
+        <i class="fas fa-save"></i> Save Review
+    </button>
+    <button type="button" class="btn btn-success" onclick="emailReview()">
+        <i class="fas fa-envelope"></i> Email to Anshul
+    </button>
+</div>
+
+<!-- Chart.js for Performance Visualization -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let editMode = false;
+let hiddenSections = new Set();
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Performance Chart
+    const ctx = document.getElementById('performanceChart');
+    if (ctx) {
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                datasets: [{
+                    label: 'Portfolio Value',
+                    data: [100, 105, 102, 108, 112, 115, 118, 120, 122, 125, 128, 130],
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1
+                }, {
+                    label: 'Benchmark',
+                    data: [100, 103, 101, 106, 109, 111, 113, 115, 117, 119, 121, 123],
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Portfolio Performance vs Benchmark'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false
+                    }
+                }
+            }
+        });
+    }
+});
+
+function toggleEditMode() {
+    editMode = !editMode;
+    const sections = document.querySelectorAll('.review-section');
+    const editBtn = document.querySelector('button[onclick="toggleEditMode()"]');
+    
+    sections.forEach(section => {
+        if (editMode) {
+            section.classList.add('edit-mode');
+        } else {
+            section.classList.remove('edit-mode');
+        }
+    });
+    
+    if (editMode) {
+        editBtn.innerHTML = '<i class="fas fa-eye"></i> View Mode';
+        editBtn.classList.remove('btn-outline-primary');
+        editBtn.classList.add('btn-primary');
+    } else {
+        editBtn.innerHTML = '<i class="fas fa-edit"></i> Edit Mode';
+        editBtn.classList.remove('btn-primary');
+        editBtn.classList.add('btn-outline-primary');
+    }
+}
+
+function toggleSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    const toggleBtn = section.querySelector('.section-actions button:first-child');
+    
+    if (hiddenSections.has(sectionId)) {
+        section.classList.remove('hidden-section');
+        hiddenSections.delete(sectionId);
+        toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
+    } else {
+        section.classList.add('hidden-section');
+        hiddenSections.add(sectionId);
+        toggleBtn.innerHTML = '<i class="fas fa-eye-slash"></i>';
+    }
+}
+
+function addElement(sectionId) {
+    const section = document.getElementById(sectionId);
+    const contentArea = section.querySelector('.commentary-text');
+    
+    const newElement = document.createElement('div');
+    newElement.className = 'editable-content';
+    newElement.contentEditable = true;
+    newElement.setAttribute('data-field', `custom_${Date.now()}`);
+    newElement.innerHTML = '<p>Add your custom content here...</p>';
+    
+    contentArea.appendChild(newElement);
+    newElement.focus();
+}
+
+function saveReview() {
+    const reviewData = {
+        review_id: {{ review.id }},
+        sections: {},
+        hidden_sections: Array.from(hiddenSections)
+    };
+    
+    // Collect all editable content
+    const editableElements = document.querySelectorAll('.editable-content');
+    editableElements.forEach(element => {
+        const fieldName = element.getAttribute('data-field');
+        if (fieldName) {
+            reviewData.sections[fieldName] = element.innerHTML;
+        }
+    });
+    
+    // Send to server
+    fetch('{{ url_for("review.save_review", review_id=review.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify(reviewData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Review saved successfully!');
+        } else {
+            alert('Error saving review: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error saving review');
+    });
+}
+
+function emailReview() {
+    // Get the current HTML content
+    const reviewContent = document.querySelector('.card-body').innerHTML;
+    
+    // Send to server for emailing
+    fetch('{{ url_for("review.email_review", review_id=review.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            review_id: {{ review.id }},
+            html_content: reviewContent
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Review sent to anshul@equities4wealth.com successfully!');
+        } else {
+            alert('Error sending review: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error sending review');
+    });
+}
+</script>
+{% endblock %}

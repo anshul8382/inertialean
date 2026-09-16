@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block title %}Position Construction{% endblock %}
+
+{% block content %}
+{% from 'partials/mobile/macros.html' import maint_child_open, maint_desktop_open, maint_desktop_close %}
+{{ maint_child_open('Position construction', url_for('main.maintenance_portfolio_modelling'), 'Step-by-step position buildup. Scroll to the tool below.') }}
+{{ maint_desktop_open('container-fluid') }}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-calculator text-primary"></i>
+                        Position Construction
+                    </h4>
+                    <p class="text-muted mb-0">Step-by-step position buildup for verification</p>
+                </div>
+                <div class="card-body">
+                    <form id="constructionForm">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="clientSelect"><strong>Select Client:</strong></label>
+                                    <select class="form-control" id="clientSelect" name="client_id" required>
+                                        <option value="">Choose a client...</option>
+                                        {% for client in clients %}
+                                        <option value="{{ client.id }}">{{ client.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="securitySelect"><strong>Select Security:</strong></label>
+                                    <select class="form-control" id="securitySelect" name="security_id" required>
+                                        <option value="">Choose a security...</option>
+                                        {% for security in securities %}
+                                        <option value="{{ security.id }}">{{ security.symbol }} - {{ security.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="targetDate"><strong>As of Date:</strong></label>
+                                    <input type="date" class="form-control" id="targetDate" name="target_date" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-calculator"></i> Build Position
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary btn-lg ml-2" onclick="clearForm()">
+                                    <i class="fas fa-eraser"></i> Clear
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="row mt-4" style="display: none;">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list-ol text-success"></i>
+                        Position Buildup Steps
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Summary Cards -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="card bg-primary text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Final Quantity</h6>
+                                    <h4 id="finalQuantity">-</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-success text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Average Price</h6>
+                                    <h4 id="finalAvgPrice">-</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-info text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Total Cost</h6>
+                                    <h4 id="finalTotalCost">-</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-warning text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Transactions</h6>
+                                    <h4 id="totalTransactions">-</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Position Info -->
+                    <div class="alert alert-info">
+                        <strong>Position:</strong> <span id="positionInfo">-</span><br>
+                        <strong>As of Date:</strong> <span id="positionDate">-</span>
+                    </div>
+
+                    <!-- Steps Table -->
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover table-sm">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Step</th>
+                                    <th>Date</th>
+                                    <th>Event</th>
+                                    <th>Qty Before</th>
+                                    <th>Qty After</th>
+                                    <th>Avg Price Before</th>
+                                    <th>Avg Price After</th>
+                                    <th>Total Cost Before</th>
+                                    <th>Total Cost After</th>
+                                    <th>Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stepsTableBody">
+                                <!-- Steps will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="text-center mt-4" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+        <p class="mt-2">Building position...</p>
+    </div>
+
+    <!-- Error Alert -->
+    <div id="errorAlert" class="alert alert-danger mt-4" style="display: none;">
+        <h5><i class="fas fa-exclamation-triangle"></i> Error</h5>
+        <p id="errorMessage"></p>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+
+<script>
+document.getElementById('constructionForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    buildPosition();
+});
+
+function buildPosition() {
+    const form = document.getElementById('constructionForm');
+    const formData = new FormData(form);
+    
+    const clientId = formData.get('client_id');
+    const securityId = formData.get('security_id');
+    const targetDate = formData.get('target_date');
+    
+    if (!clientId || !securityId || !targetDate) {
+        showError('Please select a client, security, and date');
+        return;
+    }
+    
+    // Show loading spinner
+    document.getElementById('loadingSpinner').style.display = 'block';
+    document.getElementById('resultsSection').style.display = 'none';
+    document.getElementById('errorAlert').style.display = 'none';
+    
+    // Call position construction API
+    fetch(`/review/api/position-construction/${clientId}/${securityId}?as_of_date=${targetDate}`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        
+        if (data.success) {
+            displayResults(data);
+        } else {
+            showError(data.error || 'Failed to build position');
+        }
+    })
+    .catch(error => {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        console.error('Position construction error:', error);
+        showError('Network error: ' + error.message);
+    });
+}
+
+function displayResults(data) {
+    // Debug: log the data structure
+    console.log('Position construction data:', data);
+    
+    // Update summary cards - use position object for final values
+    const position = data.position || {};
+    document.getElementById('finalQuantity').textContent = formatNumber(position.final_quantity || data.final_quantity || 0);
+    document.getElementById('finalAvgPrice').textContent = formatCurrency(position.final_average_price || data.final_average_price || 0);
+    document.getElementById('finalTotalCost').textContent = formatCurrency(position.final_total_cost || data.final_total_cost || 0);
+    
+    // Safely access summary
+    let transactionsProcessed = 0;
+    if (data.summary && typeof data.summary.transactions_processed !== 'undefined') {
+        transactionsProcessed = data.summary.transactions_processed;
+    } else if (data.transactions_processed !== undefined) {
+        transactionsProcessed = data.transactions_processed;
+    }
+    document.getElementById('totalTransactions').textContent = transactionsProcessed;
+    
+    // Update position info
+    const clientName = document.getElementById('clientSelect').selectedOptions[0].text;
+    const securityName = document.getElementById('securitySelect').selectedOptions[0].text;
+    document.getElementById('positionInfo').textContent = `${clientName} - ${data.security_symbol || securityName}`;
+    document.getElementById('positionDate').textContent = data.as_of_date;
+    
+    // Populate steps table
+    const tbody = document.getElementById('stepsTableBody');
+    tbody.innerHTML = '';
+    
+    if (data.steps && data.steps.length > 0) {
+        data.steps.forEach(step => {
+            const row = document.createElement('tr');
+            const eventTypeClass = step.event_type === 'transaction' ? 'badge-primary' : 'badge-secondary';
+            const eventTypeLabel = step.event_type === 'transaction' ? 'TXN' : 'CA';
+            
+            // Format details
+            let detailsHtml = '';
+            if (step.details) {
+                if (step.details.type) {
+                    detailsHtml = `<small>ID: ${step.details.transaction_id || 'N/A'}</small>`;
+                } else if (step.details.action_type) {
+                    detailsHtml = `<small>${step.details.action_type}`;
+                    if (step.details.ratio) detailsHtml += ` (${step.details.ratio}:1)`;
+                    if (step.details.role) detailsHtml += ` - ${step.details.role}`;
+                    detailsHtml += `</small>`;
+                }
+            }
+            
+            row.innerHTML = `
+                <td><strong>${step.step_number}</strong></td>
+                <td>${step.date}</td>
+                <td>
+                    <span class="badge ${eventTypeClass}">${eventTypeLabel}</span><br>
+                    <small>${step.event_description}</small>
+                </td>
+                <td>${formatNumber(step.quantity_before)}</td>
+                <td><strong>${formatNumber(step.quantity_after)}</strong></td>
+                <td>${formatCurrency(step.average_price_before)}</td>
+                <td><strong>${formatCurrency(step.average_price_after)}</strong></td>
+                <td>${formatCurrency(step.total_cost_before)}</td>
+                <td><strong>${formatCurrency(step.total_cost_after)}</strong></td>
+                <td>${detailsHtml}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    } else {
+        const row = document.createElement('tr');
+        row.innerHTML = '<td colspan="10" class="text-center text-muted">No steps found</td>';
+        tbody.appendChild(row);
+    }
+    
+    // Show results
+    document.getElementById('resultsSection').style.display = 'block';
+}
+
+function showError(message) {
+    document.getElementById('errorMessage').textContent = message;
+    document.getElementById('errorAlert').style.display = 'block';
+}
+
+function clearForm() {
+    document.getElementById('constructionForm').reset();
+    document.getElementById('resultsSection').style.display = 'none';
+    document.getElementById('errorAlert').style.display = 'none';
+}
+
+function formatCurrency(amount) {
+    if (!amount && amount !== 0) return '₹0.00';
+    return '₹' + parseFloat(amount).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function formatNumber(number) {
+    if (!number && number !== 0) return '-';
+    return parseFloat(number).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 4});
+}
+
+// Set default date to today
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('targetDate').value = today;
+});
+</script>
+{% endblock %}
+

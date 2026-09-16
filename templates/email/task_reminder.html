@@ -1,0 +1,27 @@
+{% extends "email/base.html" %}
+
+{% block content %}
+<div style="padding: 20px 0;">
+    <h2 style="color: #2c3e50; margin-bottom: 16px;">Task Reminder: {{ task_name }}</h2>
+    <p style="margin-bottom: 12px;">This is a reminder for the following task:</p>
+    <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <tr>
+            <td style="padding: 8px 0; font-weight: bold; width: 120px;">Task:</td>
+            <td style="padding: 8px 0;">{{ task_name }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px 0; font-weight: bold;">Deadline:</td>
+            <td style="padding: 8px 0;">{{ deadline }}</td>
+        </tr>
+        {% if notes %}
+        <tr>
+            <td style="padding: 8px 0; font-weight: bold;">Notes:</td>
+            <td style="padding: 8px 0;">{{ notes }}</td>
+        </tr>
+        {% endif %}
+    </table>
+    <p style="margin-top: 20px;">
+        <a href="{{ task_url }}" style="display: inline-block; padding: 10px 20px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 6px;">View Task</a>
+    </p>
+</div>
+{% endblock %}

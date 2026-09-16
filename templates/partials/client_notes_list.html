@@ -1,0 +1,26 @@
+{# Render timestamped client notes (newest first). #}
+{% macro client_notes_list(field_text) %}
+    {% set entries = field_text|parse_client_notes %}
+    {% if entries %}
+        <div class="client-notes-list">
+            {% for entry in entries %}
+            <div class="client-note-entry border-bottom pb-2 mb-2">
+                <div class="small text-muted mb-1">
+                    {% if entry.legacy %}
+                        <span class="badge bg-secondary me-1">Earlier note</span>
+                    {% else %}
+                        <i class="fas fa-clock"></i>
+                        <strong>{{ entry.timestamp }}</strong>
+                        {% if entry.author %}
+                            <span class="ms-1">— {{ entry.author }}</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                <div class="note-body" style="white-space: pre-wrap;">{{ entry.body }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <p class="text-muted mb-0">No notes yet. Click Add Note to record one.</p>
+    {% endif %}
+{% endmacro %}

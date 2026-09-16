@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+{% from "agreements/_billing_rates_widget.html" import billing_rates_widget %}
+
+{% block title %}Create Agreement - {{ lead.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Create New Agreement</h4>
+                    <p class="card-text">
+                        Lead: <strong>{{ lead.name }}</strong> | 
+                        Email: {{ lead.email }} | 
+                        Phone: {{ lead.phone }}
+                    </p>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.template_id.label(class="form-label") }}
+                                    {{ form.template_id(class="form-control") }}
+                                    {% if form.template_id.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.template_id.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        Select a template to use for this agreement
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.advisory_model.label(class="form-label") }}
+                                    {{ form.advisory_model(id="advisory_model", class="form-control") }}
+                                    {% if form.advisory_model.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.advisory_model.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Billing calendar -->
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.billing_frequency.label(class="form-label") }}
+                                    {{ form.billing_frequency(class="form-select") }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.billing_start_date.label(class="form-label") }}
+                                    {{ form.billing_start_date(class="form-control", type="date") }}
+                                    <small class="text-muted">First billing period starts from this date. Leave blank to use the signed date.</small>
+                                    {% if form.billing_start_date.errors %}
+                                        <div class="text-danger">{% for e in form.billing_start_date.errors %}<small>{{ e }}</small>{% endfor %}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Billing period configuration -->
+                        <div class="row mt-3" id="billingPeriodConfig">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.period_start_month.label(class="form-label") }}
+                                    {{ form.period_start_month(class="form-select") }}
+                                    <small class="text-muted">First month of every billing cycle (e.g. April = Apr–Sep / Oct–Mar for half-yearly).</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6" id="valuationDateRuleGroup">
+                                <div class="form-group">
+                                    {{ form.valuation_date_rule.label(class="form-label") }}
+                                    {{ form.valuation_date_rule(class="form-select") }}
+                                    <small class="text-muted">
+                                        <strong>Pre-paid:</strong> value before period starts (e.g. 31-Dec for Jan–Jun) ·
+                                        <strong>Post-paid:</strong> value after period ends (e.g. 30-Jun for Jan–Jun)
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group mt-3">
+                            {{ form.asset_types.label(class="form-label") }}
+                            {{ form.asset_types(id="asset_types", class="form-control", multiple=true, size=8) }}
+                            {% if form.asset_types.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.asset_types.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">Hold Ctrl (Cmd on Mac) to select multiple asset types</small>
+                        </div>
+
+                        <div class="mt-3">
+                            {% if proposal_prefill %}
+                            <div class="alert alert-info small">
+                                Prefilling commercials from proposal
+                                {% if proposal_prefill.get('fee_raw') %}(fee: {{ proposal_prefill.fee_raw }}){% endif %}.
+                                Review before saving.
+                            </div>
+                            {% endif %}
+                            {{ billing_rates_widget(
+                                form.asset_types.choices,
+                                {},
+                                fixed_fee_config if fixed_fee_config is defined else {},
+                                billing_structure_config if billing_structure_config is defined else {},
+                                transition_config if transition_config is defined else {}
+                            ) }}
+                        </div>
+
+                        <div class="form-group mt-3">
+                            {{ form.special_note.label(class="form-label") }}
+                            {{ form.special_note(class="form-control", rows="3", placeholder="Enter special notes about billing and terms") }}
+                            {% if form.special_note.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.special_note.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group mt-3">
+                            {{ form.notes.label(class="form-label") }}
+                            {{ form.notes(class="form-control", rows="3", placeholder="Add any additional notes about this agreement") }}
+                            {% if form.notes.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.notes.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group mt-4">
+                            {{ form.submit(class="btn btn-primary") }}
+                            <a href="{{ url_for('agreements.lead_agreements', lead_id=lead.id) }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template Preview Section -->
+    <div class="row mt-4" id="template-preview" style="display: none;">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Selected Template Details</h5>
+                </div>
+                <div class="card-body">
+                    <div id="template-details">
+                        <!-- Template details will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const templateSelect = document.getElementById('template_id');
+    const previewSection = document.getElementById('template-preview');
+    const templateDetails = document.getElementById('template-details');
+
+    templateSelect.addEventListener('change', function() {
+        const selectedTemplateId = this.value;
+        if (selectedTemplateId) {
+            // Fetch template details
+            fetch(`/agreements/templates/${selectedTemplateId}/details`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayTemplateDetails(data.template);
+                        previewSection.style.display = 'block';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching template details:', error);
+                });
+        } else {
+            previewSection.style.display = 'none';
+        }
+    });
+
+    function displayTemplateDetails(template) {
+        let html = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Template Information</h6>
+                    <table class="table table-sm">
+                        <tr>
+                            <td><strong>Name:</strong></td>
+                            <td>${template.name}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Type:</strong></td>
+                            <td><span class="badge bg-info">${template.template_type.toUpperCase()}</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Variables:</strong></td>
+                            <td><span class="badge bg-secondary">${template.variables_count} variables</span></td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <h6>Description</h6>
+                    <p class="text-muted">${template.description || 'No description available'}</p>
+                </div>
+            </div>
+        `;
+
+        if (template.variables && template.variables.length > 0) {
+            html += `
+                <div class="mt-3">
+                    <h6>Variables Found</h6>
+                    <div class="row">
+                        ${template.variables.map((variable, index) => `
+                            <div class="col-md-4 mb-2">
+                                <span class="badge bg-light text-dark">${variable}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        templateDetails.innerHTML = html;
+    }
+
+    // Trigger change event if template is pre-selected (from URL parameter)
+    const urlParams = new URLSearchParams(window.location.search);
+    const templateId = urlParams.get('template_id');
+    if (templateId) {
+        templateSelect.value = templateId;
+        templateSelect.dispatchEvent(new Event('change'));
+    }
+});
+</script>
+{% endblock %}

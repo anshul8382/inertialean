@@ -1,0 +1,87 @@
+/* Login page styles */
+.bg-login-image {
+    background: url('../img/login-bg.jpg');
+    background-position: center;
+    background-size: cover;
+}
+
+/* Form styles */
+.form-control-user {
+    font-size: 0.8rem;
+    border-radius: 10rem;
+    padding: 1.5rem 1rem;
+}
+
+.btn-user {
+    font-size: 0.8rem;
+    border-radius: 10rem;
+    padding: 0.75rem 1rem;
+}
+
+/* Card styles */
+.card {
+    border: none;
+    border-radius: 0.35rem;
+}
+
+.card-body {
+    padding: 2rem;
+}
+
+/* Text styles */
+.text-gray-900 {
+    color: #5a5c69 !important;
+}
+
+/* Custom checkbox styles */
+.custom-control-input:checked ~ .custom-control-label::before {
+    background-color: #4e73df;
+    border-color: #4e73df;
+}
+
+/* Error message styles */
+.text-danger {
+    color: #e74a3b !important;
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+}
+
+/* Navbar styles */
+.navbar-dark .navbar-nav .nav-link {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.navbar-dark .navbar-nav .nav-link:hover {
+    color: #ffffff !important;
+}
+
+.navbar-dark .navbar-nav .nav-link.active {
+    color: #ffffff !important;
+    font-weight: bold;
+}
+
+.dropdown-menu {
+    background-color: #4e73df;
+    border: none;
+    border-radius: 0.35rem;
+    margin-top: 0;
+}
+
+.dropdown-item {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.dropdown-item:hover {
+    background-color: #2e59d9;
+    color: #ffffff !important;
+}
+
+.dropdown-item.active {
+    background-color: #2e59d9;
+    color: #ffffff !important;
+}
+
+/* Fix dropdown hover issue */
+.navbar-nav .dropdown:hover .dropdown-menu {
+    display: block;
+} 

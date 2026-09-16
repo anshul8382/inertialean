@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Data Validation - Financial Analytics{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="fas fa-exclamation-triangle text-warning"></i> Data Validation Required</h2>
+            
+            {% if not validation_result.can_proceed %}
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-times-circle"></i> Data Issues Found</h5>
+                <p>Please review the data issues below before proceeding with calculations.</p>
+            </div>
+            {% else %}
+            <div class="alert alert-warning">
+                <h5><i class="fas fa-exclamation-triangle"></i> Data Warnings</h5>
+                <p>Some data issues were found. Calculations may proceed but accuracy may be affected.</p>
+            </div>
+            {% endif %}
+            
+            <!-- Summary -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Validation Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="metric-box text-center p-3">
+                                <h3>{{ validation_result.summary.total_metrics }}</h3>
+                                <p class="text-muted mb-0">Total Metrics</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="metric-box text-center p-3">
+                                <h3 class="text-success">{{ validation_result.summary.valid_metrics }}</h3>
+                                <p class="text-muted mb-0">Valid Metrics</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="metric-box text-center p-3">
+                                <h3 class="text-warning">{{ validation_result.summary.metrics_with_warnings }}</h3>
+                                <p class="text-muted mb-0">With Warnings</p>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="metric-box text-center p-3">
+                                <h3 class="text-danger">{{ validation_result.summary.metrics_with_errors }}</h3>
+                                <p class="text-muted mb-0">With Errors</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if validation_result.summary.missing_securities_count > 0 %}
+                    <div class="alert alert-warning mt-3">
+                        <strong>Missing Securities:</strong> {{ validation_result.summary.missing_securities_count }}
+                        <ul class="mb-0 mt-2">
+                            {% for symbol in validation_result.summary.missing_securities[:10] %}
+                            <li>{{ symbol }}</li>
+                            {% endfor %}
+                            {% if validation_result.summary.missing_securities|length > 10 %}
+                            <li>... and {{ validation_result.summary.missing_securities|length - 10 }} more</li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Detailed Results by Metric -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Detailed Validation Results</h5>
+                </div>
+                <div class="card-body">
+                    {% for metric_type, result in validation_result.validation_results.items() %}
+                    <div class="metric-validation-result mb-4 border-bottom pb-3">
+                        <h6>
+                            <strong>{{ metric_type|upper }}</strong>
+                            {% if result.is_valid %}
+                            <span class="badge bg-success">Valid</span>
+                            {% else %}
+                            <span class="badge bg-danger">Issues Found</span>
+                            {% endif %}
+                        </h6>
+                        
+                        <p class="text-muted">
+                            Period: {{ result.start_date }} to {{ result.end_date }} 
+                            ({{ result.period_days }} days)
+                        </p>
+                        
+                        {% if result.errors %}
+                        <div class="alert alert-danger">
+                            <strong>Errors:</strong>
+                            <ul class="mb-0">
+                                {% for error in result.errors %}
+                                <li>{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                        
+                        {% if result.warnings %}
+                        <div class="alert alert-warning">
+                            <strong>Warnings:</strong>
+                            <ul class="mb-0">
+                                {% for warning in result.warnings %}
+                                <li>{{ warning }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                        
+                        {% if result.missing_securities %}
+                        <div class="alert alert-info">
+                            <strong>Missing Securities:</strong>
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Symbol</th>
+                                        <th>Reason</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for sec in result.missing_securities %}
+                                    <tr>
+                                        <td>{{ sec.symbol if sec.symbol else sec }}</td>
+                                        <td>{{ sec.reason if sec.reason else 'No data available' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% endif %}
+                        
+                        {% if result.data_coverage %}
+                        <div class="mt-3">
+                            <h6>Data Coverage:</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered">
+                                    <thead>
+                                        <tr>
+                                            <th>Security</th>
+                                            <th>Available Days</th>
+                                            <th>Coverage %</th>
+                                            <th>Missing Days</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for sec_id, coverage in result.data_coverage.items() %}
+                                        <tr class="{% if coverage.coverage_percent < 80 %}table-warning{% endif %}">
+                                            <td>{{ coverage.symbol }}</td>
+                                            <td>{{ coverage.available_days }} / {{ coverage.total_expected_days }}</td>
+                                            <td>
+                                                <div class="progress" style="height: 20px;">
+                                                    <div class="progress-bar {% if coverage.coverage_percent >= 80 %}bg-success{% elif coverage.coverage_percent >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                                         role="progressbar" 
+                                                         style="width: {{ coverage.coverage_percent }}%">
+                                                        {{ coverage.coverage_percent }}%
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>{{ coverage.missing_days }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Recommendations -->
+            {% if validation_result.recommendations %}
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5><i class="fas fa-lightbulb"></i> Recommendations</h5>
+                </div>
+                <div class="card-body">
+                    <ul>
+                        {% for rec in validation_result.recommendations %}
+                        <li>{{ rec }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+            
+            <!-- Actions -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <a href="{{ url_for('historical_prices.upload_page') }}" class="btn btn-primary">
+                                <i class="fas fa-upload"></i> Upload Historical Prices
+                            </a>
+                            <a href="{{ url_for('financial_analytics.dashboard') }}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                            </a>
+                        </div>
+                        <div>
+                            {% if not validation_result.can_proceed %}
+                            <form method="POST" action="{{ url_for('financial_analytics.calculate_metrics_ui') }}" style="display: inline;">
+                                <input type="hidden" name="client_id" value="{{ client_id }}">
+                                <input type="hidden" name="override_validation" value="on">
+                                {% for metric, config in metrics_config.items() %}
+                                <input type="hidden" name="metric_{{ metric }}_enabled" value="on">
+                                {% if config.period_days %}
+                                <input type="hidden" name="metric_{{ metric }}_period_days" value="{{ config.period_days }}">
+                                {% endif %}
+                                {% if config.start_date %}
+                                <input type="hidden" name="metric_{{ metric }}_start_date" value="{{ config.start_date }}">
+                                {% endif %}
+                                {% if config.end_date %}
+                                <input type="hidden" name="metric_{{ metric }}_end_date" value="{{ config.end_date }}">
+                                {% endif %}
+                                {% endfor %}
+                                <button type="submit" class="btn btn-warning" 
+                                        onclick="return confirm('Proceed with limited data? Results may be inaccurate.');">
+                                    <i class="fas fa-exclamation-triangle"></i> Override & Calculate Anyway
+                                </button>
+                            </form>
+                            {% else %}
+                            <form method="POST" action="{{ url_for('financial_analytics.calculate_metrics_ui') }}" style="display: inline;">
+                                <input type="hidden" name="client_id" value="{{ client_id }}">
+                                {% for metric, config in metrics_config.items() %}
+                                <input type="hidden" name="metric_{{ metric }}_enabled" value="on">
+                                {% if config.period_days %}
+                                <input type="hidden" name="metric_{{ metric }}_period_days" value="{{ config.period_days }}">
+                                {% endif %}
+                                {% if config.start_date %}
+                                <input type="hidden" name="metric_{{ metric }}_start_date" value="{{ config.start_date }}">
+                                {% endif %}
+                                {% if config.end_date %}
+                                <input type="hidden" name="metric_{{ metric }}_end_date" value="{{ config.end_date }}">
+                                {% endif %}
+                                {% endfor %}
+                                <button type="submit" class="btn btn-success">
+                                    <i class="fas fa-calculator"></i> Proceed with Calculation
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

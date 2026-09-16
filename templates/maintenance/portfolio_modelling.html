@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link %}
+
+{% block title %}Maintenance — Portfolio modelling{% endblock %}
+
+{% block content %}
+{{ maint_hub_open('Portfolio modelling', 'Construction and position tools for portfolio reviews.', url_for('main.data_upload_links')) }}
+  {{ maint_link('fa-calculator', 'Portfolio construction', url_for('review.portfolio_construction')) }}
+  {{ maint_link('fa-list-ol', 'Position construction', url_for('review.position_construction')) }}
+{{ maint_hub_close() }}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0"><i class="fas fa-calculator text-primary"></i> Portfolio modelling</h1>
+        <a href="{{ url_for('main.data_upload_links') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-upload"></i> Data upload
+        </a>
+    </div>
+    <p class="text-muted mb-4">Construction and position tools for portfolio reviews.</p>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('review.portfolio_construction') }}">
+                        <i class="fas fa-calculator d-block mb-2 fa-lg"></i> Portfolio construction
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('review.position_construction') }}">
+                        <i class="fas fa-list-ol d-block mb-2 fa-lg"></i> Position construction
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+{{ maint_desktop_close() }}
+{% endblock %}

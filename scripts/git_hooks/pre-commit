@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Run agent approval loop before each commit. Blocks on FAIL (not PARTIAL/SKIP).
+#
+# Bypass (emergency only): SKIP_AGENT_APPROVAL=1 git commit ...
+# Faster (no pytest):       AGENT_APPROVAL_SKIP_TESTS=1 git commit ...
+#
+# Install: ./scripts/install_git_hooks.sh
+
+set -euo pipefail
+
+if [[ "${SKIP_AGENT_APPROVAL:-}" == "1" ]]; then
+  echo "pre-commit: SKIP_AGENT_APPROVAL=1 — agent approval skipped." >&2
+  exit 0
+fi
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "$ROOT" ]]; then
+  echo "pre-commit: not inside a git repository." >&2
+  exit 1
+fi
+cd "$ROOT"
+
+PY="$ROOT/venv/bin/python"
+if [[ ! -x "$PY" ]]; then
+  PY="python3"
+fi
+
+echo "pre-commit: running agent approval loop (read-only)..." >&2
+if [[ "${AGENT_APPROVAL_SKIP_TESTS:-}" == "1" ]]; then
+  RUN=(scripts/run_agent_approval_loop.py --pre-commit --skip-tests)
+else
+  RUN=(scripts/run_agent_approval_loop.py --pre-commit)
+fi
+if ! "$PY" "${RUN[@]}"; then
+  echo "" >&2
+  echo "pre-commit: BLOCKED — fix FAIL items above, or re-run:" >&2
+  echo "  python3 scripts/run_agent_approval_loop.py --write-status" >&2
+  echo "Emergency bypass: SKIP_AGENT_APPROVAL=1 git commit ..." >&2
+  exit 1
+fi
+
+echo "pre-commit: agent approval passed (PARTIAL/SKIP allowed)." >&2
+exit 0

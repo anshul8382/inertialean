@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% from "agreements/_billing_rates_widget.html" import billing_rates_widget %}
+
+{% block title %}Record Existing Agreement - {{ client.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Record Existing Agreement</h4>
+                    <p class="card-text">
+                        Client: <strong>{{ client.name }}</strong> | 
+                        Email: {{ client.email|display_email }} |
+                        Phone: {{ client.phone|display_phone }}
+                    </p>
+                    <small class="text-muted">Use this form to record an agreement that has already been signed. Upload the PDF and provide the agreement details.</small>
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    {{ form.asset_types.label(class="form-label") }}
+                                    {{ form.asset_types(id="asset_types", class="form-control", multiple=true, size=5) }}
+                                    {% if form.asset_types.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.asset_types.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        Hold Ctrl (Cmd on Mac) to select multiple asset types
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    {{ form.advisory_model.label(class="form-label") }}
+                                    {{ form.advisory_model(id="advisory_model", class="form-control") }}
+                                    {% if form.advisory_model.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.advisory_model.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Billing calendar -->
+                        <div class="row mt-2 mb-2">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    {{ form.billing_frequency.label(class="form-label") }}
+                                    {{ form.billing_frequency(class="form-select") }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    {{ form.billing_start_date.label(class="form-label") }}
+                                    {{ form.billing_start_date(class="form-control", type="date") }}
+                                    <small class="text-muted">Defaults to signed date if left blank.</small>
+                                    {% if form.billing_start_date.errors %}
+                                        <div class="text-danger">{% for e in form.billing_start_date.errors %}<small>{{ e }}</small>{% endfor %}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Billing period configuration -->
+                        <div class="row mt-2 mb-2" id="billingPeriodConfig">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    {{ form.period_start_month.label(class="form-label") }}
+                                    {{ form.period_start_month(class="form-select") }}
+                                    <small class="text-muted">First month of every billing cycle.</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6" id="valuationDateRuleGroup">
+                                <div class="form-group mb-3">
+                                    {{ form.valuation_date_rule.label(class="form-label") }}
+                                    {{ form.valuation_date_rule(class="form-select") }}
+                                    <small class="text-muted">
+                                        <strong>Pre-paid:</strong> value before period · <strong>Post-paid:</strong> value after period
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-12">
+                                {{ billing_rates_widget(form.asset_types.choices, {}, {}, billing_structure_config if billing_structure_config is defined else {}, {}) }}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group mb-3">
+                                    {{ form.special_note.label(class="form-label") }}
+                                    {{ form.special_note(class="form-control", rows=3) }}
+                                    {% if form.special_note.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.special_note.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    {{ form.agreement_pdf.label(class="form-label") }}
+                                    {{ form.agreement_pdf(class="form-control", accept=".pdf") }}
+                                    {% if form.agreement_pdf.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.agreement_pdf.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        Upload the already signed agreement PDF
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    {{ form.status.label(class="form-label") }}
+                                    {{ form.status(class="form-control") }}
+                                    {% if form.status.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.status.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    {{ form.sent_date.label(class="form-label") }}
+                                    {{ form.sent_date(class="form-control", type="date") }}
+                                    {% if form.sent_date.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.sent_date.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        Date when agreement was sent to client (optional)
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    {{ form.signed_date.label(class="form-label") }}
+                                    {{ form.signed_date(class="form-control", type="date") }}
+                                    {% if form.signed_date.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.signed_date.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        Date when agreement was signed (required)
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group mb-3">
+                                    {{ form.notes.label(class="form-label") }}
+                                    {{ form.notes(class="form-control", rows=3, placeholder="Add any additional notes about this agreement...") }}
+                                    {% if form.notes.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.notes.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group mt-4">
+                            {{ form.submit(class="btn btn-primary") }}
+                            <a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

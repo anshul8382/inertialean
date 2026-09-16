@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-box { border: 1px solid #ccc; padding: 10px; margin: 10px 0; }
+        select, input, button { margin: 5px; padding: 5px; }
+    </style>
+</head>
+<body>
+    <h1>Simple Test Page</h1>
+    <p>This is a completely isolated test page with no external dependencies.</p>
+    
+    <div class="test-box">
+        <h3>Test Form</h3>
+        <form method="POST" action="{{ url_for('main.edit_asset_model', model_id=model.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div>
+                <label>Name:</label>
+                <input type="text" name="name" value="{{ model.name }}" required>
+            </div>
+            
+            <div>
+                <label>Description:</label>
+                <textarea name="description">{{ model.description }}</textarea>
+            </div>
+            
+            <div>
+                <label>Risk Profile:</label>
+                <select name="risk_level" required>
+                    <option value="Conservative" {% if model.risk_profile == 'Conservative' %}selected{% endif %}>Conservative</option>
+                    <option value="Moderate" {% if model.risk_profile == 'Moderate' %}selected{% endif %}>Moderate</option>
+                    <option value="Aggressive" {% if model.risk_profile == 'Aggressive' %}selected{% endif %}>Aggressive</option>
+                </select>
+            </div>
+            
+            <div>
+                <label>Test Dropdown:</label>
+                <select id="test-dropdown">
+                    <option value="">Select an option</option>
+                    <option value="1">Option 1</option>
+                    <option value="2">Option 2</option>
+                    <option value="3">Option 3</option>
+                </select>
+            </div>
+            
+            <button type="submit">Save Changes</button>
+        </form>
+    </div>
+    
+    <div class="test-box">
+        <h3>Test Links</h3>
+        <a href="{{ url_for('main.models') }}">Back to Models</a>
+        <br>
+        <a href="#" onclick="alert('Link clicked!'); return false;">Test Link</a>
+    </div>
+    
+    <div class="test-box">
+        <h3>Model Info</h3>
+        <p>Model ID: {{ model.id }}</p>
+        <p>Model Name: {{ model.name }}</p>
+        <p>Asset Classes Available: {{ asset_classes|length }}</p>
+    </div>
+    
+    <script>
+        console.log('=== SIMPLE TEST PAGE LOADED ===');
+        console.log('Current URL:', window.location.href);
+        console.log('Model ID:', '{{ model.id }}');
+        
+        // Test dropdown functionality
+        document.getElementById('test-dropdown').addEventListener('change', function() {
+            console.log('Dropdown changed to:', this.value);
+            alert('Dropdown changed to: ' + this.value);
+        });
+        
+        // Test form submission
+        document.querySelector('form').addEventListener('submit', function(e) {
+            console.log('Form submitted!');
+            alert('Form submitted!');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Advisor Review{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+      <h1 class="h3 mb-1">Advisor Review</h1>
+      <p class="text-muted mb-0 small">AUM, review pendency, committed monthly investment, and MoM growth by advisor</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a href="{{ url_for('advisor_review.assignments_overview') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-user-friends"></i> Assignment overview
+      </a>
+      <a href="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients', unassigned=1) }}" class="btn btn-outline-warning btn-sm">
+        <i class="fas fa-user-slash"></i> Unassigned ({{ unassigned_count }})
+      </a>
+    </div>
+  </div>
+
+  <div class="card card-app border-0 shadow-sm">
+    <div class="card-header bg-white">
+      <span class="fw-semibold">Advisor books</span>
+    </div>
+    <div class="card-body p-0">
+      {% if rows %}
+      <div class="table-responsive" data-mobile-table="scroll">
+        <table class="table table-app table-hover table-striped mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th scope="col">Advisor</th>
+              <th scope="col" class="text-num">Clients</th>
+              <th scope="col" class="text-num">AUM</th>
+              <th scope="col" class="text-num">Review pendency</th>
+              <th scope="col" class="text-num">Committed monthly</th>
+              <th scope="col" class="text-num">This month planned</th>
+              <th scope="col" class="text-num">MoM growth</th>
+              <th scope="col">Trend</th>
+              <th scope="col"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr class="{% if r.get('is_unassigned') %}table-warning{% endif %}">
+              <td>
+                <span class="fw-medium">{{ r.advisor_name }}</span>
+              </td>
+              <td class="text-num">{{ r.client_count }}</td>
+              <td class="text-num">{{ r.aum_display }}</td>
+              <td class="text-num">
+                {% if r.pending_reviews %}
+                <span class="badge bg-warning text-dark">{{ r.pending_reviews }}</span>
+                {% else %}
+                0
+                {% endif %}
+              </td>
+              <td class="text-num">{{ r.committed_display }}</td>
+              <td class="text-num">{{ r.this_month_display }}</td>
+              <td class="text-num">
+                {% if r.trend == 'up' %}
+                <span class="text-success"><i class="fas fa-arrow-up" aria-hidden="true"></i>
+                  {% if r.growth_pct is not none %}+{{ r.growth_pct }}%{% else %}New{% endif %}
+                </span>
+                {% elif r.trend == 'down' %}
+                <span class="text-danger"><i class="fas fa-arrow-down" aria-hidden="true"></i>
+                  {{ r.growth_pct }}%
+                </span>
+                {% else %}
+                <span class="text-muted"><i class="fas fa-minus" aria-hidden="true"></i>
+                  {% if r.growth_pct is not none %}{{ r.growth_pct }}%{% else %}—{% endif %}
+                </span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="d-flex align-items-end gap-1" style="height:28px;" title="Last {{ r.trend_months|length }} months planned investment" role="img" aria-label="Monthly planned investment trend">
+                  {% for m in r.trend_months %}
+                  <span class="d-inline-block rounded-1 {% if loop.last %}bg-primary{% else %}bg-secondary{% endif %}"
+                        style="width:6px;height:{{ m.bar_px_sm }}px;opacity:{% if loop.last %}1{% else %}0.45{% endif %};"
+                        title="{{ m.label }}: {{ m.amount_display }}"></span>
+                  {% endfor %}
+                </div>
+              </td>
+              <td class="text-end">
+                {% if r.advisor_id %}
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('advisor_review.advisor_detail', advisor_id=r.advisor_id) }}">
+                  Details
+                </a>
+                {% else %}
+                <a class="btn btn-sm btn-outline-warning" href="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients', unassigned=1) }}">
+                  Assign
+                </a>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0 px-3 py-4">No active clients assigned to advisors yet.</p>
+      {% endif %}
+    </div>
+  </div>
+  <p class="text-muted small mt-3 mb-0">
+    Growth compares this calendar month’s monthly-investment planned totals to last month.
+    Committed monthly is the sum of active recurring schedules.
+  </p>
+</div>
+{% endblock %}

@@ -1,0 +1,188 @@
+    <div class="card card-app shadow-sm mb-4">
+        <div class="card-header"><h5 class="card-title mb-0">Quick assign lead</h5></div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('main.maintenance_client_advisor_assignments', tab='leads', lq=lq, owner_id=filter_owner_id) }}" class="row g-3 align-items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-md-5">
+                    <label for="quick_lead_id" class="form-label">Lead</label>
+                    <select class="form-select" id="quick_lead_id" name="lead_id" required>
+                        <option value="">— Select lead —</option>
+                        {% for l in pick_leads %}
+                        <option value="{{ l.id }}">{{ l.name }} ({{ l.email }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <label for="quick_lead_user_id" class="form-label">Owner</label>
+                    <select class="form-select" id="quick_lead_user_id" name="advisor_id" required>
+                        <option value="">— Select user —</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}">{{ u.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-check"></i> Assign</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card card-app shadow-sm mb-3">
+        <div class="card-header"><h5 class="card-title mb-0">Filter leads</h5></div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('main.maintenance_client_advisor_assignments') }}" class="row g-3 align-items-end">
+                <input type="hidden" name="tab" value="leads">
+                <div class="col-md-5">
+                    <label for="lq" class="form-label">Search</label>
+                    <input type="search" class="form-control" id="lq" name="lq" value="{{ lq }}" placeholder="Name, email, or phone">
+                </div>
+                <div class="col-md-5">
+                    <label for="owner_id" class="form-label">Current owner</label>
+                    <select class="form-select" id="owner_id" name="owner_id">
+                        <option value="">All owners</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}" {% if filter_owner_id == u.id %}selected{% endif %}>{{ u.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-outline-primary w-100">Apply</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card card-app shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">Lead list</h5>
+            <span class="text-muted small">{{ lead_pagination.total }} total</span>
+        </div>
+        <div class="card-body border-bottom bg-light">
+            <form id="bulkLeadForm" method="POST" action="{{ url_for('main.maintenance_client_advisor_assignments', tab='leads', lq=lq, owner_id=filter_owner_id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="bulk_entity" value="leads">
+                <input type="hidden" name="bulk_scope" id="bulk_lead_scope" value="selected">
+                <input type="hidden" name="filter_lq" value="{{ lq }}">
+                <input type="hidden" name="filter_owner_id" value="{{ filter_owner_id or '' }}">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="bulk_lead_user" class="form-label">Assign to owner</label>
+                        <select class="form-select" id="bulk_lead_user" name="advisor_id" required>
+                            <option value="">— Select user —</option>
+                            {% for u in users %}
+                            <option value="{{ u.id }}">{{ u.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-8 d-flex flex-wrap gap-2 align-items-end">
+                        <button type="submit" class="btn btn-primary" id="btnLeadAssignSelected"
+                                data-confirm="Assign checked leads on this page?">
+                            <i class="fas fa-users"></i> Assign selected
+                        </button>
+                        {% if lead_pagination.total > 0 %}
+                        <button type="submit" class="btn btn-outline-primary" id="btnLeadAssignAllFiltered"
+                                data-confirm="Assign all {{ lead_pagination.total }} matching leads (all pages)?">
+                            <i class="fas fa-check-double"></i> Assign all {{ lead_pagination.total }}
+                        </button>
+                        {% endif %}
+                        <span class="text-muted small" id="bulkLeadHint">0 selected</span>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-app table-hover table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:2.5rem;"><input class="form-check-input" type="checkbox" id="selectAllLeadsPage" aria-label="Select all on page"></th>
+                        <th>Lead</th>
+                        <th>Contact</th>
+                        <th>Status</th>
+                        <th>Owner</th>
+                        <th>Change</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in leads %}
+                    <tr>
+                        <td><input class="form-check-input lead-select" type="checkbox" form="bulkLeadForm" name="lead_ids" value="{{ l.id }}"></td>
+                        <td><a href="{{ url_for('leads.view_lead', lead_id=l.id) }}">{{ l.name }}</a></td>
+                        <td class="small">{{ l.email }}<br>{{ l.phone }}</td>
+                        <td>{{ l.status or '—' }}</td>
+                        <td>{% if l.owner_label %}{{ l.owner_label }}{% else %}—{% endif %}</td>
+                        <td>
+                            <form method="POST" action="{{ url_for('main.maintenance_client_advisor_assignments', tab='leads', lq=lq, owner_id=filter_owner_id) }}" class="d-flex gap-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="lead_id" value="{{ l.id }}">
+                                <select class="form-select form-select-sm" name="advisor_id" required style="max-width:12rem;">
+                                    {% for u in users %}
+                                    <option value="{{ u.id }}" {% if l.owner_id == u.id %}selected{% endif %}>{{ u.username }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">No leads match.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if lead_pagination.pages > 1 %}
+        <div class="card-footer">
+            <ul class="pagination pagination-sm mb-0 justify-content-center">
+                <li class="page-item {% if not lead_pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.maintenance_client_advisor_assignments', tab='leads', lead_page=lead_pagination.prev_num, lq=lq, owner_id=filter_owner_id) }}">Previous</a>
+                </li>
+                {% for p in lead_pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                    {% if p %}
+                    <li class="page-item {% if p == lead_pagination.page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('main.maintenance_client_advisor_assignments', tab='leads', lead_page=p, lq=lq, owner_id=filter_owner_id) }}">{{ p }}</a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not lead_pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.maintenance_client_advisor_assignments', tab='leads', lead_page=lead_pagination.next_num, lq=lq, owner_id=filter_owner_id) }}">Next</a>
+                </li>
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+<script>
+(function () {
+    var form = document.getElementById('bulkLeadForm');
+    var scopeInput = document.getElementById('bulk_lead_scope');
+    var selectAll = document.getElementById('selectAllLeadsPage');
+    var hint = document.getElementById('bulkLeadHint');
+    var btnSel = document.getElementById('btnLeadAssignSelected');
+    var btnAll = document.getElementById('btnLeadAssignAllFiltered');
+    function boxes() { return [].slice.call(document.querySelectorAll('.lead-select')); }
+    function updateHint() {
+        var n = boxes().filter(function (b) { return b.checked; }).length;
+        if (hint) hint.textContent = n + ' selected';
+        if (selectAll) {
+            selectAll.checked = n > 0 && n === boxes().length;
+            selectAll.indeterminate = n > 0 && n < boxes().length;
+        }
+    }
+    if (selectAll) selectAll.addEventListener('change', function () {
+        var c = selectAll.checked; boxes().forEach(function (b) { b.checked = c; }); updateHint();
+    });
+    boxes().forEach(function (b) { b.addEventListener('change', updateHint); });
+    updateHint();
+    if (form) form.addEventListener('submit', function (ev) {
+        if (ev.submitter === btnAll) {
+            scopeInput.value = 'filtered';
+            if (!confirm(btnAll.getAttribute('data-confirm') || 'Continue?')) ev.preventDefault();
+        } else if (ev.submitter === btnSel) {
+            scopeInput.value = 'selected';
+            if (!boxes().some(function (b) { return b.checked; })) { ev.preventDefault(); alert('Select leads or use Assign all.'); return; }
+            if (!confirm(btnSel.getAttribute('data-confirm') || 'Continue?')) ev.preventDefault();
+        }
+    });
+})();
+</script>

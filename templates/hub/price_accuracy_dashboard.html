@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block title %}Price data accuracy{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <div class="mb-3">
+    <a href="{{ url_for('hub.system_dashboard') }}" class="small text-muted text-decoration-none">← System intelligence</a>
+    <h2 class="mt-1 mb-0"><i class="fas fa-wave-square text-secondary"></i> Price data accuracy</h2>
+    <p class="text-muted mb-0">
+      Scans <code>historical_price</code> for jumps, zero closes, and <strong>holes longer than 5 open days</strong> (weekdays that are not holidays).
+      A single missing day is ignored — valuation already uses a close a few days either side.
+      Saturday/Sunday are never flagged. If names that <strong>traded that weekday</strong> all have no close, confirm it as a market holiday below. Days with no trade are ignored — valuation already uses a nearby close. If some names have a close that day, the market was open (a 54-of-105 hole is missing history, not a holiday).
+      A jump that matches a split or bonus on file (e.g. RELIANCE −50%, HDFCBANK −75%) is not listed — stored closes are as-traded, not split-adjusted.
+      The <code>Prices</code> tab update does not backfill old missing dates — use the Sheets queue or IST close historical save for that.
+      Once a jump is confirmed (UI or Google Apps Script), it is stored and skipped on later runs.
+    </p>
+  </div>
+
+  <div class="alert alert-light border small mb-4">
+    <strong>Verify from Google Sheet</strong>
+    fetches GOOGLEFINANCE closes on the two historical dates (HistoricalPrices worksheet),
+    not the <code>Prices</code> tab (that tab only updates today’s last price, and historical rows save at IST close).
+    A spike is auto-closed if rupee levels match within <strong>{{ sheet_tolerance_pct }}%</strong>
+    <em>or</em> the % move matches (GOOGLEFINANCE is often split-adjusted, so levels can differ).
+    Real data errors — sheet move does not match the DB jump — stay open.<br/>
+    <strong>Import rule:</strong> do not write GOOGLEFINANCE closes into history when they diverge from as-traded neighbors after a later split/bonus — <code>apply-prices</code> and missing-fill reject those and require unadjusted NSE closes.<br/>
+    <strong>Apps Script webhooks</strong> (same host as the app):
+    <code class="user-select-all">{{ webhook_base }}apply-prices</code> and
+    <code class="user-select-all">{{ webhook_base }}findings/verified-by-id</code>
+    · {{ token_hint }}
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 mb-4">
+    <form method="post" action="{{ url_for('hub.price_accuracy_run_scan') }}" class="d-flex flex-wrap gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div>
+        <label class="form-label small mb-0 text-muted">Jump threshold (%)</label>
+        <input type="text" name="threshold_pct" value="10" class="form-control form-control-sm" style="width:5rem" title="Applied to consecutive historical rows (not calendar gaps)"/>
+      </div>
+      <button type="submit" class="btn btn-dark"><i class="fas fa-play"></i> Run scan</button>
+    </form>
+    <form method="post" action="{{ url_for('hub.price_accuracy_push_sheets_queue') }}" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <input type="hidden" name="push_mode" value="full"/>
+      <button type="submit" class="btn btn-outline-dark" title="Writes current findings to worksheet PriceAccuracyQueue (same spreadsheet as daily prices)">
+        <i class="fas fa-table"></i> Push queue to Google Sheets
+      </button>
+    </form>
+    <form method="post" action="{{ url_for('hub.price_accuracy_clean_google_sheet_tabs') }}" class="d-inline-flex flex-wrap align-items-center gap-2 ms-1" title="HistoricalPrices fills with GOOGLEFINANCE scratch rows — trim when the workbook is slow or near limits" onsubmit="return confirm('Delete all DATA rows under the header for: {{ sheet_cleanup_tabs_label | e }}\n(Optional: PriceAccuracyQueue if checked.)\n\nNever touches Prices or Nifty. Continue?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="btn btn-outline-danger">
+        <i class="fas fa-broom"></i> Clean sheet tabs
+      </button>
+      <label class="small text-muted mb-0 d-flex align-items-center gap-1">
+        <input type="checkbox" name="include_accuracy_queue_tab" value="1"/>
+        also clear price-accuracy queue tab
+      </label>
+    </form>
+    <p class="small text-muted w-100 mb-0 mt-1">
+      Tab list from <code>GOOGLE_SHEETS_CLEANUP_WORKSHEETS</code> (shown: {{ sheet_cleanup_tabs_label }}).
+    </p>
+  </div>
+
+  <div class="card border-warning mb-4">
+    <div class="card-body py-3">
+      <h6 class="card-title mb-2"><i class="fas fa-bolt"></i> One-shot: pull all Prices from Sheet + rescan + verify every spike</h6>
+      <p class="card-text small text-muted mb-2">
+        Imports current prices from the <code>Prices</code> tab (historical EOD rows save only in the IST close window), then rebuilds this report, then GOOGLEFINANCE-checks every spike. Can take several minutes.
+      </p>
+      <form method="post" action="{{ url_for('hub.price_accuracy_full_sheets_pipeline') }}" class="d-flex flex-wrap align-items-end gap-2" onsubmit="return confirm('Run the full pipeline now? This imports all Prices from Sheet, reruns the accuracy scan, then verifies every spike via GOOGLEFINANCE (slow). Continue?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div>
+          <label class="form-label small mb-0 text-muted">Spike threshold for scan step (%)</label>
+          <input type="text" name="threshold_pct" value="10" class="form-control form-control-sm" style="width:5rem"/>
+        </div>
+        <button type="submit" class="btn btn-warning">
+          Run full Sheet sync + verify
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {% if not snapshot %}
+    <p class="text-muted">No scan has been run yet.</p>
+  {% else %}
+    {% set r = snapshot.run %}
+    <div class="card mb-4">
+      <div class="card-body py-2 px-3">
+        <span class="small text-muted">Run #{{ r.id }}</span>
+        · started {{ r.started_at or '—' }}
+        · threshold {{ r.threshold_pct }}%
+        · securities {{ r.securities_scanned }}
+        · <strong class="text-danger">{{ r.spike_count }}</strong> spikes
+        · <strong class="text-warning">{{ r.missing_count }}</strong> missing
+        · <strong class="text-warning">{{ r.zero_count }}</strong> zero/invalid
+      </div>
+    </div>
+
+    {% set zeros = snapshot.findings | selectattr('kind', 'equalto', 'ZERO') | list %}
+
+    <h5 class="mt-3">Suspicious jumps (consecutive stored rows)</h5>
+    <p class="small text-muted mb-2">Symbols with more than <strong>5</strong> rows are collapsible groups. Each group can mark all spikes verified or run Google Sheet verification for that symbol.</p>
+    {% if not spike_groups %}
+      <p class="text-muted small">None over threshold (or all remaining pairs are already acknowledged).</p>
+    {% else %}
+      <form id="spike-bulk-form" method="post" class="mb-2 d-flex flex-wrap align-items-center gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button type="submit" formaction="{{ url_for('hub.price_accuracy_bulk_ack_spikes') }}" class="btn btn-sm btn-success">
+          Mark selected verified
+        </button>
+        <button type="submit" formaction="{{ url_for('hub.price_accuracy_verify_from_sheets') }}" class="btn btn-sm btn-outline-primary" title="Re-fetch closes from Google Sheets (GOOGLEFINANCE) for selected spikes">
+          Verify selected via Google Sheet
+        </button>
+        <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 align-baseline" id="chk-all-spikes">Select all</button>
+      </form>
+      {% for g in spike_groups %}
+      <div class="card mb-2">
+        <div class="card-header py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            {% if g.collapse %}
+            <button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button" data-bs-toggle="collapse" data-bs-target="#spike-grp-{{ g.security_id }}" aria-expanded="false" aria-controls="spike-grp-{{ g.security_id }}" title="Expand / collapse rows">
+              <i class="fas fa-chevron-down small"></i>
+            </button>
+            {% endif %}
+            <strong>{{ g.symbol }}</strong>
+            <span class="text-muted">#{{ g.security_id }}</span>
+            <span class="badge bg-secondary">{{ g.count }} spike{% if g.count != 1 %}s{% endif %}</span>
+            <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 js-spike-select-group" data-security-id="{{ g.security_id }}" title="Check all spikes for this symbol">Select symbol</button>
+          </div>
+          <div class="d-flex flex-wrap gap-1">
+            <form method="post" action="{{ url_for('hub.price_accuracy_bulk_ack_spikes_by_security') }}" class="d-inline" onsubmit="return confirm('Mark every spike on this scan as verified for security #{{ g.security_id }}?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <input type="hidden" name="security_id" value="{{ g.security_id }}"/>
+              <button type="submit" class="btn btn-sm btn-outline-success">All verified (symbol)</button>
+            </form>
+            <form method="post" action="{{ url_for('hub.price_accuracy_verify_from_sheets_by_security') }}" class="d-inline" onsubmit="return confirm('Run GOOGLEFINANCE for every spike for security #{{ g.security_id }}? May take several minutes.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <input type="hidden" name="security_id" value="{{ g.security_id }}"/>
+              <button type="submit" class="btn btn-sm btn-outline-primary">Verify via Sheet (symbol)</button>
+            </form>
+          </div>
+        </div>
+        <div id="spike-grp-{{ g.security_id }}" class="collapse {% if not g.collapse %}show{% endif %}">
+          <div class="table-responsive mb-0">
+            <table class="table table-sm table-striped align-middle mb-0">
+              <thead class="table-light"><tr><th class="border-end-0" style="width:2rem"></th><th>Earlier date</th><th>Later date</th><th>Close before</th><th>Close after</th><th>% change</th><th></th></tr></thead>
+              <tbody>
+                {% for row in g.rows %}
+                <tr>
+                  <td class="border-end-0">
+                    <input class="form-check-input spike-finding-chk" type="checkbox" name="finding_id" value="{{ row.id }}" form="spike-bulk-form" data-security-id="{{ g.security_id }}" />
+                  </td>
+                  <td>{{ row.date_prev }}</td>
+                  <td>{{ row.date_next }}</td>
+                  <td>{{ '%.4f' % row.close_prev if row.close_prev is not none else '—' }}</td>
+                  <td>{{ '%.4f' % row.close_next if row.close_next is not none else '—' }}</td>
+                  <td>{{ '%.2f' % row.pct_change if row.pct_change is not none else '—' }}</td>
+                  <td>
+                    <form method="post" action="{{ url_for('hub.price_accuracy_ack_spike') }}" class="d-inline">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                      <input type="hidden" name="finding_id" value="{{ row.id }}"/>
+                      <button type="submit" class="btn btn-sm btn-outline-success" title="Mark verified">Row verify</button>
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+      <form method="post" action="{{ url_for('hub.price_accuracy_verify_from_sheets') }}" class="mb-4 mt-3" onsubmit="return confirm('Run GOOGLEFINANCE for every spike in this report? This can take a while.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="all_spikes" value="1"/>
+        <button type="submit" class="btn btn-sm btn-outline-primary"><i class="fas fa-globe-asia"></i> Verify ALL spikes from Google Sheet</button>
+        <span class="small text-muted ms-2">Skips pairs already acknowledged.</span>
+      </form>
+    {% endif %}
+
+    <h5 class="mt-3">Long price gaps (more than 5 open days)</h5>
+    <p class="small text-muted mb-2">One-day holes are ignored. Same grouping rule (&gt;5 gaps per symbol = collapsible).</p>
+    {% if possible_holidays %}
+    <div class="card border-info mb-3">
+      <div class="card-body py-3">
+        <h6 class="card-title mb-2"><i class="fas fa-calendar-times"></i> Possible market holidays</h6>
+        <p class="small text-muted mb-2">
+          Only weekdays when someone in the firm traded, and <strong>none</strong> of those names have a close.
+          If other names have a close that day, the market was open — do not mark a holiday.
+          We do not need a close on days with no trade.
+        </p>
+        <div class="table-responsive mb-0">
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>Date</th>
+                <th>Day</th>
+                <th>Names missing</th>
+                <th>Examples</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for h in possible_holidays %}
+              <tr>
+                <td>{{ h.date }}</td>
+                <td>{{ h.weekday }}</td>
+                <td>{{ h.symbol_count }} of {{ h.universe or h.symbol_count }} <span class="text-muted">(no close)</span></td>
+                <td class="small">{{ h.sample_symbols | join(', ') }}</td>
+                <td>
+                  <form method="post" action="{{ url_for('hub.price_accuracy_mark_holiday') }}" class="d-inline" onsubmit="return confirm('Mark {{ h.date }} as a market holiday and stop flagging missing prices on that day?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <input type="hidden" name="holiday_date" value="{{ h.date }}"/>
+                    <button type="submit" class="btn btn-outline-info">Yes, holiday</button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% if not missing_groups %}
+      <p class="text-muted small">None in the scanned range.</p>
+    {% else %}
+      <form id="missing-push-subset-form" method="post" action="{{ url_for('hub.price_accuracy_push_sheets_queue') }}" class="mb-2 d-flex flex-wrap align-items-center gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="push_mode" value="subset_missing"/>
+        <button type="submit" class="btn btn-sm btn-outline-dark">Push selected MISSING rows to Sheets</button>
+        <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 align-baseline" id="chk-all-missing">Select all missing</button>
+      </form>
+      {% for g in missing_groups %}
+      <div class="card mb-2">
+        <div class="card-header py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            {% if g.collapse %}
+            <button class="btn btn-sm btn-outline-secondary py-0 px-1" type="button" data-bs-toggle="collapse" data-bs-target="#missing-grp-{{ g.security_id }}" aria-expanded="false" aria-controls="missing-grp-{{ g.security_id }}">
+              <i class="fas fa-chevron-down small"></i>
+            </button>
+            {% endif %}
+            <strong>{{ g.symbol }}</strong>
+            <span class="text-muted">#{{ g.security_id }}</span>
+            <span class="badge bg-warning text-dark">{{ g.count }} gap{% if g.count != 1 %}s{% endif %}</span>
+            <button type="button" class="btn btn-sm btn-link text-decoration-none p-0 js-missing-select-group" data-security-id="{{ g.security_id }}" title="Check all rows for this symbol">Select symbol</button>
+          </div>
+          <form method="post" action="{{ url_for('hub.price_accuracy_push_sheets_queue') }}" class="d-inline" onsubmit="return confirm('Replace PriceAccuracyQueue with only MISSING rows for security #{{ g.security_id }} ({{ g.count }} row(s))?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <input type="hidden" name="push_mode" value="by_security"/>
+            <input type="hidden" name="security_id" value="{{ g.security_id }}"/>
+            <input type="hidden" name="push_kind" value="MISSING"/>
+            <button type="submit" class="btn btn-sm btn-outline-dark">Push all missing for symbol</button>
+          </form>
+        </div>
+        <div id="missing-grp-{{ g.security_id }}" class="collapse {% if not g.collapse %}show{% endif %}">
+          <div class="table-responsive mb-0">
+            <table class="table table-sm table-striped mb-0">
+              <thead class="table-light"><tr><th class="border-end-0" style="width:2rem"></th><th>From close</th><th>To close</th><th>First missing day</th></tr></thead>
+              <tbody>
+                {% for row in g.rows %}
+                <tr>
+                  <td class="border-end-0">
+                    <input class="form-check-input missing-finding-chk" type="checkbox" name="finding_id_missing" value="{{ row.id }}" form="missing-push-subset-form" data-security-id="{{ g.security_id }}" />
+                  </td>
+                  <td>{{ row.date_prev or '—' }}</td>
+                  <td>{{ row.date_next or '—' }}</td>
+                  <td>{{ row.missing_date }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    <h5 class="mt-3">Zero or non-positive historical close</h5>
+    {% if not zeros %}
+      <p class="text-muted small">None.</p>
+    {% else %}
+      <div class="table-responsive mb-4">
+        <table class="table table-sm table-striped">
+          <thead><tr><th>Symbol</th><th>Date</th></tr></thead>
+          <tbody>
+            {% for row in zeros %}
+            <tr><td>{{ row.symbol }} <span class="text-muted">#{{ row.security_id }}</span></td><td>{{ row.missing_date }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+
+    <p class="small text-muted mb-5">
+      Use <strong>Push queue to Google Sheets</strong> to fill the <code>PriceAccuracyQueue</code> tab. After you edit
+      <code>new_close_price</code> or <code>verified_ok_Y_or_blank</code>, run your Apps Script (see <code>scripts/google_apps_script_price_accuracy_example.js</code> in the repo) to POST fixes and acknowledgements back to the URLs above.
+      <br/><strong>Do not paste GOOGLEFINANCE closes</strong> when the name has a later split/bonus — those are adjusted.
+      The apply-prices webhook rejects them and returns:
+      <em>Need unadjusted NSE close (as-traded). Google Sheets / GOOGLEFINANCE returned a corporate-action-adjusted price…</em>
+      Enter the unadjusted NSE EOD close instead.
+    </p>
+  {% endif %}
+</div>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+{% if snapshot %}
+<script>
+(function () {
+  function toggleBoxes(selector) {
+    var boxes = document.querySelectorAll(selector);
+    if (!boxes.length) return;
+    var allOn = Array.prototype.every.call(boxes, function (b) { return b.checked; });
+    boxes.forEach(function (b) { b.checked = !allOn; });
+  }
+  function boxesForSid(selector, sid) {
+    return document.querySelectorAll(selector + '[data-security-id="' + sid + '"]');
+  }
+  function toggleSid(selector, sid) {
+    var boxes = boxesForSid(selector, sid);
+    if (!boxes.length) return;
+    var allOn = Array.prototype.every.call(boxes, function (b) { return b.checked; });
+    Array.prototype.forEach.call(boxes, function (b) { b.checked = !allOn; });
+  }
+
+  var masterSpikes = document.getElementById('chk-all-spikes');
+  if (masterSpikes) {
+    masterSpikes.addEventListener('click', function (e) {
+      e.preventDefault();
+      toggleBoxes('.spike-finding-chk');
+    });
+  }
+  document.querySelectorAll('.js-spike-select-group').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      toggleSid('.spike-finding-chk', this.getAttribute('data-security-id'));
+    });
+  });
+
+  var masterMissing = document.getElementById('chk-all-missing');
+  if (masterMissing) {
+    masterMissing.addEventListener('click', function (e) {
+      e.preventDefault();
+      toggleBoxes('.missing-finding-chk');
+    });
+  }
+  document.querySelectorAll('.js-missing-select-group').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      toggleSid('.missing-finding-chk', this.getAttribute('data-security-id'));
+    });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

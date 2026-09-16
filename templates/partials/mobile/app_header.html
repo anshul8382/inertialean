@@ -1,0 +1,20 @@
+{# Mobile app top bar #}
+<header class="im-mobile-topbar im-mobile-only" role="banner">
+  {% if mobile_back_url is defined and mobile_back_url %}
+  <a href="{{ mobile_back_url }}" class="im-mobile-topbar__back" aria-label="Go back">
+    <i class="fas fa-arrow-left"></i>
+  </a>
+  {% else %}
+  <span class="im-mobile-topbar__back" style="width:44px" aria-hidden="true"></span>
+  {% endif %}
+  <h1 class="im-mobile-topbar__title">{{ mobile_page_title|default('INERTIA') }}</h1>
+  <div class="im-mobile-topbar__actions">
+    {% if mobile_header_action_url is defined and mobile_header_action_url %}
+      <a href="{{ mobile_header_action_url }}"
+         class="btn btn-sm {{ mobile_header_action_class|default('btn-success') }}"
+         aria-label="{{ mobile_header_action_label|default('Action') }}">
+        <i class="{{ mobile_header_action_icon|default('fas fa-plus') }}"></i>
+      </a>
+    {% endif %}
+  </div>
+</header>

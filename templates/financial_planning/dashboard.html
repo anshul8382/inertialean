@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Financial Plans{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-chart-pie"></i> Financial Plans</h1>
+        <div>
+            <a href="{{ url_for('clients.add_client') }}" class="btn btn-success me-2">
+                <i class="fas fa-user-plus"></i> Add new client
+            </a>
+            <a href="{{ url_for('financial_planning.dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-list"></i> All Clients
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="fas fa-users"></i> Select Client</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Choose a client to view or create their financial plan and goals. Don't see your client? <a href="{{ url_for('clients.add_client') }}">Add a new client</a> first.</p>
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th>Plan status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in clients %}
+                        <tr>
+                            <td>{{ c.name }}</td>
+                            <td>
+                                {% if c.id in clients_with_plan_ids %}
+                                <span class="badge bg-success">Has plan</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">No plan</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if c.id in clients_with_plan_ids %}
+                                <a href="{{ url_for('financial_planning.client_plan', client_id=c.id) }}" class="btn btn-sm btn-primary">
+                                    <i class="fas fa-file-invoice"></i> View plan
+                                </a>
+                                {% else %}
+                                <a href="{{ url_for('financial_planning.plan_create', client_id=c.id) }}" class="btn btn-sm btn-success">
+                                    <i class="fas fa-plus"></i> Create plan
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="3" class="text-muted">
+                                No clients found. <a href="{{ url_for('clients.add_client') }}">Add your first client</a> to get started.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

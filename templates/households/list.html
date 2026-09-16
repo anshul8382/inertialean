@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Households{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h2 mb-0">Households</h1>
+    <a href="{{ url_for('households.create_household') }}" class="btn btn-primary">
+      <i class="fas fa-plus"></i> Create household
+    </a>
+  </div>
+  <div class="card card-app">
+    <div class="card-body">
+      {% if groups %}
+      <div class="table-responsive">
+        <table class="table table-app table-hover">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Members</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for g in groups %}
+            <tr>
+              <td><strong>{{ g.name }}</strong></td>
+              <td>{{ g.members|length }}</td>
+              <td class="action-bar">
+                <a class="btn btn-sm btn-primary" href="{{ url_for('households.household_details', group_id=g.id) }}">Details</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('households.household_review', group_id=g.id) }}">Review snapshot</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">No households yet. Create one from a client profile or use Create household.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

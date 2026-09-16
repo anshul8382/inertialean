@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block title %}Meta WhatsApp Groups API{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="page-title-box">
+        <div class="page-title-right">
+          <ol class="breadcrumb m-0">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('main.whatsapp_dashboard') }}">WhatsApp</a></li>
+            <li class="breadcrumb-item active">Meta Groups API</li>
+          </ol>
+        </div>
+        <h4 class="page-title">Meta WhatsApp Groups API setup</h4>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+          <h4 class="card-title mb-0">Configuration status</h4>
+          <button type="button" class="btn btn-primary" id="btnVerifyMetaGroups">
+            <i class="mdi mdi-cloud-check-outline"></i> Verify with Meta (list groups)
+          </button>
+        </div>
+        <div class="card-body">
+          <p class="text-muted">
+            Groups use the same access token and phone number ID as 1:1 WhatsApp Cloud API.
+            Set feature flags in environment variables, then verify that Meta returns your active groups.
+          </p>
+          <div id="metaGroupsAlert" class="alert d-none" role="alert"></div>
+          <dl class="row mb-0" id="metaGroupsConfigList">
+            <dt class="col-sm-4">Groups feature flag</dt>
+            <dd class="col-sm-8" id="cfgEnabled">—</dd>
+            <dt class="col-sm-4">Default join approval</dt>
+            <dd class="col-sm-8" id="cfgJoin">—</dd>
+            <dt class="col-sm-4">Graph API base URL</dt>
+            <dd class="col-sm-8 text-break" id="cfgApi">—</dd>
+            <dt class="col-sm-4">Phone number ID</dt>
+            <dd class="col-sm-8" id="cfgPhone">—</dd>
+            <dt class="col-sm-4">Access token</dt>
+            <dd class="col-sm-8" id="cfgToken">—</dd>
+            <dt class="col-sm-4">Webhook URL</dt>
+            <dd class="col-sm-8 text-break" id="cfgWebhook">—</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <h4 class="card-title mb-0">Webhook fields (Meta App Dashboard)</h4>
+        </div>
+        <div class="card-body">
+          <p class="text-muted mb-2">Subscribe your WhatsApp app webhook to these fields for group lifecycle and metadata:</p>
+          <ul class="mb-0" id="webhookFieldsList"></ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header">
+          <h4 class="card-title mb-0">Documentation</h4>
+        </div>
+        <div class="card-body">
+          <ul class="mb-0" id="docsLinks"></ul>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <h4 class="card-title mb-0">Environment variables</h4>
+        </div>
+        <div class="card-body small text-muted">
+          <code>WHATSAPP_GROUPS_ENABLED</code> — set to <code>true</code> when ready to use group features in the app.<br><br>
+          <code>WHATSAPP_GROUPS_DEFAULT_JOIN_APPROVAL</code> — <code>auto_approve</code> or <code>approval_required</code> for API-created groups (used when sending create-group calls).<br><br>
+          Use a Graph API version in <code>WHATSAPP_API_URL</code> that supports WhatsApp Groups (check Meta docs).
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h4 class="card-title mb-0">Last verification — groups returned</h4>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm table-centered mb-0">
+              <thead>
+                <tr>
+                  <th>Group ID</th>
+                  <th>Subject</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody id="groupsTableBody">
+                <tr><td colspan="3" class="text-muted text-center">Run verification to load groups from Meta.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showMetaGroupsAlert(type, html) {
+  const el = $('#metaGroupsAlert');
+  el.removeClass('d-none alert-success alert-danger alert-warning alert-info');
+  const map = { success: 'alert-success', error: 'alert-danger', warning: 'alert-warning', info: 'alert-info' };
+  el.addClass(map[type] || 'alert-info').html(html);
+}
+
+function loadMetaGroupsConfig() {
+  $.getJSON('/api/v1/whatsapp/meta-groups/config')
+    .done(function (res) {
+      if (!res.success || !res.config) {
+        showMetaGroupsAlert('error', res.error || 'Failed to load configuration');
+        return;
+      }
+      const c = res.config;
+      $('#cfgEnabled').html(c.enabled ? '<span class="badge bg-success">Enabled</span>' : '<span class="badge bg-secondary">Disabled</span>');
+      $('#cfgJoin').text(c.default_join_approval_mode || '—');
+      $('#cfgApi').text(c.api_url || '—');
+      $('#cfgPhone').text(c.phone_number_id_configured ? 'Configured' : 'Not set');
+      $('#cfgToken').text(c.access_token_configured ? 'Configured' : 'Not set');
+      $('#cfgWebhook').text(c.webhook_url || '—');
+
+      const ul = $('#webhookFieldsList').empty();
+      (c.webhook_fields_recommended || []).forEach(function (f) {
+        ul.append($('<li></li>').text(f));
+      });
+
+      const docs = $('#docsLinks').empty();
+      const d = c.docs || {};
+      const labels = {
+        group_management: 'Group management (reference)',
+        group_messaging: 'Group messaging',
+        group_webhooks: 'Group webhooks'
+      };
+      Object.keys(d).forEach(function (k) {
+        if (!d[k]) return;
+        docs.append(
+          $('<li class="mb-1"></li>').append(
+            $('<a></a>').attr('href', d[k]).attr('target', '_blank').attr('rel', 'noopener noreferrer').text(labels[k] || k)
+          )
+        );
+      });
+    })
+    .fail(function (xhr) {
+      showMetaGroupsAlert('error', (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load configuration');
+    });
+}
+
+function renderGroupsTable(groups) {
+  const tbody = $('#groupsTableBody').empty();
+  if (!groups || !groups.length) {
+    tbody.append('<tr><td colspan="3" class="text-muted text-center">No groups in this page of results.</td></tr>');
+    return;
+  }
+  groups.forEach(function (g) {
+    tbody.append(
+      '<tr><td class="text-break"><small>' +
+        (g.id || '') +
+        '</small></td><td>' +
+        (g.subject != null ? String(g.subject) : '—') +
+        '</td><td>' +
+        (g.created_at != null ? String(g.created_at) : '—') +
+        '</td></tr>'
+    );
+  });
+}
+
+$(document).ready(function () {
+  loadMetaGroupsConfig();
+
+  $('#btnVerifyMetaGroups').on('click', function () {
+    const btn = $(this);
+    btn.prop('disabled', true);
+    $('#metaGroupsAlert').addClass('d-none');
+    $.ajax({
+      url: '/api/v1/whatsapp/meta-groups/verify',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({ limit: 25 }),
+    })
+      .done(function (res) {
+        if (res.success) {
+          showMetaGroupsAlert(
+            'success',
+            'Meta accepted the request. Groups in response: <strong>' + (res.group_count != null ? res.group_count : (res.groups || []).length) + '</strong>.'
+          );
+          renderGroupsTable(res.groups || []);
+        } else {
+          showMetaGroupsAlert('error', res.error || 'Verification failed');
+          renderGroupsTable([]);
+        }
+      })
+      .fail(function (xhr) {
+        const r = xhr.responseJSON || {};
+        showMetaGroupsAlert('error', r.error || xhr.statusText || 'Request failed');
+        renderGroupsTable([]);
+      })
+      .always(function () {
+        btn.prop('disabled', false);
+      });
+  });
+});
+</script>
+{% endblock %}

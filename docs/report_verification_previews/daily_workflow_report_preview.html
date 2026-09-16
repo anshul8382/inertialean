@@ -1,0 +1,219 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Daily Workflow Report - 2026-07-07</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .header { background-color: #007bff; color: white; padding: 20px; border-radius: 5px; }
+            .summary { background-color: #f8f9fa; padding: 15px; margin: 20px 0; border-radius: 5px; }
+            .stage-section { margin: 20px 0; border: 1px solid #dee2e6; border-radius: 5px; }
+            .stage-header { 
+                padding: 15px; 
+                color: white; 
+                font-weight: bold; 
+                border-radius: 5px 5px 0 0;
+            }
+            .client-table { width: 100%; border-collapse: collapse; }
+            .client-table th, .client-table td { 
+                padding: 10px; 
+                text-align: left; 
+                border-bottom: 1px solid #dee2e6; 
+            }
+            .client-table th { background-color: #f8f9fa; font-weight: bold; }
+            .amount { font-weight: bold; color: #28a745; }
+            .notes { font-style: italic; color: #6c757d; }
+            .subtotal { 
+                background-color: #e9ecef; 
+                padding: 10px; 
+                font-weight: bold; 
+                text-align: right; 
+            }
+            .total { 
+                background-color: #007bff; 
+                color: white; 
+                padding: 15px; 
+                font-weight: bold; 
+                text-align: center; 
+                font-size: 18px;
+                margin-top: 20px;
+                border-radius: 5px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Daily Workflow Report</h1>
+            <p>Generated on: July 07, 2026</p>
+        </div>
+        
+        <div class="summary">
+            <h3>Summary</h3>
+            <p><strong>Total Active Workflows:</strong> 1</p>
+            <p><strong>Total Amount Involved:</strong> Rs. 50,000.00</p>
+            <p><strong>Stages with Active Workflows:</strong> 1</p>
+            <p><strong>Completed Workflows (Last 30 Days):</strong> 1</p>
+            <p><strong>⚠️ Pending Workflows from Last Month:</strong> <span style="color: #dc3545; font-weight: bold;">1</span> (Action Required!)</p>
+            
+            
+            
+        </div>
+        
+    
+        <div class="stage-section">
+            <div class="stage-header" style="background-color: #ffc107;">
+                <h3>FUNDS - Awaiting Funds</h3>
+                <p>Clients: 1 | Subtotal: Rs. 50,000.00</p>
+            </div>
+            <table class="client-table">
+                <thead>
+                    <tr>
+                        <th>Client Name</th>
+                        <th>Planned Amount</th>
+                        <th>Investment Date</th>
+                        <th>Investment notes</th>
+                        <th>Schedule notes</th>
+                        <th>Workflow record notes</th>
+                        <th>Action notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+        
+                    <tr>
+                        <td><strong>Sample Client</strong></td>
+                        <td class="amount">Rs. 50,000.00</td>
+                        <td>2025-07-01</td>
+                        <td class="notes">Inv note</td>
+                        <td class="notes">Sched note</td>
+                        <td class="notes">WF note</td>
+                        <td class="notes">Action note</td>
+                    </tr>
+            
+                </tbody>
+            </table>
+            <div class="subtotal">
+                Stage Subtotal: Rs. 50,000.00
+            </div>
+        </div>
+        
+        <div class="total">
+            GRAND TOTAL: Rs. 50,000.00
+        </div>
+    
+        <div class="stage-section" style="margin-top: 30px; border: 3px solid #dc3545;">
+            <div class="stage-header" style="background-color: #dc3545;">
+                <h3>⚠️ PENDING WORKFLOWS FROM JUNE 2025 - ACTION REQUIRED</h3>
+                <p>Clients: 1 | Subtotal: Rs. 10,000.00</p>
+                <p style="font-size: 0.9em; margin-top: 5px; font-weight: normal;">These workflows were created or updated last month but are still not completed. <strong>Please review and close them.</strong></p>
+            </div>
+            <table class="client-table" style="background-color: #fff3cd;">
+                <thead>
+                    <tr style="background-color: #343a40; color: white;">
+                        <th>Client Name</th>
+                        <th>Current Stage</th>
+                        <th>Planned Amount</th>
+                        <th>Investment Date</th>
+                        <th>Target Completion</th>
+                        <th>Created/Updated</th>
+                        <th>Investment notes</th>
+                        <th>Schedule notes</th>
+                        <th>Workflow record notes</th>
+                        <th>Action notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+        
+                    <tr style="background-color: #fff3cd;">
+                        <td><strong>Pending Client</strong><br><span style="background-color: #17a2b8; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; margin-right: 5px;">Created Last Month</span></td>
+                        <td><strong style="color: #856404;">RECOS</strong></td>
+                        <td class="amount">Rs. 10,000.00</td>
+                        <td>2025-06-01</td>
+                        <td><strong>2025-06-30</strong> <span style="background-color: #dc3545; color: white; padding: 2px 6px; border-radius: 3px; font-size: 0.8em; font-weight: bold;">OVERDUE</span></td>
+                        <td>
+                            <small>Created: 2025-06-01<br>Updated: 2025-06-10</small>
+                        </td>
+                        <td class="notes">—</td>
+                        <td class="notes">—</td>
+                        <td class="notes">—</td>
+                        <td class="notes">—</td>
+                    </tr>
+            
+                </tbody>
+            </table>
+            <div class="subtotal" style="background-color: #ffc107; font-weight: bold;">
+                Pending Last Month Subtotal: Rs. 10,000.00
+            </div>
+        </div>
+        
+        <div class="stage-section" style="margin-top: 30px;">
+            <div class="stage-header" style="background-color: #28a745;">
+                <h3>COMPLETED - Completed Workflows</h3>
+                <p>Clients: 1 | Subtotal: Rs. 25,000.00</p>
+                <p style="font-size: 0.9em; margin-top: 5px;">Showing workflows completed in the last 30 days</p>
+            </div>
+            <table class="client-table">
+                <thead>
+                    <tr>
+                        <th>Client Name</th>
+                        <th>Planned Amount</th>
+                        <th>Investment Date</th>
+                        <th>Completion Date</th>
+                        <th>Investment notes</th>
+                        <th>Schedule notes</th>
+                        <th>Workflow record notes</th>
+                        <th>Action notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+        
+                    <tr>
+                        <td><strong>Completed Client</strong></td>
+                        <td class="amount">Rs. 25,000.00</td>
+                        <td>2025-06-15</td>
+                        <td>2025-06-20</td>
+                        <td class="notes">—</td>
+                        <td class="notes">—</td>
+                        <td class="notes">—</td>
+                        <td class="notes">—</td>
+                    </tr>
+            
+                </tbody>
+            </table>
+            <div class="subtotal">
+                Completed Workflows Subtotal: Rs. 25,000.00
+            </div>
+        </div>
+        
+        <div class="stage-section" style="margin-top: 30px; border: 2px solid #6c757d;">
+            <div class="stage-header" style="background-color: #6c757d;">
+                <h3>Inactive Clients</h3>
+                <p>Total: 1 — not included in workflow sections above</p>
+            </div>
+            <table class="client-table">
+                <thead>
+                    <tr>
+                        <th>Client Name</th>
+                        <th>Phone</th>
+                    </tr>
+                </thead>
+                <tbody><tr><td><strong>Inactive Client</strong></td><td>9000000000</td></tr></tbody>
+            </table>
+        </div>
+    
+        <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+            <p><strong>Report Details:</strong></p>
+            <ul>
+                <li>This report shows active-client workflows as of July 07, 2026</li>
+                <li>Amounts are in Indian Rupees (Rs.)</li>
+                <li>Active workflows (not completed) are shown in the main sections</li>
+                <li>Completed workflows from the last 30 days are shown in a separate section</li>
+                <li>Investment notes: monthly investment; schedule notes: workflow.schedule_notes; workflow record notes: workflow.notes; action notes: latest workflow action</li>
+                <li>Meetings due in the next 7 days are included</li>
+                <li>Open service tickets are included with SLA status</li>
+                <li>Inactive clients are listed in a separate section at the end</li>
+            </ul>
+        </div>
+    </body>
+    </html>
+    

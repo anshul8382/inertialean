@@ -1,0 +1,174 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12 mb-4">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="fas fa-chart-line"></i> Workflow Details - {{ workflow.client.name }}</h2>
+                <a href="{{ url_for('monthly_investment_dashboard') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Overview -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Workflow Overview</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Client:</strong> {{ workflow.client.name }}</p>
+                            <p><strong>Email:</strong> {{ workflow.client.email|display_email }}</p>
+                            <p><strong>Investment Date:</strong> 
+                                {% if workflow.investment_date %}
+                                    {{ workflow.investment_date.strftime('%B %d, %Y') }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </p>
+                            <p><strong>Current Stage:</strong> 
+                                <span class="badge 
+                                    {% if workflow.current_stage == 'FUNDS' %}bg-warning{% endif %}
+                                    {% if workflow.current_stage == 'RECOS' %}bg-info{% endif %}
+                                    {% if workflow.current_stage == 'NOTIFY' %}bg-primary{% endif %}
+                                    {% if workflow.current_stage == 'EXEC' %}bg-secondary{% endif %}
+                                    {% if workflow.current_stage == 'UPDATE' %}bg-dark{% endif %}
+                                    {% if workflow.current_stage == 'COMPLETED' %}bg-success{% endif %}">
+                                    {{ workflow.current_stage }}
+                                </span>
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Planned Amount:</strong> ₹{{ "{:,.2f}".format(workflow.planned_amount) }}</p>
+                            <p><strong>Actual Amount:</strong> ₹{{ "{:,.2f}".format(workflow.actual_amount) }}</p>
+                            <p><strong>Status:</strong> 
+                                {% set status = workflow.get_stage_status() %}
+                                <span class="badge 
+                                    {% if status == 'ON_TIME' %}bg-success{% endif %}
+                                    {% if status == 'OVERDUE' %}bg-danger{% endif %}
+                                    {% if status == 'COMPLETED' %}bg-success{% endif %}">
+                                    {{ status }}
+                                </span>
+                            </p>
+                            <p><strong>Created:</strong> 
+                                {% if workflow.created_at %}
+                                    {{ workflow.created_at.strftime('%B %d, %Y at %I:%M %p') }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    
+                    {% if workflow.notes %}
+                    <div class="mt-3">
+                        <strong>Notes:</strong>
+                        <p class="mt-2">{{ workflow.notes }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Timeline -->
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Action Timeline</h5>
+                </div>
+                <div class="card-body">
+                    {% if actions %}
+                    <div class="timeline">
+                        {% for action in actions %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker">
+                                <i class="fas fa-circle"></i>
+                            </div>
+                            <div class="timeline-content">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1">{{ action.action_type.replace('_', ' ').title() }}</h6>
+                                        <small class="text-muted">
+                                            {% if action.action_date %}
+                                                {{ action.action_date.strftime('%B %d, %Y at %I:%M %p') }}
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </small>
+                                        <p class="mb-1">Performed by: {{ action.user.username }}</p>
+                                        {% if action.amount %}
+                                        <p class="mb-1"><strong>Amount:</strong> ₹{{ "{:,.2f}".format(action.amount) }}</p>
+                                        {% endif %}
+                                        {% if action.notes %}
+                                        <p class="mb-0"><strong>Notes:</strong> {{ action.notes }}</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-clock fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No actions taken yet</h5>
+                        <p class="text-muted">Actions will appear here as the workflow progresses</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dee2e6;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 30px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -22px;
+    top: 5px;
+    width: 15px;
+    height: 15px;
+    background: #007bff;
+    border-radius: 50%;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 3px solid #007bff;
+}
+</style>
+{% endblock %} 

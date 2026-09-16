@@ -1,0 +1,47 @@
+---
+description: When creating or modifying agents in agents/
+globs: agents/**/*
+---
+
+# Agent Development Rules
+
+## Runtime agents (current)
+
+| Agent | File | Notes |
+|-------|------|--------|
+| Data Integrity Manager | `data_integrity_manager.py` | `BaseAgent`; categories in `registry.AGENT_CATEGORIES` |
+| Recommendation Execution Monitor | `recommendation_execution_monitor.py` | `BaseAgent`; `rec_exec_monitor` |
+| Portfolio Performance Monitor | `portfolio_performance_monitor.py` | `BaseAgent`; XIRR vs benchmark |
+| Alert Orchestrator | `orchestrator.py` | `BaseAgent`; `orchestrate_alerts()` — do not create Alert directly elsewhere |
+| Task Assignment Agent | `task_assignment_agent.py` | **Not** `BaseAgent`; `run_backfill()` only |
+
+**Registry:** add/update metadata in `agents/registry.py` (`AGENT_GROUP_META`, `group` on each agent, dashboard + `/hub/`).
+
+**Related (not in `agents/`):** `price_accuracy_service`, `issue_healer_service`, `task_auto_close_service` — Airflow DAGs; document in `registry.SCHEDULED_AGENT_LIKE_JOBS`.
+
+## BaseAgent contract
+
+- Subclass `BaseAgent` from `agents.base`
+- Implement `agent_name` (str) and `agent_version` (str) properties
+- Implement `run_checks(client_id, **kwargs)` as a **generator** yielding `DataIntegrityIssue`
+
+## Issue creation
+
+- Use `self.create_issue(...)` / `_create_issue` with: check_category, severity, message, client_id, suggested_action, details (JSON)
+- Do NOT create `Alert` directly; AlertOrchestrator consolidates and creates alerts
+- Call `should_skip_issue()` / client patterns for user feedback
+
+## Registration checklist
+
+1. New module under `agents/`
+2. Export in `agents/__init__.py` `__all__`
+3. Entry in `agents/registry.py` (`AGENT_CATEGORIES`, `RUNTIME_AGENTS`)
+4. Manual trigger in `routes/agents_dashboard.py` `trigger_agent` if `BaseAgent` (or backfill branch for operational agents)
+5. Airflow DAG if scheduled
+6. `docs/AGENTS_PROD_CHECK.md` if production tables/routes affected
+
+## Task assignment
+
+- `TaskAssignmentRule`: workflow_stage | issue_category | review_status
+- `services/task_assignment_service.py`: `get_assignee_for_*`, `create_ops_task_from_*`, `apply_review_assignment()`
+- Issues get assignees on create via base/alert paths; **TaskAssignmentAgent** backfills null assignees and missing OpsTasks

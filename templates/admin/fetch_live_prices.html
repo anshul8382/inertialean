@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Fetch Live Prices{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Update Prices from Google Sheets</h3>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-group">
+                            <label for="spreadsheet_key">Google Sheets Key:</label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="spreadsheet_key" 
+                                   name="spreadsheet_key" 
+                                   value="1Cd-TYldviG1HHMVo8coAjj-zzcu_nAr64slRZsFFmgM"
+                                   placeholder="Enter Google Sheets key" 
+                                   required>
+                            <small class="form-text text-muted">
+                                This will read prices from your Google Sheets and update the database
+                            </small>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success">Update Prices from Sheets</button>
+                        <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+                    </form>
+                    
+                    <hr>
+                    
+                    <div class="alert alert-info">
+                        <h5>What this does:</h5>
+                        <ul>
+                            <li>Reads prices from the "Prices" worksheet in your Google Sheets</li>
+                            <li>Updates the current_price in the database for matching securities</li>
+                            <li>Skips invalid prices (like #N/A, negative values, etc.)</li>
+                            <li>Reports how many securities were updated, not found, or skipped</li>
+                        </ul>
+                        <p><strong>Note:</strong> Make sure your Google Sheets has a "Prices" worksheet with columns: Symbol, Price</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

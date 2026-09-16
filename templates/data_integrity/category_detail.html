@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.replace('_', ' ').title() }} Issues{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <div class="page-title-right">
+                    <ol class="breadcrumb m-0">
+                        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('data_integrity.dashboard') }}">Data Integrity</a></li>
+                        <li class="breadcrumb-item active">{{ category.replace('_', ' ').title() }}</li>
+                    </ol>
+                </div>
+                <h4 class="page-title">
+                    <i class="fas fa-exclamation-triangle me-2"></i>{{ category.replace('_', ' ').title() }} Issues
+                </h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h4 class="mb-1">{{ total_issues }} Issues</h4>
+                            <p class="text-muted mb-0">affecting {{ total_clients }} clients</p>
+                        </div>
+                        <div>
+                            <form action="{{ url_for('data_integrity.bulk_resolve_category', category=category) }}" 
+                                  method="POST" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="resolution" value="fixed">
+                                <button type="submit" class="btn btn-success" 
+                                        onclick="return confirm('Resolve all {{ total_issues }} issues?')">
+                                    <i class="fas fa-check me-1"></i> Resolve All
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <form method="GET" class="d-flex gap-2">
+                        <select name="client_id" class="form-select" onchange="this.form.submit()">
+                            <option value="">All Clients</option>
+                            {% for client in all_clients %}
+                            <option value="{{ client.id }}" {% if client_filter == client.id %}selected{% endif %}>
+                                {{ client.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if client_filter %}
+                        <a href="{{ url_for('data_integrity.category_detail', category=category) }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-times"></i> Clear
+                        </a>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Issues by Client -->
+    <div class="row">
+        <div class="col-12">
+            <form id="bulkResolveForm" action="{{ url_for('data_integrity.resolve_issues') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="resolution" value="fixed">
+                
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h4 class="header-title mb-0">Issues by Client</h4>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAll()">
+                                Select All Visible
+                            </button>
+                            <button type="submit" class="btn btn-sm btn-success" id="resolveSelectedBtn" disabled>
+                                <i class="fas fa-check"></i> Resolve Selected (<span id="selectedCount">0</span>)
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if clients_with_issues %}
+                            {% for row in clients_with_issues %}
+                            <div class="border-bottom">
+                                <div class="d-flex align-items-center p-3 bg-light">
+                                    <div class="flex-grow-1">
+                                        <a href="{{ url_for('data_integrity.client_issues', client_id=row.client_id) }}" 
+                                           class="text-dark fw-bold">
+                                            {{ row.client_name }}
+                                        </a>
+                                        <span class="badge bg-{{ 'danger' if row.max_severity == 'critical' else 'warning' if row.max_severity == 'warning' else 'info' }} ms-2">
+                                            {{ row.issue_count }} issues
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <button type="button" class="btn btn-sm btn-link" 
+                                                data-bs-toggle="collapse" 
+                                                data-bs-target="#client-{{ row.client_id }}">
+                                            <i class="fas fa-chevron-down"></i> Details
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div class="collapse" id="client-{{ row.client_id }}">
+                                    <div class="p-3">
+                                        {% if client_issues.get(row.client_id) %}
+                                            {% for issue in client_issues[row.client_id] %}
+                                            <div class="d-flex align-items-start mb-2 p-2 border rounded">
+                                                <div class="form-check me-3">
+                                                    <input type="checkbox" class="form-check-input issue-checkbox" 
+                                                           name="issue_ids[]" value="{{ issue.id }}"
+                                                           onchange="updateSelectedCount()">
+                                                </div>
+                                                <div class="flex-grow-1">
+                                                    <div class="d-flex justify-content-between">
+                                                        <span class="badge bg-{{ 'danger' if issue.severity == 'critical' else 'warning' if issue.severity == 'warning' else 'info' }}">
+                                                            {{ issue.severity }}
+                                                        </span>
+                                                        <span>
+                                                            {% if issue.assigned_user %}
+                                                            <span class="badge bg-secondary me-1">{{ issue.assigned_user.username }}</span>
+                                                            {% endif %}
+                                                            <small class="text-muted">
+                                                                {{ issue.detected_at.strftime('%Y-%m-%d') if issue.detected_at else '' }}
+                                                            </small>
+                                                        </span>
+                                                    </div>
+                                                    <p class="mb-1 mt-1">{{ issue.message }}</p>
+                                                    {% if issue.recommendation_id %}
+                                                    <small class="d-block mb-1">
+                                                        <a href="{{ url_for('unified_recommendations.edit_recommendation', recommendation_id=issue.recommendation_id) }}" class="text-primary">
+                                                            <i class="fas fa-external-link-alt"></i> View recommendation #{{ issue.recommendation_id }}
+                                                        </a>
+                                                    </small>
+                                                    {% endif %}
+                                                    {% if issue.suggested_action %}
+                                                    <small class="text-muted">
+                                                        <i class="fas fa-lightbulb"></i>
+                                                        {% if issue.check_name == 'workflow_stalled' and issue.details and issue.details.get('workflow_id') %}
+                                                            Review <a href="{{ url_for('rec_execution.workflow_issues', id=issue.details.get('monthly_investment_id') or issue.details.workflow_id) }}">workflow {{ issue.details.workflow_id }}</a> and move to next stage
+                                                        {% elif issue.details and issue.details.get('workflow_id') %}
+                                                            {{ issue.suggested_action }} <a href="{{ url_for('rec_execution.workflow_issues', id=issue.details.get('monthly_investment_id') or issue.details.workflow_id) }}">View workflow {{ issue.details.workflow_id }}</a>
+                                                        {% else %}
+                                                            {{ issue.suggested_action }}
+                                                        {% endif %}
+                                                    </small>
+                                                    {% endif %}
+                                                    {% if issue.check_name == 'unrecorded_superseded_session' %}
+                                                    {% include 'data_integrity/_superseded_session_compare.html' %}
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                            {% endfor %}
+                                            {% if row.issue_count > 5 %}
+                                            <div class="text-center">
+                                                <a href="{{ url_for('data_integrity.client_issues', client_id=row.client_id) }}" 
+                                                   class="btn btn-sm btn-link">
+                                                    View all {{ row.issue_count }} issues for {{ row.client_name }}
+                                                </a>
+                                            </div>
+                                            {% endif %}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center py-5">
+                                <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                                <h5>No Issues Found</h5>
+                                <p class="text-muted">No open issues in this category.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="row">
+        <div class="col-12">
+            <nav>
+                <ul class="pagination justify-content-center">
+                    {% if page > 1 %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page - 1 }}{% if client_filter %}&client_id={{ client_filter }}{% endif %}">Previous</a>
+                    </li>
+                    {% endif %}
+                    
+                    {% for p in range(1, total_pages + 1) %}
+                        {% if p >= page - 2 and p <= page + 2 %}
+                        <li class="page-item {% if p == page %}active{% endif %}">
+                            <a class="page-link" href="?page={{ p }}{% if client_filter %}&client_id={{ client_filter }}{% endif %}">{{ p }}</a>
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if page < total_pages %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page + 1 }}{% if client_filter %}&client_id={{ client_filter }}{% endif %}">Next</a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function selectAll() {
+    const checkboxes = document.querySelectorAll('.issue-checkbox');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    checkboxes.forEach(cb => cb.checked = !allChecked);
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const checked = document.querySelectorAll('.issue-checkbox:checked').length;
+    document.getElementById('selectedCount').textContent = checked;
+    document.getElementById('resolveSelectedBtn').disabled = checked === 0;
+}
+</script>
+{% endblock %}

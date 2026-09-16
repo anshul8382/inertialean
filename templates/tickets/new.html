@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Create Service Ticket{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-plus"></i> Create Service Ticket</h1>
+        {% if client %}
+        <a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Client
+        </a>
+        {% else %}
+        <a href="{{ url_for('tickets.list_tickets') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Tickets
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Ticket Information</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        {{ form.hidden_tag() }}
+                        
+                        {% if client %}
+                        <input type="hidden" name="client_id" value="{{ client.id }}">
+                        <div class="mb-3">
+                            <label class="form-label">Client</label>
+                            <input type="text" class="form-control" value="{{ client.name }}" readonly>
+                        </div>
+                        {% else %}
+                        <div class="mb-3">
+                            <label for="client_id" class="form-label">Client *</label>
+                            <select class="form-select" id="client_id" name="client_id" required>
+                                <option value="">Select Client</option>
+                                {% for c in clients %}
+                                <option value="{{ c.id }}">{{ c.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+                        
+                        <div class="mb-3">
+                            {{ form.title.label(class="form-label") }}
+                            {{ form.title(class="form-control") }}
+                            {% if form.title.errors %}
+                                <div class="text-danger">{{ form.title.errors[0] }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.description.label(class="form-label") }}
+                            {{ form.description(class="form-control", rows=5) }}
+                            {% if form.description.errors %}
+                                <div class="text-danger">{{ form.description.errors[0] }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                {{ form.alert_type.label(class="form-label") }}
+                                {{ form.alert_type(class="form-select") }}
+                                {% if form.alert_type.errors %}
+                                    <div class="text-danger">{{ form.alert_type.errors[0] }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">This will determine the SLA timeline</small>
+                            </div>
+                            
+                            <div class="col-md-6 mb-3">
+                                {{ form.priority.label(class="form-label") }}
+                                {{ form.priority(class="form-select") }}
+                                {% if form.priority.errors %}
+                                    <div class="text-danger">{{ form.priority.errors[0] }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.assigned_to.label(class="form-label") }}
+                            {{ form.assigned_to(class="form-select") }}
+                            {% if form.assigned_to.errors %}
+                                <div class="text-danger">{{ form.assigned_to.errors[0] }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            {% if client %}
+                            <a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="btn btn-secondary">Cancel</a>
+                            {% else %}
+                            <a href="{{ url_for('tickets.list_tickets') }}" class="btn btn-secondary">Cancel</a>
+                            {% endif %}
+                            {{ form.submit(class="btn btn-primary") }}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,520 @@
+{% extends "base.html" %}
+
+{% block title %}Market Commentary - {{ review.client.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-chart-line text-primary"></i>
+                        Market Commentary
+                    </h1>
+                    <p class="text-muted mb-0">
+                        Market analysis and insights for {{ review.client.name }} - {{ review.start_date.strftime('%B %Y') }} to {{ review.end_date.strftime('%B %Y') }}
+                    </p>
+                </div>
+                <div>
+                    <button class="btn btn-primary me-2" onclick="generateFreshCommentary()">
+                        <i class="fas fa-sync-alt"></i> Refresh Commentary
+                    </button>
+                    <a href="{{ url_for('review.review_detail', review_id=review.id) }}" 
+                       class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Review
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if commentary %}
+    <!-- Period Summary -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-calendar-alt"></i> Review Period Summary
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h5>{{ commentary.period_summary.period }}</h5>
+                            <p class="text-muted">{{ commentary.period_summary.summary }}</p>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <div class="border-right">
+                                        <h4 class="text-primary">{{ commentary.period_summary.duration_days }}</h4>
+                                        <small class="text-muted">Days</small>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="border-right">
+                                        <h4 class="text-success">{{ commentary.period_summary.market_environment.split()[0] }}</h4>
+                                        <small class="text-muted">Environment</small>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <h4 class="text-info">{{ commentary.period_summary.volatility_level }}</h4>
+                                    <small class="text-muted">Volatility</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Market Performance -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-chart-bar"></i> Market Performance
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for index, data in commentary.market_performance.major_indices.items() %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card border-light">
+                                <div class="card-body text-center">
+                                    <h6 class="card-title">{{ index }}</h6>
+                                    <h3 class="text-{{ 'success' if data.return > 0 else 'danger' }}">
+                                        {{ "%.1f"|format(data.return) }}%
+                                    </h3>
+                                    <p class="text-muted small">{{ data.comment }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <h6>Fixed Income</h6>
+                            <p class="text-muted">{{ commentary.market_performance.fixed_income.comment }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Commodities</h6>
+                            <div class="row">
+                                {% for commodity, data in commentary.market_performance.commodities.items() %}
+                                <div class="col-4 text-center">
+                                    <small class="text-muted">{{ commodity|title }}</small>
+                                    <div class="text-{{ 'success' if data.change > 0 else 'danger' }}">
+                                        {{ "%.1f"|format(data.change) }}%
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sector Analysis -->
+    {% if commentary.sector_analysis %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-industry"></i> Sector Analysis
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for sector, data in commentary.sector_analysis.items() %}
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-light">
+                                <div class="card-header bg-light">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">{{ sector }}</h6>
+                                        <span class="badge bg-primary">{{ "%.1f"|format(data.portfolio_weight) }}% of Portfolio</span>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <h5 class="text-{{ 'success' if data.market_performance > 0 else 'danger' }}">
+                                                {{ "%.1f"|format(data.market_performance) }}%
+                                            </h5>
+                                            <small class="text-muted">Market Return</small>
+                                        </div>
+                                        <div class="col-6">
+                                            <span class="badge bg-{{ 'success' if data.outlook == 'positive' else 'warning' if data.outlook == 'mixed' else 'secondary' }}">
+                                                {{ data.outlook|title }}
+                                            </span>
+                                            <small class="text-muted d-block">Outlook</small>
+                                        </div>
+                                    </div>
+                                    
+                                    {% if data.key_drivers %}
+                                    <div class="mt-2">
+                                        <small class="text-muted">Key Drivers:</small>
+                                        <div>
+                                            {% for driver in data.key_drivers %}
+                                            <span class="badge bg-light text-dark me-1">{{ driver }}</span>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Economic Outlook -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-globe"></i> Economic Outlook
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for metric, data in commentary.economic_outlook.items() %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card border-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">{{ metric.replace('_', ' ')|title }}</h6>
+                                    <div class="row">
+                                        <div class="col-6">
+                                            <h5>{{ data.current }}</h5>
+                                            <small class="text-muted">Current</small>
+                                        </div>
+                                        <div class="col-6">
+                                            <h5>{{ data.forecast }}</h5>
+                                            <small class="text-muted">Forecast</small>
+                                        </div>
+                                    </div>
+                                    <p class="text-muted small mt-2">{{ data.comment }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Portfolio Impact -->
+    {% if commentary.portfolio_impact %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-chart-pie"></i> Portfolio Impact
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>Portfolio Performance</h5>
+                            <h3 class="text-{{ 'success' if commentary.portfolio_impact.total_return > 0 else 'danger' }}">
+                                {{ "%.1f"|format(commentary.portfolio_impact.total_return) }}%
+                            </h3>
+                            <p class="text-muted">{{ commentary.portfolio_impact.summary }}</p>
+                            
+                            <div class="mt-3">
+                                <h6>Top Performers</h6>
+                                {% for performer in commentary.portfolio_impact.top_performers %}
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span>{{ performer.symbol }} - {{ performer.name }}</span>
+                                    <span class="text-success">{{ "%.1f"|format(performer.return) }}%</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h5>Market Correlation</h5>
+                            <div class="progress mb-3">
+                                <div class="progress-bar" role="progressbar" 
+                                     style="width: {{ commentary.portfolio_impact.market_correlation * 100 }}%">
+                                    {{ "%.0f"|format(commentary.portfolio_impact.market_correlation * 100) }}%
+                                </div>
+                            </div>
+                            <p class="text-muted small">Correlation with broader market</p>
+                            
+                            <div class="mt-3">
+                                <h6>Underperformers</h6>
+                                {% for underperformer in commentary.portfolio_impact.underperformers %}
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span>{{ underperformer.symbol }} - {{ underperformer.name }}</span>
+                                    <span class="text-danger">{{ "%.1f"|format(underperformer.return) }}%</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Forward Looking Insights -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-crystal-ball"></i> Forward Looking Insights
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for timeframe, outlook in commentary.forward_looking.items() %}
+                        {% if timeframe != 'risks_to_watch' and timeframe != 'opportunities' %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card border-light">
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0">{{ timeframe.replace('_', ' ')|title }} ({{ outlook.timeframe }})</h6>
+                                </div>
+                                <div class="card-body">
+                                    <span class="badge bg-{{ 'success' if outlook.sentiment == 'positive' or outlook.sentiment == 'bullish' else 'warning' if outlook.sentiment == 'cautiously_optimistic' else 'secondary' }}">
+                                        {{ outlook.sentiment.replace('_', ' ')|title }}
+                                    </span>
+                                    <p class="text-muted small mt-2">{{ outlook.comment }}</p>
+                                    
+                                    {% if outlook.key_factors %}
+                                    <small class="text-muted">Key Factors:</small>
+                                    <ul class="list-unstyled small">
+                                        {% for factor in outlook.key_factors %}
+                                        <li><i class="fas fa-arrow-right text-muted"></i> {{ factor }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <h6>Risks to Watch</h6>
+                            <ul class="list-unstyled">
+                                {% for risk in commentary.forward_looking.risks_to_watch %}
+                                <li><i class="fas fa-exclamation-triangle text-warning"></i> {{ risk }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Opportunities</h6>
+                            <ul class="list-unstyled">
+                                {% for opportunity in commentary.forward_looking.opportunities %}
+                                <li><i class="fas fa-lightbulb text-success"></i> {{ opportunity }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Events -->
+    {% if commentary.key_events %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-calendar-check"></i> Key Market Events
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="timeline">
+                        {% for event in commentary.key_events %}
+                        <div class="timeline-item">
+                            <div class="timeline-marker bg-{{ 'success' if event.impact == 'positive' else 'warning' if event.impact == 'mixed' else 'danger' }}"></div>
+                            <div class="timeline-content">
+                                <div class="d-flex justify-content-between">
+                                    <h6 class="mb-1">{{ event.event }}</h6>
+                                    <small class="text-muted">{{ event.date }}</small>
+                                </div>
+                                <p class="text-muted mb-0">{{ event.description }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Custom Insights Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-edit"></i> Custom Insights
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="customInsights" class="form-label">Add your personal market insights and commentary:</label>
+                        <textarea class="form-control" id="customInsights" rows="4" 
+                                  placeholder="Add your professional insights, client-specific observations, or additional market commentary here...">{{ commentary.custom_insights or '' }}</textarea>
+                        <small class="text-muted">These insights will be included in the final review and can be customized for each client.</small>
+                    </div>
+                    <button class="btn btn-primary" onclick="saveCustomInsights()">
+                        <i class="fas fa-save"></i> Save Custom Insights
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- No Commentary Available -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+                    <h4>Market Commentary Not Available</h4>
+                    <p class="text-muted mb-4">
+                        Market commentary has not been generated for this review yet.
+                    </p>
+                    <button class="btn btn-primary" onclick="generateFreshCommentary()">
+                        <i class="fas fa-magic"></i> Generate Market Commentary
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -35px;
+    top: 5px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    border-left: 3px solid #007bff;
+}
+</style>
+
+<script>
+function generateFreshCommentary() {
+    if (!confirm('This will generate fresh market commentary. Continue?')) {
+        return;
+    }
+    
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    button.disabled = true;
+    
+    // Make API call to generate fresh commentary
+    fetch(`/api/reviews/{{ review.id }}/generate-commentary`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reload page to show new commentary
+            window.location.reload();
+        } else {
+            alert('Error generating commentary: ' + data.error);
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error generating commentary');
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+
+function saveCustomInsights() {
+    const customInsights = document.getElementById('customInsights').value;
+    
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    button.disabled = true;
+    
+    // Make API call to save custom insights
+    fetch(`/api/reviews/{{ review.id }}/market-commentary`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            custom_insights: customInsights
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Custom insights saved successfully!');
+            button.innerHTML = originalText;
+            button.disabled = false;
+        } else {
+            alert('Error saving insights: ' + data.error);
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error saving insights');
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+</script>
+{% endblock %}

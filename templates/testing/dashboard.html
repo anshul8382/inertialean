@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Testing Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h3 mb-0">
+                <i class="fas fa-vial"></i> Testing Dashboard
+            </h1>
+            <p class="text-muted mb-0">Tools and utilities for testing and debugging</p>
+        </div>
+    </div>
+
+    <div class="row">
+        {% if show_tools and tool_links %}
+        {% for name, icon, style, url in tool_links %}
+        <div class="col-md-6 col-lg-4 mb-3">
+            <div class="card h-100 shadow-sm">
+                <div class="card-body">
+                    <h5 class="card-title"><i class="fas fa-{{ icon }} text-{{ style }}"></i> {{ name }}</h5>
+                    <p class="card-text text-muted small">Open from Testing dashboard.</p>
+                    <a href="{{ url }}" class="btn btn-outline-{{ style }} btn-sm">Open</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> Testing tools (Performance Timeline, Period Analysis, Database Browser, SQL Query) are available to admins and managers. If you have access, they appear above; otherwise contact an administrator.
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if historical_price_scripts %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <h5 class="h5 mb-3"><i class="fas fa-chart-line text-primary"></i> Historical Price Scripts</h5>
+            <p class="text-muted small mb-3">CLI scripts for finding and filling missing historical prices. Run from project root.</p>
+        </div>
+        {% for s in historical_price_scripts %}
+        <div class="col-12 mb-3">
+            <div class="card shadow-sm">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>{{ s.name }}</strong>
+                            <span class="text-muted small ms-2 font-monospace">{{ s.script }}</span>
+                            <p class="text-muted small mb-1 mt-1">{{ s.description }}</p>
+                            <code class="small d-block bg-light px-2 py-1 rounded">{{ s.example }}</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

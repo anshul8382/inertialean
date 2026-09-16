@@ -1,0 +1,169 @@
+{% extends 'base.html' %}
+{% block title %}Edit Transaction{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h2 mb-0">Edit Transaction</h1>
+        <a href="{{ url_for('main.transactions', client_id=transaction.client_id) }}" class="btn btn-secondary">Back to Transactions</a>
+    </div>
+
+    {% if require_cashflow_ack %}
+    <div class="card border-warning mb-4" id="cashflow-ack-gate" role="alertdialog" aria-labelledby="cashflow-ack-title" aria-describedby="cashflow-ack-body">
+        <div class="card-header bg-warning-subtle">
+            <h2 class="h5 mb-0" id="cashflow-ack-title">Trade updated — cashflow review required</h2>
+        </div>
+        <div class="card-body">
+            <p id="cashflow-ack-body" class="mb-3">
+                Transaction <strong>#{{ transaction.id }}</strong> was saved.
+                Related cashflow rows are <strong>not modified</strong> when the trade is saved.
+                Open Cashflows in <strong>detail</strong> view and use <strong>Edit</strong> on the matching row (or add a new entry).
+                <a class="alert-link" href="{{ trade_cashflow_guide_url }}" target="_blank" rel="noopener noreferrer">
+                    Step-by-step guide
+                </a>
+            </p>
+            <form method="POST" action="{{ url_for('main.acknowledge_trade_cashflow_review', transaction_id=transaction.id) }}" id="cashflow-ack-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" value="1" id="ack_cashflow_review" name="ack_cashflow_review" required>
+                    <label class="form-check-label" for="ack_cashflow_review">
+                        I acknowledge that I must review and manually update related cashflow entries
+                        (<a href="{{ trade_cashflow_guide_url }}" target="_blank" rel="noopener noreferrer" class="alert-link">guide</a>).
+                    </label>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="submit" name="next" value="cashflows" class="btn btn-warning" id="ack-go-cashflows" disabled>
+                        Acknowledge &amp; open cashflows
+                    </button>
+                    <button type="submit" name="next" value="transactions" class="btn btn-outline-secondary" id="ack-continue" disabled>
+                        Acknowledge &amp; continue
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="alert alert-warning border-warning mb-4" role="alert" data-live-cashflow-warning="1">
+        <strong>Cashflow is not changed when you save this trade.</strong>
+        Only the trade and holdings are updated. If quantity, price, or date changed,
+        open Cashflows (detail view) and use <strong>Edit</strong> on the matching row.
+        <a class="alert-link" href="{{ trade_cashflow_guide_url }}" target="_blank" rel="noopener noreferrer">
+            Read the step-by-step guide
+        </a>
+        {% if cashflows_url %}
+        · <a class="alert-link" href="{{ cashflows_url }}">Open cashflows for this client</a>
+        {% endif %}
+    </div>
+
+    <div class="card card-app">
+        <div class="card-header">Transaction details</div>
+        <div class="card-body">
+            <form method="POST" id="edit-transaction-form" {% if require_cashflow_ack %}aria-disabled="true"{% endif %}>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <fieldset {% if require_cashflow_ack %}disabled{% endif %}>
+                <div class="mb-3">
+                    <label for="client_id" class="form-label">Client</label>
+                    <select class="form-select" id="client_id" name="client_id" required>
+                        {% for client in clients %}
+                        <option value="{{ client.id }}" {{ 'selected' if client.id == transaction.client_id else '' }}>
+                            {{ client.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="security_id" class="form-label">Security</label>
+                    <select class="form-select" id="security_id" name="security_id" required>
+                        {% for security in securities %}
+                        <option value="{{ security.id }}" {{ 'selected' if security.id == transaction.security_id else '' }}>
+                            {{ security.symbol }} - {{ security.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="type" class="form-label">Transaction Type</label>
+                    <select class="form-select" id="type" name="type" required>
+                        <option value="BUY" {{ 'selected' if transaction.type == 'BUY' else '' }}>Buy</option>
+                        <option value="SELL" {{ 'selected' if transaction.type == 'SELL' else '' }}>Sell</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="quantity" class="form-label">Quantity</label>
+                    <input type="number" class="form-control" id="quantity" name="quantity"
+                           value="{{ transaction.quantity }}" min="1" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="price" class="form-label">Price per Share</label>
+                    <input type="number" class="form-control" id="price" name="price"
+                           value="{{ transaction.price }}" step="0.01" min="0" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="transaction_date" class="form-label">Transaction Date</label>
+                    <input type="datetime-local" class="form-control" id="transaction_date" name="transaction_date"
+                           value="{% if transaction.transaction_date %}{{ transaction.transaction_date.strftime('%Y-%m-%dT%H:%M') }}{% endif %}" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="notes" class="form-label">Notes</label>
+                    <textarea class="form-control" id="notes" name="notes" rows="3">{{ transaction.notes or '' }}</textarea>
+                </div>
+
+                <div class="form-check mb-3 p-3 border rounded bg-light">
+                    <input class="form-check-input" type="checkbox" value="1" id="ack_cashflow_before_save" name="ack_cashflow_before_save" required>
+                    <label class="form-check-label" for="ack_cashflow_before_save">
+                        I understand this trade update does not automatically correct cashflows, and I will update related cashflow entries manually
+                        (<a href="{{ trade_cashflow_guide_url }}" target="_blank" rel="noopener noreferrer" class="alert-link">guide</a>).
+                    </label>
+                </div>
+
+                <div class="action-bar d-flex justify-content-end gap-2 mt-3">
+                    <a href="{{ url_for('main.transactions', client_id=transaction.client_id) }}" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary" id="update-txn-btn" disabled>Update Transaction</button>
+                </div>
+                </fieldset>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var beforeSave = document.getElementById('ack_cashflow_before_save');
+    var updateBtn = document.getElementById('update-txn-btn');
+    if (beforeSave && updateBtn) {
+        function syncSaveBtn() {
+            updateBtn.disabled = !beforeSave.checked;
+        }
+        beforeSave.addEventListener('change', syncSaveBtn);
+        syncSaveBtn();
+    }
+
+    var ackBox = document.getElementById('ack_cashflow_review');
+    var ackBtns = [
+        document.getElementById('ack-go-cashflows'),
+        document.getElementById('ack-continue')
+    ].filter(Boolean);
+    if (ackBox && ackBtns.length) {
+        function syncAckBtns() {
+            ackBtns.forEach(function (b) { b.disabled = !ackBox.checked; });
+        }
+        ackBox.addEventListener('change', syncAckBtns);
+        syncAckBtns();
+        var gate = document.getElementById('cashflow-ack-gate');
+        if (gate) {
+            gate.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            ackBox.focus();
+        }
+    }
+});
+</script>
+{% endblock %}

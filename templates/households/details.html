@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}{{ group.name }} — Household{% endblock %}
+{% block content %}
+<div class="container mt-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('households.list_households') }}">Households</a></li>
+      <li class="breadcrumb-item active" aria-current="page">{{ group.name }}</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+    <div>
+      <h1 class="h2 mb-1">{{ group.name }}</h1>
+      <p class="text-muted mb-0">Consolidated portfolio view. Billing and recommendations stay per client.</p>
+    </div>
+    <div class="action-bar">
+      <a class="btn btn-outline-primary" href="{{ url_for('households.household_review', group_id=group.id) }}">
+        <i class="fas fa-chart-line"></i> Review snapshot
+      </a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('households.manage_members', group_id=group.id) }}">
+        <i class="fas fa-users"></i> Manage members
+      </a>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-md-3 mb-3">
+      <div class="card card-app h-100">
+        <div class="card-body">
+          <div class="text-muted small">Total market value</div>
+          <div class="h4 mb-0">₹{{ "{:,.0f}".format(totals.current_value) }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card card-app h-100">
+        <div class="card-body">
+          <div class="text-muted small">Advisory AUA (sum)</div>
+          <div class="h4 mb-0 text-info">₹{{ "{:,.0f}".format(totals.advisory_aua) }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card card-app h-100">
+        <div class="card-body">
+          <div class="text-muted small">Household XIRR</div>
+          <div class="h4 mb-0 {% if totals.xirr >= 0 %}text-success{% else %}text-danger{% endif %}">
+            {{ "%.1f"|format(totals.xirr) }}%
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3 mb-3">
+      <div class="card card-app h-100">
+        <div class="card-body">
+          <div class="text-muted small">Net investment</div>
+          <div class="h4 mb-0">₹{{ "{:,.0f}".format(totals.net_investment) }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="small text-muted mb-4">{{ household_xirr.disclaimer }}</p>
+
+  <div class="card card-app mb-4">
+    <div class="card-header"><strong>Members</strong></div>
+    <div class="card-body">
+      <div class="row">
+        {% for m in members %}
+        <div class="col-md-4 mb-3">
+          <div class="border rounded p-3 h-100">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <a href="{{ url_for('clients.client_details', client_id=m.client_id) }}" class="fw-bold">{{ m.client_name }}</a>
+                <div><span class="badge bg-light text-dark border">{{ m.role|title }}</span></div>
+              </div>
+              {% if not m.is_active %}<span class="badge bg-secondary">Inactive</span>{% endif %}
+            </div>
+            <div class="mt-2 small">
+              <div>MV: ₹{{ "{:,.0f}".format(m.current_value) }}</div>
+              <div>XIRR: {{ "%.1f"|format(m.xirr) }}%</div>
+              <div>Advisory AUA: ₹{{ "{:,.0f}".format(m.advisory_aua) }}</div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-app mb-4">
+    <div class="card-header d-flex justify-content-between">
+      <strong>Consolidated holdings</strong>
+      <span class="text-muted">Total ₹{{ "{:,.0f}".format(holdings_total) }}</span>
+    </div>
+    <div class="card-body">
+      {% if holding_sections %}
+        {% for section in holding_sections %}
+        <div class="mb-4">
+          <h2 class="h6 text-uppercase text-muted">{{ section.asset_class }}
+            <span class="fw-normal">— ₹{{ "{:,.0f}".format(section.total) }}</span>
+          </h2>
+          <div class="table-responsive">
+            <table class="table table-app table-sm table-hover" data-mobile-table="scroll">
+              <thead>
+                <tr>
+                  <th scope="col">Security</th>
+                  <th scope="col" class="text-end">Quantity</th>
+                  <th scope="col" class="text-end">Market value</th>
+                  <th scope="col">Owned by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for h in section.holdings %}
+                <tr>
+                  <td>
+                    <strong>{{ h.symbol }}</strong><br>
+                    <small class="text-muted">{{ h.name }}</small>
+                  </td>
+                  <td class="text-end text-num">{{ "{:,.0f}".format(h.quantity) }}</td>
+                  <td class="text-end text-num">₹{{ "{:,.0f}".format(h.current_value) }}</td>
+                  <td>
+                    <small>
+                      {% for o in h.owners %}
+                        {{ o.client_name }} (₹{{ "{:,.0f}".format(o.current_value) }}){% if not loop.last %}; {% endif %}
+                      {% endfor %}
+                    </small>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted mb-0">No holdings across household members.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

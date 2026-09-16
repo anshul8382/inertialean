@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Setup Stocks & Auto-Refresh{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-cogs"></i> Setup Stocks & Auto-Refresh
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h5><i class="fas fa-info-circle"></i> One-Time Setup</h5>
+                        <p class="mb-0">This will:</p>
+                        <ul class="mb-0">
+                            <li>Load all stocks from your Google Sheets "Stocks" worksheet</li>
+                            <li>Fetch current prices for all stocks</li>
+                            <li>Start automatic price refresh every 30 minutes</li>
+                        </ul>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Current Stocks in Database</h5>
+                                    <h2 class="text-primary">{{ stock_count }}</h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <h5 class="card-title">Auto-Refresh Status</h5>
+                                    <h2 class="text-success">
+                                        <i class="fas fa-sync-alt"></i> Active
+                                    </h2>
+                                    <small class="text-muted">Every 30 minutes</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-group mb-3">
+                            <label for="spreadsheet_key" class="form-label">
+                                <i class="fas fa-table"></i> Google Sheets Spreadsheet Key
+                            </label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="spreadsheet_key" 
+                                   name="spreadsheet_key" 
+                                   value="{{ spreadsheet_key }}" 
+                                   required>
+                            <div class="form-text">
+                                The spreadsheet key from your Google Sheets URL
+                            </div>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="worksheet_name" class="form-label">
+                                <i class="fas fa-file-alt"></i> Worksheet Name
+                            </label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="worksheet_name" 
+                                   name="worksheet_name" 
+                                   value="NSE STOCKS" 
+                                   required>
+                            <div class="form-text">
+                                The name of the worksheet containing your stock data with prices (typically "NSE STOCKS")
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <h6><i class="fas fa-exclamation-triangle"></i> Required Worksheet Format</h6>
+                            <p class="mb-2">Your Google Sheets worksheet must have these columns:</p>
+                            <ul class="mb-0">
+                                <li><strong>Symbol</strong> - Stock symbol (e.g., TCS, INFY, RELIANCE)</li>
+                                <li><strong>Company Name</strong> - Full company name</li>
+                                <li><strong>Sector</strong> - Industry sector</li>
+                                <li><strong>Exchange</strong> - Stock exchange (NSE, BSE, etc.)</li>
+                                <li><strong>Price</strong> (or Current Price) - Current stock price</li>
+                            </ul>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-play"></i> Start Setup & Auto-Refresh
+                            </button>
+                        </div>
+                    </form>
+
+                    <hr>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <a href="{{ url_for('main.load_stocks_from_sheets') }}" class="btn btn-outline-secondary w-100">
+                                <i class="fas fa-download"></i> Manual Load Stocks
+                            </a>
+                        </div>
+                        <div class="col-md-6">
+                            <button onclick="checkSchedulerStatus()" class="btn btn-outline-info w-100">
+                                <i class="fas fa-info"></i> Check Scheduler Status
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="scheduler-status" class="mt-3" style="display: none;">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Scheduler Status</h6>
+                            </div>
+                            <div class="card-body">
+                                <pre id="status-content"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function checkSchedulerStatus() {
+    fetch('/admin/scheduler-status')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('status-content').textContent = JSON.stringify(data, null, 2);
+            document.getElementById('scheduler-status').style.display = 'block';
+        })
+        .catch(error => {
+            document.getElementById('status-content').textContent = 'Error: ' + error;
+            document.getElementById('scheduler-status').style.display = 'block';
+        });
+}
+</script>
+{% endblock %} 

@@ -1,0 +1,624 @@
+{# Use full navbar (base.html); base_clean.html is a slim nav for isolated flows. #}
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+
+    <!-- Header -->
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h4 class="mb-0 fw-semibold" style="color:#495057;">
+                <i class="fas fa-home me-2" style="color:#4a7c59;"></i>Dashboard
+            </h4>
+            <small class="text-muted">Welcome back, {{ current_user.username }}</small>
+        </div>
+        <span class="text-muted small">{{ now.strftime('%A, %d %b %Y') if now is defined else '' }}</span>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row g-3 mb-4">
+        {% if tasks_nav_enabled %}
+        <div class="col-xl-3 col-md-6">
+            <a href="{{ url_for('tasks.list_tasks', view='my_tasks', status='active') }}" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm" style="border-left:4px solid #e83e8c !important;">
+                    <div class="card-body d-flex align-items-center gap-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width:48px;height:48px;background:rgba(232,62,140,0.12);">
+                            <i class="fas fa-tasks" style="color:#e83e8c;font-size:1.3rem;"></i>
+                        </div>
+                        <div>
+                            <div class="fs-2 fw-bold" style="color:#e83e8c;line-height:1;">{{ my_open_tasks_count|default(0) }}</div>
+                            <div class="text-muted small">My open tasks</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+        <div class="col-xl-3 col-md-6">
+            <a href="{{ url_for('clients_v2.list_clients') }}" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm" style="border-left:4px solid #4a7c59 !important;">
+                    <div class="card-body d-flex align-items-center gap-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width:48px;height:48px;background:rgba(74,124,89,0.12);">
+                            <i class="fas fa-users" style="color:#4a7c59;font-size:1.3rem;"></i>
+                        </div>
+                        <div>
+                            <div class="fs-2 fw-bold" style="color:#4a7c59;line-height:1;">{{ total_clients|default(0) }}</div>
+                            <div class="text-muted small">Total Clients</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <a href="{{ url_for('main.list_monthly_investments') }}" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm" style="border-left:4px solid #17a2b8 !important;">
+                    <div class="card-body d-flex align-items-center gap-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width:48px;height:48px;background:rgba(23,162,184,0.12);">
+                            <i class="fas fa-calendar-week" style="color:#17a2b8;font-size:1.3rem;"></i>
+                        </div>
+                        <div>
+                            <div class="fs-6 fw-bold" style="color:#17a2b8;line-height:1.2;">Monthly</div>
+                            <div class="text-muted small">Investments</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <a href="{% if has_blueprint('enhanced_review') %}{{ url_for('enhanced_review.period_analysis_v2') }}{% else %}{{ url_for('main.maintenance_reviews') }}{% endif %}" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm" style="border-left:4px solid #ffc107 !important;">
+                    <div class="card-body d-flex align-items-center gap-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width:48px;height:48px;background:rgba(255,193,7,0.12);">
+                            <i class="fas fa-file-alt" style="color:#ffc107;font-size:1.3rem;"></i>
+                        </div>
+                        <div>
+                            <div class="fs-2 fw-bold" style="color:#ffc107;line-height:1;">{{ pending_reviews|default(0) }}</div>
+                            <div class="text-muted small">Pending Reviews</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <a href="{{ url_for('alerts.list_alerts') }}" class="text-decoration-none">
+                <div class="card h-100 border-0 shadow-sm" style="border-left:4px solid #dc3545 !important;">
+                    <div class="card-body d-flex align-items-center gap-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width:48px;height:48px;background:rgba(220,53,69,0.12);">
+                            <i class="fas fa-bell" style="color:#dc3545;font-size:1.3rem;"></i>
+                        </div>
+                        <div>
+                            <div class="fs-2 fw-bold" style="color:#dc3545;line-height:1;"><i class="fas fa-arrow-right" style="font-size:1.1rem;"></i></div>
+                            <div class="text-muted small">View Alerts</div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    {% if (is_admin_user or is_manager_user) and assignment_overview %}
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h6 class="mb-0 fw-semibold" style="color:#495057;">
+                        <i class="fas fa-user-friends me-2" style="color:#4a7c59;"></i>Advisor–client map
+                    </h6>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a href="{{ url_for('advisor_review.assignments_overview') }}" class="btn btn-sm btn-outline-secondary">Full map</a>
+                        {% if is_admin_user %}
+                        <a href="{{ url_for('advisor_review.dashboard') }}" class="btn btn-sm btn-outline-secondary">Advisor Review (metrics)</a>
+                        {% endif %}
+                        <a href="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients') }}" class="btn btn-sm btn-outline-primary">Manage</a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if assignment_overview.unassigned_clients %}
+                    <div class="mb-3">
+                        <div class="small fw-semibold text-warning-emphasis mb-1">Unassigned</div>
+                        <ul class="list-unstyled d-flex flex-wrap gap-2 mb-0 small">
+                            {% for c in assignment_overview.unassigned_clients[:12] %}
+                            <li>
+                                <a class="badge bg-warning text-dark text-decoration-none" href="{{ url_for('clients.client_details', client_id=c.id) }}">{{ c.name }}</a>
+                            </li>
+                            {% endfor %}
+                            {% if assignment_overview.unassigned_clients|length > 12 %}
+                            <li>
+                                <a class="small" href="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients', unassigned=1) }}">See all →</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    <div class="row g-2">
+                        {% for g in assignment_overview.groups[:8] %}
+                        <div class="col-md-4 col-sm-6">
+                            <div class="border rounded px-3 py-2 h-100">
+                                <div class="fw-medium mb-1">{{ g.advisor_name }}</div>
+                                {% if g.clients %}
+                                <ul class="list-unstyled mb-0 small text-muted">
+                                    {% for c in g.clients[:8] %}
+                                    <li class="py-0">
+                                        <a href="{{ url_for('clients.client_details', client_id=c.id) }}">{{ c.name }}</a>
+                                    </li>
+                                    {% endfor %}
+                                    {% if g.clients|length > 8 %}
+                                    <li class="pt-1">
+                                        <a href="{{ url_for('advisor_review.assignments_overview') }}">+ more</a>
+                                    </li>
+                                    {% endif %}
+                                </ul>
+                                {% else %}
+                                <div class="text-muted small">No clients</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="col-12 text-muted">No assignments yet.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if tasks_nav_enabled %}
+    <div class="row g-3 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h6 class="mb-0 fw-semibold" style="color:#495057;">
+                        <i class="fas fa-clipboard-list me-2" style="color:#e83e8c;"></i>My open tasks
+                    </h6>
+                    <a href="{{ url_for('tasks.list_tasks', view='my_tasks', status='active') }}" class="btn btn-sm btn-outline-secondary">
+                        View all in /tasks
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    {% if my_open_tasks %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Due</th>
+                                    <th>Task</th>
+                                    <th>Client</th>
+                                    <th>Priority</th>
+                                    <th>Status</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in my_open_tasks %}
+                                <tr class="{% if task.deadline and task.deadline < now %}table-warning{% endif %}">
+                                    <td class="text-nowrap small">{{ task.deadline | ist_datetime if task.deadline else '—' }}</td>
+                                    <td>
+                                        <div class="fw-medium text-break" style="max-width:280px;">{{ task.name }}</div>
+                                    </td>
+                                    <td class="small">
+                                        {% if task.client %}
+                                        <a href="{{ url_for('clients.client_details', client_id=task.client_id) }}">{{ task.client.name }}</a>
+                                        {% elif task.client_id %}
+                                        <span class="text-muted">#{{ task.client_id }}</span>
+                                        {% else %}
+                                        <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><span class="badge bg-{% if task.priority == 'high' %}danger{% elif task.priority == 'medium' %}warning text-dark{% else %}secondary{% endif %}">{{ task.priority or 'medium' }}</span></td>
+                                    <td class="small text-capitalize">{{ task.status|replace('_', ' ') }}</td>
+                                    <td class="text-end">
+                                        <a href="{{ url_for('tasks.view_task', task_id=task.id) }}" class="btn btn-sm btn-primary">Open</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0 px-3 py-4">No open tasks assigned to you.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Quick Access -->
+    <div class="row g-3">
+        <!-- Left column: Quick links -->
+        <div class="col-xl-4 col-lg-5">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h6 class="mb-0 fw-semibold" style="color:#495057;">
+                        <i class="fas fa-bolt me-2" style="color:#4a7c59;"></i>Quick Access
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        <a href="{{ url_for('clients_v2.list_clients') }}"
+                           class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3">
+                            <span class="rounded p-2" style="background:rgba(74,124,89,0.1);">
+                                <i class="fas fa-users" style="color:#4a7c59;width:16px;text-align:center;"></i>
+                            </span>
+                            <span>Clients</span>
+                            <i class="fas fa-chevron-right ms-auto text-muted small"></i>
+                        </a>
+                        {% if is_admin_user or is_manager_user or current_user.is_advisor or current_user.is_ops_manager %}
+                        <a href="{{ url_for('advisor_review.assignments_overview') }}"
+                           class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3">
+                            <span class="rounded p-2" style="background:rgba(13,110,253,0.1);">
+                                <i class="fas fa-user-friends" style="color:#0d6efd;width:16px;text-align:center;"></i>
+                            </span>
+                            <span>{% if is_admin_user or is_manager_user %}Advisor assignments{% else %}My assignments <span class="text-muted small">(view)</span>{% endif %}</span>
+                            <i class="fas fa-chevron-right ms-auto text-muted small"></i>
+                        </a>
+                        {% endif %}
+                        <a href="{{ url_for('main.list_monthly_investments') }}"
+                           class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3">
+                            <span class="rounded p-2" style="background:rgba(23,162,184,0.1);">
+                                <i class="fas fa-calendar-week" style="color:#17a2b8;width:16px;text-align:center;"></i>
+                            </span>
+                            <span>Monthly investments</span>
+                            <i class="fas fa-chevron-right ms-auto text-muted small"></i>
+                        </a>
+                        <a href="{% if has_blueprint('enhanced_review') %}{{ url_for('enhanced_review.period_analysis_v2') }}{% else %}{{ url_for('main.maintenance_reviews') }}{% endif %}"
+                           class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3">
+                            <span class="rounded p-2" style="background:rgba(255,193,7,0.1);">
+                                <i class="fas fa-file-alt" style="color:#ffc107;width:16px;text-align:center;"></i>
+                            </span>
+                            <span>Reviews</span>
+                            <i class="fas fa-chevron-right ms-auto text-muted small"></i>
+                        </a>
+                        <a href="{{ url_for('rec_execution.dashboard') }}"
+                           class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3">
+                            <span class="rounded p-2" style="background:rgba(108,176,107,0.1);">
+                                <i class="fas fa-clipboard-check" style="color:#6bb06b;width:16px;text-align:center;"></i>
+                            </span>
+                            <span>Rec Execution</span>
+                            <i class="fas fa-chevron-right ms-auto text-muted small"></i>
+                        </a>
+                        <a href="{{ url_for('unified_recommendations.unified_recommendations') }}"
+                           class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3">
+                            <span class="rounded p-2" style="background:rgba(102,16,242,0.1);">
+                                <i class="fas fa-lightbulb" style="color:#6610f2;width:16px;text-align:center;"></i>
+                            </span>
+                            <span>Recommendations</span>
+                            <i class="fas fa-chevron-right ms-auto text-muted small"></i>
+                        </a>
+                        {% if tasks_nav_enabled %}
+                        <a href="{{ url_for('tasks.list_tasks', view='my_tasks', status='active') }}"
+                           class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3">
+                            <span class="rounded p-2" style="background:rgba(220,53,69,0.1);">
+                                <i class="fas fa-tasks" style="color:#dc3545;width:16px;text-align:center;"></i>
+                            </span>
+                            <span>Ops Tasks{% if my_open_tasks_count %} <span class="badge bg-danger">{{ my_open_tasks_count }}</span>{% endif %}</span>
+                            <i class="fas fa-chevron-right ms-auto text-muted small"></i>
+                        </a>
+                        {% endif %}
+                        <a href="{{ url_for('alerts.list_alerts') }}"
+                           class="list-group-item list-group-item-action d-flex align-items-center gap-3 py-3">
+                            <span class="rounded p-2" style="background:rgba(220,53,69,0.1);">
+                                <i class="fas fa-bell" style="color:#dc3545;width:16px;text-align:center;"></i>
+                            </span>
+                            <span>Alerts</span>
+                            <i class="fas fa-chevron-right ms-auto text-muted small"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right column: Daily Ops shortcuts -->
+        <div class="col-xl-8 col-lg-7">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-bottom py-3">
+                    <h6 class="mb-0 fw-semibold" style="color:#495057;">
+                        <i class="fas fa-chart-bar me-2" style="color:#4a7c59;"></i>Reports &amp; ops
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="{{ url_for('main.list_monthly_investments') }}" class="text-decoration-none">
+                                <div class="card border text-center py-3 h-100 hover-card">
+                                    <div class="card-body py-2">
+                                        <i class="fas fa-calendar-week fa-2x mb-2" style="color:#4a7c59;"></i>
+                                        <div class="small fw-semibold" style="color:#495057;">Monthly investments</div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="{{ url_for('rec_execution.dashboard') }}" class="text-decoration-none">
+                                <div class="card border text-center py-3 h-100 hover-card">
+                                    <div class="card-body py-2">
+                                        <i class="fas fa-clipboard-check fa-2x mb-2" style="color:#17a2b8;"></i>
+                                        <div class="small fw-semibold" style="color:#495057;">Rec Execution</div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="{{ url_for('main.list_monthly_investments') }}" class="text-decoration-none">
+                                <div class="card border text-center py-3 h-100 hover-card">
+                                    <div class="card-body py-2">
+                                        <i class="fas fa-calendar-alt fa-2x mb-2" style="color:#6610f2;"></i>
+                                        <div class="small fw-semibold" style="color:#495057;">Monthly Investments</div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="{% if has_blueprint('enhanced_review') %}{{ url_for('enhanced_review.period_analysis_v2') }}{% else %}{{ url_for('main.maintenance_reviews') }}{% endif %}" class="text-decoration-none">
+                                <div class="card border text-center py-3 h-100 hover-card">
+                                    <div class="card-body py-2">
+                                        <i class="fas fa-file-alt fa-2x mb-2" style="color:#ffc107;"></i>
+                                        <div class="small fw-semibold" style="color:#495057;">Reviews</div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="{{ url_for('unified_recommendations.generate_unified_recommendations') }}" class="text-decoration-none">
+                                <div class="card border text-center py-3 h-100 hover-card">
+                                    <div class="card-body py-2">
+                                        <i class="fas fa-plus-circle fa-2x mb-2" style="color:#20c997;"></i>
+                                        <div class="small fw-semibold" style="color:#495057;">Generate Reco</div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="{{ url_for('alerts.alert_dashboard') }}" class="text-decoration-none">
+                                <div class="card border text-center py-3 h-100 hover-card">
+                                    <div class="card-body py-2">
+                                        <i class="fas fa-bell fa-2x mb-2" style="color:#dc3545;"></i>
+                                        <div class="small fw-semibold" style="color:#495057;">Alerts Dashboard</div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="{{ url_for('main.transactions') }}" class="text-decoration-none">
+                                <div class="card border text-center py-3 h-100 hover-card">
+                                    <div class="card-body py-2">
+                                        <i class="fas fa-exchange-alt fa-2x mb-2" style="color:#6c757d;"></i>
+                                        <div class="small fw-semibold" style="color:#495057;">Transactions</div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="{{ url_for('clients.data_integrity_list') }}" class="text-decoration-none">
+                                <div class="card border text-center py-3 h-100 hover-card">
+                                    <div class="card-body py-2">
+                                        <i class="fas fa-clipboard-check fa-2x mb-2" style="color:#0d6efd;"></i>
+                                        <div class="small fw-semibold" style="color:#495057;">
+                                          Data integrity
+                                          {% if data_integrity_issue_count %}
+                                          <span class="badge bg-danger">{{ data_integrity_issue_count }}</span>
+                                          {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="{{ url_for('clients.cashflow_trade_integrity_list') }}" class="text-decoration-none">
+                                <div class="card border text-center py-3 h-100 hover-card">
+                                    <div class="card-body py-2">
+                                        <i class="fas fa-balance-scale fa-2x mb-2" style="color:#6f42c1;"></i>
+                                        <div class="small fw-semibold" style="color:#495057;">
+                                          Cashflow vs trades
+                                          {% if cashflow_trade_issue_count %}
+                                          <span class="badge bg-danger">{{ cashflow_trade_issue_count }}</span>
+                                          {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-sm-6 col-lg-4">
+                            {% set data_price_href = url_for('data_integrity.data_price_by_client') if has_endpoint('data_integrity.data_price_by_client') else url_for('data_integrity.dashboard') %}
+                            <a href="{{ data_price_href }}" class="text-decoration-none">
+                                <div class="card border text-center py-3 h-100 hover-card">
+                                    <div class="card-body py-2">
+                                        <i class="fas fa-database fa-2x mb-2" style="color:#fd7e14;"></i>
+                                        <div class="small fw-semibold" style="color:#495057;">
+                                          Data / price by client
+                                          {% if data_price_overdue %}<span class="badge bg-warning text-dark">{{ data_price_overdue }} overdue</span>{% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        {% if tasks_nav_enabled %}
+                        <div class="col-sm-6 col-lg-4">
+                            <a href="{{ url_for('tasks.list_tasks', view='my_tasks', status='active') }}" class="text-decoration-none">
+                                <div class="card border text-center py-3 h-100 hover-card">
+                                    <div class="card-body py-2">
+                                        <i class="fas fa-tasks fa-2x mb-2" style="color:#e83e8c;"></i>
+                                        <div class="small fw-semibold" style="color:#495057;">Ops Tasks{% if my_open_tasks_count %} <span class="badge bg-danger">{{ my_open_tasks_count }}</span>{% endif %}</div>
+                                    </div>
+                                </div>
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if data_integrity_issues is defined and data_integrity_issues %}
+    <div class="row mt-3">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h6 class="mb-0 fw-semibold" style="color:#495057;">
+                        <i class="fas fa-clipboard-check me-2" style="color:#0d6efd;"></i>Data integrity attention
+                        <span class="badge bg-danger ms-1">{{ data_integrity_issue_count|default(data_integrity_issues|length) }}</span>
+                        {% if data_integrity_counts %}
+                        <span class="badge bg-danger ms-1">Not matched {{ data_integrity_counts.get('not_matched', 0) }}</span>
+                        <span class="badge bg-warning text-dark">Review {{ data_integrity_counts.get('needs_review', 0) }}</span>
+                        {% endif %}
+                    </h6>
+                    <div class="d-flex align-items-center gap-2">
+                        {% if data_integrity_issue_as_of %}
+                        <small class="text-muted">As of {{ data_integrity_issue_as_of[:19] }} UTC</small>
+                        {% endif %}
+                        <a href="{{ url_for('clients.data_integrity_list') }}" class="small">View all</a>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" data-mobile-table="scroll">
+                        <table class="table table-sm table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Client</th>
+                                    {% if data_integrity_show_advisor %}<th>Advisor</th>{% endif %}
+                                    <th>Overall</th>
+                                    <th class="text-end">Open sections</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in data_integrity_issues %}
+                                <tr>
+                                    <td><a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_name }}</a></td>
+                                    {% if data_integrity_show_advisor %}
+                                    <td class="small">{{ r.advisor_name or '—' }}</td>
+                                    {% endif %}
+                                    <td><span class="badge {{ r.badge_class }}">{{ r.overall_label }}</span></td>
+                                    <td class="text-end">{{ r.open_section_count }}</td>
+                                    <td class="text-end">
+                                        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('clients.data_integrity', client_id=r.client_id) }}">Open</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if cashflow_trade_issues is defined and cashflow_trade_issues %}
+    <div class="row mt-3">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <h6 class="mb-0 fw-semibold" style="color:#495057;">
+                        <i class="fas fa-balance-scale me-2" style="color:#6f42c1;"></i>Cashflow ↔ trade issues
+                        <span class="badge bg-danger ms-1">{{ cashflow_trade_issue_count|default(cashflow_trade_issues|length) }}</span>
+                    </h6>
+                    <div class="d-flex align-items-center gap-2">
+                        {% if cashflow_trade_issue_as_of %}
+                        <small class="text-muted">Scan {{ cashflow_trade_issue_as_of[:19] }} UTC</small>
+                        {% endif %}
+                        <a href="{{ url_for('clients.cashflow_trade_integrity_list') }}" class="small">View all</a>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" data-mobile-table="scroll">
+                        <table class="table table-sm table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Client</th>
+                                    {% if cashflow_trade_show_advisor %}<th>Advisor</th>{% endif %}
+                                    <th>Status</th>
+                                    <th class="text-end">Gap</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in cashflow_trade_issues %}
+                                <tr>
+                                    <td><a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_name }}</a></td>
+                                    {% if cashflow_trade_show_advisor %}
+                                    <td class="small">{{ r.advisor_name or '—' }}</td>
+                                    {% endif %}
+                                    <td><span class="badge {{ r.badge_class }}">{{ r.label }}</span></td>
+                                    <td class="text-end text-num">{{ "{:,.0f}".format(r.difference or 0) }}</td>
+                                    <td class="text-end">
+                                        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('clients.cashflow_trade_integrity', client_id=r.client_id) }}">Open</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if data_price_rows %}
+    <div class="row mt-3">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-semibold" style="color:#495057;">
+                        <i class="fas fa-database me-2" style="color:#fd7e14;"></i>Data / price issues by client
+                    </h6>
+                    <a href="{{ url_for('data_integrity.data_price_by_client') if has_endpoint('data_integrity.data_price_by_client') else url_for('data_integrity.dashboard') }}" class="small">View all</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Client</th>
+                                    <th class="text-end">Issues</th>
+                                    <th class="text-end">Overdue</th>
+                                    <th class="text-end">Age (d)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in data_price_rows[:8] %}
+                                <tr>
+                                    <td><a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_name }}</a></td>
+                                    <td class="text-end">{{ r.issue_count }}</td>
+                                    <td class="text-end">{% if r.overdue_count %}<span class="text-warning fw-semibold">{{ r.overdue_count }}</span>{% else %}0{% endif %}</td>
+                                    <td class="text-end">{{ r.oldest_age_days }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hover-card {
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        cursor: pointer;
+    }
+    .hover-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important;
+        border-color: #4a7c59 !important;
+    }
+</style>
+{% endblock %}

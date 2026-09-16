@@ -1,0 +1,888 @@
+{% extends "base.html" %}
+
+{% block title %}Monthly Investments{% endblock %}
+
+{% block extra_css %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+
+<style>
+    .workflow-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .workflow-stage-funds { background-color: #ffc107 !important; color: #000 !important; }
+    .workflow-stage-icr { background-color: #0d6efd !important; color: #fff !important; }
+    .workflow-stage-recos { background-color: #17a2b8 !important; color: #fff !important; }
+    .workflow-stage-notify { background-color: #6f42c1 !important; color: #fff !important; }
+    .workflow-stage-exec { background-color: #fd7e14 !important; color: #fff !important; }
+    .workflow-stage-update { background-color: #20c997 !important; color: #fff !important; }
+    .workflow-stage-completed { background-color: #28a745 !important; color: #fff !important; }
+    .workflow-stage-no-workflow { background-color: #6c757d !important; color: #fff !important; }
+    
+    .filter-summary {
+        background-color: #f8f9fa;
+        border-left: 4px solid #007bff;
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+        border-radius: 0.25rem;
+    }
+    
+    /* DataTables custom styling */
+    .dataTables_wrapper .dataTables_length,
+    .dataTables_wrapper .dataTables_filter,
+    .dataTables_wrapper .dataTables_info,
+    .dataTables_wrapper .dataTables_processing,
+    .dataTables_wrapper .dataTables_paginate {
+        margin-bottom: 1rem;
+    }
+    
+    .dataTables_wrapper .dataTables_filter input {
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 0.375rem 0.75rem;
+    }
+    
+    /* Sortable column headers */
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+    }
+    
+    .sortable:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .sorting::after,
+    .sorting_asc::after,
+    .sorting_desc::after {
+        content: '';
+        display: inline-block;
+        width: 0;
+        height: 0;
+        margin-left: 5px;
+        vertical-align: middle;
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+    }
+    
+    .sorting::after {
+        border-top: 4px solid #999;
+    }
+    
+    .sorting_asc::after {
+        border-bottom: 4px solid #007bff;
+    }
+    
+    .sorting_desc::after {
+        border-top: 4px solid #007bff;
+    }
+    
+    /* Search input styling */
+    .input-group .form-control:focus {
+        border-color: #007bff;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    /* Table row hover effect */
+    #investmentsTable tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+    
+    /* Loading state */
+    .dataTables_processing {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        color: #333;
+        font-size: 14px;
+        font-weight: bold;
+        left: 50%;
+        margin-left: -100px;
+        margin-top: -20px;
+        padding: 20px;
+        position: absolute;
+        text-align: center;
+        top: 50%;
+        width: 200px;
+        z-index: 1000;
+    }
+
+    /* Keep row actions compact; avoid a wide horizontal button strip */
+    #investmentsTable th.actions-col,
+    #investmentsTable td.actions-col {
+        width: 1%;
+        white-space: nowrap;
+        vertical-align: middle;
+        text-align: end;
+    }
+    #investmentsTable td.actions-col .dropdown-menu {
+        min-width: 12rem;
+        z-index: 1060;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Monthly investments' %}
+  {% set mobile_back_url = url_for('monthly_investments.monthly_investments_root') if has_endpoint('monthly_investments.monthly_investments_root') else url_for('main.list_monthly_investments') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <div class="im-mobile-search">
+    <i class="fas fa-search"></i>
+    <input type="search" data-im-mobile-filter="imMobileInvestmentsList" placeholder="Search by client or stage…" aria-label="Search">
+  </div>
+  <div class="im-list-stack" id="imMobileInvestmentsList">
+    {% for investment in investments %}
+      {% include 'partials/mobile/investment_card.html' %}
+    {% else %}
+      <div class="im-empty-state"><p>No investments</p></div>
+    {% endfor %}
+  </div>
+  <a href="{{ url_for('monthly_investments.new_monthly_investment') }}" class="im-fab" aria-label="New investment"><i class="fas fa-plus"></i></a>
+</div>
+<div class="im-desktop-only im-collapsed-on-mobile container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-1">
+                    <li class="breadcrumb-item"><a href="{{ url_for('main.list_monthly_investments') }}">Monthly investments hub</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Full list</li>
+                </ol>
+            </nav>
+            <h1 class="mb-0">Monthly investments</h1>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+        <a href="{{ url_for('monthly_investments.new_monthly_investment') }}" class="btn" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+            <i class="fas fa-plus"></i> New monthly investment
+        </a>
+        <form method="post" action="{{ url_for('monthly_investments.sync_missing_monthly_workflows') }}" class="d-inline"
+              title="Creates missing next cycles after completed workflows and FUNDS workflows on pending investments that have none. Safe to run more than once.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-primary">
+                <i class="fas fa-sync-alt"></i> Sync missing workflows
+            </button>
+        </form>
+        </div>
+    </div>
+
+    <!-- Filter Summary -->
+    {% if request.args.get('status') or request.args.get('workflow_status') or request.args.get('client_id') or request.args.get('month') %}
+    <div class="filter-summary">
+        <h6 class="mb-2">Active Filters:</h6>
+        <div class="d-flex flex-wrap gap-2">
+            {% if request.args.get('month') %}
+            <span class="badge bg-secondary">Month: {{ month_filter_label or request.args.get('month') }}</span>
+            {% endif %}
+            {% if request.args.get('status') %}
+            <span class="badge bg-primary">Status: {{ request.args.get('status')|title }}</span>
+            {% endif %}
+            {% if request.args.get('workflow_status') %}
+            <span class="badge bg-info">Workflow: {{ request.args.get('workflow_status') }}</span>
+            {% endif %}
+            {% if request.args.get('client_id') %}
+            {% set client = clients|selectattr('id', 'equalto', request.args.get('client_id')|int)|first %}
+            {% if client %}
+            <span class="badge bg-success">Client: {{ client.name }}</span>
+            {% endif %}
+            {% endif %}
+        </div>
+        <div class="mt-2">
+            <small class="text-muted">Showing {{ investments|length }} investment(s)</small>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Filter Form -->
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filter Investments</h5>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('monthly_investments.list_monthly_investments') }}" class="row g-3">
+                <div class="col-md-3 col-lg-2">
+                    <label for="month_filter" class="form-label">Investment month</label>
+                    <input type="month" class="form-control" id="month_filter" name="month"
+                           value="{{ request.args.get('month', '') }}">
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <label for="status_filter" class="form-label">Investment Status</label>
+                    <select class="form-select" id="status_filter" name="status">
+                        <option value="">All Statuses</option>
+                        <option value="pending" {% if request.args.get('status') == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="completed" {% if request.args.get('status') == 'completed' %}selected{% endif %}>Completed</option>
+                        <option value="cancelled" {% if request.args.get('status') == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                    </select>
+                </div>
+                <div class="col-md-3 col-lg-2">
+                    <label for="workflow_status_filter" class="form-label">Workflow Status</label>
+                    <select class="form-select" id="workflow_status_filter" name="workflow_status">
+                        <option value="">All Workflow Statuses</option>
+                        <option value="FUNDS" {% if request.args.get('workflow_status') == 'FUNDS' %}selected{% endif %}>Funds</option>
+                        <option value="RECOS" {% if request.args.get('workflow_status') == 'RECOS' %}selected{% endif %}>Recommendations</option>
+                        <option value="NOTIFY" {% if request.args.get('workflow_status') == 'NOTIFY' %}selected{% endif %}>Notify</option>
+                        <option value="EXEC" {% if request.args.get('workflow_status') == 'EXEC' %}selected{% endif %}>Execute</option>
+                        <option value="UPDATE" {% if request.args.get('workflow_status') == 'UPDATE' %}selected{% endif %}>Update</option>
+                        <option value="COMPLETED" {% if request.args.get('workflow_status') == 'COMPLETED' %}selected{% endif %}>Completed</option>
+                        <option value="NO_WORKFLOW" {% if request.args.get('workflow_status') == 'NO_WORKFLOW' %}selected{% endif %}>No Workflow</option>
+                    </select>
+                </div>
+                <div class="col-md-3 col-lg-3">
+                    <label for="client_filter" class="form-label">Client</label>
+                    <select class="form-select" id="client_filter" name="client_id">
+                        <option value="">All Clients</option>
+                        {% for client in clients %}
+                        <option value="{{ client.id }}" {% if request.args.get('client_id')|int == client.id %}selected{% endif %}>{{ client.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-12 col-lg-3 d-flex align-items-end">
+                    <div class="d-grid gap-2 w-100">
+                        <button type="submit" class="btn" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                            <i class="fas fa-filter"></i> Apply Filters
+                        </button>
+                        <a href="{{ url_for('monthly_investments.list_monthly_investments') }}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Clear Filters
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center" style="background-color: #4a7c59; color: white;">
+            <h6 class="m-0 font-weight-bold" style="color: white;">Investments List</h6>
+            <div class="d-flex align-items-center gap-2">
+                <div class="input-group" style="width: 300px;">
+                    <span class="input-group-text">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" id="investmentSearch" class="form-control form-control-sm" placeholder="Search investments...">
+                    <button type="button" id="clearSearch" class="btn btn-outline-secondary btn-sm" onclick="clearSearch()" style="display: none;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <button type="button" id="deleteSelectedBtn" class="btn btn-sm btn-danger" onclick="deleteSelected()" disabled>
+                    <i class="fas fa-trash"></i> Delete Selected
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table" id="investmentsTable">
+                    <thead>
+                        <tr>
+                            <th>
+                                <input type="checkbox" id="selectAllInvestments" onchange="toggleAllInvestments()">
+                            </th>
+                            <th class="sortable" data-sort="client">Client <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-sort="amount">Amount <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-sort="date">Date <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-sort="status">Investment Status <i class="fas fa-sort"></i></th>
+                            <th class="sortable" data-sort="workflow">Workflow Status <i class="fas fa-sort"></i></th>
+                            <!-- New column: monthly schedule notes snapshot -->
+                            <th>Monthly Schedule Notes</th>
+                            <th class="actions-col">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for investment in investments %}
+                        <tr>
+                            <td>
+                                <input type="checkbox" class="investment-checkbox" value="{{ investment.id }}" onchange="updateDeleteButton()">
+                            </td>
+                            <td>{{ investment.client.name if investment.client else 'Unknown Client' }}</td>
+                            <td>₹{{ "%.2f"|format(investment.planned_amount) }}</td>
+                            <td>
+                                {% if investment.investment_date %}
+                                    {{ investment.investment_date.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ investment.status_color }}">
+                                    {{ investment.status }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if investment.workflow %}
+                                    <span class="badge workflow-badge workflow-stage-{{ investment.workflow.current_stage.lower() }}">
+                                        {{ investment.workflow.current_stage }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge workflow-badge workflow-stage-no-workflow">No Workflow</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if investment.workflow and investment.workflow.schedule_notes %}
+                                    {{ investment.workflow.schedule_notes[:80] }}{% if investment.workflow.schedule_notes|length > 80 %}...{% endif %}
+                                {% else %}
+                                    <span class="text-muted">No schedule notes</span>
+                                {% endif %}
+                            </td>
+                            <td class="actions-col">
+                                <div class="dropdown d-inline-block text-end">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                                            data-bs-toggle="dropdown"
+                                            data-bs-popper-config='{"strategy":"fixed"}'
+                                            aria-expanded="false" aria-label="Row actions">
+                                        Actions
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('monthly_investments.view_monthly_investment', id=investment.id) }}">
+                                                <i class="fas fa-eye fa-fw me-2 text-info"></i>View details
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <button type="button" class="dropdown-item btn-edit-notes"
+                                                    title="Edit investment and schedule notes"
+                                                    data-bs-toggle="modal" data-bs-target="#editNotesModal"
+                                                    data-notes-url="{{ url_for('monthly_investments.monthly_investment_notes', id=investment.id) }}">
+                                                <i class="fas fa-sticky-note fa-fw me-2 text-secondary"></i>Notes
+                                            </button>
+                                        </li>
+                                        {% if investment.workflow and investment.client_id %}
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('unified_recommendations.client_recommendations', client_id=investment.client_id) }}">
+                                                <i class="fas fa-chart-line fa-fw me-2 text-warning"></i>Recommendations
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <button type="button" class="dropdown-item btn-next-stage"
+                                                    data-workflow-id="{{ investment.workflow.id }}"
+                                                    data-current-stage="{{ investment.workflow.current_stage }}"
+                                                    data-client-name="{{ investment.client.name if investment.client else 'Unknown Client' }}">
+                                                <i class="fas fa-arrow-up fa-fw me-2 text-success"></i>Next stage
+                                            </button>
+                                        </li>
+                                        {% if investment.workflow.current_stage not in ['FUNDS', 'ICR', 'INVESTMENT/CHANGES/REDEMPTION'] %}
+                                        <li>
+                                            <button type="button" class="dropdown-item btn-prev-stage"
+                                                    data-workflow-id="{{ investment.workflow.id }}"
+                                                    data-current-stage="{{ investment.workflow.current_stage }}">
+                                                <i class="fas fa-arrow-down fa-fw me-2"></i>Previous stage
+                                            </button>
+                                        </li>
+                                        {% endif %}
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Next Stage Modal -->
+<div class="modal fade" id="nextLevelModal" tabindex="-1" aria-labelledby="nextLevelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="nextLevelModalLabel">Enter Recommendation Amount</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="nextLevelForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Client</label>
+                                <input type="text" class="form-control" id="modalClientName" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Current Stage</label>
+                                <input type="text" class="form-control" id="modalCurrentStage" readonly>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                        <label class="form-label">Next Stage</label>
+                                <select class="form-select" id="nextStageSelect" name="next_stage" required>
+                                    <option value="">Select Next Stage</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Action Type</label>
+                                <select class="form-select" id="actionTypeSelect" name="action_type" required>
+                                    <option value="">Select Action</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Amount <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="modalAmount" name="amount" step="0.01" min="0" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Target Date</label>
+                                <input type="date" class="form-control" id="modalTargetDate" name="target_date">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea class="form-control" id="modalNotes" name="notes" rows="3" placeholder="Add any additional notes..."></textarea>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Note:</strong> Please enter the amount for the recommendations generated. This will advance the workflow to the notification stage.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-arrow-up"></i> Submit and Advance
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editNotesModal" tabindex="-1" aria-labelledby="editNotesModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editNotesModalLabel">Edit monthly and investment notes</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editNotesForm" method="POST" action="">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="editNotesInvestment">Investment notes</label>
+                        <textarea class="form-control" name="investment_notes" id="editNotesInvestment" rows="4"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="editNotesSchedule">Monthly schedule notes</label>
+                        <textarea class="form-control" name="schedule_notes" id="editNotesSchedule" rows="4"></textarea>
+                        <div class="form-text">If this row has a workflow, notes are stored on that workflow. Otherwise they are stored on the client's active monthly investment schedule.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- DataTables JavaScript -->
+<script type="text/javascript" src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+
+<script>
+    document.getElementById('editNotesModal').addEventListener('show.bs.modal', function (event) {
+        var btn = event.relatedTarget;
+        if (!btn || !btn.classList.contains('btn-edit-notes')) {
+            return;
+        }
+        var url = btn.getAttribute('data-notes-url');
+        document.getElementById('editNotesForm').action = url || '';
+        var invTa = document.getElementById('editNotesInvestment');
+        var schedTa = document.getElementById('editNotesSchedule');
+        invTa.value = '';
+        schedTa.value = '';
+        if (!url) {
+            return;
+        }
+        invTa.disabled = true;
+        schedTa.disabled = true;
+        fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                invTa.value = data.investment_notes || '';
+                schedTa.value = data.schedule_notes || '';
+            })
+            .catch(function () {
+                invTa.value = '';
+                schedTa.value = '';
+            })
+            .finally(function () {
+                invTa.disabled = false;
+                schedTa.disabled = false;
+            });
+    });
+
+    // Workflow stage progression
+    const workflowStages = {
+        'FUNDS': { next: 'RECOS', action: 'FUNDS_RECEIVED' },
+        'ICR': { next: 'RECOS', action: 'FUNDS_RECEIVED' },
+        'RECOS': { next: 'NOTIFY', action: 'RECOS_GENERATED' },
+        'NOTIFY': { next: 'EXEC', action: 'CLIENT_NOTIFIED' },
+        'EXEC': { next: 'UPDATE', action: 'EXECUTED' },
+        'UPDATE': { next: 'COMPLETED', action: 'UPDATED' }
+    };
+    const prevStages = {
+        'RECOS': 'FUNDS',
+        'NOTIFY': 'RECOS',
+        'EXEC': 'NOTIFY',
+        'UPDATE': 'EXEC',
+        'COMPLETED': 'UPDATE'
+    };
+    
+    // Action type descriptions
+    const actionDescriptions = {
+        'FUNDS_RECEIVED': 'Funds Received from Client',
+        'RECOS_GENERATED': 'Recommendations Generated',
+        'CLIENT_NOTIFIED': 'Client Notified of Recommendations',
+        'EXECUTED': 'Trades Executed',
+        'UPDATED': 'Portfolio Updated'
+    };
+    
+    function advanceWorkflow(workflowId, currentStage, clientName) {
+        console.log('DEBUG: advanceWorkflow called with workflowId:', workflowId, 'currentStage:', currentStage, 'clientName:', clientName);
+        
+        // Get next stage info
+        const stageInfo = workflowStages[currentStage];
+        if (!stageInfo) {
+            alert('Cannot determine next stage for current stage: ' + currentStage);
+            return;
+        }
+        
+        // If it's RECOS stage, show modal for amount input
+        if (currentStage === 'RECOS') {
+            showRecosModal(workflowId, currentStage, clientName, stageInfo);
+        } else {
+            // For all other stages, advance automatically
+            advanceWorkflowAutomatically(workflowId, stageInfo);
+        }
+    }
+    
+    function showRecosModal(workflowId, currentStage, clientName, stageInfo) {
+        // Set modal data
+        document.getElementById('modalClientName').value = clientName;
+        document.getElementById('modalCurrentStage').value = currentStage;
+        
+        // Populate next stage dropdown
+        const nextStageSelect = document.getElementById('nextStageSelect');
+        nextStageSelect.innerHTML = '<option value="">Select Next Stage</option>';
+        nextStageSelect.innerHTML += `<option value="${stageInfo.next}" selected>${stageInfo.next}</option>`;
+        
+        // Populate action type dropdown
+        const actionTypeSelect = document.getElementById('actionTypeSelect');
+        actionTypeSelect.innerHTML = '<option value="">Select Action</option>';
+        actionTypeSelect.innerHTML += `<option value="${stageInfo.action}" selected>${actionDescriptions[stageInfo.action]}</option>`;
+        
+        // Set form action
+        document.getElementById('nextLevelForm').action = `/monthly-investments/workflow/${workflowId}/update`;
+        
+        // Set default target date (7 days from now)
+        const targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + 7);
+        document.getElementById('modalTargetDate').value = targetDate.toISOString().split('T')[0];
+        
+        // Show modal
+        new bootstrap.Modal(document.getElementById('nextLevelModal')).show();
+    }
+    
+    function advanceWorkflowAutomatically(workflowId, stageInfo) {
+        console.log('DEBUG: advanceWorkflowAutomatically called with workflowId:', workflowId, 'stageInfo:', stageInfo);
+        
+        // Create form data for automatic advancement
+        const formData = new FormData();
+        formData.append('next_stage', stageInfo.next);
+        formData.append('action_type', stageInfo.action);
+        formData.append('amount', ''); // No amount needed for automatic steps
+        formData.append('notes', `Automatically advanced from ${stageInfo.action}`);
+        
+        // Add CSRF token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        formData.append('csrf_token', csrfToken);
+        
+        console.log('DEBUG: Sending request to:', `/monthly-investments/workflow/${workflowId}/next-level`);
+        
+        // Send request using the existing update route
+        fetch(`/monthly-investments/workflow/${workflowId}/update`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.ok) {
+                showAlert('success', 'Successfully moved to next level!');
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            } else {
+                throw new Error('Network response was not ok');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('danger', 'An error occurred while processing the request.');
+        });
+    }
+    
+    // Handle form submission
+    document.getElementById('nextLevelForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(this);
+        
+        fetch(this.action, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.ok) {
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('nextLevelModal')).hide();
+                
+                // Show success message
+                showAlert('success', 'Successfully submitted recommendations!');
+                
+                // Reload page after a short delay
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            } else {
+                throw new Error('Network response was not ok');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('danger', 'An error occurred while processing the request.');
+        });
+    });
+    
+    // Delegated click handlers for stage buttons
+    document.addEventListener('click', function(e) {
+        const nextBtn = e.target.closest('.btn-next-stage');
+        if (nextBtn) {
+            const workflowId = nextBtn.getAttribute('data-workflow-id');
+            const currentStage = nextBtn.getAttribute('data-current-stage');
+            const clientName = nextBtn.getAttribute('data-client-name') || 'Unknown Client';
+            advanceWorkflow(workflowId, currentStage, clientName);
+            return;
+        }
+        const prevBtn = e.target.closest('.btn-prev-stage');
+        if (prevBtn) {
+            const workflowId = prevBtn.getAttribute('data-workflow-id');
+            const currentStage = prevBtn.getAttribute('data-current-stage');
+            revertWorkflow(workflowId, currentStage);
+            return;
+        }
+    });
+    
+    function revertWorkflow(workflowId, currentStage) {
+        const prev = prevStages[currentStage];
+        if (!prev) {
+            showAlert('warning', 'No previous stage available for this workflow.');
+            return;
+        }
+        if (!confirm(`Move workflow back to ${prev}?`)) {
+            return;
+        }
+        const formData = new FormData();
+        formData.append('next_stage', prev);
+        formData.append('action_type', 'REVERT');
+        formData.append('notes', `Reverted from ${currentStage} to ${prev}`);
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        formData.append('csrf_token', csrfToken);
+        fetch(`/monthly-investments/workflow/${workflowId}/update`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.ok) {
+                showAlert('success', `Moved back to ${prev}.`);
+                setTimeout(() => location.reload(), 1200);
+            } else {
+                throw new Error('Network response was not ok');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showAlert('danger', 'Failed to move to previous stage.');
+        });
+    }
+    
+    function showAlert(type, message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        
+        // Insert at the top of the container
+        const container = document.querySelector('.container');
+        container.insertBefore(alertDiv, container.firstChild);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+    
+    // Multi-select functions
+    function toggleAllInvestments() {
+        const selectAll = document.getElementById('selectAllInvestments');
+        const checkboxes = document.querySelectorAll('.investment-checkbox');
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = selectAll.checked;
+        });
+        
+        updateDeleteButton();
+    }
+    
+    function updateDeleteButton() {
+        const checkboxes = document.querySelectorAll('.investment-checkbox:checked');
+        const deleteBtn = document.getElementById('deleteSelectedBtn');
+        deleteBtn.disabled = checkboxes.length === 0;
+    }
+    
+    function deleteSelected() {
+        const checkboxes = document.querySelectorAll('.investment-checkbox:checked');
+        const ids = Array.from(checkboxes).map(cb => cb.value);
+        
+        if (ids.length === 0) {
+            alert('Please select investments to delete');
+            return;
+        }
+        
+        if (!confirm(`Are you sure you want to delete ${ids.length} investment(s)?`)) {
+            return;
+        }
+        
+        // Create form and submit
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/monthly-investments/bulk-delete';
+        
+        // Add CSRF token
+        const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrf_token';
+        csrfInput.value = csrfToken;
+        form.appendChild(csrfInput);
+        
+        // Add investment IDs as comma-separated string
+        const idsInput = document.createElement('input');
+        idsInput.type = 'hidden';
+        idsInput.name = 'investment_ids';
+        idsInput.value = ids.join(',');
+        form.appendChild(idsInput);
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+    
+    $(document).ready(function() {
+        console.log('Document ready, initializing DataTable...');
+        
+        // Check if DataTable is available
+        if (typeof $.fn.DataTable === 'undefined') {
+            console.error('DataTable library not loaded!');
+            return;
+        }
+        
+        try {
+            var investmentsTable = $('#investmentsTable').DataTable({
+                "order": [[3, "desc"]], // Sort by date column (adjusted for checkbox column)
+                "pageLength": 25,
+                "searching": true,
+                "dom": 'lrtip', // Show length, processing, info, pagination controls
+                "processing": true,
+                "language": {
+                    "lengthMenu": "Show _MENU_ investments per page",
+                    "info": "Showing _START_ to _END_ of _TOTAL_ investments",
+                    "search": "Search:",
+                    "emptyTable": "No investments found",
+                    "zeroRecords": "No matching investments found"
+                },
+                "columnDefs": [
+                    { 
+                        "orderable": false, 
+                        "targets": [0, 7] // Disable sorting on checkbox and actions columns (checkbox + actions)
+                    },
+                    {
+                        "type": "date",
+                        "targets": 3 // Date column for proper sorting
+                    },
+                    {
+                        "type": "currency",
+                        "targets": 2 // Amount column for proper sorting
+                    }
+                ],
+                "responsive": true,
+                "autoWidth": false
+            });
+            
+            console.log('DataTable initialized successfully');
+            
+            // Custom search functionality
+            $('#investmentSearch').on('keyup', function() {
+                console.log('Search input changed:', this.value);
+                investmentsTable.search(this.value).draw();
+                
+                // Show/hide clear button
+                if (this.value.length > 0) {
+                    $('#clearSearch').show();
+                } else {
+                    $('#clearSearch').hide();
+                }
+            });
+            
+            // Clear search functionality
+            window.clearSearch = function() {
+                $('#investmentSearch').val('').trigger('keyup');
+            };
+            
+            // Add click handlers for custom sorting
+            $('.sortable').on('click', function() {
+                var column = $(this).data('sort');
+                var columnIndex = $(this).index();
+                
+                // Toggle between ascending and descending
+                var currentOrder = investmentsTable.order();
+                var newOrder = [[columnIndex, 'asc']];
+                
+                if (currentOrder.length > 0 && currentOrder[0][0] === columnIndex) {
+                    newOrder = [[columnIndex, currentOrder[0][1] === 'asc' ? 'desc' : 'asc']];
+                }
+                
+                investmentsTable.order(newOrder).draw();
+            });
+            
+        } catch (error) {
+            console.error('Error initializing DataTable:', error);
+        }
+    });
+</script>
+{% endblock %} 

@@ -1,0 +1,98 @@
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const fileInput = document.querySelector('input[type="file"]');
+    const previewSection = document.getElementById('template-preview');
+    const variablesList = document.getElementById('variables-list');
+    if (!fileInput || !previewSection || !variablesList) {
+        return;
+    }
+
+    function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, function(ch) {
+            return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]);
+        });
+    }
+
+    function showAnalyzeError(message) {
+        variablesList.innerHTML = '<div class="alert alert-danger" role="alert">' + escapeHtml(message) + '</div>';
+    }
+
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) {
+            return;
+        }
+        variablesList.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Analyzing template...</div>';
+        previewSection.style.display = 'block';
+
+        const csrf = document.querySelector('input[name="csrf_token"]');
+        const formData = new FormData();
+        formData.append('template_file', file);
+        if (csrf && csrf.value) {
+            formData.append('csrf_token', csrf.value);
+        }
+
+        const headers = {};
+        if (csrf && csrf.value) {
+            headers['X-CSRFToken'] = csrf.value;
+        }
+
+        fetch('{{ url_for("agreements.analyze_template") }}', {
+            method: 'POST',
+            headers: headers,
+            body: formData,
+            credentials: 'same-origin'
+        })
+        .then(function(response) {
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                if (response.status === 400) {
+                    throw new Error('Security check failed. Refresh this page and choose the file again.');
+                }
+                if (response.status === 401 || response.redirected) {
+                    throw new Error('Please log in again, then retry.');
+                }
+                throw new Error('Could not analyze this file. Use a .docx Word file (Drive: File → Download → Microsoft Word).');
+            }
+            return response.json().then(function(data) {
+                data._httpStatus = response.status;
+                return data;
+            });
+        })
+        .then(function(data) {
+            if (data.success) {
+                displayVariables(data.variables || []);
+                return;
+            }
+            showAnalyzeError(data.error || 'Could not analyze template. Please check the file format.');
+        })
+        .catch(function(error) {
+            console.error('Error:', error);
+            showAnalyzeError(error.message || 'Error analyzing template.');
+        });
+    });
+
+    function displayVariables(variables) {
+        if (!variables.length) {
+            variablesList.innerHTML = '<div class="alert alert-info">No variables found in template. Make sure variables are marked as &lt;&lt;variable_name&gt;&gt;</div>';
+            return;
+        }
+
+        let html = '<div class="row">';
+        variables.forEach(function(variable, index) {
+            html += `
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title">${escapeHtml(variable)}</h6>
+                            <small class="text-muted">Variable ${index + 1}</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        variablesList.innerHTML = html;
+    }
+});
+</script>

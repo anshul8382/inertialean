@@ -1,0 +1,25 @@
+{# Mobile email preview — expects client, session_id, recommendations, total_value #}
+<div class="im-metric-grid mb-3">
+  <div class="im-metric-tile">
+    <span class="im-metric-tile__label">Recs</span>
+    <span class="im-metric-tile__value">{{ recommendations|length }}</span>
+  </div>
+  <div class="im-metric-tile">
+    <span class="im-metric-tile__label">Portfolio</span>
+    <span class="im-metric-tile__value">₹{{ "{:,.0f}".format(total_value) }}</span>
+  </div>
+</div>
+<div class="rec-sticky-actions mb-2" aria-label="Email actions">
+  <button type="button" class="btn btn-success" onclick="document.getElementById('sendEmailBtn')&&document.getElementById('sendEmailBtn').click();">
+    <i class="fas fa-paper-plane"></i> Send
+  </button>
+  {% if session_id %}
+  <a href="{{ url_for('unified_recommendations.security_distribution', client_id=client.id, session_id=session_id) }}" class="btn btn-secondary">
+    <i class="fas fa-arrow-left"></i> Distribution
+  </a>
+  {% endif %}
+  <button type="button" class="btn btn-outline-primary" onclick="refreshPreview&&refreshPreview();">
+    <i class="fas fa-sync"></i> Refresh
+  </button>
+</div>
+<a href="#emailForm" class="im-settings-link im-scroll-to-desktop"><i class="fas fa-edit"></i><span>Edit subject, recipients &amp; preview</span><i class="fas fa-chevron-down text-muted"></i></a>

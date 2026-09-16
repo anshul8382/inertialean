@@ -1,0 +1,143 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Period Analysis</title>
+    <style>
+      body { font-family: Arial, Helvetica, sans-serif; color: #222; font-size: 13px; }
+      .container { max-width: 820px; margin: 0 auto; padding: 16px; }
+      .meta { color: #666; font-size: 12px; margin-bottom: 12px; }
+      .card { border: 1px solid #e5e5e5; border-radius: 8px; margin-bottom: 14px; }
+      .card-header { background: #f7f7f7; padding: 10px 12px; font-weight: 700; border-bottom: 1px solid #e5e5e5; font-size: 13px; }
+      .card-body { padding: 12px; font-size: 13px; }
+      table { border-collapse: collapse; width: 100%; font-size: 13px; font-family: Arial, Helvetica, sans-serif; }
+      th, td { border: 1px solid #e5e5e5; padding: 8px 10px; font-size: 13px; }
+      th { background: #fafafa; text-align: left; font-weight: 700; color: #222; }
+      td { color: #222; }
+      img { max-width: 100%; height: auto; }
+      .message { white-space: pre-wrap; background: #fffdf2; border: 1px solid #f1e6a8; padding: 10px 12px; border-radius: 8px; font-size: 13px; }
+      .footer { margin-top: 18px; font-size: 12px; color: #666; }
+
+      /* Portfolio snapshot (match shared appearance) */
+      .snapshot-wrap { border: 2px solid #111; border-radius: 0; overflow: hidden; margin: 0 0 14px 0; }
+      .snapshot-title { background: #fff; color: #000; font-weight: 800; font-size: 18px; padding: 10px 12px; border-bottom: 2px solid #111; }
+      table.snapshot { width: 100%; border-collapse: collapse; background: #fff6d1; font-size: 13px; }
+      table.snapshot th, table.snapshot td { border: 2px solid #111; padding: 10px 12px; font-size: 13px; }
+      table.snapshot th { color: #000; font-weight: 800; text-align: center; background: #fff6d1; }
+      table.snapshot td.label { font-weight: 800; width: 45%; color: #000; }
+      table.snapshot td.val { text-align: center; font-weight: 700; color: #000; }
+
+      /* Section headers - larger font */
+      .section-header { font-size: 16px; font-weight: 700; color: #000; padding: 12px; background: #f7f7f7; border-bottom: 2px solid #222; margin-bottom: 0; }
+      .section-header-large { font-size: 18px; font-weight: 800; color: #000; padding: 14px; background: #f7f7f7; border-bottom: 2px solid #222; margin-bottom: 0; }
+
+      /* Period header - black font */
+      .period-header { color: #000; font-weight: 700; font-size: 14px; }
+      
+      /* Horizontal layout for core data */
+      .core-data-horizontal { display: table; width: 100%; border-collapse: collapse; }
+      .core-data-horizontal > div { display: table-cell; padding: 10px; border: 1px solid #e5e5e5; text-align: center; vertical-align: middle; }
+      .core-data-horizontal .label { font-weight: 700; color: #000; }
+      .core-data-horizontal .value { font-size: 14px; font-weight: 600; color: #000; }
+      
+      /* Logo styling */
+      .email-logo { text-align: center; padding: 20px 0; margin-bottom: 20px; border-bottom: 2px solid #e5e5e5; }
+      .email-logo img { max-width: 200px; height: auto; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      {% if logo_base64 %}
+      <div class="email-logo">
+        <img src="data:image/png;base64,{{ logo_base64 }}" alt="Inertia Logo" />
+      </div>
+      {% else %}
+      <div class="email-logo">
+        <img src="{{ base_url }}/static/images/inertia-logo.png" alt="Inertia Logo" />
+      </div>
+      {% endif %}
+      {% if market_commentary %}
+        <div class="card">
+          <div class="card-header section-header-large">Market Commentary</div>
+          <div class="card-body">
+            <div style="white-space: pre-wrap; line-height: 1.6; color: #222; font-size: 13px;">{{ market_commentary }}</div>
+          </div>
+        </div>
+      {% endif %}
+      {% if portfolio_snapshot %}
+        <div class="snapshot-wrap">
+          <div class="snapshot-title">Portfolio Snapshot: {{ client.name }}</div>
+          <table class="snapshot">
+            <thead>
+              <tr>
+                <th></th>
+                <th>{{ portfolio_snapshot.columns.current }}</th>
+                <th>{{ portfolio_snapshot.columns.previous }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in portfolio_snapshot.rows %}
+                <tr>
+                  <td class="label">{{ r.label }}</td>
+                  {% if r.kind == 'money' %}
+                    <td class="val">{{ "%.1f"|format(r.cur|default(0)) }}</td>
+                    <td class="val">{{ "%.1f"|format(r.prev|default(0)) }}</td>
+                  {% elif r.kind == 'percent' %}
+                    <td class="val">{{ "%.0f"|format(r.cur|default(0)) }}%</td>
+                    <td class="val">{{ "%.0f"|format(r.prev|default(0)) }}%</td>
+                  {% elif r.kind == 'number' %}
+                    <td class="val">{{ "%.1f"|format(r.cur|default(0)) }}</td>
+                    <td class="val">{{ "%.1f"|format(r.prev|default(0)) }}</td>
+                  {% else %}
+                    <td class="val">{{ r.cur|default('N/A') }}</td>
+                    <td class="val">{{ r.prev|default('N/A') }}</td>
+                  {% endif %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+
+      {% if custom_message %}
+        <div class="card">
+          <div class="card-header">Performance Summary</div>
+          <div class="card-body">
+            <div class="message">{{ custom_message }}</div>
+          </div>
+        </div>
+      {% else %}
+        <div class="card">
+          <div class="card-header">Performance Summary</div>
+        </div>
+      {% endif %}
+
+      {% for s in sections %}
+        {% if s.html and ('<table' in s.html|lower or '<thead' in s.html|lower) %}
+          {# Section already contains a table, don't wrap in card #}
+          <div style="margin-bottom: 20px;">
+          {# SAFE: server-generated period analysis HTML only (not raw user input) #}
+            {{ s.html | safe }}
+          </div>
+        {% else %}
+          {# Section doesn't have table, wrap in card #}
+          <div class="card">
+            <div class="card-header">{{ s.title }}</div>
+            <div class="card-body">
+            {# SAFE: server-generated period analysis HTML only (not raw user input) #}
+            {{ s.html | safe }}
+            </div>
+          </div>
+        {% endif %}
+      {% endfor %}
+
+      <div class="footer">
+        This email contains selected sections from Period Analysis V2.
+      </div>
+    </div>
+  </body>
+</html>
+
+
+

@@ -1,0 +1,2990 @@
+{% extends "base.html" %}
+
+{% block title %}Security Distribution - {{ client.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Future weight: compact (header “Within …” still fits; inputs stay usable) */
+#section1-table th.col-s1-future,
+#section1-table td.col-s1-future {
+  min-width: 6.25rem;
+  width: 8%;
+  max-width: 8.5rem;
+}
+#section1-table .future-weight-input.section1-input {
+  min-width: 4.5rem;
+  max-width: 6.75rem;
+  width: 100%;
+}
+#section1-table td.col-s1-future .d-flex {
+  min-width: 0;
+}
+/* Amount ₹: more room for 5–7 digit values */
+#section1-table th.col-s1-amount,
+#section1-table td.col-s1-amount {
+  min-width: 8.5rem;
+  width: 12%;
+}
+#section1-table .amount-input.section1-input {
+  min-width: 7rem;
+  max-width: 11rem;
+  width: 100%;
+}
+/* Section 3: widen Future Weight % for Equity review */
+#section3-table th.col-s3-future,
+#section3-table td.col-s3-future {
+  min-width: 9.5rem;
+}
+{% if s1_equity_view %}
+#section3-table th.col-s3-future,
+#section3-table td.col-s3-future {
+  min-width: 11rem;
+  width: 12%;
+}
+#section3-table .future-weight-input {
+  min-width: 7rem;
+}
+{% endif %}
+@media (max-width: 991.98px) {
+  #section1-table th.col-s1-future,
+  #section1-table td.col-s1-future,
+  #section1-table th.col-s1-amount,
+  #section1-table td.col-s1-amount,
+  #section3-table th.col-s3-future,
+  #section3-table td.col-s3-future {
+    min-width: 0 !important;
+    max-width: none !important;
+    width: auto !important;
+  }
+  #section1-table .future-weight-input.section1-input,
+  #section1-table .amount-input.section1-input,
+  #section3-table .future-weight-input {
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+}
+</style>
+{% endblock %}
+
+{% set selected_classes = pending_data.get('selected_asset_classes') or ([pending_data.get('selected_asset_class')] if pending_data.get('selected_asset_class') else []) %}
+{% set s1_multi = (selected_classes|length) > 1 %}
+{% set s1_selected = (pending_data.get('selected_asset_class') or '')|trim %}
+{% set s1_equity_view = (not s1_multi) and (s1_selected|lower == 'equity') %}
+
+{% block content %}
+{% from 'partials/mobile/macros.html' import rec_mobile_open, rec_mobile_close, rec_desktop_open, rec_desktop_close %}
+{{ rec_mobile_open('Security distribution — ' ~ client.name, url_for('unified_recommendations.review_recommendations', client_id=client.id, session_id=session_id), 'Edit sections below, then record and preview email.') }}
+{% include 'partials/mobile/rec_security_dist_mobile.html' %}
+{{ rec_mobile_close('Section 1–3 tables below — use sticky Record / Email when done.') }}
+{{ rec_desktop_open() }}
+    {% if pending_data.get('is_edit_mode', False) %}
+    <!-- EDIT MODE INDICATOR -->
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <h4 class="alert-heading"><i class="fas fa-edit"></i> <strong>EDIT MODE</strong></h4>
+        <p class="mb-0">You are currently <strong>editing existing recommendations</strong> for {{ client.name }}. 
+        Changes will update the saved recommendations in the database.</p>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-stretch align-items-md-center mb-4 rec-page-header gap-2">
+        <h1>
+            Security Distribution for {{ client.name }}
+            {% if s1_multi %}
+                <small class="text-muted">({{ selected_classes|join(', ') }})</small>
+            {% elif pending_data.selected_asset_class %}
+                <small class="text-muted">({{ pending_data.selected_asset_class }} only)</small>
+            {% endif %}
+        </h1>
+        <div class="rec-mobile-action-bar d-none d-md-flex flex-wrap gap-2">
+            <button type="button" class="btn btn-primary record-to-db-btn" onclick="recordRecommendations()">
+                <i class="fas fa-database"></i> Record to Database
+            </button>
+            <a id="preview-email-btn" class="btn btn-success preview-email-link" href="{{ url_for('unified_recommendations.preview_email', client_id=client.id, session_id=session_id) }}">
+                <i class="fas fa-envelope"></i> Preview & Send Email
+            </a>
+            <a href="{{ url_for('unified_recommendations.review_recommendations', client_id=client.id, session_id=session_id) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Asset Allocation
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4 border-primary" id="live-sum-bar">
+        <div class="card-body py-3">
+            <div class="row g-2 align-items-center">
+                <div class="col-6 col-md-3">
+                    <div class="small text-muted">Investment amount</div>
+                    <div class="fs-5 fw-semibold" id="live-investment-amount">₹{{ "%.0f"|format((pending_data.investment_amount|default(0.0))|float) }}</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="small text-muted">Section 1 net (all classes)</div>
+                    <div class="fs-5 fw-semibold" id="live-section1-sum">₹0</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="small text-muted">Difference</div>
+                    <div class="fs-5 fw-semibold" id="live-section1-diff">₹0</div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <span class="badge bg-secondary" id="live-sum-status">Checking…</span>
+                    <div class="small text-muted mt-1">Weights below are % of each asset class, not the portfolio.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% if client.planning_synopsis %}
+    <div class="alert alert-info mb-4">
+        <h5 class="alert-heading"><i class="fas fa-lightbulb"></i> Planning Synopsis</h5>
+        <p class="mb-0">{{ client.planning_synopsis|nl2br }}</p>
+    </div>
+    {% endif %}
+
+    {% include 'partials/asset_class_mismatch_warning.html' %}
+
+    <!-- User Selections & Rejections Panel -->
+    <div class="card shadow mb-4 border-info">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-user-cog"></i> User Selections & Rejections
+                <button class="btn btn-sm btn-light float-end" type="button" data-bs-toggle="collapse" data-bs-target="#userActionsPanel" aria-expanded="true">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+            </h5>
+            <small>Manage your manually selected and rejected securities</small>
+        </div>
+        <div class="collapse show" id="userActionsPanel">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-success"><i class="fas fa-check-circle"></i> Selected Securities (will be prioritized)</h6>
+                        <div id="user-selected-list" class="border rounded p-2 mb-3" style="min-height: 100px; max-height: 200px; overflow-y: auto;">
+                            <small class="text-muted" id="user-selected-empty">No securities manually selected</small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="clearUserSelected()">
+                            <i class="fas fa-trash"></i> Clear All Selected
+                        </button>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-danger"><i class="fas fa-times-circle"></i> Rejected Securities (will be excluded)</h6>
+                        <div id="user-rejected-list" class="border rounded p-2 mb-3" style="min-height: 100px; max-height: 200px; overflow-y: auto;">
+                            <small class="text-muted" id="user-rejected-empty">No securities rejected</small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="clearUserRejected()">
+                            <i class="fas fa-trash"></i> Clear All Rejected
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Asset Level Summary -->
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Asset Level Summary</h5>
+            <small class="text-muted">Overview of asset-level allocations and changes</small>
+        </div>
+        <div class="card-body">
+            <div class="row rec-summary-grid">
+                <div class="col-6 col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Current Portfolio Value</h6>
+                            <h4 class="text-primary">₹{{ "%.2f"|format((pending_data.get('current_state', {}).get('total_portfolio_value', 0.0))|float) }}</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Investment Amount</h6>
+                            <h4 class="{% if (pending_data.investment_amount|float) > 0 %}text-success{% elif (pending_data.investment_amount|float) < 0 %}text-danger{% else %}text-info{% endif %}">
+                                ₹{{ "%.2f"|format((pending_data.investment_amount)|float) }}
+                            </h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Total After Investment</h6>
+                            <h4 class="text-success">₹{{ "%.2f"|format((pending_data.get('current_state', {}).get('total_portfolio_value', 0.0)|float) + (pending_data.get('investment_amount', 0.0)|float)) }}</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Recommendation Value</h6>
+                            <h4 class="text-warning">₹{{ "%.2f"|format((pending_data.total_recommendation_value|default(0.0))|float) }}</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Asset Allocation Summary Table -->
+            <div class="table-responsive mt-3">
+                <table class="table table-bordered rec-card-table">
+                    <thead>
+                        <tr>
+                            <th>Asset Class</th>
+                            <th>Current Value</th>
+                            <th>Current Weight</th>
+                            <th>Target Weight</th>
+                            <th>Required Change</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rec in pending_data.asset_recommendations|default([]) %}
+                        <tr>
+                            <td><strong>{{ rec.asset_class }}</strong></td>
+                            <td>₹{{ "%.2f"|format((rec.current_value|default(0.0))|float) }}</td>
+                            <td>{{ "%.2f"|format((rec.current_weight|default(0.0))|float) }}%</td>
+                            <td>{{ "%.2f"|format((rec.target_weight|default(0.0))|float) }}%</td>
+                            <td class="{% if ((rec.required_change|default(0))|float) > 0 %}text-success{% else %}text-danger{% endif %}">
+                                ₹{{ "%.2f"|format((rec.required_change|default(0.0))|float) }}
+                            </td>
+                            <td>
+                                <span class="badge {% if rec.action == 'BUY' %}bg-success{% else %}bg-danger{% endif %}">
+                                    {{ rec.action|default('HOLD') }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 1: Recommended Securities -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-check-circle"></i> Section 1: Recommended Securities
+            </h5>
+            <small>System-generated recommendations. Uncheck to exclude from calculations.</small>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered rec-card-table" id="section1-table" data-selected-asset-class="{{ pending_data.get('selected_asset_class', 'Equity')|e }}" data-hide-asset-class="{{ '1' if s1_equity_view else '0' }}">
+                    <thead>
+                        <tr>
+                            <th width="50">
+                                <input type="checkbox" id="select-all-section1">
+                            </th>
+                            <th>Security</th>
+                            {% if not s1_equity_view %}
+                            <th>Asset Class</th>
+                            {% endif %}
+                            <th>Current Weight %<br><small class="text-muted">Within asset class</small></th>
+                            <th>Target Weight %<br><small class="text-muted">Within asset class</small></th>
+                            <th class="col-s1-future">Future Weight %<br><small class="text-muted">Within asset class</small></th>
+                            <th>Action</th>
+                            <th class="col-s1-amount">Amount ₹</th>
+                            <th>Quantity</th>
+                            <th>Current Price</th>
+                            <th>Reason</th>
+                            <th width="80">Delete</th>
+                        </tr>
+                    </thead>
+                    <tbody id="section1-tbody">
+                        {% for rec in pending_data.section_1_recommended|default([]) %}
+                        {% set user_actions = pending_data.get('user_actions', {}) %}
+                        {% set is_user_selected = rec.security_id in (user_actions.get('manually_selected', [])) %}
+                        {% set is_user_rejected = rec.security_id in (user_actions.get('manually_rejected', [])) %}
+                        {% set should_be_checked = is_user_selected or (not is_user_rejected) %}
+                        <tr data-security-id="{{ rec.security_id }}" data-section="1" data-asset-class="{{ rec.asset_class|default('Equity')|e }}" data-user-modified="{% if rec.is_user_modified %}1{% else %}0{% endif %}" {% if rec.recommendation_id %}data-recommendation-id="{{ rec.recommendation_id }}"{% endif %}>
+                            <td>
+                                <input type="checkbox" 
+                                       class="section1-checkbox"
+                                       data-security-id="{{ rec.security_id }}"
+                                       {% if should_be_checked %}checked{% endif %}>
+                            </td>
+                            <td>
+                                <strong>{{ rec.symbol|default('N/A')|e }}</strong><br>
+                                <small class="text-muted">{{ rec.security_name|default('N/A')|e }}</small>
+                            </td>
+                            {% if not s1_equity_view %}
+                            <td>{{ rec.asset_class|default('Unknown')|e }}</td>
+                            {% endif %}
+                            <td class="current-weight-cell">{{ "%.2f"|format((rec.current_weight|default(0.0))|float) }}%</td>
+                            <td class="target-weight-cell">{{ "%.2f"|format((rec.target_weight|default(0.0))|float) }}%</td>
+                            <td class="col-s1-future">
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="number" 
+                                           class="form-control form-control-sm future-weight-input section1-input {% if rec.overselling_warning or (rec.future_weight|default(0.0)|float) < 0 %}border-warning bg-warning-subtle{% endif %}" 
+                                           data-security-id="{{ rec.security_id }}"
+                                           data-section="1"
+                                           value="{{ "%.2f"|format((rec.future_weight|default(rec.target_weight|default(0.0)))|float) }}"
+                                           step="0.01"
+                                           style="{% if rec.overselling_warning or (rec.future_weight|default(0.0)|float) < 0 %}border-width: 2px;{% endif %}">
+                                    {% if rec.overselling_warning or (rec.future_weight|default(0.0)|float) < 0 %}
+                                    <span class="badge bg-warning text-dark" title="Warning: Selling more than available quantity ({{ rec.future_quantity|default(0)|int }} remaining)">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge action-badge {% if rec.action == 'BUY' %}bg-success{% elif rec.action == 'SELL' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {{ rec.action|default('HOLD') }}
+                                </span>
+                            </td>
+                            <td class="col-s1-amount">
+                                <input type="number" 
+                                       class="form-control form-control-sm amount-input section1-input" 
+                                       data-security-id="{{ rec.security_id }}"
+                                       data-section="1"
+                                       value="{{ (rec.amount|default(0.0))|round|int }}"
+                                       step="1">
+                            </td>
+                            <td>
+                                <input type="number" 
+                                       class="form-control form-control-sm quantity-input section1-input" 
+                                       data-security-id="{{ rec.security_id }}"
+                                       data-section="1"
+                                       value="{{ (rec.quantity|default(0))|int }}"
+                                       step="1">
+                            </td>
+                            <td class="current-price-cell">₹{{ "%.2f"|format((rec.current_price|default(0.0))|float) }}</td>
+                            <td>
+                                <small class="text-muted">{{ rec.reason|default('N/A')|e }}</small>
+                            </td>
+                            <td>
+                                <button type="button" 
+                                        class="btn btn-sm btn-outline-danger delete-row-btn" 
+                                        data-security-id="{{ rec.security_id }}"
+                                        {% if rec.recommendation_id %}data-recommendation-id="{{ rec.recommendation_id }}"{% endif %}
+                                        title="Delete this recommendation">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot id="section1-tfoot">
+                        <tr class="table-info fw-bold" id="section1-totals-row">
+                            <td></td>
+                            <td><strong>Total</strong></td>
+                            {% if not s1_equity_view %}
+                            <td></td>
+                            {% endif %}
+                            <td id="section1-total-current-weight" class="text-end">0.00%</td>
+                            <td id="section1-total-target-weight" class="text-end">0.00%</td>
+                            <td id="section1-total-future-weight" class="text-end col-s1-future">0.00%</td>
+                            <td></td>
+                            <td id="section1-total-amount" class="text-end col-s1-amount">₹0</td>
+                            <td id="section1-total-quantity" class="text-end">0</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <div class="mt-3">
+                <button type="button" class="btn btn-primary" id="recalculate-section1-btn">
+                    <i class="fas fa-sync"></i> Recalculate After Exclusions
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 2: Hot Stocks -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0">
+                <i class="fas fa-fire"></i> Section 2: Hot Stocks
+            </h5>
+            <small>All hot stocks. Click "Move to Section 1" to add to recommendations.</small>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="section2-table">
+                    <thead>
+                        <tr>
+                            <th width="50">Action</th>
+                            <th>Security</th>
+                            <th>Asset Class</th>
+                            <th>Current Weight %<br><small class="text-muted">Within asset class</small></th>
+                            <th>Target Weight %<br><small class="text-muted">Within asset class</small></th>
+                            <th class="col-s3-future">Future Weight %<br><small class="text-muted">Within asset class</small></th>
+                            <th>Action</th>
+                            <th>Amount ₹</th>
+                            <th>Quantity</th>
+                            <th>Current Price</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="section2-tbody">
+                        {% for rec in pending_data.section_2_hot_stocks|default([]) %}
+                        <tr data-security-id="{{ rec.security_id }}" data-section="2">
+                            <td>
+                                <button type="button" 
+                                        class="btn btn-sm btn-success move-to-section1-btn" 
+                                        data-security-id="{{ rec.security_id }}"
+                                        data-source-section="2">
+                                    <i class="fas fa-arrow-up"></i> Move to Section 1
+                                </button>
+                            </td>
+                            <td>
+                                <strong>{{ rec.symbol|default('N/A')|e }}</strong><br>
+                                <small class="text-muted">{{ rec.security_name|default('N/A')|e }}</small>
+                            </td>
+                            <td>{{ rec.asset_class|default('Unknown')|e }}</td>
+                            <td class="current-weight-cell">{{ "%.2f"|format((rec.current_weight|default(0.0))|float) }}%</td>
+                            <td class="target-weight-cell">{{ "%.2f"|format((rec.target_weight|default(0.0))|float) }}%</td>
+                            <td>
+                                <input type="number" 
+                                       class="form-control form-control-sm future-weight-input" 
+                                       data-security-id="{{ rec.security_id }}"
+                                       data-section="2"
+                                       value="{{ "%.2f"|format((rec.future_weight|default(rec.target_weight|default(0.0)))|float) }}"
+                                       step="0.01" min="0" max="100"
+                                       readonly>
+                            </td>
+                            <td>
+                                <span class="badge {% if rec.action == 'BUY' %}bg-success{% elif rec.action == 'SELL' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {{ rec.action|default('HOLD') }}
+                                </span>
+                            </td>
+                            <td>₹{{ "%.2f"|format((rec.amount|default(0.0))|float) }}</td>
+                            <td>{{ (rec.quantity|default(0))|int }}</td>
+                            <td>₹{{ "%.2f"|format((rec.current_price|default(0.0))|float) }}</td>
+                            <td>
+                                <small class="text-muted">{{ rec.reason|default('N/A')|e }}</small>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 3: Other Securities -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-info text-white">
+            <h5 class="mb-0">
+                <i class="fas fa-list"></i> Section 3: Other Securities
+            </h5>
+            <small>All other securities for review. Click "Move to Section 1" to add to recommendations.</small>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered rec-card-table" id="section3-table">
+                    <thead>
+                        <tr>
+                            <th width="50">Action</th>
+                            <th>Security</th>
+                            <th>Asset Class</th>
+                            <th>Current Weight %<br><small class="text-muted">Within asset class</small></th>
+                            <th>Target Weight %<br><small class="text-muted">Within asset class</small></th>
+                            <th>Future Weight %<br><small class="text-muted">Within asset class</small></th>
+                            <th>Action</th>
+                            <th>Amount ₹</th>
+                            <th>Quantity</th>
+                            <th>Current Price</th>
+                            <th>Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="section3-tbody">
+                        {% for rec in pending_data.section_3_other|default([]) %}
+                        <tr data-security-id="{{ rec.security_id }}" data-section="3">
+                            <td>
+                                <button type="button" 
+                                        class="btn btn-sm btn-success move-to-section1-btn" 
+                                        data-security-id="{{ rec.security_id }}"
+                                        data-source-section="3">
+                                    <i class="fas fa-arrow-up"></i> Move to Section 1
+                                </button>
+                            </td>
+                            <td>
+                                <strong>{{ rec.symbol|default('N/A')|e }}</strong><br>
+                                <small class="text-muted">{{ rec.security_name|default('N/A')|e }}</small>
+                            </td>
+                            <td>{{ rec.asset_class|default('Unknown')|e }}</td>
+                            <td class="current-weight-cell">{{ "%.2f"|format((rec.current_weight|default(0.0))|float) }}%</td>
+                            <td class="target-weight-cell">{{ "%.2f"|format((rec.target_weight|default(0.0))|float) }}%</td>
+                            <td class="col-s3-future">
+                                <input type="number" 
+                                       class="form-control form-control-sm future-weight-input" 
+                                       data-security-id="{{ rec.security_id }}"
+                                       data-section="3"
+                                       value="{{ "%.2f"|format((rec.future_weight|default(rec.target_weight|default(0.0)))|float) }}"
+                                       step="0.01" min="0" max="100"
+                                       readonly>
+                            </td>
+                            <td>
+                                <span class="badge {% if rec.action == 'BUY' %}bg-success{% elif rec.action == 'SELL' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {{ rec.action|default('HOLD') }}
+                                </span>
+                            </td>
+                            <td>
+                                <small class="text-muted d-block">Allocation:</small> ₹{{ "%.2f"|format((rec.amount|default(0.0))|float) }}<br>
+                                <small class="text-muted d-block">Current Value:</small> ₹{{ "%.2f"|format((rec.current_value|default(0.0))|float) }}
+                            </td>
+                            <td>
+                                <small class="text-muted d-block">Allocation:</small> {{ (rec.quantity|default(0))|int }}<br>
+                                <small class="text-muted d-block">Current Qty:</small> {{ (rec.current_quantity|default(0))|int }}
+                            </td>
+                            <td>₹{{ "%.2f"|format((rec.current_price|default(0.0))|float) }}</td>
+                            <td>
+                                <small class="text-muted">{{ rec.reason|default('N/A')|e }}</small>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+            
+            <!-- Summary Totals -->
+            <div class="row mt-3">
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Total Investment</h6>
+                            <h4 class="text-primary" id="summary-total-amount">₹0.00</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Total Quantity</h6>
+                            <h4 class="text-info" id="summary-total-quantity">0</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Current Weight</h6>
+                            <h4 class="text-warning" id="summary-current-weight">0.00%</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Future Weight</h6>
+                            <h4 class="text-success" id="summary-future-weight">0.00%</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Asset Class Breakdown -->
+            <div class="row mt-3" id="asset-class-breakdown">
+                <div class="col-12">
+                    <div class="card bg-info text-white">
+                        <div class="card-body">
+                            <h6 class="card-title">Asset Class Breakdown</h6>
+                            <div class="row" id="asset-class-summary-content">
+                                <!-- Will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-3 d-flex flex-column flex-md-row gap-2 align-items-stretch align-items-md-center flex-wrap">
+                <button type="button" class="btn btn-success" id="add-new-security-btn">
+                    <i class="fas fa-plus"></i> Add Security
+                </button>
+                <label class="visually-hidden" for="add-security-asset-class">Asset class for new security</label>
+                <select id="add-security-asset-class" class="form-select" style="max-width: 16rem;">
+                    {% for ac in selected_classes %}
+                    <option value="{{ ac|e }}">{{ ac }}</option>
+                    {% endfor %}
+                </select>
+                {% if available_asset_classes %}
+                <select id="add-asset-class-select" class="form-select" style="max-width: 16rem;">
+                    <option value="">Add another asset class…</option>
+                    {% for ac in available_asset_classes %}
+                    <option value="{{ ac.name|e }}">{{ ac.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="btn btn-outline-primary" id="add-asset-class-btn">Add class</button>
+                {% endif %}
+                <button type="button" class="btn btn-warning" id="update-security-allocation-btn">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Future Values Summary -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6 class="card-title">Future Portfolio Values After Implementation</h6>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <strong>Future Equity Value:</strong> <span id="future-equity-value">₹0.00</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Future Fixed Income Value:</strong> <span id="future-fixed-income-value">₹0.00</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Future Gold Value:</strong> <span id="future-gold-value">₹0.00</span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Total Future Portfolio:</strong> <span id="total-future-portfolio">₹0.00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{{ rec_desktop_close() }}
+
+<script>
+// CSRF for API calls (delete, record, etc.) — required on mobile WebView
+window.csrfToken = {{ csrf_token()|tojson_safe }};
+
+// Section 1 layout: hide Asset Class column on Equity-only view (matches server-rendered table)
+const section1HideAssetClass = {{ s1_equity_view|tojson_safe }};
+const selectedAssetClasses = {{ selected_classes|tojson_safe }};
+const investmentAmountLive = parseFloat({{ pending_data.investment_amount|default(0.0)|tojson_safe }}) || 0;
+
+function getRowAssetClass(row) {
+    if (!row) return 'Equity';
+    const fromAttr = (row.getAttribute('data-asset-class') || '').trim();
+    if (fromAttr) return fromAttr;
+    const cell = row.querySelector('td:nth-child(3)');
+    return cell ? cell.textContent.trim() : 'Equity';
+}
+
+// Global state for user selections and rejections
+let userSelectedIds = [];
+let userRejectedIds = [];
+let securityIdToName = {}; // Map security_id to name/symbol for display
+
+// Initialize from session data
+// Initialize state from backend (before DOMContentLoaded)
+(function() {
+    const pendingData = {{ pending_data|tojson_safe }};
+    const userActions = pendingData.user_actions || {};
+    
+    userSelectedIds = userActions.manually_selected || [];
+    userRejectedIds = userActions.manually_rejected || [];
+    
+    // Build security name mapping from all sections
+    const allSections = [
+        ...(pendingData.section_1_recommended || []),
+        ...(pendingData.section_2_hot_stocks || []),
+        ...(pendingData.section_3_other || [])
+    ];
+    allSections.forEach(rec => {
+        if (rec.security_id) {
+            securityIdToName[rec.security_id] = {
+                symbol: rec.symbol || 'N/A',
+                name: rec.security_name || 'N/A'
+            };
+        }
+    });
+
+    // IMPORTANT: Section 1 editing treats Quantity as TRADE QUANTITY (delta),
+    // not "new holding quantity". Keep a stable reference so other functions
+    // that still check section1Data don't throw.
+    window.section1Data = pendingData.section_1_recommended || [];
+})();
+
+function updateUserSelectedList() {
+    const listDiv = document.getElementById('user-selected-list');
+    const emptyMsg = document.getElementById('user-selected-empty');
+    
+    if (!listDiv) return;
+    
+    if (userSelectedIds.length === 0) {
+        listDiv.innerHTML = '<small class="text-muted" id="user-selected-empty">No securities manually selected</small>';
+        return;
+    }
+    
+    let html = '<div class="d-flex flex-wrap gap-2">';
+    userSelectedIds.forEach(secId => {
+        const secInfo = securityIdToName[secId] || { symbol: `ID: ${secId}`, name: '' };
+        html += `
+            <span class="badge bg-success d-flex align-items-center gap-1">
+                <strong>${escapeHtml(secInfo.symbol)}</strong>
+                <small>${escapeHtml(secInfo.name)}</small>
+                <button type="button" class="btn-close btn-close-white btn-sm" style="font-size: 0.7em;" 
+                        onclick="removeFromUserSelected(${secId})" title="Remove" aria-label="Close"></button>
+            </span>
+        `;
+    });
+    html += '</div>';
+    listDiv.innerHTML = html;
+}
+
+function updateUserRejectedList() {
+    const listDiv = document.getElementById('user-rejected-list');
+    const emptyMsg = document.getElementById('user-rejected-empty');
+    
+    if (!listDiv) return;
+    
+    if (userRejectedIds.length === 0) {
+        listDiv.innerHTML = '<small class="text-muted" id="user-rejected-empty">No securities rejected</small>';
+        return;
+    }
+    
+    let html = '<div class="d-flex flex-wrap gap-2">';
+    userRejectedIds.forEach(secId => {
+        const secInfo = securityIdToName[secId] || { symbol: `ID: ${secId}`, name: '' };
+        html += `
+            <span class="badge bg-danger d-flex align-items-center gap-1">
+                <strong>${escapeHtml(secInfo.symbol)}</strong>
+                <small>${escapeHtml(secInfo.name)}</small>
+                <button type="button" class="btn-close btn-close-white btn-sm" style="font-size: 0.7em;" 
+                        onclick="removeFromUserRejected(${secId})" title="Remove" aria-label="Close"></button>
+            </span>
+        `;
+    });
+    html += '</div>';
+    listDiv.innerHTML = html;
+}
+
+function addToUserSelected(securityId, symbol, name) {
+    // Remove from rejected if present
+    userRejectedIds = userRejectedIds.filter(id => id !== securityId);
+    
+    // Add to selected if not already there
+    if (!userSelectedIds.includes(securityId)) {
+        userSelectedIds.push(securityId);
+    }
+    
+    // Update security name mapping
+    securityIdToName[securityId] = { symbol: symbol, name: name };
+    
+    updateUserSelectedList();
+    updateUserRejectedList();
+}
+
+function addToUserRejected(securityId, symbol, name) {
+    // Remove from selected if present
+    userSelectedIds = userSelectedIds.filter(id => id !== securityId);
+    
+    // Add to rejected if not already there
+    if (!userRejectedIds.includes(securityId)) {
+        userRejectedIds.push(securityId);
+    }
+    
+    // Update security name mapping
+    securityIdToName[securityId] = { symbol: symbol, name: name };
+    
+    updateUserSelectedList();
+    updateUserRejectedList();
+}
+
+function removeFromUserSelected(securityId) {
+    userSelectedIds = userSelectedIds.filter(id => id !== securityId);
+    updateUserSelectedList();
+}
+
+function removeFromUserRejected(securityId) {
+    userRejectedIds = userRejectedIds.filter(id => id !== securityId);
+    updateUserRejectedList();
+}
+
+function clearUserSelected() {
+    if (confirm('Clear all selected securities?')) {
+        userSelectedIds = [];
+        updateUserSelectedList();
+    }
+}
+
+function clearUserRejected() {
+    if (confirm('Clear all rejected securities?')) {
+        userRejectedIds = [];
+        updateUserRejectedList();
+    }
+}
+
+function getSecurityInfo(securityId) {
+    // Try to get from current page data
+    const row = document.querySelector(`tr[data-security-id="${securityId}"]`);
+    if (row) {
+        const symbolCell = row.querySelector('td:nth-child(2) strong');
+        const nameCell = row.querySelector('td:nth-child(2) small');
+        if (symbolCell && nameCell) {
+            return {
+                symbol: symbolCell.textContent.trim(),
+                name: nameCell.textContent.trim()
+            };
+        }
+    }
+    
+    // Fall back to mapping
+    return securityIdToName[securityId] || { symbol: `ID: ${securityId}`, name: '' };
+}
+
+function markRowUserModified(row) {
+    if (!row) return;
+    row.dataset.userModified = '1';
+}
+
+function isRowUserModified(row) {
+    return !!row && row.dataset.userModified === '1';
+}
+
+function updateFutureWeightWarning(futureWeightInput, futureWeight) {
+    // Update warning styling for negative future weights or overselling
+    const row = futureWeightInput.closest('tr');
+    const amountInput = row.querySelector('.amount-input');
+    const quantityInput = row.querySelector('.quantity-input');
+    
+    // Check if overselling (negative quantity after sell)
+    const quantity = parseInt(quantityInput.value) || 0;
+    const securityId = futureWeightInput.dataset.securityId;
+    const currentState = {{ pending_data.get('current_state', {})|tojson_safe }};
+    const currentHoldings = currentState.current_holdings || {};
+    const currentHolding = currentHoldings[securityId] || {};
+    const currentQuantity = currentHolding.quantity || 0;
+    const futureQuantity = currentQuantity + quantity;
+    const overselling = quantity < 0 && futureQuantity < 0;
+    
+    // Update styling
+    futureWeightInput.classList.remove('border-warning', 'bg-warning-subtle');
+    let warningBadge = row.querySelector('.future-weight-warning-badge');
+    
+    if (futureWeight < 0 || overselling) {
+        futureWeightInput.classList.add('border-warning', 'bg-warning-subtle');
+        futureWeightInput.style.borderWidth = '2px';
+        
+        // Add or update warning badge
+        if (!warningBadge) {
+            warningBadge = document.createElement('span');
+            warningBadge.className = 'badge bg-warning text-dark future-weight-warning-badge';
+            warningBadge.innerHTML = '<i class="fas fa-exclamation-triangle"></i>';
+            futureWeightInput.parentElement.appendChild(warningBadge);
+        }
+        warningBadge.title = `Warning: ${overselling ? 'Selling more than available quantity' : 'Negative future weight'} (${futureQuantity} remaining)`;
+        warningBadge.style.display = 'inline-block';
+    } else {
+        futureWeightInput.style.borderWidth = '';
+        if (warningBadge) {
+            warningBadge.style.display = 'none';
+        }
+    }
+}
+
+function updateSecurityRecommendation(input, section = 1) {
+    const row = input.closest('tr');
+    const securityId = input.dataset.securityId;
+    
+    // Only allow updates for Section 1
+    if (section !== 1) {
+        return;
+    }
+    
+    // Get all inputs for this security
+    const amountInput = row.querySelector('.amount-input');
+    const quantityInput = row.querySelector('.quantity-input');
+    const futureWeightInput = row.querySelector('.future-weight-input');
+    
+    // Get current price for this security
+    const currentPrice = getCurrentPrice(securityId);
+    const currentState = {{ pending_data.get('current_state', {})|tojson_safe }};
+    const totalPortfolioValue = currentState.total_portfolio_value || 0.0;
+    const investmentAmount = {{ pending_data.investment_amount|default(0.0)|tojson_safe }};
+    const assetRecommendations = {{ pending_data.get('asset_recommendations', [])|tojson_safe }};
+    
+    const assetClass = getRowAssetClass(row);
+    
+    // Get current asset class value from current_state
+    const currentAssetAllocations = currentState.current_asset_allocations || {};
+    const currentAssetValue = currentAssetAllocations[assetClass] || 0.0;
+    
+    // Get asset-class investment delta (required_change) for denominator of future weight
+    const assetRec = Array.isArray(assetRecommendations)
+        ? assetRecommendations.find(r => ((r.asset_class || '').trim() === assetClass))
+        : null;
+    const assetInvestment = assetRec ? (parseFloat(assetRec.required_change) || 0) : 0;
+
+    // Get current value for this security from current holdings
+    const currentHoldings = currentState.current_holdings || {};
+    const currentHolding = currentHoldings[securityId] || currentHoldings[String(securityId)] || {};
+    const currentValue = currentHolding.current_value || 0.0;
+    
+    // Update related fields based on what changed
+    if (input.classList.contains('amount-input')) {
+        const amount = parseFloat(input.value) || 0;
+        if (currentPrice > 0) {
+            quantityInput.value = Math.round(amount / currentPrice);
+        }
+        // Update future weight WITHIN asset class:
+        // (current_value + security_amount) / (current_asset_value + asset_class_investment) * 100
+        const futureValue = currentValue + amount;
+        const futureAssetValue = currentAssetValue + assetInvestment; // Future asset class total
+        if (futureAssetValue !== 0) {
+            const futureWeight = (futureValue / futureAssetValue) * 100;
+            futureWeightInput.value = futureWeight.toFixed(2);
+        }
+    } else if (input.classList.contains('quantity-input')) {
+        const quantity = parseInt(input.value) || 0;
+        if (currentPrice > 0) {
+            const amount = quantity * currentPrice;
+            amountInput.value = Math.round(amount);
+            // Update future weight WITHIN asset class:
+            // (current_value + security_amount) / (current_asset_value + asset_class_investment) * 100
+            const futureValue = currentValue + amount;
+            const futureAssetValue = currentAssetValue + assetInvestment; // Future asset class total
+            if (futureAssetValue !== 0) {
+                const futureWeight = (futureValue / futureAssetValue) * 100;
+                futureWeightInput.value = futureWeight.toFixed(2);
+                updateFutureWeightWarning(futureWeightInput, futureWeight);
+            }
+        }
+    } else if (input.classList.contains('future-weight-input')) {
+        const futureWeight = parseFloat(input.value) || 0;
+        // Calculate required security amount for desired future weight WITHIN asset class.
+        // future_weight = (current_value + amount) / (current_asset_value + asset_investment) * 100
+        // => amount = (future_weight/100)*(current_asset_value + asset_investment) - current_value
+        const denom = (currentAssetValue + assetInvestment);
+        let amount = ((futureWeight / 100) * denom) - currentValue;
+        if (currentPrice > 0) {
+            // Calculate quantity based on amount needed
+            const quantity = Math.round(amount / currentPrice);
+            quantityInput.value = quantity;
+            // Recalculate amount based on whole-number quantity
+            const actualAmount = quantity * currentPrice;
+            amountInput.value = Math.round(actualAmount);
+        } else {
+            amountInput.value = Math.round(amount);
+        }
+    }
+    
+    // Update action badge (quantity-based logic is handled in updateQuantityAndAction)
+    updateActionBadge(row);
+    
+    // Update totals
+    updateTotals();
+    updateSection1Totals(); // Also update Section 1 totals
+    updateAssetClassBreakdown();
+    updateFutureValuesSummary();
+}
+
+// Section 1 checkbox handling
+function toggleAllSection1(checkbox) {
+    const checkboxes = document.querySelectorAll('.section1-checkbox');
+    checkboxes.forEach(cb => {
+        cb.checked = checkbox.checked;
+        handleSection1Toggle(cb);
+    });
+}
+
+function handleSection1Toggle(checkbox) {
+    const securityId = parseInt(checkbox.getAttribute('data-security-id'));
+    const isChecked = checkbox.checked;
+    const row = checkbox.closest('tr');
+    
+    // Update user lists based on checkbox state
+    const secInfo = getSecurityInfo(securityId);
+    
+    if (isChecked) {
+        // Add to selected, remove from rejected
+        addToUserSelected(securityId, secInfo.symbol, secInfo.name);
+    } else {
+        // Add to rejected, remove from selected
+        addToUserRejected(securityId, secInfo.symbol, secInfo.name);
+    }
+    
+    // Visual feedback
+    if (!isChecked) {
+        row.style.opacity = '0.6';
+    } else {
+        row.style.opacity = '1.0';
+    }
+    
+    // Update totals to reflect checkbox state (only count selected rows)
+    updateSection1Totals();
+}
+
+async function recalculateSection1() {
+    // Get unchecked securities from Section 1 and add them to rejected list
+    const uncheckedIds = [];
+    document.querySelectorAll('.section1-checkbox:not(:checked)').forEach(cb => {
+        const securityId = parseInt(cb.getAttribute('data-security-id'));
+        uncheckedIds.push(securityId);
+        
+        // Add to user rejected list
+        const secInfo = getSecurityInfo(securityId);
+        addToUserRejected(securityId, secInfo.symbol, secInfo.name);
+    });
+    
+    if (uncheckedIds.length === 0) {
+        // No new rejections, but still recalculate with current lists
+        console.log('No new rejections, recalculating with current user selections/rejections');
+    }
+    
+    // Get current Section 1 data (ONLY checked rows)
+    const currentSection1 = [];
+    document.querySelectorAll('#section1-tbody tr').forEach(row => {
+        const checkbox = row.querySelector('.section1-checkbox');
+        if (!checkbox || !checkbox.checked) {
+            return; // Skip unchecked securities
+        }
+
+        const securityId = parseInt(row.getAttribute('data-security-id'));
+        if (!securityId || isNaN(securityId)) {
+            // Skip rows with temporary IDs (e.g. manually added before lookup completes)
+            return;
+        }
+        const amountInput = row.querySelector('.amount-input');
+        const quantityInput = row.querySelector('.quantity-input');
+        const futureWeightInput = row.querySelector('.future-weight-input');
+        const amount = parseFloat(amountInput?.value) || 0;
+        const quantity = parseInt(quantityInput?.value) || 0;
+        const futureWeight = parseFloat(futureWeightInput?.value) || 0;
+
+        const currentWeightCell = row.querySelector('.current-weight-cell');
+        const targetWeightCell = row.querySelector('.target-weight-cell');
+        const currentWeight = parseFloat((currentWeightCell?.textContent || '0').replace('%', '')) || 0;
+        const targetWeight = parseFloat((targetWeightCell?.textContent || '0').replace('%', '')) || 0;
+
+        const currentPrice = getCurrentPrice(securityId);
+
+        currentSection1.push({
+            security_id: securityId,
+            amount: amount,
+            quantity: quantity,
+            future_weight: futureWeight,
+            current_weight: currentWeight,
+            target_weight: targetWeight,
+            current_price: currentPrice,
+            asset_class: getRowAssetClass(row),
+            is_user_modified: false
+        });
+    });
+    
+    // Call API to recalculate with FULL user_selected and user_rejected lists
+    try {
+        const recalcUrl = {{ url_for("unified_recommendations.api_recalculate_exclusions")|tojson_safe }};
+        const recalcCsrfToken = {{ csrf_token()|tojson_safe }};
+        const recalcClientId = {{ pending_data.client_id|default(0)|tojson_safe }};
+        const recalcInvestmentAmount = {{ pending_data.investment_amount|default(0.0)|tojson_safe }};
+        const recalcSessionId = {{ session_id|default(0)|tojson_safe }} || {{ pending_data.edit_session_id|default(0)|tojson_safe }};
+        
+        if (!recalcSessionId || recalcSessionId === 0) {
+            alert('Session ID is missing. Please refresh the page and try again.');
+            return;
+        }
+        
+        const response = await fetch(recalcUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': recalcCsrfToken
+            },
+            body: JSON.stringify({
+                client_id: recalcClientId,
+                session_id: recalcSessionId,  // CRITICAL: Include session_id
+                excluded_security_ids: uncheckedIds,  // New rejections (will be merged on backend)
+                manually_selected: userSelectedIds,    // FULL list of selected
+                manually_rejected: userRejectedIds,    // FULL list of rejected
+                current_section_1: currentSection1,
+                selected_asset_classes: selectedAssetClasses,
+                investment_amount: recalcInvestmentAmount
+            })
+        });
+        
+        // Check if response is JSON before parsing
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('Non-JSON response received:', text.substring(0, 200));
+            throw new Error(`Server returned non-JSON response (${response.status}). This might be an error page.`);
+        }
+        
+        // Check response status
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status} Error` }));
+            throw new Error(errorData.error || `HTTP ${response.status} Error`);
+        }
+        
+        const data = await response.json();
+        if (data.success) {
+            // Update user lists from response (in case backend modified them)
+            if (data.user_actions) {
+                userSelectedIds = data.user_actions.manually_selected || [];
+                userRejectedIds = data.user_actions.manually_rejected || [];
+                updateUserSelectedList();
+                updateUserRejectedList();
+            }
+            
+            // Update UI dynamically instead of reloading to preserve session
+            if (data.section_1_recommended) {
+                updateSection1Table(data.section_1_recommended);
+            }
+            if (data.section_2_hot_stocks !== undefined) {
+                updateSection2Table(data.section_2_hot_stocks);
+            }
+            if (data.section_3_other !== undefined) {
+                updateSection3Table(data.section_3_other);
+            }
+            showAlert('Recommendations recalculated successfully', 'success');
+            // Update totals
+            updateTotals();
+        } else {
+            alert('Error recalculating: ' + (data.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error recalculating: ' + error.message);
+    }
+}
+
+async function moveToSection1(securityId, sourceSection, event) {
+    console.log('moveToSection1 called:', { securityId, sourceSection, event });
+    
+    // Get security info before moving
+    const secInfo = getSecurityInfo(securityId);
+
+    // Capture allocation amount + current price from the SOURCE row (sec2/sec3) so we can
+    // normalize Section 1 semantics even if the API returns amount=0 or holding quantities.
+    function _findSourceRow(sectionNum) {
+        const tbody = document.getElementById(sectionNum === 2 ? 'section2-tbody' : 'section3-tbody');
+        if (!tbody) return null;
+        return tbody.querySelector(`tr[data-security-id="${securityId}"]`);
+    }
+    function _parseFirstRupeeAmount(text) {
+        if (!text) return 0;
+        const m = String(text).replace(/,/g, '').match(/₹\s*([-\d.]+)/);
+        return m ? (parseFloat(m[1]) || 0) : 0;
+    }
+    const sourceRow = _findSourceRow(sourceSection);
+    let sourceAllocationAmt = 0;
+    let sourceCurrentPrice = 0;
+    try {
+        if (sourceRow) {
+            // Amount column differs between sec2/sec3, but always contains a ₹ value.
+            // Prefer the "Allocation" amount when present (sec3 shows "Allocation:" + "Current Value:").
+            const amountCell = sourceRow.querySelector('td:nth-child(8)') || sourceRow.querySelector('td:nth-child(7)');
+            if (amountCell) {
+                // If there are multiple ₹ values, the first is allocation in our rendered rows.
+                sourceAllocationAmt = _parseFirstRupeeAmount(amountCell.textContent || '');
+            }
+            const priceCell = sourceRow.querySelector('td:nth-child(10)') || sourceRow.querySelector('td:nth-child(9)');
+            if (priceCell) {
+                sourceCurrentPrice = _parseFirstRupeeAmount(priceCell.textContent || '');
+            }
+        }
+    } catch (e) {
+        console.warn('Unable to parse source allocation/price for move:', e);
+    }
+    
+    // Find the button that was clicked
+    let button = null;
+    if (event && event.target) {
+        button = event.target.closest('.move-to-section1-btn');
+    }
+    
+    // Fallback: find button by data attributes
+    if (!button) {
+        const buttons = document.querySelectorAll('.move-to-section1-btn');
+        button = Array.from(buttons).find(btn => 
+            parseInt(btn.getAttribute('data-security-id')) === securityId &&
+            parseInt(btn.getAttribute('data-source-section')) === sourceSection
+        );
+    }
+    
+    const originalText = button ? button.innerHTML : '';
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Moving...';
+    }
+    
+    try {
+        const url = {{ url_for("unified_recommendations.api_move_to_section1")|tojson_safe }};
+        const csrfToken = {{ csrf_token()|tojson_safe }};
+        const clientId = {{ pending_data.client_id|default(0)|tojson_safe }};
+        const sessionId = {{ session_id|default(0)|tojson_safe }};
+        
+        console.log('Moving security to Section 1:', { securityId, sourceSection, url, clientId, sessionId });
+        
+        // Add to user selected list IMMEDIATELY (optimistic update)
+        addToUserSelected(securityId, secInfo.symbol, secInfo.name);
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                client_id: clientId,
+                session_id: sessionId,
+                security_ids: [securityId],
+                manually_selected: userSelectedIds,    // Send FULL list including this one
+                manually_rejected: userRejectedIds,    // Send FULL list
+                // Optional hint (UI only today): allocation amount to deploy for this moved security.
+                suggested_amounts: sourceAllocationAmt ? { [securityId]: sourceAllocationAmt } : {}
+            })
+        });
+        
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Error response:', errorText);
+            // Revert optimistic update on error
+            removeFromUserSelected(securityId);
+            throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 200)}`);
+        }
+        
+        const data = await response.json();
+        console.log('Response data:', data);
+        
+        if (data.success) {
+            console.log('Move successful, updating UI with:', {
+                s1_count: data.section_1_recommended?.length || 0,
+                s2_count: data.section_2_hot_stocks?.length || 0,
+                s3_count: data.section_3_other?.length || 0
+            });
+            
+            // Update user lists from response (in case backend modified them)
+            if (data.user_actions) {
+                userSelectedIds = data.user_actions.manually_selected || [];
+                userRejectedIds = data.user_actions.manually_rejected || [];
+                updateUserSelectedList();
+                updateUserRejectedList();
+            }
+            
+            // Update UI dynamically instead of reloading to preserve session
+            if (data.section_1_recommended) {
+                console.log('Updating Section 1 with', data.section_1_recommended.length, 'items');
+                // Section semantics:
+                // - Section 3 rows can carry holding quantity context.
+                // - Section 1 must always show TRADE quantity, with amount = qty * current_price.
+                // Normalize the moved security row(s) into Section 1 trade-quantity semantics.
+                const movedIds = new Set([securityId]);
+                const normalizedS1 = (data.section_1_recommended || []).map(function (rec) {
+                    rec = Object.assign({}, rec);
+                    const sid = parseInt(rec.security_id, 10);
+                    if (!movedIds.has(sid)) {
+                        return rec;
+                    }
+                    // IMPORTANT: `rec.amount` here is treated as the TARGET ALLOCATION AMOUNT (₹)
+                    // we want to deploy for this moved security (not holding value).
+                    const price = (sourceCurrentPrice || parseFloat(rec.current_price) || 0);
+                    const allocationAmt = (sourceAllocationAmt || parseFloat(rec.amount) || 0);
+                    if (price > 0 && allocationAmt !== 0) {
+                        // Trade quantity derived from allocation amount and current price:
+                        // trade_qty = round(allocation_amount / current_price)
+                        const qty = Math.round(allocationAmt / price);
+                        rec.quantity = qty;
+                        // Enforce invariant: amount = qty * current_price (signed)
+                        rec.amount = Math.round(qty * price);
+                        rec.action = deriveActionFromTrade(qty, rec.amount);
+                        rec.current_price = price;
+                    }
+                    return rec;
+                });
+                updateSection1Table(normalizedS1);
+            }
+            if (data.section_2_hot_stocks !== undefined) {
+                console.log('Updating Section 2 with', data.section_2_hot_stocks.length, 'items');
+                updateSection2Table(data.section_2_hot_stocks);
+            }
+            if (data.section_3_other !== undefined) {
+                console.log('Updating Section 3 with', data.section_3_other.length, 'items');
+                updateSection3Table(data.section_3_other);
+            }
+            
+            // Update totals
+            updateTotals();
+            updateSection1Totals();
+            
+            // Show success message
+            showAlert(`Successfully moved ${data.moved_count || 1} security to Section 1`, 'success');
+        } else {
+            // Revert optimistic update on error
+            removeFromUserSelected(securityId);
+            throw new Error(data.error || 'Unknown error occurred');
+        }
+    } catch (error) {
+        console.error('Error moving security:', error);
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = originalText;
+        }
+        alert('Error moving security: ' + error.message);
+    }
+}
+
+function updateActionBadge(row) {
+    const currentWeightCell = row.querySelector('td:nth-child(4)'); // Current Weight column
+    const futureWeightInput = row.querySelector('.future-weight-input');
+    const actionBadge = row.querySelector('.badge');
+    
+    if (!actionBadge) return;
+    
+    const currentWeight = currentWeightCell ? parseFloat(currentWeightCell.textContent.replace('%', '')) || 0 : 0;
+    const futureWeight = futureWeightInput ? parseFloat(futureWeightInput.value) || 0 : 0;
+    
+    // Section 1 semantics: Quantity input is TRADE quantity (signed).
+    // Always derive action from trade qty (+ optional signed amount).
+    const quantityInput = row.querySelector('.quantity-input');
+    const amountInput = row.querySelector('.amount-input');
+    if (quantityInput) {
+        const tradeQty = parseInt(quantityInput.value, 10) || 0;
+        const amountVal = parseFloat(amountInput?.value) || 0;
+        applyActionBadgeFromTrade(actionBadge, tradeQty, amountVal);
+        return;
+    }
+    
+    // Fallback to weight-based logic if quantity-based logic didn't apply
+    const weightDiff = futureWeight - currentWeight;
+    if (Math.abs(weightDiff) > 0.01) { // Only update if there's a meaningful change
+        if (weightDiff > 0) {
+            actionBadge.textContent = 'BUY';
+            actionBadge.className = 'badge bg-success';
+        } else {
+            actionBadge.textContent = 'SELL';
+            actionBadge.className = 'badge bg-danger';
+        }
+    } else {
+        // No weight change - preserve original action
+        const originalAction = actionBadge.textContent.trim();
+        if (originalAction !== 'BUY' && originalAction !== 'SELL') {
+            // Only set to HOLD if there was no original action
+            actionBadge.textContent = 'HOLD';
+            actionBadge.className = 'badge bg-secondary';
+        }
+        // Otherwise preserve the original action
+    }
+}
+
+function editSecurityRecommendation(securityId) {
+    const row = document.querySelector(`tr[data-security-id="${securityId}"]`);
+    if (row) {
+        const firstInput = row.querySelector('input');
+        if (firstInput) {
+            firstInput.focus();
+            firstInput.select();
+        }
+    }
+}
+
+function isTempSecurityId(securityId) {
+    const s = String(securityId);
+    return s.startsWith('new_') || s.startsWith('NEW_');
+}
+
+function findSection1Row(securityId) {
+    const sid = String(securityId);
+    if (typeof CSS !== 'undefined' && CSS.escape) {
+        return document.querySelector(
+            `#section1-tbody tr[data-section="1"][data-security-id="${CSS.escape(sid)}"]`
+        );
+    }
+    const rows = document.querySelectorAll('#section1-tbody tr[data-section="1"]');
+    for (let i = 0; i < rows.length; i++) {
+        if (rows[i].getAttribute('data-security-id') === sid) {
+            return rows[i];
+        }
+    }
+    return null;
+}
+
+async function deleteSecurityRecommendation(securityId, deleteBtn) {
+    const sid = String(securityId);
+    const row = findSection1Row(sid);
+    if (!row) {
+        showAlert('Row not found', 'error');
+        return;
+    }
+
+    if (!confirm('Remove this security from Section 1?')) {
+        return;
+    }
+
+    const recommendationId =
+        (deleteBtn && deleteBtn.getAttribute('data-recommendation-id')) ||
+        row.getAttribute('data-recommendation-id');
+
+    if (recommendationId && !isTempSecurityId(sid)) {
+        try {
+            let csrfToken = window.csrfToken;
+            if (!csrfToken || csrfToken === '') {
+                const response = await fetch('/unified-recommendations/get-csrf-token');
+                const data = await response.json();
+                csrfToken = data.csrf_token;
+                window.csrfToken = csrfToken;
+            }
+
+            const deleteResponse = await fetch(
+                `/unified-recommendations/api/security-recommendation/${recommendationId}`,
+                {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'Content-Type': 'application/json',
+                    },
+                    credentials: 'same-origin',
+                }
+            );
+
+            const deleteData = await deleteResponse.json();
+
+            if (!deleteData.success) {
+                showAlert(
+                    'Failed to delete recommendation: ' + (deleteData.error || 'Unknown error'),
+                    'error'
+                );
+                return;
+            }
+        } catch (error) {
+            console.error('Error deleting recommendation:', error);
+            showAlert('Error deleting recommendation. Please try again.', 'error');
+            return;
+        }
+    }
+
+    row.remove();
+    updateTotals();
+    updateSection1Totals();
+    updateAssetClassBreakdown();
+    updateFutureValuesSummary();
+    showAlert('Recommendation deleted successfully!', 'success');
+}
+
+
+/** Parse a positive per-share price (avoids JS falsy 0 and string quirks). */
+function parsePositivePriceFromRec(val) {
+    if (val === null || val === undefined || val === '') return null;
+    const p = parseFloat(val);
+    if (isNaN(p) || p <= 0) return null;
+    return p;
+}
+
+/** Read displayed current price from a Section 1 row (works with or without Asset Class column). */
+function parsePriceFromRowPriceCell(row) {
+    if (!row) return null;
+    const priceCell = row.querySelector('.current-price-cell');
+    if (!priceCell) return null;
+    const priceText = priceCell.textContent.replace(/[₹,\s]/g, '').trim();
+    const price = parseFloat(priceText);
+    if (isNaN(price) || price <= 0) return null;
+    return price;
+}
+
+function getCurrentPrice(securityId) {
+    // Check Section 1
+    const section1 = {{ pending_data.section_1_recommended|default([])|tojson_safe }};
+    for (const rec of section1) {
+        if (rec.security_id == securityId) {
+            const p = parsePositivePriceFromRec(rec.current_price);
+            if (p !== null) return p;
+        }
+    }
+    
+    // Check Section 2
+    const section2 = {{ pending_data.section_2_hot_stocks|default([])|tojson_safe }};
+    for (const rec of section2) {
+        if (rec.security_id == securityId) {
+            const p = parsePositivePriceFromRec(rec.current_price);
+            if (p !== null) return p;
+        }
+    }
+    
+    // Check Section 3
+    const section3 = {{ pending_data.section_3_other|default([])|tojson_safe }};
+    for (const rec of section3) {
+        if (rec.security_id == securityId) {
+            const p = parsePositivePriceFromRec(rec.current_price);
+            if (p !== null) return p;
+        }
+    }
+    
+    // Fallback to old format
+    const securityRecommendations = {{ pending_data.security_recommendations|default([])|tojson_safe }};
+    for (const rec of securityRecommendations) {
+        if (rec.security_id == securityId) {
+            const q = parseFloat(rec.quantity);
+            const amt = parseFloat(rec.amount);
+            if (!isNaN(q) && q !== 0 && !isNaN(amt)) {
+                const implied = Math.abs(amt / q);
+                if (!isNaN(implied) && implied > 0) return implied;
+            }
+            const p = parsePositivePriceFromRec(rec.current_price);
+            if (p !== null) return p;
+            break;
+        }
+    }
+    
+    // Live DOM: use class so column index stays correct when Asset Class column is hidden (Equity view)
+    const row = document.querySelector(`tr[data-security-id="${securityId}"]`);
+    const fromCell = parsePriceFromRowPriceCell(row);
+    if (fromCell !== null) return fromCell;
+    
+    console.warn(`Could not find price for security ${securityId}, returning 0`);
+    return 0.0;
+}
+
+function updateQuantityAndAction(securityId) {
+    const row = document.querySelector(`tr[data-security-id="${securityId}"]`);
+    if (!row) return;
+    
+    const quantityInput = row.querySelector('.quantity-input');
+    const amountInput = row.querySelector('.amount-input');
+    const actionBadge = row.querySelector('.action-badge');
+    
+    if (!quantityInput || !amountInput) return;
+    
+    // Section 1 semantics: Quantity input is TRADE quantity (signed).
+    // Amount must always equal quantity * current price.
+    const tradeQty = parseInt(quantityInput.value, 10) || 0;
+    
+    // Prefer visible price cell (correct with/without Asset Class col); then session snapshot
+    let currentPrice = parsePriceFromRowPriceCell(row);
+    if (currentPrice === null) {
+        currentPrice = getCurrentPrice(securityId);
+    }
+    
+    // Update amount = qty * price (signed)
+    if (currentPrice > 0) {
+        const newAmount = tradeQty * currentPrice;
+        amountInput.value = Math.round(newAmount);
+    }
+
+    const amountVal = parseFloat(amountInput.value) || 0;
+    applyActionBadgeFromTrade(actionBadge, tradeQty, amountVal);
+    
+    // Update totals and other calculations
+    updateTotals();
+    updateSection1Totals();
+    updateAssetClassBreakdown();
+    updateFutureValuesSummary();
+
+    // Mark row as user-modified (quantity edit is an explicit user action)
+    markRowUserModified(row);
+}
+
+function updateTotals() {
+    // Only count Section 1 (recommended securities) for the SELECTED ASSET CLASS
+    const rows = document.querySelectorAll('#section1-tbody tr[data-security-id]');
+    let totalAmount = 0;
+    let totalQuantity = 0;
+    let totalTargetWeight = 0;
+    let totalCurrentWeight = 0;
+    let totalFutureWeight = 0;
+    
+    rows.forEach(row => {
+        // Only count checked securities
+        const checkbox = row.querySelector('.section1-checkbox');
+        if (checkbox && !checkbox.checked) {
+            return; // Skip excluded securities
+        }
+        
+        const amountInput = row.querySelector('.amount-input');
+        const quantityInput = row.querySelector('.quantity-input');
+        const targetWeightCell = row.querySelector('.target-weight-cell');
+        const currentWeightCell = row.querySelector('.current-weight-cell');
+        const futureWeightInput = row.querySelector('.future-weight-input');
+        
+        if (amountInput) totalAmount += parseFloat(amountInput.value) || 0;
+        if (quantityInput) totalQuantity += parseInt(quantityInput.value) || 0;
+        // NOTE: individual cell weights are already within the selected asset class
+        if (targetWeightCell) {
+            const weight = parseFloat(targetWeightCell.textContent) || 0;
+            totalTargetWeight += weight;
+        }
+        if (currentWeightCell) {
+            const weight = parseFloat(currentWeightCell.textContent) || 0;
+            totalCurrentWeight += weight;
+        }
+        if (futureWeightInput) {
+            const weight = parseFloat(futureWeightInput.value) || 0;
+            totalFutureWeight += weight;
+        }
+    });
+    
+    // Get portfolio and asset-class values from the template
+    const currentState = {{ pending_data.get('current_state', {})|tojson_safe }};
+    const investmentAmount = {{ pending_data.investment_amount|default(0.0)|tojson_safe }};
+    const selectedAssetClass = {{ pending_data.get('selected_asset_class', 'Equity')|tojson_safe }};
+
+    const totalCurrentPortfolio = currentState.total_portfolio_value || 0.0;
+    const totalFuturePortfolio = totalCurrentPortfolio + investmentAmount;
+
+    const currentAssetAllocations = currentState.current_asset_allocations || {};
+    const currentAssetValue = currentAssetAllocations[selectedAssetClass] || 0.0;
+    const futureAssetValue = currentAssetValue + totalAmount;
+
+    // Calculate proper weights for summary cards WITHIN THE SELECTED ASSET CLASS
+    const assetClassCurrentWeight = currentAssetValue > 0
+        ? (currentAssetValue / currentAssetValue * 100)
+        : 0;
+    const assetClassFutureWeight = futureAssetValue > 0
+        ? (futureAssetValue / futureAssetValue * 100)
+        : 0;
+    
+    // Update totals row (sum of individual security weights)
+    const totalsRow = document.querySelector('#totals-row');
+    if (totalsRow) {
+        const amountCell = totalsRow.querySelector('.total-amount');
+        const quantityCell = totalsRow.querySelector('.total-quantity');
+        const currentWeightCell = totalsRow.querySelector('.total-current-weight');
+        const targetWeightCell = totalsRow.querySelector('.total-target-weight');
+        const futureWeightCell = totalsRow.querySelector('.total-future-weight');
+        
+        if (amountCell) amountCell.textContent = '₹' + totalAmount.toFixed(2);
+        if (quantityCell) quantityCell.textContent = totalQuantity;
+        if (currentWeightCell) currentWeightCell.textContent = totalCurrentWeight.toFixed(2) + '%';
+        if (targetWeightCell) targetWeightCell.textContent = totalTargetWeight.toFixed(2) + '%';
+        if (futureWeightCell) futureWeightCell.textContent = totalFutureWeight.toFixed(2) + '%';
+    }
+    
+    // Update summary cards (asset-class-level weights)
+    const summaryTotalAmount = document.getElementById('summary-total-amount');
+    const summaryTotalQuantity = document.getElementById('summary-total-quantity');
+    const summaryCurrentWeight = document.getElementById('summary-current-weight');
+    const summaryFutureWeight = document.getElementById('summary-future-weight');
+    
+    if (summaryTotalAmount) summaryTotalAmount.textContent = '₹' + totalAmount.toFixed(2);
+    if (summaryTotalQuantity) summaryTotalQuantity.textContent = totalQuantity;
+    if (summaryCurrentWeight) summaryCurrentWeight.textContent = assetClassCurrentWeight.toFixed(2) + '%';
+    if (summaryFutureWeight) summaryFutureWeight.textContent = assetClassFutureWeight.toFixed(2) + '%';
+}
+
+function updateAssetClassBreakdown() {
+    // Only process Section 1 rows (they have editable amount inputs)
+    const rows = document.querySelectorAll('#section1-tbody tr[data-security-id]');
+    const assetClassTotals = {};
+    
+    rows.forEach(row => {
+        // Only count checked securities
+        const checkbox = row.querySelector('.section1-checkbox');
+        if (checkbox && !checkbox.checked) {
+            return; // Skip excluded securities
+        }
+        
+        const assetClass = getRowAssetClass(row);
+        const amountInput = row.querySelector('.amount-input');
+        
+        // Only process if amount input exists
+        if (!amountInput) return;
+        
+        const amount = parseFloat(amountInput.value) || 0;
+        
+        if (!assetClassTotals[assetClass]) {
+            assetClassTotals[assetClass] = 0;
+        }
+        assetClassTotals[assetClass] += amount;
+    });
+    
+    // Update the asset class breakdown display
+    const content = document.getElementById('asset-class-summary-content');
+    if (!content) return;
+    
+    content.innerHTML = '';
+    
+    Object.keys(assetClassTotals).forEach(assetClass => {
+        const total = assetClassTotals[assetClass];
+        const col = document.createElement('div');
+        col.className = 'col-md-3';
+        col.innerHTML = `<strong>${assetClass}:</strong> ₹${total.toFixed(2)}`;
+        content.appendChild(col);
+    });
+}
+
+function updateFutureValuesSummary() {
+    const currentState = {{ pending_data.get('current_state', {})|tojson_safe }} || {};
+    const investmentAmount = parseFloat({{ pending_data.investment_amount|default(0.0)|tojson_safe }}) || 0;
+    
+    const currentHoldings = currentState?.current_holdings || {};
+    
+    let futureEquityValue = parseFloat(currentHoldings.Equity?.current_value) || 0;
+    let futureFixedIncomeValue = parseFloat(currentHoldings['Fixed Income']?.current_value) || 0;
+    let futureGoldValue = parseFloat(currentHoldings.Gold?.current_value) || 0;
+    
+    // Only process Section 1 rows (they have editable amount inputs)
+    const rows = document.querySelectorAll('#section1-tbody tr[data-security-id]');
+    rows.forEach(row => {
+        // Only count checked securities
+        const checkbox = row.querySelector('.section1-checkbox');
+        if (checkbox && !checkbox.checked) {
+            return; // Skip excluded securities
+        }
+        
+        const assetClass = getRowAssetClass(row);
+        const amountInput = row.querySelector('.amount-input');
+        
+        // Only process if amount input exists
+        if (!amountInput) return;
+        
+        const amount = parseFloat(amountInput.value) || 0;
+        
+        if (assetClass === 'Equity') {
+            futureEquityValue += amount;
+        } else if (assetClass === 'Fixed Income') {
+            futureFixedIncomeValue += amount;
+        } else if (assetClass === 'Gold') {
+            futureGoldValue += amount;
+        }
+    });
+    
+    // Calculate total portfolio after investment
+    const totalPortfolioAfterInvestment = futureEquityValue + futureFixedIncomeValue + futureGoldValue;
+    
+    // Ensure all values are valid numbers before calling toLocaleString
+    futureEquityValue = isNaN(futureEquityValue) ? 0 : futureEquityValue;
+    futureFixedIncomeValue = isNaN(futureFixedIncomeValue) ? 0 : futureFixedIncomeValue;
+    futureGoldValue = isNaN(futureGoldValue) ? 0 : futureGoldValue;
+    const safeTotalPortfolio = isNaN(totalPortfolioAfterInvestment) ? 0 : totalPortfolioAfterInvestment;
+    
+    const futureEquityEl = document.getElementById('future-equity-value');
+    const futureFixedIncomeEl = document.getElementById('future-fixed-income-value');
+    const futureGoldEl = document.getElementById('future-gold-value');
+    const totalFutureEl = document.getElementById('total-future-portfolio');
+    
+    if (futureEquityEl) futureEquityEl.textContent = '₹' + futureEquityValue.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (futureFixedIncomeEl) futureFixedIncomeEl.textContent = '₹' + futureFixedIncomeValue.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (futureGoldEl) futureGoldEl.textContent = '₹' + futureGoldValue.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (totalFutureEl) totalFutureEl.textContent = '₹' + safeTotalPortfolio.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function addNewSecurityRecommendation() {
+    const securityName = prompt('Enter security symbol (e.g., RELIANCE):');
+    if (!securityName) return;
+    
+    const tbody = document.querySelector('#section1-tbody');
+    const newRow = document.createElement('tr');
+    const tempId = 'new_' + Date.now();
+    newRow.setAttribute('data-security-id', tempId);
+    newRow.setAttribute('data-section', '1');
+    const pageAc = document.getElementById('add-security-asset-class')?.value
+        || document.getElementById('section1-table')?.getAttribute('data-selected-asset-class')
+        || (selectedAssetClasses[0] || 'Equity');
+    newRow.setAttribute('data-asset-class', pageAc);
+    
+    // Escape HTML to prevent XSS and syntax errors
+    const escapedName = securityName.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+    
+    const acCol = section1HideAssetClass ? '' : `<td>${pageAc}</td>`;
+    
+    newRow.innerHTML = `
+        <td>
+            <input type="checkbox" class="section1-checkbox" data-security-id="${tempId}" checked>
+        </td>
+        <td>
+            <strong>${escapedName.toUpperCase()}</strong><br>
+            <small class="text-muted">New Security</small>
+        </td>
+        ${acCol}
+        <td class="current-weight-cell">0.00%</td>
+        <td class="target-weight-cell">0.00%</td>
+        <td class="col-s1-future">
+            <input type="number" 
+                   class="form-control form-control-sm future-weight-input section1-input" 
+                   data-security-id="${tempId}"
+                   data-section="1"
+                   value="0.00"
+                   step="0.01" min="0" max="100">
+        </td>
+        <td>
+            <span class="badge bg-secondary action-badge">HOLD</span>
+        </td>
+        <td class="col-s1-amount">
+            <input type="number" 
+                   class="form-control form-control-sm amount-input section1-input" 
+                   data-security-id="${tempId}"
+                   data-section="1"
+                   value="0.00"
+                   step="0.01">
+        </td>
+        <td>
+            <input type="number" 
+                   class="form-control form-control-sm quantity-input section1-input" 
+                   data-security-id="${tempId}"
+                   data-section="1"
+                   value="0"
+                   step="1">
+        </td>
+        <td class="current-price-cell">₹0.00</td>
+        <td>
+            <small class="text-muted">Manually added</small>
+        </td>
+        <td>
+            <button type="button" 
+                    class="btn btn-sm btn-outline-danger delete-row-btn" 
+                    data-security-id="${tempId}"
+                    title="Delete this recommendation">
+                <i class="fas fa-trash"></i>
+            </button>
+        </td>
+    `;
+    
+    // Attach event listeners to new inputs
+    newRow.querySelectorAll('.section1-input').forEach(input => {
+        input.addEventListener('change', function() {
+            updateSecurityRecommendation(this, 1);
+            markRowUserModified(newRow);
+        });
+        input.addEventListener('input', function() {
+            updateSecurityRecommendation(this, 1);
+            markRowUserModified(newRow);
+        });
+    });
+    
+    // Attach checkbox listener
+    const checkbox = newRow.querySelector('.section1-checkbox');
+    if (checkbox) {
+        checkbox.addEventListener('change', function() {
+            handleSection1Toggle(this);
+        });
+    }
+    
+    tbody.appendChild(newRow);
+    
+    // Fetch security price and ID from API
+    const priceCell = newRow.querySelector('.current-price-cell');
+    if (priceCell) {
+        const searchSymbol = securityName.trim().toUpperCase();
+        fetch(`/historical-prices/api/securities/search?q=${encodeURIComponent(searchSymbol)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Security search response for', searchSymbol, ':', data);
+                if (data.securities && data.securities.length > 0) {
+                    // Find exact match (case-insensitive)
+                    const exactMatch = data.securities.find(sec => 
+                        sec.symbol && sec.symbol.toUpperCase() === searchSymbol
+                    ) || data.securities[0]; // Fallback to first result if no exact match
+                    
+                    console.log('Found security match:', exactMatch);
+                    
+                    // Update the row with the actual security_id
+                    if (exactMatch && exactMatch.id) {
+                        const actualSecurityId = parseInt(exactMatch.id);
+                        if (!isNaN(actualSecurityId)) {
+                            newRow.setAttribute('data-security-id', actualSecurityId);
+                            // Also update the checkbox and inputs to use the real security_id
+                            const checkbox = newRow.querySelector('.section1-checkbox');
+                            if (checkbox) {
+                                checkbox.setAttribute('data-security-id', actualSecurityId);
+                            }
+                            newRow.querySelectorAll('[data-security-id]').forEach(el => {
+                                if (el.getAttribute('data-security-id') === tempId) {
+                                    el.setAttribute('data-security-id', actualSecurityId);
+                                }
+                            });
+                            console.log('Updated row security_id from', tempId, 'to', actualSecurityId);
+                        }
+                    }
+                    
+                    // Update price
+                    if (exactMatch && exactMatch.current_price !== null && exactMatch.current_price !== undefined) {
+                        const price = parseFloat(exactMatch.current_price);
+                        console.log('Parsed price:', price);
+                        if (!isNaN(price) && price > 0) {
+                            priceCell.textContent = '₹' + price.toFixed(2);
+                            console.log('Updated price cell to:', priceCell.textContent);
+                        } else {
+                            console.warn('Invalid price value:', exactMatch.current_price);
+                        }
+                    } else {
+                        console.warn('No valid price found for security:', exactMatch);
+                    }
+                } else {
+                    console.warn('No securities found for symbol:', searchSymbol);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching security price:', error);
+            });
+    }
+    
+    updateTotals();
+    updateSection1Totals();
+    updateAssetClassBreakdown();
+    updateFutureValuesSummary();
+    
+    // Offer to redistribute funds to include the new security
+    // Note: New securities start with 0 amount, so redistribution will include them
+    showAlert('New security recommendation added! Click "Recalculate Section 1" to redistribute funds.', 'success');
+}
+
+function updateSecurityAllocation() {
+    // Collect only checked securities from Section 1
+    const rows = document.querySelectorAll('#section1-tbody tr[data-security-id]');
+    const securityRecommendations = [];
+    
+    rows.forEach(row => {
+        const checkbox = row.querySelector('.section1-checkbox');
+        if (!checkbox || !checkbox.checked) {
+            return; // Skip unchecked securities
+        }
+        
+        const securityIdAttr = row.getAttribute('data-security-id');
+        const securityId = parseInt(securityIdAttr);
+        const amountInput = row.querySelector('.amount-input');
+        const quantityInput = row.querySelector('.quantity-input');
+        const futureWeightInput = row.querySelector('.future-weight-input');
+        
+        const amount = parseFloat(amountInput?.value) || 0;
+        const quantity = parseInt(quantityInput?.value) || 0;
+        const futureWeight = parseFloat(futureWeightInput?.value) || 0;
+        
+        // Skip if securityId is not a valid number (e.g., temporary IDs like 'new_1234567890')
+        // This happens when a manually added security hasn't been looked up yet
+        if (isNaN(securityId) || !securityId) {
+            console.warn('Skipping row with invalid security_id:', securityIdAttr, '- Security may not have been found in database. Please wait for price lookup to complete.');
+            return; // Skip this row
+        }
+        
+        securityRecommendations.push({
+            security_id: securityId,
+            amount: amount,
+            quantity: quantity,
+            future_weight: futureWeight,
+            asset_class: getRowAssetClass(row)
+        });
+    });
+    
+    const updateUrl = {{ url_for("unified_recommendations.update_security_allocation")|tojson_safe }};
+    const updateCsrfToken = {{ csrf_token()|tojson_safe }};
+    
+    // Disable button during save
+    const saveBtn = document.getElementById('update-security-allocation-btn');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    
+    // Set flag to track save progress
+    window._saveInProgress = true;
+    
+    fetch(updateUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': updateCsrfToken
+        },
+        body: JSON.stringify({
+            security_recommendations: securityRecommendations,
+            selected_asset_classes: selectedAssetClasses,
+            selected_asset_class: selectedAssetClasses[0] || '',
+            user_actions: {
+                manually_selected: userSelectedIds,
+                manually_rejected: userRejectedIds
+            }
+        })
+    })
+    .then(async response => {
+        // Check if response is ok
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('HTTP error response:', errorText);
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        // Check content type to ensure it's JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            // If not JSON, try to get text and log it
+            const text = await response.text();
+            console.error('Non-JSON response received:', text);
+            // If it's a redirect or success message, treat as success
+            if (response.status === 200 || response.status === 302) {
+                return { success: true, message: 'Saved successfully' };
+            }
+            throw new Error('Server returned non-JSON response');
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data && data.success) {
+            showAlert('Security allocation saved successfully! Redirecting...', 'success');
+            // Redirect back to asset allocation screen after a short delay
+            // Use a flag to prevent error handling after successful save
+            window._saveInProgress = false;
+            setTimeout(() => {
+                window.location.href = {{ url_for("unified_recommendations.review_recommendations", client_id=client.id, session_id=session_id)|tojson_safe }};
+            }, 1000);
+        } else {
+            window._saveInProgress = false;
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = originalText;
+            showAlert('Error saving security allocation: ' + (data?.error || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        // Don't show error if we're already redirecting (save was successful)
+        if (window._saveInProgress === false) {
+            return; // Save was successful, ignore any subsequent errors
+        }
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = originalText;
+        console.error('Error saving:', error);
+        // Only show error for actual failures, not network errors during redirect
+        const errorMsg = error.message || String(error);
+        if (errorMsg && !errorMsg.includes('Failed to fetch') && 
+            !errorMsg.includes('NetworkError') && 
+            !errorMsg.includes('Load failed') &&
+            !errorMsg.includes('network')) {
+            showAlert('Error saving security allocation: ' + errorMsg, 'error');
+        }
+    });
+}
+
+
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    
+    const container = document.querySelector('.container');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 5000);
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize UI lists after DOM is ready
+    updateUserSelectedList();
+    updateUserRejectedList();
+    
+    // Reconcile trade qty / amount on server-rendered rows (amount = qty * price)
+    const section1Table = document.getElementById('section1-table');
+    if (section1Table) {
+        section1Table.querySelectorAll('#section1-tbody tr[data-security-id]').forEach(function (row) {
+            reconcileSection1RowFromInputs(row);
+        });
+        updateSection1Totals();
+    }
+    
+    updateTotals();
+    updateSection1Totals(); // Initialize totals row
+    updateAssetClassBreakdown();
+    updateFutureValuesSummary();
+    
+    // Use event delegation for "Move to Section 1" buttons (works for dynamically added buttons too)
+    document.addEventListener('click', function(event) {
+        // Check if click is on the button or inside it (icon, text, etc.)
+        const button = event.target.closest('.move-to-section1-btn');
+        if (!button) {
+            // Also check if click is on icon inside button
+            const icon = event.target.closest('i.fa-arrow-up');
+            if (icon) {
+                const parentButton = icon.closest('.move-to-section1-btn');
+                if (parentButton) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleMoveToSection1Click(parentButton, event);
+                    return;
+                }
+            }
+            return;
+        }
+        
+        event.preventDefault();
+        event.stopPropagation();
+        handleMoveToSection1Click(button, event);
+    });
+    
+    // Delete buttons — string security ids (incl. new_* rows); touch-friendly on mobile
+    let lastDeleteTouchAt = 0;
+    function handleDeleteRowActivate(event) {
+        const deleteBtn = event.target.closest('.delete-row-btn');
+        if (!deleteBtn || deleteBtn.disabled) return;
+        const securityId = deleteBtn.getAttribute('data-security-id');
+        if (!securityId) return;
+        event.preventDefault();
+        event.stopPropagation();
+        deleteBtn.disabled = true;
+        Promise.resolve(deleteSecurityRecommendation(securityId, deleteBtn)).finally(() => {
+            if (deleteBtn.isConnected) deleteBtn.disabled = false;
+        });
+    }
+    document.addEventListener(
+        'touchend',
+        function (event) {
+            const deleteBtn = event.target.closest('.delete-row-btn');
+            if (!deleteBtn) return;
+            lastDeleteTouchAt = Date.now();
+            handleDeleteRowActivate(event);
+        },
+        { passive: false, capture: true }
+    );
+    document.addEventListener('click', function (event) {
+        if (Date.now() - lastDeleteTouchAt < 500) return;
+        handleDeleteRowActivate(event);
+    }, true);
+    
+    function handleMoveToSection1Click(button, event) {
+        // Check if button is disabled (already processing)
+        if (button.disabled) {
+            console.log('Button already processing, ignoring click');
+            return;
+        }
+        
+        const securityId = button.getAttribute('data-security-id');
+        const sourceSection = button.getAttribute('data-source-section');
+        
+        console.log('Move to Section 1 clicked:', { securityId, sourceSection, button });
+        
+        if (!securityId || !sourceSection) {
+            console.error('Missing data attributes:', { securityId, sourceSection });
+            alert('Error: Missing security information. Please refresh the page.');
+            return;
+        }
+        
+        const securityIdInt = parseInt(securityId);
+        const sourceSectionInt = parseInt(sourceSection);
+        
+        if (isNaN(securityIdInt) || isNaN(sourceSectionInt)) {
+            console.error('Invalid security ID or section:', { securityId, sourceSection });
+            alert('Error: Invalid security information. Please refresh the page.');
+            return;
+        }
+        
+        try {
+            moveToSection1(securityIdInt, sourceSectionInt, event);
+        } catch (error) {
+            console.error('Error in moveToSection1:', error);
+            alert('Error moving security: ' + error.message);
+            // Re-enable button on error
+            if (button) {
+                button.disabled = false;
+                const originalText = button.innerHTML;
+                if (originalText && !originalText.includes('Moving')) {
+                    button.innerHTML = originalText;
+                } else {
+                    button.innerHTML = '<i class="fas fa-arrow-up"></i> Move to Section 1';
+                }
+            }
+        }
+    }
+    
+    // Attach event listeners for Section 1 checkboxes
+    document.querySelectorAll('.section1-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            handleSection1Toggle(this);
+        });
+    });
+    
+    // Attach event listener for "select all" checkbox
+    const selectAllCheckbox = document.getElementById('select-all-section1');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            toggleAllSection1(this);
+        });
+    }
+    
+    // Attach event listeners for Section 1 input fields
+    document.querySelectorAll('.section1-input').forEach(input => {
+        input.addEventListener('change', function() {
+            updateSecurityRecommendation(this, 1);
+            updateSection1Totals(); // Update totals when value changes
+            markRowUserModified(this.closest('tr'));
+        });
+        input.addEventListener('input', function() {
+            updateSecurityRecommendation(this, 1);
+            updateSection1Totals(); // Update totals as user types
+            markRowUserModified(this.closest('tr'));
+        });
+    });
+    
+    // Attach event listeners for buttons with inline handlers
+    
+    const recalculateBtn = document.getElementById('recalculate-section1-btn');
+    if (recalculateBtn) {
+        recalculateBtn.addEventListener('click', recalculateSection1);
+    }
+    
+    const addNewSecurityBtn = document.getElementById('add-new-security-btn');
+    if (addNewSecurityBtn) {
+        addNewSecurityBtn.addEventListener('click', addNewSecurityRecommendation);
+    }
+
+    const addClassBtn = document.getElementById('add-asset-class-btn');
+    if (addClassBtn) {
+        addClassBtn.addEventListener('click', function () {
+            const select = document.getElementById('add-asset-class-select');
+            const name = (select && select.value) || '';
+            if (!name) {
+                alert('Choose an asset class to add.');
+                return;
+            }
+            fetch({{ url_for("unified_recommendations.add_asset_class_to_session")|tojson_safe }}, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': window.csrfToken
+                },
+                body: JSON.stringify({
+                    client_id: {{ pending_data.client_id|default(0)|tojson_safe }},
+                    session_id: {{ session_id|default(0)|tojson_safe }},
+                    asset_class: name,
+                    amount: 0
+                })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    const params = new URLSearchParams(window.location.search);
+                    const existing = (params.get('asset_classes') || selectedAssetClasses.join(','));
+                    const next = existing ? (existing + ',' + name) : name;
+                    params.set('asset_classes', next);
+                    window.location.search = params.toString();
+                } else {
+                    alert(data.error || 'Could not add asset class.');
+                }
+            })
+            .catch(function () {
+                alert('Could not add asset class.');
+            });
+        });
+    }
+    
+    const updateAllocationBtn = document.getElementById('update-security-allocation-btn');
+    if (updateAllocationBtn) {
+        updateAllocationBtn.addEventListener('click', updateSecurityAllocation);
+    }
+
+    document.querySelectorAll('.preview-email-link').forEach(function (previewEmailBtn) {
+        previewEmailBtn.addEventListener('click', previewEmailWithSave);
+    });
+});
+
+// Helper functions to update tables dynamically without page reload
+function updateSection1Table(section1Data) {
+    const tbody = document.getElementById('section1-tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    section1Data.forEach(rec => {
+        const row = createSection1Row(rec);
+        tbody.appendChild(row);
+    });
+    
+    // Re-attach event listeners for new rows
+    document.querySelectorAll('.section1-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            handleSection1Toggle(this);
+        });
+        
+        // Set checkbox state based on userSelectedIds and userRejectedIds
+        // 1. If in userSelectedIds: always checked
+        // 2. If in userRejectedIds: always unchecked
+        // 3. Otherwise (system-generated): checked by default
+        const securityId = parseInt(checkbox.getAttribute('data-security-id'));
+        const isSelected = userSelectedIds.includes(securityId);
+        const isRejected = userRejectedIds.includes(securityId);
+        checkbox.checked = isSelected || (!isRejected);
+    });
+    document.querySelectorAll('.section1-input').forEach(input => {
+        input.addEventListener('change', function() {
+            updateSecurityRecommendation(this, 1);
+            updateSection1Totals(); // Update totals when user changes values
+            markRowUserModified(this.closest('tr'));
+        });
+        input.addEventListener('input', function() {
+            updateSecurityRecommendation(this, 1);
+            updateSection1Totals(); // Update totals as user types
+            markRowUserModified(this.closest('tr'));
+        });
+    });
+    
+    // Update security name mapping
+    section1Data.forEach(rec => {
+        if (rec.security_id) {
+            securityIdToName[rec.security_id] = {
+                symbol: rec.symbol || 'N/A',
+                name: rec.security_name || 'N/A'
+            };
+        }
+    });
+    
+    // Update totals row
+    updateSection1Totals();
+}
+
+function updateSection1Totals() {
+    const rows = document.querySelectorAll('#section1-tbody tr[data-security-id]');
+    let totalBuyAmount = 0;  // Amount for BUY actions
+    let totalSellAmount = 0; // Amount for SELL actions
+    let totalBuyQuantity = 0;  // Quantity for BUY actions
+    let totalSellQuantity = 0; // Quantity for SELL actions
+    let totalCurrentWeight = 0;
+    let totalTargetWeight = 0;
+    let totalFutureWeight = 0;
+    
+    rows.forEach(row => {
+        // Only count checked securities
+        const checkbox = row.querySelector('.section1-checkbox');
+        if (checkbox && !checkbox.checked) {
+            return; // Skip unchecked securities
+        }
+        
+        // Get amount, quantity, and action
+        const amountInput = row.querySelector('.amount-input');
+        const quantityInput = row.querySelector('.quantity-input');
+        const currentWeightCell = row.querySelector('.current-weight-cell');
+        const targetWeightCell = row.querySelector('.target-weight-cell');
+        const futureWeightInput = row.querySelector('.future-weight-input');
+        const actionBadge = row.querySelector('.action-badge');
+        
+        const amount = parseFloat(amountInput?.value) || 0;
+        // Section 1 semantics: quantity input is TRADE quantity (signed).
+        const tradeQty = parseInt(quantityInput?.value, 10) || 0;
+        const action = deriveActionFromTrade(tradeQty, amount);
+        
+        // Separate BUY and SELL amounts/quantities
+        if (action === 'BUY') {
+            totalBuyAmount += amount;
+            totalBuyQuantity += Math.abs(tradeQty);
+        } else if (action === 'SELL') {
+            totalSellAmount += Math.abs(amount);
+            totalSellQuantity += Math.abs(tradeQty);
+        }
+        
+        if (currentWeightCell) {
+            const weight = parseFloat(currentWeightCell.textContent.replace('%', '')) || 0;
+            totalCurrentWeight += weight;
+        }
+        if (targetWeightCell) {
+            const weight = parseFloat(targetWeightCell.textContent.replace('%', '')) || 0;
+            totalTargetWeight += weight;
+        }
+        if (futureWeightInput) {
+            const weight = parseFloat(futureWeightInput.value) || 0;
+            totalFutureWeight += weight;
+        }
+    });
+    
+    // Calculate NET allocation (buys - sells)
+    const netAmount = (totalBuyAmount || 0) - (totalSellAmount || 0);
+    const netQuantity = (totalBuyQuantity || 0) - (totalSellQuantity || 0);
+    
+    // Ensure values are valid numbers
+    const safeNetAmount = isNaN(netAmount) ? 0 : netAmount;
+    const safeNetQuantity = isNaN(netQuantity) ? 0 : netQuantity;
+    
+    // Update totals row
+    const totalAmountEl = document.getElementById('section1-total-amount');
+    const totalQuantityEl = document.getElementById('section1-total-quantity');
+    const totalCurrentWeightEl = document.getElementById('section1-total-current-weight');
+    const totalTargetWeightEl = document.getElementById('section1-total-target-weight');
+    const totalFutureWeightEl = document.getElementById('section1-total-future-weight');
+    
+    if (totalAmountEl) {
+        totalAmountEl.textContent = '₹' + Math.round(safeNetAmount).toLocaleString('en-IN');
+        totalAmountEl.className = 'text-end ' + (safeNetAmount >= 0 ? 'text-success' : 'text-danger');
+    }
+    if (totalQuantityEl) {
+        totalQuantityEl.textContent = safeNetQuantity.toLocaleString('en-IN');
+        totalQuantityEl.className = 'text-end ' + (safeNetQuantity >= 0 ? 'text-success' : 'text-danger');
+    }
+    const multiClass = (selectedAssetClasses || []).length > 1;
+    if (totalCurrentWeightEl) {
+        totalCurrentWeightEl.textContent = multiClass ? 'per class' : (totalCurrentWeight.toFixed(2) + '%');
+    }
+    if (totalTargetWeightEl) {
+        totalTargetWeightEl.textContent = multiClass ? 'per class' : (totalTargetWeight.toFixed(2) + '%');
+    }
+    if (totalFutureWeightEl) {
+        totalFutureWeightEl.textContent = multiClass ? 'per class' : (totalFutureWeight.toFixed(2) + '%');
+    }
+    updateLiveSumBar(safeNetAmount);
+}
+
+function updateLiveSumBar(netAmount) {
+    const sumEl = document.getElementById('live-section1-sum');
+    const diffEl = document.getElementById('live-section1-diff');
+    const statusEl = document.getElementById('live-sum-status');
+    if (!sumEl || !diffEl || !statusEl) return;
+    const net = Number(netAmount) || 0;
+    const diff = net - investmentAmountLive;
+    sumEl.textContent = '₹' + Math.round(net).toLocaleString('en-IN');
+    diffEl.textContent = '₹' + Math.round(diff).toLocaleString('en-IN');
+    sumEl.className = 'fs-5 fw-semibold ' + (net >= 0 ? 'text-success' : 'text-danger');
+    const absDiff = Math.abs(diff);
+    if (absDiff < 1) {
+        statusEl.className = 'badge bg-success';
+        statusEl.textContent = 'Matches investment';
+        diffEl.className = 'fs-5 fw-semibold text-success';
+    } else if (absDiff < Math.max(1000, Math.abs(investmentAmountLive) * 0.02)) {
+        statusEl.className = 'badge bg-warning text-dark';
+        statusEl.textContent = 'Close';
+        diffEl.className = 'fs-5 fw-semibold text-warning';
+    } else {
+        statusEl.className = 'badge bg-danger';
+        statusEl.textContent = 'Does not match';
+        diffEl.className = 'fs-5 fw-semibold text-danger';
+    }
+}
+
+function updateSection2Table(section2Data) {
+    const tbody = document.getElementById('section2-tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    section2Data.forEach(rec => {
+        const row = createSection2Row(rec);
+        tbody.appendChild(row);
+    });
+    
+    // Event delegation handles buttons automatically - no need to re-attach listeners
+}
+
+function updateSection3Table(section3Data) {
+    const tbody = document.getElementById('section3-tbody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = '';
+    section3Data.forEach(rec => {
+        const row = createSection3Row(rec);
+        tbody.appendChild(row);
+    });
+    
+    // Event delegation handles buttons automatically - no need to re-attach listeners
+}
+
+function createSection1Row(rec) {
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-security-id', rec.security_id);
+    tr.setAttribute('data-section', '1');
+    tr.setAttribute('data-asset-class', rec.asset_class || 'Equity');
+    tr.setAttribute('data-user-modified', rec.is_user_modified ? '1' : '0');
+    if (rec.recommendation_id) {
+        tr.setAttribute('data-recommendation-id', rec.recommendation_id);
+    }
+    
+    // Update security name mapping
+    if (rec.security_id) {
+        securityIdToName[rec.security_id] = {
+            symbol: rec.symbol || 'N/A',
+            name: rec.security_name || 'N/A'
+        };
+    }
+    
+    const normalized = normalizeSection1TradeQtyAmount({
+        current_price: rec.current_price,
+        current_quantity: rec.current_quantity,
+        quantity: rec.quantity,
+        amount: rec.amount
+    });
+    const tradeQty = normalized.tradeQty;
+    const amountVal = normalized.amount;
+    const action = deriveActionFromTrade(tradeQty, amountVal);
+    const actionClass = action === 'BUY' ? 'bg-success' : (action === 'SELL' ? 'bg-danger' : 'bg-secondary');
+    const isSelected = userSelectedIds.includes(rec.security_id);
+    const isRejected = userRejectedIds.includes(rec.security_id);
+    
+    // Checkbox logic:
+    // 1. If in userSelectedIds: always checked
+    // 2. If in userRejectedIds: always unchecked (shouldn't be here, but handle gracefully)
+    // 3. Otherwise (system-generated): checked by default
+    const shouldBeChecked = isSelected || (!isRejected);
+    const acCol = section1HideAssetClass ? '' : `<td>${escapeHtml(rec.asset_class || 'Unknown')}</td>`;
+    
+    tr.innerHTML = `
+        <td>
+            <input type="checkbox" 
+                   class="section1-checkbox"
+                   data-security-id="${rec.security_id}"
+                   ${shouldBeChecked ? 'checked' : ''}>
+        </td>
+        <td>
+            <strong>${escapeHtml(rec.symbol || 'N/A')}</strong><br>
+            <small class="text-muted">${escapeHtml(rec.security_name || 'N/A')}</small>
+        </td>
+        ${acCol}
+        <td class="current-weight-cell">${(rec.current_weight || 0).toFixed(2)}%</td>
+        <td class="target-weight-cell">${(rec.target_weight || 0).toFixed(2)}%</td>
+        <td class="col-s1-future">
+            <input type="number" 
+                   class="form-control form-control-sm future-weight-input section1-input" 
+                   data-security-id="${rec.security_id}"
+                   data-section="1"
+                   value="${(rec.future_weight || rec.target_weight || 0).toFixed(2)}"
+                   step="0.01" min="0" max="100">
+        </td>
+        <td>
+            <span class="badge action-badge ${actionClass}" data-security-id="${rec.security_id}">
+                ${action}
+            </span>
+        </td>
+        <td class="col-s1-amount">
+            <input type="number" 
+                   class="form-control form-control-sm amount-input section1-input" 
+                   data-security-id="${rec.security_id}"
+                   data-section="1"
+                   value="${Math.round(amountVal)}"
+                   step="1">
+        </td>
+        <td>
+            <input type="number" 
+                   class="form-control form-control-sm quantity-input section1-input" 
+                   data-security-id="${rec.security_id}"
+                   data-section="1"
+                   value="${tradeQty}"
+                   step="1"
+                   onchange="updateQuantityAndAction(${rec.security_id})">
+        </td>
+        <td class="current-price-cell">₹${(rec.current_price || 0).toFixed(2)}</td>
+        <td>
+            <small class="text-muted">${escapeHtml(rec.reason || 'N/A')}</small>
+        </td>
+        <td>
+            <button type="button" 
+                    class="btn btn-sm btn-outline-danger delete-row-btn" 
+                    data-security-id="${rec.security_id}"
+                    ${rec.recommendation_id ? `data-recommendation-id="${rec.recommendation_id}"` : ''}
+                    title="Delete this recommendation">
+                <i class="fas fa-trash"></i>
+            </button>
+        </td>
+    `;
+    return tr;
+}
+
+function createSection2Row(rec) {
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-security-id', rec.security_id);
+    tr.setAttribute('data-section', '2');
+    
+    // Update security name mapping
+    if (rec.security_id) {
+        securityIdToName[rec.security_id] = {
+            symbol: rec.symbol || 'N/A',
+            name: rec.security_name || 'N/A'
+        };
+    }
+    
+    const actionClass = rec.action === 'BUY' ? 'bg-success' : (rec.action === 'SELL' ? 'bg-danger' : 'bg-secondary');
+    
+    tr.innerHTML = `
+        <td>
+            <button type="button" 
+                    class="btn btn-sm btn-success move-to-section1-btn" 
+                    data-security-id="${rec.security_id}"
+                    data-source-section="2">
+                <i class="fas fa-arrow-up"></i> Move to Section 1
+            </button>
+        </td>
+        <td>
+            <strong>${escapeHtml(rec.symbol || 'N/A')}</strong><br>
+            <small class="text-muted">${escapeHtml(rec.security_name || 'N/A')}</small>
+        </td>
+        <td>${escapeHtml(rec.asset_class || 'Unknown')}</td>
+        <td class="current-weight-cell">${(rec.current_weight || 0).toFixed(2)}%</td>
+        <td class="target-weight-cell">${(rec.target_weight || 0).toFixed(2)}%</td>
+        <td>
+            <input type="number" 
+                   class="form-control form-control-sm future-weight-input" 
+                   data-security-id="${rec.security_id}"
+                   data-section="2"
+                   value="${(rec.future_weight || rec.target_weight || 0).toFixed(2)}"
+                   step="0.01" min="0" max="100"
+                   readonly>
+        </td>
+        <td>
+            <span class="badge ${actionClass}">${rec.action || 'HOLD'}</span>
+        </td>
+        <td>₹${(rec.amount || 0).toFixed(2)}</td>
+        <td>${rec.quantity || 0}</td>
+        <td>₹${(rec.current_price || 0).toFixed(2)}</td>
+        <td>
+            <small class="text-muted">${escapeHtml(rec.reason || 'N/A')}</small>
+        </td>
+    `;
+    return tr;
+}
+
+function createSection3Row(rec) {
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-security-id', rec.security_id);
+    tr.setAttribute('data-section', '3');
+    
+    // Update security name mapping
+    if (rec.security_id) {
+        securityIdToName[rec.security_id] = {
+            symbol: rec.symbol || 'N/A',
+            name: rec.security_name || 'N/A'
+        };
+    }
+    
+    const actionClass = rec.action === 'BUY' ? 'bg-success' : (rec.action === 'SELL' ? 'bg-danger' : 'bg-secondary');
+    
+    tr.innerHTML = `
+        <td>
+            <button type="button" 
+                    class="btn btn-sm btn-success move-to-section1-btn" 
+                    data-security-id="${rec.security_id}"
+                    data-source-section="3">
+                <i class="fas fa-arrow-up"></i> Move to Section 1
+            </button>
+        </td>
+        <td>
+            <strong>${escapeHtml(rec.symbol || 'N/A')}</strong><br>
+            <small class="text-muted">${escapeHtml(rec.security_name || 'N/A')}</small>
+        </td>
+        <td>${escapeHtml(rec.asset_class || 'Unknown')}</td>
+        <td class="current-weight-cell">${(rec.current_weight || 0).toFixed(2)}%</td>
+        <td class="target-weight-cell">${(rec.target_weight || 0).toFixed(2)}%</td>
+        <td>
+            <input type="number" 
+                   class="form-control form-control-sm future-weight-input" 
+                   data-security-id="${rec.security_id}"
+                   data-section="3"
+                   value="${(rec.future_weight || rec.target_weight || 0).toFixed(2)}"
+                   step="0.01" min="0" max="100"
+                   readonly>
+        </td>
+        <td>
+            <span class="badge ${actionClass}">${rec.action || 'HOLD'}</span>
+        </td>
+        <td>
+            <small class="text-muted d-block">Allocation:</small> ₹${(rec.amount || 0).toFixed(2)}<br>
+            <small class="text-muted d-block">Current Value:</small> ₹${(rec.current_value || 0).toFixed(2)}
+        </td>
+        <td>
+            <small class="text-muted d-block">Allocation:</small> ${rec.quantity || 0}<br>
+            <small class="text-muted d-block">Current Qty:</small> ${rec.current_quantity || 0}
+        </td>
+        <td>₹${(rec.current_price || 0).toFixed(2)}</td>
+        <td>
+            <small class="text-muted">${escapeHtml(rec.reason || 'N/A')}</small>
+        </td>
+    `;
+    return tr;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * Section 1: quantity = TRADE shares (signed); amount = tradeQty * current_price.
+ * Repairs rows where quantity was shown/stored as future holding (current + trade).
+ */
+function normalizeSection1TradeQtyAmount(rec) {
+    const price = parseFloat(rec.current_price) || 0;
+    const currentQty = parseInt(rec.current_quantity, 10) || 0;
+    let tradeQty = parseInt(rec.quantity, 10) || 0;
+    let amount = parseFloat(rec.amount) || 0;
+
+    if (price <= 0) {
+        return { tradeQty: tradeQty, amount: amount, price: price };
+    }
+
+    const amtAbs = Math.abs(amount);
+    const qtyAbs = Math.abs(tradeQty);
+    const impliedFromAmount = amtAbs > 0 ? Math.round(amtAbs / price) : 0;
+    const amountFromQty = qtyAbs * price;
+    const qtyMismatch = amtAbs > 0 && Math.abs(amountFromQty - amtAbs) > price * 0.5;
+
+    if (qtyMismatch && impliedFromAmount > 0) {
+        if (currentQty > 0 && qtyAbs >= currentQty) {
+            const delta = qtyAbs - currentQty;
+            if (Math.abs(delta * price - amtAbs) <= price * 0.51) {
+                tradeQty = amount < 0 ? -delta : delta;
+            } else {
+                tradeQty = amount < 0 ? -impliedFromAmount : impliedFromAmount;
+            }
+        } else {
+            tradeQty = amount < 0 ? -impliedFromAmount : impliedFromAmount;
+        }
+        amount = Math.round(tradeQty * price);
+    } else if (tradeQty !== 0) {
+        const signedAmount = Math.round(tradeQty * price);
+        if (amtAbs === 0 || Math.abs(amtAbs - Math.abs(signedAmount)) > price * 0.5) {
+            amount = signedAmount;
+        }
+    }
+
+    return { tradeQty: tradeQty, amount: amount, price: price };
+}
+
+/** Fix amount/qty on a server-rendered Section 1 row without reload. */
+function reconcileSection1RowFromInputs(row) {
+    if (!row) {
+        return;
+    }
+    const securityId = parseInt(row.getAttribute('data-security-id'), 10);
+    const amountInput = row.querySelector('.amount-input');
+    const quantityInput = row.querySelector('.quantity-input');
+    const priceCell = row.querySelector('.current-price-cell');
+    if (!amountInput || !quantityInput || !priceCell) {
+        return;
+    }
+
+    const price = parseFloat((priceCell.textContent || '').replace(/₹|,/g, '').trim()) || 0;
+    const currentQty = securityId ? getSection1CurrentQty(securityId) : 0;
+    const normalized = normalizeSection1TradeQtyAmount({
+        current_price: price,
+        current_quantity: currentQty,
+        quantity: parseInt(quantityInput.value, 10) || 0,
+        amount: parseFloat(amountInput.value) || 0
+    });
+
+    quantityInput.value = normalized.tradeQty;
+    amountInput.value = Math.round(normalized.amount);
+    const actionBadge = row.querySelector('.action-badge') || row.querySelector('.badge');
+    applyActionBadgeFromTrade(actionBadge, normalized.tradeQty, normalized.amount);
+}
+
+/** Current holding qty for a Section 1 security (from section1Data). */
+function getSection1CurrentQty(securityId) {
+    if (typeof section1Data === 'undefined') {
+        return 0;
+    }
+    const rec = section1Data.find(function (r) {
+        return r.security_id == securityId;
+    });
+    if (!rec) {
+        return 0;
+    }
+    return parseInt(rec.current_quantity, 10) || 0;
+}
+
+/** BUY / SELL / HOLD from signed trade qty and amount — never from badge text. */
+function deriveActionFromTrade(tradeQty, amount) {
+    const t = parseInt(tradeQty, 10) || 0;
+    const a = parseFloat(amount) || 0;
+    if (t > 0 || a > 0) {
+        return 'BUY';
+    }
+    if (t < 0 || a < 0) {
+        return 'SELL';
+    }
+    return 'HOLD';
+}
+
+function applyActionBadgeFromTrade(actionBadge, tradeQty, amount) {
+    if (!actionBadge) {
+        return;
+    }
+    const action = deriveActionFromTrade(tradeQty, amount);
+    actionBadge.textContent = action;
+    actionBadge.className = 'badge action-badge ' + (
+        action === 'BUY' ? 'bg-success' : (action === 'SELL' ? 'bg-danger' : 'bg-secondary')
+    );
+}
+
+// Record recommendations to database
+// Returns: Promise<boolean> success
+async function recordRecommendations() {
+    // Collect recommendations from Section 1 (recommended securities)
+    const recommendations = [];
+    const section1Table = document.getElementById('section1-table');
+    if (!section1Table) {
+        alert('Section 1 table not found');
+        return false;
+    }
+    
+    const tbody = section1Table.querySelector('tbody#section1-tbody');
+    if (!tbody) {
+        alert('Section 1 tbody not found');
+        return false;
+    }
+    
+    const rows = tbody.querySelectorAll('tr[data-security-id]');
+    console.log('Found rows:', rows.length);
+
+    const tableEl = document.getElementById('section1-table');
+    const selectedAssetClass = (tableEl && tableEl.getAttribute('data-selected-asset-class'))
+        || {{ pending_data.get('selected_asset_class', 'Equity')|tojson_safe }}
+        || 'Equity';
+
+    rows.forEach((row, index) => {
+        const securityId = parseInt(row.getAttribute('data-security-id'), 10);
+        if (!securityId || isNaN(securityId)) {
+            console.log(`Skipping row ${index}: invalid security_id`);
+            return;
+        }
+        
+        // Only process checked rows - skip unchecked rows
+        const checkbox = row.querySelector('.section1-checkbox');
+        if (!checkbox || !checkbox.checked) {
+            console.log(`Skipping row ${index}: checkbox not checked`);
+            return; // Skip unchecked rows
+        }
+
+        const amountInput = row.querySelector('.amount-input');
+        const quantityInput = row.querySelector('.quantity-input');
+        if (!amountInput || !quantityInput) {
+            console.log(`Skipping row ${index}: missing amount/quantity inputs`);
+            return;
+        }
+
+        const symbolElement = row.querySelector('td:nth-child(2) strong');
+        const symbol = symbolElement ? symbolElement.textContent.trim() : '';
+
+        // Section 1 semantics: quantity input is TRADE quantity (signed).
+        // Amount should already be qty*price (kept in sync via updateQuantityAndAction),
+        // but we still send both for normalization/notes.
+        const tradeQty = parseInt(quantityInput.value, 10) || 0;
+        const amount = parseFloat(amountInput.value) || 0;
+        const action = deriveActionFromTrade(tradeQty, amount);
+
+        let currentPrice = 0;
+        const priceCell = row.querySelector('.current-price-cell');
+        if (priceCell) {
+            currentPrice = parseFloat((priceCell.textContent || '').replace(/₹|,/g, '').trim()) || 0;
+        }
+
+        const assetClass = getRowAssetClass(row);
+
+        recommendations.push({
+            security_id: securityId,
+            symbol: symbol,
+            action: action,
+            amount: amount,
+            quantity: tradeQty,
+            current_price: currentPrice,
+            asset_class: assetClass
+        });
+        console.log(`Added recommendation: ${symbol} (ID: ${securityId}), Action: ${action} (from qty), tradeQty: ${tradeQty}, Amount: ${amount}`);
+    });
+    
+    console.log('Total recommendations collected:', recommendations.length);
+    
+    if (recommendations.length === 0) {
+        alert('No recommendations to record. In Section 1, check at least one row for this asset class (or fix asset-class labels), then try again.');
+        return false;
+    }
+    
+    const clientId = {{ client.id }};
+    const sessionId = {{ session_id|tojson_safe }};
+    
+    console.log('Recording recommendations:', recommendations);
+    console.log('Client ID:', clientId);
+    console.log('Number of recommendations:', recommendations.length);
+    console.log('Asset classes:', [...new Set(recommendations.map(r => r.asset_class))]);
+    
+    const recordBtns = document.querySelectorAll('.record-to-db-btn');
+    const savedBtnState = [];
+    recordBtns.forEach(function (btn, idx) {
+        savedBtnState[idx] = { html: btn.innerHTML, className: btn.className };
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-primary');
+    });
+
+    function restoreRecordButtons() {
+        recordBtns.forEach(function (btn, idx) {
+            const s = savedBtnState[idx];
+            if (!s) {
+                return;
+            }
+            btn.disabled = false;
+            btn.innerHTML = s.html;
+            btn.className = s.className;
+        });
+    }
+
+    try {
+        const response = await fetch('{{ url_for("unified_recommendations.record_recommendations") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name=csrf-token]')?.getAttribute('content') || ''
+            },
+            body: JSON.stringify({
+                client_id: clientId,
+                session_id: sessionId,
+                asset_class: selectedAssetClass,
+                recommendations: recommendations  // Send all recommendations with their asset_classes
+            })
+        });
+
+        console.log('Response status:', response.status);
+        let data = null;
+        const ct = (response.headers.get('content-type') || '').toLowerCase();
+        if (ct.includes('application/json')) {
+            data = await response.json();
+        } else {
+            const text = await response.text();
+            restoreRecordButtons();
+            alert('Save failed (' + response.status + '). Server did not return JSON. Check logs or session.');
+            console.error('Non-JSON response:', text.slice(0, 500));
+            return false;
+        }
+        console.log('Response data:', data);
+
+        if (!response.ok || !data || !data.success) {
+            restoreRecordButtons();
+            alert('Error: ' + ((data && data.error) || ('Request failed (' + response.status + ')')));
+            return false;
+        }
+
+        // Update BOTH mobile sticky + desktop toolbar (same class)
+        recordBtns.forEach(function (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-check"></i> Recorded';
+            btn.classList.remove('btn-primary');
+            btn.classList.add('btn-success');
+        });
+        return true;
+    } catch (error) {
+        console.error('Error:', error);
+        restoreRecordButtons();
+        alert('Error recording recommendations. Please try again.');
+        return false;
+    }
+}
+
+async function previewEmailWithSave(event) {
+    if (event && event.preventDefault) event.preventDefault();
+
+    const previewBtns = document.querySelectorAll('.preview-email-link');
+    if (!previewBtns.length) {
+        return;
+    }
+
+    const previewUrl = previewBtns[0].getAttribute('href');
+    if (!previewUrl) {
+        alert('Preview URL is missing.');
+        return;
+    }
+
+    // Prevent double-clicks
+    if (previewBtns[0].dataset.saving === '1') return;
+
+    const originalHtml = [];
+    previewBtns.forEach(function (btn, idx) {
+        btn.dataset.saving = '1';
+        originalHtml[idx] = btn.innerHTML;
+        btn.classList.add('disabled');
+        btn.setAttribute('aria-disabled', 'true');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    });
+
+    const ok = await recordRecommendations();
+    if (ok) {
+        window.location.href = previewUrl;
+        return;
+    }
+
+    // Restore buttons if save failed
+    previewBtns.forEach(function (btn, idx) {
+        btn.dataset.saving = '0';
+        btn.classList.remove('disabled');
+        btn.removeAttribute('aria-disabled');
+        btn.innerHTML = originalHtml[idx];
+    });
+}
+
+</script>
+{% endblock %}
+
+

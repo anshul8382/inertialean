@@ -1,0 +1,31 @@
+{# Mobile: record trade details client picker (expects clients list) #}
+{% if clients %}
+<div class="im-list-card im-maint-record-trade">
+  <h2 class="im-list-card__title h6 mb-1"><i class="fas fa-clipboard-list text-primary me-1"></i> Record trade details</h2>
+  <p class="im-list-card__meta mb-2">Recommended trades for one client</p>
+  <label for="imRecordTradeClientSelect" class="form-label small text-muted">Client</label>
+  <select id="imRecordTradeClientSelect" class="form-select mb-2">
+    <option value="">— Select client —</option>
+    {% for c in clients %}
+    <option value="{{ url_for('recommended_trades.client_recommended_trades', client_id=c.id) }}">{{ c.name }}</option>
+    {% endfor %}
+  </select>
+  <button type="button" class="btn btn-primary w-100" id="imRecordTradeGoBtn">Open recommended trades</button>
+</div>
+<script>
+(function () {
+  var sel = document.getElementById('imRecordTradeClientSelect');
+  var btn = document.getElementById('imRecordTradeGoBtn');
+  if (!sel || !btn) return;
+  function go() {
+    var href = (sel.value || '').trim();
+    if (!href) { alert('Please select a client.'); return; }
+    window.location.href = href;
+  }
+  btn.addEventListener('click', go);
+  sel.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); go(); }
+  });
+})();
+</script>
+{% endif %}

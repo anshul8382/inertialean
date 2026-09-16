@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Airflow Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h3 mb-0">
+                <i class="fas fa-project-diagram"></i> Airflow Dashboard
+            </h1>
+            <p class="text-muted">Manage and monitor all scheduled workflows</p>
+        </div>
+    </div>
+
+    <!-- Airflow Status -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-info-circle"></i> Airflow Status</h5>
+                </div>
+                <div class="card-body">
+                    {% if airflow_info.is_running %}
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle"></i> Airflow is running
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> Airflow is not running
+                        <br><small>Start Airflow: <code>./scripts/start_airflow.sh</code></small>
+                    </div>
+                    {% endif %}
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Webserver URL:</strong> 
+                            <a href="{{ airflow_info.webserver_url }}" target="_blank">{{ airflow_info.webserver_url }}</a>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Airflow Home:</strong> {{ airflow_info.airflow_home }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DAGs List -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-tasks"></i> DAGs ({{ dags|length }})</h5>
+                    <button class="btn btn-sm btn-primary" onclick="refreshDAGs()">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if dags %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>DAG ID</th>
+                                    <th>Status</th>
+                                    <th>Schedule</th>
+                                    <th>Tags</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for dag in dags %}
+                                <tr>
+                                    <td><strong>{{ dag.dag_id }}</strong></td>
+                                    <td>
+                                        {% if dag.state == 'running' %}
+                                        <span class="badge bg-success">Running</span>
+                                        {% elif dag.state == 'paused' %}
+                                        <span class="badge bg-warning">Paused</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ dag.state }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><code>{{ dag.schedule }}</code></td>
+                                    <td>
+                                        {% for tag in dag.tags %}
+                                        <span class="badge bg-info">{{ tag }}</span>
+                                        {% endfor %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-primary" onclick="triggerDAG('{{ dag.dag_id }}')" title="Trigger">
+                                                <i class="fas fa-play"></i>
+                                            </button>
+                                            {% if dag.state == 'paused' %}
+                                            <button class="btn btn-success" onclick="unpauseDAG('{{ dag.dag_id }}')" title="Unpause">
+                                                <i class="fas fa-play-circle"></i>
+                                            </button>
+                                            {% else %}
+                                            <button class="btn btn-warning" onclick="pauseDAG('{{ dag.dag_id }}')" title="Pause">
+                                                <i class="fas fa-pause"></i>
+                                            </button>
+                                            {% endif %}
+                                            <a href="{{ airflow_info.webserver_url }}/dags/{{ dag.dag_id }}" target="_blank" class="btn btn-info" title="View in Airflow UI">
+                                                <i class="fas fa-external-link-alt"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No DAGs found. Make sure Airflow is running and DAGs are loaded.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshDAGs() {
+    fetch('/airflow/api/dags')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error refreshing DAGs: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
+        });
+}
+
+function triggerDAG(dagId) {
+    if (!confirm(`Trigger DAG "${dagId}"?`)) return;
+    
+    fetch(`/airflow/api/dags/${dagId}/trigger`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('DAG triggered successfully!');
+                refreshDAGs();
+            } else {
+                alert('Error: ' + (data.error || data.message));
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
+        });
+}
+
+function pauseDAG(dagId) {
+    if (!confirm(`Pause DAG "${dagId}"?`)) return;
+    
+    fetch(`/airflow/api/dags/${dagId}/pause`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('DAG paused successfully!');
+                refreshDAGs();
+            } else {
+                alert('Error: ' + (data.error || data.message));
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
+        });
+}
+
+function unpauseDAG(dagId) {
+    if (!confirm(`Unpause DAG "${dagId}"?`)) return;
+    
+    fetch(`/airflow/api/dags/${dagId}/unpause`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('DAG unpaused successfully!');
+                refreshDAGs();
+            } else {
+                alert('Error: ' + (data.error || data.message));
+            }
+        })
+        .catch(error => {
+            alert('Error: ' + error);
+        });
+}
+
+// Auto-refresh every 30 seconds
+setInterval(refreshDAGs, 30000);
+</script>
+{% endblock %}

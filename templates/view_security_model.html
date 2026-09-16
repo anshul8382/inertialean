@@ -1,0 +1,523 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Security Model Details</h1>
+        <div>
+            <a href="{{ url_for('main.models') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Models
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Model Information</h5>
+                    <table class="table">
+                        <tr>
+                            <th>Name</th>
+                            <td>{{ model.name }}</td>
+                        </tr>
+                        <tr>
+                            <th>Description</th>
+                            <td>{{ model.description or 'No description' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Created At</th>
+                            <td>
+                                {% if model.created_at %}
+                                    {{ model.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Last Updated</th>
+                            <td>
+                                {% if model.updated_at %}
+                                    {{ model.updated_at.strftime('%Y-%m-%d %H:%M') }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="col-md-6">
+                    <h5>Model Statistics</h5>
+                    <table class="table">
+                        <tr>
+                            <th>Asset Class</th>
+                            <td>{{ model.asset_class.name if model.asset_class else 'Not assigned' }}</td>
+                        </tr>
+
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sector-wise Allocations Section -->
+    {% if sector_allocations %}
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-industry"></i> Sector-wise Allocations
+                <span class="badge bg-info">{{ sector_allocations|length }}</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                {% for sector, data in sector_allocations.items() %}
+                <div class="col-md-6 col-lg-4 mb-3">
+                    <div class="card border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0">
+                                <i class="fas fa-chart-pie"></i> {{ sector }}
+                                <span class="badge bg-light text-dark float-end">{{ data.count }}</span>
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>Total Allocation:</strong>
+                                <span class="badge bg-success">{{ "%.2f"|format(data.total_allocation) }}%</span>
+                            </div>
+                            <div class="progress mb-2" style="height: 8px;">
+                                <div class="progress-bar bg-success" role="progressbar" 
+                                     style="width: {{ data.total_allocation }}%" 
+                                     aria-valuenow="{{ data.total_allocation }}" 
+                                     aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                            <small class="text-muted">
+                                {% for stock in data.stocks[:3] %}
+                                    {{ stock.symbol }}{% if not loop.last %}, {% endif %}
+                                {% endfor %}
+                                {% if data.stocks|length > 3 %}...{% endif %}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            <!-- Sector Summary -->
+            <div class="alert alert-info mt-3">
+                <div class="row">
+                    <div class="col-md-4">
+                        <strong>Total Sectors:</strong> {{ sector_allocations|length }}
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Largest Sector:</strong> 
+                        {% set largest_sector = sector_allocations.items()|first %}
+                        {{ largest_sector[0] }} ({{ "%.2f"|format(largest_sector[1].total_allocation) }}%)
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Diversification:</strong> 
+                        {% if sector_allocations|length >= 5 %}High{% elif sector_allocations|length >= 3 %}Medium{% else %}Low{% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Pie Chart Section -->
+            <div class="row mt-4">
+                <div class="col-md-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-chart-pie"></i> Sector Allocation Pie Chart
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="sectorPieChart" width="400" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6 class="mb-0">
+                                <i class="fas fa-list"></i> Sector Legend
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div id="sectorLegend">
+                                {% for sector, data in sector_allocations.items() %}
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="d-flex align-items-center">
+                                        <div class="sector-color me-2" style="width: 16px; height: 16px; border-radius: 50%; background-color: var(--sector-color-{{ loop.index }});"></div>
+                                        <small>{{ sector }}</small>
+                                    </div>
+                                    <small class="text-muted">{{ "%.1f"|format(data.total_allocation) }}%</small>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Stock Allocations Section -->
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="fas fa-chart-pie"></i> Individual Stock Allocations
+                    <span class="badge bg-primary">{{ allocations|length }}</span>
+                </h5>
+                <div class="d-flex align-items-center">
+                    <label class="me-2 mb-0"><small>Sort by:</small></label>
+                    <select id="sortSelect" class="form-select form-select-sm" style="width: auto;">
+                        <option value="allocation-desc">Allocation % (High to Low)</option>
+                        <option value="allocation-asc">Allocation % (Low to High)</option>
+                        <option value="symbol-asc">Symbol (A-Z)</option>
+                        <option value="symbol-desc">Symbol (Z-A)</option>
+                        <option value="sector-asc">Sector (A-Z)</option>
+                        <option value="sector-desc">Sector (Z-A)</option>
+                        <option value="name-asc">Name (A-Z)</option>
+                        <option value="name-desc">Name (Z-A)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if allocations %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Stock</th>
+                                <th>Symbol</th>
+                                <th>Sector</th>
+                                <th>Allocation %</th>
+                                <th>Min %</th>
+                                <th>Max %</th>
+                                <th>Current Price</th>
+                            </tr>
+                        </thead>
+                        <tbody id="allocationsTableBody">
+                            {% for allocation in allocations %}
+                            <tr>
+                                <td>
+                                    <strong>{{ allocation.security.name if allocation.security else 'Unknown' }}</strong>
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ allocation.security.symbol if allocation.security else 'N/A' }}</span>
+                                </td>
+                                <td>
+                                    {% set sector = 'Unknown' %}
+                                    {% if allocation.security and allocation.security.meta_data %}
+                                        {% set meta_data = allocation.security.meta_data|from_json %}
+                                        {% if meta_data and meta_data.sector %}
+                                            {% set sector = meta_data.sector %}
+                                        {% endif %}
+                                    {% endif %}
+                                    <span class="badge bg-info">{{ sector }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-success">{{ "%.2f"|format(allocation.allocation_percentage) }}%</span>
+                                </td>
+                                <td>
+                                    {% if allocation.min_allocation %}
+                                        {{ "%.2f"|format(allocation.min_allocation) }}%
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if allocation.max_allocation %}
+                                        {{ "%.2f"|format(allocation.max_allocation) }}%
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if allocation.security and allocation.security.current_price %}
+                                        ₹{{ "%.2f"|format(allocation.security.current_price) }}
+                                    {% else %}
+                                        <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Allocation Summary -->
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <div class="alert alert-info">
+                            <strong>Total Allocation:</strong> 
+                            <span class="badge bg-primary">
+                                {{ "%.2f"|format(allocations|sum(attribute='allocation_percentage')) }}%
+                            </span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="alert alert-warning">
+                            <strong>Number of Stocks:</strong> 
+                            <span class="badge bg-secondary">{{ allocations|length }}</span>
+                        </div>
+                    </div>
+                </div>
+            {% else %}
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <strong>No stocks allocated to this model yet.</strong>
+                    <br>
+                    <a href="{{ url_for('main.edit_security_model', model_id=model.id) }}" class="btn btn-primary btn-sm mt-2">
+                        <i class="fas fa-plus"></i> Add Stocks
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Assigned Clients Section -->
+    {% if assigned_clients %}
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">
+                <i class="fas fa-users"></i> Assigned Clients
+                <span class="badge bg-info">{{ assigned_clients|length }}</span>
+            </h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Client Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Assigned Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for assignment in assigned_clients %}
+                        <tr>
+                            <td>
+                                <strong>{{ assignment.client.name if assignment.client else 'Unknown' }}</strong>
+                            </td>
+                            <td>{{ assignment.client.email|display_email if assignment.client else 'N/A' }}</td>
+                            <td>{{ assignment.client.phone|display_phone if assignment.client else 'N/A' }}</td>
+                            <td>
+                                {% if assignment.assigned_at %}
+                                    {{ assignment.assigned_at.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Action Buttons -->
+    <div class="d-flex justify-content-between">
+        <div>
+            <a href="{{ url_for('main.edit_security_model', model_id=model.id) }}" class="btn btn-primary">
+                <i class="fas fa-edit"></i> Edit Model
+            </a>
+            <a href="{{ url_for('main.models') }}" class="btn btn-secondary">
+                <i class="fas fa-list"></i> All Models
+            </a>
+        </div>
+        <div>
+            {% if allocations %}
+                <span class="badge bg-success">Model Ready</span>
+            {% else %}
+                <span class="badge bg-warning">Needs Stocks</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if sector_allocations %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sectorCanvas = document.getElementById('sectorPieChart');
+    if (!sectorCanvas) {
+        return;
+    }
+    const sectorData = {
+        labels: [
+            {% for sector, data in sector_allocations.items() %}
+                '{{ sector }}',
+            {% endfor %}
+        ],
+        datasets: [{
+            data: [
+                {% for sector, data in sector_allocations.items() %}
+                    {{ data.total_allocation }},
+                {% endfor %}
+            ],
+            backgroundColor: [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384',
+                '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'
+            ],
+            borderWidth: 2,
+            borderColor: '#fff'
+        }]
+    };
+
+    const config = {
+        type: 'pie',
+        data: sectorData,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.label || '';
+                            const value = context.parsed || 0;
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            if (!total) {
+                                return label + ': 0%';
+                            }
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return `${label}: ${value.toFixed(2)}% (${percentage}% of total)`;
+                        }
+                    }
+                }
+            },
+            animation: {
+                animateRotate: true,
+                animateScale: true
+            }
+        }
+    };
+
+    const ctx = sectorCanvas.getContext('2d');
+    const sectorPieChart = new Chart(ctx, config);
+
+    const legendItems = document.querySelectorAll('#sectorLegend .d-flex');
+    legendItems.forEach((item, index) => {
+        item.style.cursor = 'pointer';
+        item.addEventListener('mouseenter', function() {
+            sectorPieChart.setActiveElements([{
+                datasetIndex: 0,
+                index: index
+            }]);
+            sectorPieChart.update();
+        });
+        item.addEventListener('mouseleave', function() {
+            sectorPieChart.setActiveElements([]);
+            sectorPieChart.update();
+        });
+    });
+
+    legendItems.forEach((item, index) => {
+        item.addEventListener('click', function() {
+            const meta = sectorPieChart.getDatasetMeta(0);
+            meta.data[index].hidden = !meta.data[index].hidden;
+            sectorPieChart.update();
+            const colorDot = item.querySelector('.sector-color');
+            if (meta.data[index].hidden) {
+                colorDot.style.opacity = '0.3';
+                item.style.opacity = '0.5';
+            } else {
+                colorDot.style.opacity = '1';
+                item.style.opacity = '1';
+            }
+        });
+    });
+});
+</script>
+{% endif %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sortSelect = document.getElementById('sortSelect');
+    const tableBody = document.getElementById('allocationsTableBody');
+    if (!sortSelect || !tableBody) {
+        return;
+    }
+
+    function sortTable(sortBy) {
+        const rows = Array.from(tableBody.querySelectorAll('tr'));
+        
+        rows.sort((a, b) => {
+            let aValue, bValue;
+            
+            switch(sortBy) {
+                case 'allocation-desc':
+                    aValue = parseFloat(a.querySelector('td:nth-child(4) .badge').textContent.replace('%', ''));
+                    bValue = parseFloat(b.querySelector('td:nth-child(4) .badge').textContent.replace('%', ''));
+                    return bValue - aValue;
+                case 'allocation-asc':
+                    aValue = parseFloat(a.querySelector('td:nth-child(4) .badge').textContent.replace('%', ''));
+                    bValue = parseFloat(b.querySelector('td:nth-child(4) .badge').textContent.replace('%', ''));
+                    return aValue - bValue;
+                case 'symbol-asc':
+                    aValue = a.querySelector('td:nth-child(2) .badge').textContent.toLowerCase();
+                    bValue = b.querySelector('td:nth-child(2) .badge').textContent.toLowerCase();
+                    return aValue.localeCompare(bValue);
+                case 'symbol-desc':
+                    aValue = a.querySelector('td:nth-child(2) .badge').textContent.toLowerCase();
+                    bValue = b.querySelector('td:nth-child(2) .badge').textContent.toLowerCase();
+                    return bValue.localeCompare(aValue);
+                case 'sector-asc':
+                    aValue = a.querySelector('td:nth-child(3) .badge').textContent.toLowerCase();
+                    bValue = b.querySelector('td:nth-child(3) .badge').textContent.toLowerCase();
+                    return aValue.localeCompare(bValue);
+                case 'sector-desc':
+                    aValue = a.querySelector('td:nth-child(3) .badge').textContent.toLowerCase();
+                    bValue = b.querySelector('td:nth-child(3) .badge').textContent.toLowerCase();
+                    return bValue.localeCompare(aValue);
+                case 'name-asc':
+                    aValue = a.querySelector('td:nth-child(1) strong').textContent.toLowerCase();
+                    bValue = b.querySelector('td:nth-child(1) strong').textContent.toLowerCase();
+                    return aValue.localeCompare(bValue);
+                case 'name-desc':
+                    aValue = a.querySelector('td:nth-child(1) strong').textContent.toLowerCase();
+                    bValue = b.querySelector('td:nth-child(1) strong').textContent.toLowerCase();
+                    return bValue.localeCompare(aValue);
+                default:
+                    return 0;
+            }
+        });
+        
+        // Clear and re-append sorted rows
+        tableBody.innerHTML = '';
+        rows.forEach(row => tableBody.appendChild(row));
+        
+        // Add visual feedback
+        rows.forEach((row, index) => {
+            row.style.transition = 'background-color 0.3s ease';
+            if (index < 3) {
+                row.style.backgroundColor = '#f8f9fa';
+                setTimeout(() => {
+                    row.style.backgroundColor = '';
+                }, 1000);
+            }
+        });
+    }
+    
+    // Add event listener for sort select
+    sortSelect.addEventListener('change', function() {
+        sortTable(this.value);
+    });
+    
+    // Initialize with default sort (allocation high to low)
+    sortTable('allocation-desc');
+});
+</script>
+{% endblock %} 

@@ -1,0 +1,251 @@
+{
+  "13": {
+    "start_date": "2025-02-24",
+    "end_date": "2026-02-24",
+    "snapshot": {
+      "mark_to_market_gains.total_start_value": null,
+      "mark_to_market_gains.total_end_value": null,
+      "mark_to_market_gains.mtm_gain": null,
+      "gains_breakdown.total_gains": null,
+      "period_xirr.xirr": 0.2918,
+      "twr.twr_percent": 31.0147,
+      "best_performers.best_performers": [
+        "APLAPOLLO",
+        "AUBANK",
+        "BAJAJCON",
+        "CUMMINSIND",
+        "GOLDBEES",
+        "HDFCAMC",
+        "PAYTM",
+        "THYROCARE",
+        "TITAN",
+        "TSFINV"
+      ],
+      "worst_performers.worst_performers": [],
+      "segment_wise_xirr.summary.weighted_avg_xirr": 12.3149
+    }
+  },
+  "38": {
+    "start_date": "2025-02-24",
+    "end_date": "2026-02-24",
+    "snapshot": {
+      "mark_to_market_gains.total_start_value": null,
+      "mark_to_market_gains.total_end_value": null,
+      "mark_to_market_gains.mtm_gain": null,
+      "gains_breakdown.total_gains": null,
+      "period_xirr.xirr": 0.1835,
+      "twr.twr_percent": 19.8934,
+      "best_performers.best_performers": [
+        "APLAPOLLO",
+        "AUBANK",
+        "GOLDBEES",
+        "HDFCAMC",
+        "LT",
+        "MARICO",
+        "MINDSPACE",
+        "PAYTM",
+        "THYROCARE",
+        "TITAN"
+      ],
+      "worst_performers.worst_performers": [],
+      "segment_wise_xirr.summary.weighted_avg_xirr": 20.757
+    }
+  },
+  "8": {
+    "start_date": "2025-02-24",
+    "end_date": "2026-02-24",
+    "snapshot": {
+      "mark_to_market_gains.total_start_value": null,
+      "mark_to_market_gains.total_end_value": null,
+      "mark_to_market_gains.mtm_gain": null,
+      "gains_breakdown.total_gains": null,
+      "period_xirr.xirr": 5.0,
+      "twr.twr_percent": 0.0,
+      "best_performers.best_performers": [],
+      "worst_performers.worst_performers": [],
+      "segment_wise_xirr.summary.weighted_avg_xirr": 0.0
+    }
+  },
+  "68": {
+    "start_date": "2025-02-24",
+    "end_date": "2026-02-24",
+    "snapshot": {
+      "mark_to_market_gains.total_start_value": null,
+      "mark_to_market_gains.total_end_value": null,
+      "mark_to_market_gains.mtm_gain": null,
+      "gains_breakdown.total_gains": null,
+      "period_xirr.xirr": -0.1358,
+      "twr.twr_percent": 0.0,
+      "best_performers.best_performers": [
+        "APLAPOLLO",
+        "AUBANK",
+        "BAJFINANCE",
+        "ETERNAL",
+        "HDFCLIFE",
+        "LT",
+        "MARICO",
+        "MOTHERSON",
+        "PAYTM",
+        "TITAN"
+      ],
+      "worst_performers.worst_performers": [],
+      "segment_wise_xirr.summary.weighted_avg_xirr": -13.5769
+    }
+  },
+  "128": {
+    "start_date": "2025-02-24",
+    "end_date": "2026-02-24",
+    "snapshot": {
+      "mark_to_market_gains.total_start_value": null,
+      "mark_to_market_gains.total_end_value": null,
+      "mark_to_market_gains.mtm_gain": null,
+      "gains_breakdown.total_gains": null,
+      "period_xirr.xirr": -0.1638,
+      "twr.twr_percent": 0.0,
+      "best_performers.best_performers": [
+        "APLAPOLLO",
+        "AUBANK",
+        "BAJFINANCE",
+        "HDFCAMC",
+        "HDFCLIFE",
+        "LT",
+        "MARUTI",
+        "NYKAA",
+        "PAYTM",
+        "TITAN"
+      ],
+      "worst_performers.worst_performers": [],
+      "segment_wise_xirr.summary.weighted_avg_xirr": -16.3761
+    }
+  },
+  "119": {
+    "start_date": "2025-02-24",
+    "end_date": "2026-02-24",
+    "snapshot": {
+      "mark_to_market_gains.total_start_value": null,
+      "mark_to_market_gains.total_end_value": null,
+      "mark_to_market_gains.mtm_gain": null,
+      "gains_breakdown.total_gains": null,
+      "period_xirr.xirr": -0.0405,
+      "twr.twr_percent": 0.0,
+      "best_performers.best_performers": [
+        "APLAPOLLO",
+        "AUBANK",
+        "BAJFINANCE",
+        "ETERNAL",
+        "HDFCLIFE",
+        "HEROMOTOCO",
+        "LT",
+        "MARICO",
+        "PAYTM",
+        "TITAN"
+      ],
+      "worst_performers.worst_performers": [],
+      "segment_wise_xirr.summary.weighted_avg_xirr": -3.5628
+    }
+  },
+  "86": {
+    "start_date": "2025-02-24",
+    "end_date": "2026-02-24",
+    "snapshot": {
+      "mark_to_market_gains.total_start_value": null,
+      "mark_to_market_gains.total_end_value": null,
+      "mark_to_market_gains.mtm_gain": null,
+      "gains_breakdown.total_gains": null,
+      "period_xirr.xirr": 0.06,
+      "twr.twr_percent": 10.0682,
+      "best_performers.best_performers": [
+        "APLAPOLLO",
+        "AUBANK",
+        "HDFCAMC",
+        "HEROMOTOCO",
+        "LT",
+        "MOTHERSON",
+        "PAYTM",
+        "THYROCARE",
+        "TIMKEN",
+        "TITAN"
+      ],
+      "worst_performers.worst_performers": [],
+      "segment_wise_xirr.summary.weighted_avg_xirr": 6.0006
+    }
+  },
+  "21": {
+    "start_date": "2025-02-24",
+    "end_date": "2026-02-24",
+    "snapshot": {
+      "mark_to_market_gains.total_start_value": null,
+      "mark_to_market_gains.total_end_value": null,
+      "mark_to_market_gains.mtm_gain": null,
+      "gains_breakdown.total_gains": null,
+      "period_xirr.xirr": 0.099,
+      "twr.twr_percent": 9.7385,
+      "best_performers.best_performers": [
+        "AUBANK",
+        "GOLDBEES",
+        "HDFCAMC",
+        "LT",
+        "MARICO",
+        "PAYTM",
+        "SBILIFE",
+        "SBIN",
+        "THYROCARE",
+        "TITAN"
+      ],
+      "worst_performers.worst_performers": [],
+      "segment_wise_xirr.summary.weighted_avg_xirr": 12.1765
+    }
+  },
+  "89": {
+    "start_date": "2025-02-24",
+    "end_date": "2026-02-24",
+    "snapshot": {
+      "mark_to_market_gains.total_start_value": null,
+      "mark_to_market_gains.total_end_value": null,
+      "mark_to_market_gains.mtm_gain": null,
+      "gains_breakdown.total_gains": null,
+      "period_xirr.xirr": 0.1213,
+      "twr.twr_percent": 14.7521,
+      "best_performers.best_performers": [
+        "APLAPOLLO",
+        "AUBANK",
+        "BAJAJCON",
+        "GOLDBEES",
+        "HDFCAMC",
+        "LT",
+        "PAYTM",
+        "THYROCARE",
+        "TIMKEN",
+        "TITAN"
+      ],
+      "worst_performers.worst_performers": [],
+      "segment_wise_xirr.summary.weighted_avg_xirr": 15.653
+    }
+  },
+  "72": {
+    "start_date": "2025-02-24",
+    "end_date": "2026-02-24",
+    "snapshot": {
+      "mark_to_market_gains.total_start_value": null,
+      "mark_to_market_gains.total_end_value": null,
+      "mark_to_market_gains.mtm_gain": null,
+      "gains_breakdown.total_gains": null,
+      "period_xirr.xirr": 0.0725,
+      "twr.twr_percent": 9.3829,
+      "best_performers.best_performers": [
+        "APLAPOLLO",
+        "AUBANK",
+        "CIEINDIA",
+        "HDFCAMC",
+        "LT",
+        "MARICO",
+        "MOTHERSON",
+        "PAYTM",
+        "THYROCARE",
+        "TITAN"
+      ],
+      "worst_performers.worst_performers": [],
+      "segment_wise_xirr.summary.weighted_avg_xirr": 7.2488
+    }
+  }
+}

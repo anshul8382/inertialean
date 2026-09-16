@@ -1,0 +1,41 @@
+// Example Tailscale ACL for Inertia (paste in admin console → Access controls).
+// Free Personal plan: up to 6 users, 3 ACL groups, device approval recommended.
+//
+// Policy goals:
+//   - Only ADMIN-tagged approved devices can reach the app server
+//   - New devices require admin approval (enable in Device management UI)
+//   - Personal phones / home browsers without Tailscale cannot reach the app
+//
+// Steps:
+//   1. Admin console → Device management → enable "Device approval"
+//   2. Replace ACL policy with this file (adjust emails)
+//   3. Tag each company laptop/phone: tag:approved-device
+//   4. Tag the prod server: tag:inertia-server
+
+{
+	"groups": {
+		"group:inertia-admins": ["you@inertiainvest.in"],
+	},
+
+	"tagOwners": {
+		"tag:inertia-server":      ["group:inertia-admins"],
+		"tag:approved-device":     ["group:inertia-admins"],
+	},
+
+	"acls": [
+		// Approved devices → app server (HTTPS via Tailscale Serve)
+		{
+			"action": "accept",
+			"src":    ["tag:approved-device"],
+			"dst":    ["tag:inertia-server:443", "tag:inertia-server:80"],
+		},
+		// Admins can SSH to server for ops (optional)
+		{
+			"action": "accept",
+			"src":    ["group:inertia-admins"],
+			"dst":    ["tag:inertia-server:22"],
+		},
+	],
+
+	// Default: deny everything not listed above (implicit deny in Tailscale)
+}

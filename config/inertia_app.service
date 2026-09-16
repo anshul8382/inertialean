@@ -1,0 +1,30 @@
+[Unit]
+Description=Inertia Investment Management App
+After=network.target mysql.service
+
+[Service]
+Type=notify
+User=root
+Group=root
+WorkingDirectory=/home/inertia/app
+Environment=PATH=/home/inertia/app/venv/bin
+Environment=FLASK_ENV=production
+Environment=FLASK_APP=main.py
+Environment=WHATSAPP_API_URL=https://graph.facebook.com/v22.0
+Environment=WHATSAPP_PHONE_NUMBER_ID=950513184811659
+Environment=WHATSAPP_WEBHOOK_URL=https://inertiainvest.in/api/v1/whatsapp/webhook
+Environment=WHATSAPP_TEMPLATE_LANGUAGE=en_US
+Environment=WHATSAPP_VERIFY_TOKEN=REPLACE_WITH_RANDOM_TOKEN
+Environment=WHATSAPP_ACCESS_TOKEN=REPLACE_WITH_REAL_TOKEN
+ExecStart=/home/inertia/app/venv/bin/gunicorn --config config/gunicorn.conf.py wsgi:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
+

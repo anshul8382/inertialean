@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block title %}Create Portfolio{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="mb-4">Create New Portfolio</h1>
+    
+    <form method="POST" action="{{ url_for('main.create_portfolio') }}" class="needs-validation" novalidate>
+        {{ form.csrf_token }}
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Portfolio Name</label>
+                    <input type="text" class="form-control" id="name" name="name" required>
+                    <div class="invalid-feedback">
+                        Please provide a portfolio name.
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description</label>
+                    <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="client_id" class="form-label">Client</label>
+                    <select class="form-select" id="client_id" name="client_id" required>
+                        <option value="">Select a client...</option>
+                        {% for client in clients %}
+                        <option value="{{ client.id }}">{{ client.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="invalid-feedback">
+                        Please select a client.
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="asset_class_id" class="form-label">Asset Class</label>
+                    <select class="form-select" id="asset_class_id" name="asset_class_id" required>
+                        <option value="">Select an asset class...</option>
+                        {% for asset_class in asset_classes %}
+                        <option value="{{ asset_class.id }}">{{ asset_class.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="invalid-feedback">
+                        Please select an asset class.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label for="target_allocation" class="form-label">Target Allocation (%)</label>
+                    <input type="number" class="form-control" id="target_allocation" name="target_allocation" min="0" max="100" step="0.01" required>
+                    <div class="invalid-feedback">
+                        Please provide a valid target allocation percentage.
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="risk_profile" class="form-label">Risk Profile</label>
+                    <select class="form-select" id="risk_profile" name="risk_profile" required>
+                        <option value="">Select a risk profile...</option>
+                        <option value="conservative">Conservative</option>
+                        <option value="moderate">Moderate</option>
+                        <option value="aggressive">Aggressive</option>
+                    </select>
+                    <div class="invalid-feedback">
+                        Please select a risk profile.
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label for="investment_horizon" class="form-label">Investment Horizon (years)</label>
+                    <input type="number" class="form-control" id="investment_horizon" name="investment_horizon" min="1" required>
+                    <div class="invalid-feedback">
+                        Please provide a valid investment horizon.
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">Create Portfolio</button>
+            <a href="{{ url_for('main.portfolios') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+{% block scripts %}
+<script>
+// Form validation
+(function () {
+    'use strict'
+    var forms = document.querySelectorAll('.needs-validation')
+    Array.prototype.slice.call(forms).forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            if (!form.checkValidity()) {
+                event.preventDefault()
+                event.stopPropagation()
+            }
+            form.classList.add('was-validated')
+        }, false)
+    })
+})()
+</script>
+{% endblock %}
+{% endblock %} 

@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}PaRRVA Portfolio Submission{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-paper-plane"></i> Submit Portfolio to PaRRVA</h1>
+        <a href="{{ url_for('main.maintenance_reference_data') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Reference data
+        </a>
+    </div>
+
+    {% if not parrva_configured %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i>
+        <strong>PaRRVA API not configured.</strong> Set <code>PARRVA_API_URL</code> and <code>PARRVA_API_KEY</code> in your environment or config. See <code>docs/PARRVA_API_SETUP.md</code>.
+    </div>
+    {% endif %}
+
+    {% if not client %}
+    <!-- Client selection -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Select Client</h6>
+        </div>
+        <div class="card-body">
+            <p class="text-muted">Choose a client to submit their equity portfolio and add MF holdings to PaRRVA.</p>
+            <div class="list-group">
+                {% for c in clients %}
+                <a href="{{ url_for('parrva.submit_page', client_id=c.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                    <span><strong>{{ c.name }}</strong> <small class="text-muted">({{ c.email }})</small></span>
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+                {% else %}
+                <div class="list-group-item text-muted">No clients found.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <!-- Client context + form -->
+    <div class="card shadow mb-3">
+        <div class="card-body py-2 d-flex justify-content-between align-items-center">
+            <div>
+                <strong>{{ client.name }}</strong>
+                <span class="text-muted ms-2">{{ client.email|display_email }}</span>
+            </div>
+            <a href="{{ url_for('parrva.submit_page') }}" class="btn btn-sm btn-outline-secondary">Change Client</a>
+        </div>
+    </div>
+
+    <form method="post" action="{{ url_for('parrva.submit_portfolio') }}" id="parrvaForm">
+        <input type="hidden" name="client_id" value="{{ client.id }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <!-- Equity Portfolio Selection -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-chart-line"></i> Equity Portfolio</h6>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="selectAllEquity">Select All</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="deselectAllEquity">Deselect All</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Select the equity holdings to include in the PaRRVA submission.</p>
+                {% if equity_holdings %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="selectAllCheckbox" title="Select all"></th>
+                                <th>Symbol</th>
+                                <th>Name</th>
+                                <th class="text-end">Quantity</th>
+                                <th class="text-end">Price</th>
+                                <th class="text-end">Value (₹)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for h in equity_holdings %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" name="selected_equity_ids" value="{{ h.holding_id }}" class="equity-checkbox">
+                                </td>
+                                <td><strong>{{ h.security_symbol }}</strong></td>
+                                <td><small>{{ h.security_name }}</small></td>
+                                <td class="text-end">{{ "{:,.2f}".format(h.quantity) }}</td>
+                                <td class="text-end">₹{{ "{:,.2f}".format(h.current_price) }}</td>
+                                <td class="text-end">₹{{ "{:,.0f}".format(h.current_value) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">No equity holdings found for this client.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- MF Manual Entry -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-money-bill-wave"></i> Mutual Fund Holdings</h6>
+                <button type="button" class="btn btn-sm btn-success" id="addMfRow">
+                    <i class="fas fa-plus"></i> Add MF
+                </button>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">Add MF holdings manually (not stored in system). Provide fund name and either amount (₹) or units.</p>
+                <div class="table-responsive">
+                    <table class="table" id="mfTable">
+                        <thead>
+                            <tr>
+                                <th>Fund Name</th>
+                                <th>ISIN (optional)</th>
+                                <th class="text-end">Amount (₹)</th>
+                                <th class="text-end">Units</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="mfTableBody">
+                            <tr class="mf-row">
+                                <td><input type="text" name="mf_fund_name" class="form-control form-control-sm" placeholder="e.g. HDFC Top 100"></td>
+                                <td><input type="text" name="mf_isin" class="form-control form-control-sm" placeholder="e.g. INE123..."></td>
+                                <td><input type="number" name="mf_amount" class="form-control form-control-sm text-end" placeholder="0" step="0.01" min="0"></td>
+                                <td><input type="number" name="mf_units" class="form-control form-control-sm text-end" placeholder="0" step="0.0001" min="0"></td>
+                                <td><button type="button" class="btn btn-sm btn-outline-danger remove-mf-row" title="Remove"><i class="fas fa-trash-alt"></i></button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end gap-2 mb-4">
+            <a href="{{ url_for('parrva.submit_page') }}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary" {% if not parrva_configured %}disabled{% endif %}>
+                <i class="fas fa-paper-plane"></i> Submit to PaRRVA
+            </button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Select All / Deselect All equity
+    const selectAll = document.getElementById('selectAllEquity');
+    const deselectAll = document.getElementById('deselectAllEquity');
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    if (selectAll) selectAll.addEventListener('click', () => {
+        document.querySelectorAll('.equity-checkbox').forEach(cb => { cb.checked = true; });
+        if (selectAllCheckbox) selectAllCheckbox.checked = true;
+    });
+    if (deselectAll) deselectAll.addEventListener('click', () => {
+        document.querySelectorAll('.equity-checkbox').forEach(cb => { cb.checked = false; });
+        if (selectAllCheckbox) selectAllCheckbox.checked = false;
+    });
+    if (selectAllCheckbox) selectAllCheckbox.addEventListener('change', function() {
+        document.querySelectorAll('.equity-checkbox').forEach(cb => { cb.checked = this.checked; });
+    });
+
+    // Add MF row
+    const addMfBtn = document.getElementById('addMfRow');
+    const mfBody = document.getElementById('mfTableBody');
+    if (addMfBtn && mfBody) {
+        addMfBtn.addEventListener('click', function() {
+            const row = document.createElement('tr');
+            row.className = 'mf-row';
+            row.innerHTML = `
+                <td><input type="text" name="mf_fund_name" class="form-control form-control-sm" placeholder="e.g. HDFC Top 100"></td>
+                <td><input type="text" name="mf_isin" class="form-control form-control-sm" placeholder="e.g. INE123..."></td>
+                <td><input type="number" name="mf_amount" class="form-control form-control-sm text-end" placeholder="0" step="0.01" min="0"></td>
+                <td><input type="number" name="mf_units" class="form-control form-control-sm text-end" placeholder="0" step="0.0001" min="0"></td>
+                <td><button type="button" class="btn btn-sm btn-outline-danger remove-mf-row" title="Remove"><i class="fas fa-trash-alt"></i></button></td>
+            `;
+            mfBody.appendChild(row);
+            row.querySelector('.remove-mf-row').addEventListener('click', () => row.remove());
+        });
+    }
+
+    // Remove MF row
+    document.querySelectorAll('.remove-mf-row').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const row = this.closest('tr');
+            if (document.querySelectorAll('.mf-row').length > 1) row.remove();
+        });
+    });
+});
+</script>
+{% endblock %}

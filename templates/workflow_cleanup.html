@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block title %}Workflow Cleanup{% endblock %}
+
+{% block extra_css %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="mb-4">
+                <i class="fas fa-broom"></i> Workflow Cleanup & Management
+            </h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Cleanup Old Workflows -->
+        <div class="col-md-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fas fa-archive"></i> Archive Old Workflows
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        Archive completed workflows that are older than specified days to keep the system clean.
+                    </p>
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="cleanup">
+                        
+                        <div class="mb-3">
+                            <label for="days_old" class="form-label">Archive workflows older than (days)</label>
+                            <input type="number" class="form-control" id="days_old" name="days_old" 
+                                   value="30" min="1" max="365">
+                            <div class="form-text">Default: 30 days</div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-warning w-100">
+                            <i class="fas fa-archive"></i> Archive Old Workflows
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Prepare Next Month -->
+        <div class="col-md-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-plus"></i> Prepare Next Month
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        Prepare the system for the next month's investment cycle. This includes creating new monthly investments for recurring clients.
+                    </p>
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="prepare_next_month">
+                        
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="fas fa-calendar-plus"></i> Prepare Next Month Cycle
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Auto Monthly Cycle -->
+        <div class="col-md-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-sync-alt"></i> Auto Monthly Cycle
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        <strong>Automatically:</strong> Archive completed workflows and create new ones for the same clients for next month.
+                    </p>
+                    <form method="POST" action="{{ url_for('main.auto_monthly_cycle') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <button type="submit" class="btn btn-primary w-100" 
+                                onclick="return confirm('This will archive all completed workflows for this month and create new ones for next month. Continue?')">
+                            <i class="fas fa-sync-alt"></i> Run Auto Monthly Cycle
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generate Monthly Report -->
+        <div class="col-md-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-bar"></i> Monthly Report
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        Generate a comprehensive monthly report for completed workflows.
+                    </p>
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="action" value="monthly_report">
+                        
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <label for="month" class="form-label">Month</label>
+                                    <select class="form-select" id="month" name="month">
+                                        <option value="1">January</option>
+                                        <option value="2">February</option>
+                                        <option value="3">March</option>
+                                        <option value="4">April</option>
+                                        <option value="5">May</option>
+                                        <option value="6">June</option>
+                                        <option value="7">July</option>
+                                        <option value="8">August</option>
+                                        <option value="9">September</option>
+                                        <option value="10">October</option>
+                                        <option value="11">November</option>
+                                        <option value="12">December</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="mb-3">
+                                    <label for="year" class="form-label">Year</label>
+                                    <input type="number" class="form-control" id="year" name="year" 
+                                           value="{{ now.year }}" min="2020" max="2030">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-info w-100">
+                            <i class="fas fa-chart-bar"></i> Generate Report
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Investment Schedules List -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-check"></i> Monthly Investment Schedules
+                    </h5>
+                    <span class="badge bg-light text-dark">{{ schedules|length }} Schedule{{ 's' if schedules|length != 1 else '' }}</span>
+                </div>
+                <div class="card-body">
+                    {% if schedules %}
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover" id="schedulesTable" width="100%" cellspacing="0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Client Name</th>
+                                    <th class="text-right">Monthly Amount</th>
+                                    <th class="text-center">Day of Month</th>
+                                    <th class="text-center">Start Date</th>
+                                    <th class="text-center">End Date</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for schedule, client in schedules %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ client.name }}</strong>
+                                        {% if schedule.notes %}
+                                        <br><small class="text-muted">{{ schedule.notes[:50] }}{% if schedule.notes|length > 50 %}...{% endif %}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-right">
+                                        <strong>₹{{ "{:,.2f}".format(schedule.planned_amount) }}</strong>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info">
+                                            {{ schedule.day_of_month }}{% if schedule.day_of_month == 1 or schedule.day_of_month == 21 or schedule.day_of_month == 31 %}st{% elif schedule.day_of_month == 2 or schedule.day_of_month == 22 %}nd{% elif schedule.day_of_month == 3 or schedule.day_of_month == 23 %}rd{% else %}th{% endif %}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">{{ schedule.start_date.strftime('%Y-%m-%d') }}</td>
+                                    <td class="text-center">
+                                        {% if schedule.end_date %}
+                                            {{ schedule.end_date.strftime('%Y-%m-%d') }}
+                                        {% else %}
+                                            <span class="text-muted">Ongoing</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if schedule.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="{{ url_for('clients.manage_monthly_schedule', client_id=client.id) }}" 
+                                           class="btn btn-sm btn-primary" 
+                                           title="Edit Schedule">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        <a href="{{ url_for('clients.client_details', client_id=client.id) }}" 
+                                           class="btn btn-sm btn-outline-info" 
+                                           title="View Client">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> 
+                        <strong>No schedules configured.</strong> 
+                        Monthly investments will use the last completed investment amount for each client.
+                        <br><br>
+                        <a href="{{ url_for('main.clients') }}" class="btn btn-sm btn-primary">
+                            <i class="fas fa-users"></i> Go to Clients to Create Schedules
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Information Section -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle"></i> Workflow Lifecycle Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Workflow Stages:</h6>
+                            <ul class="list-unstyled">
+                                <li><span class="badge bg-warning">FUNDS</span> - Funds Received</li>
+                                <li><span class="badge bg-info">RECOS</span> - Recommendations Generated</li>
+                                <li><span class="badge bg-primary">NOTIFY</span> - Client Notified</li>
+                                <li><span class="badge bg-warning">EXEC</span> - Executed</li>
+                                <li><span class="badge bg-success">UPDATE</span> - Portfolio Updated</li>
+                                <li><span class="badge bg-success">COMPLETED</span> - Completed</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Monthly Cycle Process:</h6>
+                            <ol>
+                                <li><strong>Month Start:</strong> Create new monthly investments for recurring clients</li>
+                                <li><strong>Throughout Month:</strong> Process workflows through stages</li>
+                                <li><strong>Month End:</strong> Generate monthly reports</li>
+                                <li><strong>Cleanup:</strong> Archive old completed workflows (30+ days)</li>
+                                <li><strong>Next Month:</strong> Repeat cycle</li>
+                            </ol>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-info mt-3">
+                        <h6><i class="fas fa-lightbulb"></i> Best Practices:</h6>
+                        <ul class="mb-0">
+                            <li>Archive workflows older than 30 days to keep the system performant</li>
+                            <li>Run monthly reports before archiving to preserve data</li>
+                            <li>Prepare next month cycle at the beginning of each month</li>
+                            <li>Monitor workflow progress through the daily workflow report</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script>
+// Set current month and year in the form
+document.addEventListener('DOMContentLoaded', function() {
+    const now = new Date();
+    document.getElementById('month').value = now.getMonth() + 1;
+    document.getElementById('year').value = now.getFullYear();
+    
+    // Initialize DataTable for schedules if table exists
+    {% if schedules %}
+    if ($('#schedulesTable').length) {
+        $('#schedulesTable').DataTable({
+            "order": [[ 0, "asc" ]], // Sort by client name
+            "pageLength": 25,
+            "responsive": true,
+            "columnDefs": [
+                { "orderable": false, "targets": 6 } // Disable sorting on Actions column
+            ]
+        });
+    }
+    {% endif %}
+});
+</script>
+{% endblock %}

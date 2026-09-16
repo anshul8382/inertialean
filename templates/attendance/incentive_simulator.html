@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+
+{% block title %}Incentive simulator{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-1 text-secondary">Incentive simulator</h1>
+            <p class="text-muted small mb-0">Dry run — figures are illustrative. Payroll still uses system-detected lines, your acknowledgment, and admin approval.</p>
+        </div>
+        <a href="{{ url_for('attendance.attendance_dashboard') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Attendance
+        </a>
+    </div>
+
+    <div class="alert alert-info small" role="alert">
+        <strong>External sales:</strong> monthly qualifying total <strong>T</strong> — if T ≤ ₹25,000 then 0%; if ₹25,001–₹50,000 then <strong>10% of T</strong>; if &gt; ₹50,000 then <strong>12.5% of T</strong>.
+        {% if show_internal %}
+        <br><strong>Internal:</strong> SIP step-up — 0.5% × (monthly increase × 10), one-time after eligibility; lump sum — 0.5% × amount.
+        {% endif %}
+    </div>
+
+    <div class="row g-4">
+        {% if show_sales %}
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100 border-0" style="border-left: 4px solid #4a7c59 !important;">
+                <div class="card-header bg-white py-3">
+                    <h2 class="h5 mb-0 text-secondary"><i class="fas fa-chart-line text-success"></i> External sales (monthly)</h2>
+                    <small class="text-muted">Qualifying total for the month (new sales / reactivation credits combined)</small>
+                </div>
+                <div class="card-body">
+                    <label class="form-label" for="inp-sales-t">Monthly qualifying total (₹)</label>
+                    <input type="number" min="0" step="1" class="form-control form-control-lg mb-2" id="inp-sales-t" value="0" inputmode="decimal">
+                    <div class="d-flex flex-wrap gap-1 mb-3">
+                        <span class="small text-muted align-self-center me-1">Try:</span>
+                        <button type="button" class="btn btn-sm btn-outline-secondary chip-sales" data-v="20000">₹20k</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary chip-sales" data-v="25001">₹25,001</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary chip-sales" data-v="40000">₹40k</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary chip-sales" data-v="50001">₹50,001</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary chip-sales" data-v="60000">₹60k</button>
+                    </div>
+                    <div id="box-external" class="border rounded p-3 bg-light small">
+                        <p class="mb-1"><strong>Current slab:</strong> <span id="ext-slab">—</span></p>
+                        <p class="mb-1"><strong>Incentive at this total:</strong> ₹<span id="ext-inc">0.00</span></p>
+                        <p class="mb-1 text-primary" id="ext-next-wrap"><strong>Gap to next tier:</strong> ₹<span id="ext-gap">0</span> → <span id="ext-next-label"></span></p>
+                        <p class="mb-0"><strong>Incentive if total were exactly at next threshold:</strong> ₹<span id="ext-inc-next">0.00</span></p>
+                        <p class="mb-0 mt-2 text-muted d-none" id="ext-top-msg">You are at the top tier for this month.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if show_internal %}
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100 border-0" style="border-left: 4px solid #6b8cae !important;">
+                <div class="card-header bg-white py-3">
+                    <h2 class="h5 mb-0 text-secondary"><i class="fas fa-coins text-primary"></i> Internal (ops)</h2>
+                    <small class="text-muted">SIP increase (notional ×10) and lump sum</small>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="inp-delta-sip">Monthly SIP increase Δ (₹/month)</label>
+                        <input type="number" min="0" step="1" class="form-control" id="inp-delta-sip" value="0">
+                        <div class="d-flex flex-wrap gap-1 mt-1">
+                            <button type="button" class="btn btn-sm btn-outline-secondary chip-sip" data-v="5000">₹5k</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary chip-sip" data-v="10000">₹10k</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary chip-sip" data-v="25000">₹25k</button>
+                        </div>
+                        <small class="text-muted">One-time incentive = 0.5% × (Δ × 10) after 3 consecutive executed months (simulator shows formula only).</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="inp-lump">Lump sum above schedule (₹)</label>
+                        <input type="number" min="0" step="1" class="form-control" id="inp-lump" value="0">
+                        <div class="d-flex flex-wrap gap-1 mt-1">
+                            <button type="button" class="btn btn-sm btn-outline-secondary chip-lump" data-v="100000">₹1L</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary chip-lump" data-v="500000">₹5L</button>
+                        </div>
+                        <small class="text-muted">Incentive = 0.5% × amount.</small>
+                    </div>
+                    <div id="box-internal" class="border rounded p-3 bg-light small">
+                        <p class="mb-1"><strong>Notional (Δ × 10):</strong> ₹<span id="int-notional">0.00</span></p>
+                        <p class="mb-1"><strong>SIP step-up incentive:</strong> ₹<span id="int-sip-inc">0.00</span></p>
+                        <p class="mb-0"><strong>Lump sum incentive:</strong> ₹<span id="int-lump-inc">0.00</span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="col-12">
+            <div class="card shadow-sm border-0 bg-dark text-white">
+                <div class="card-body d-flex flex-wrap justify-content-between align-items-center py-3">
+                    <div>
+                        <div class="text-uppercase small opacity-75">Combined simulated incentive</div>
+                        <div class="display-6 fw-semibold">₹<span id="combined-total">0.00</span></div>
+                    </div>
+                    <button type="button" class="btn btn-light btn-sm" id="btn-reset"><i class="fas fa-undo"></i> Reset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const showSales = {{ 'true' if show_sales else 'false' }};
+    const showInternal = {{ 'true' if show_internal else 'false' }};
+    const calcUrl = {{ url_for('attendance.incentive_simulator_calculate') | tojson }};
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+    const inpSales = document.getElementById('inp-sales-t');
+    const inpSip = document.getElementById('inp-delta-sip');
+    const inpLump = document.getElementById('inp-lump');
+
+    let timer = null;
+    function scheduleRecalc() {
+        clearTimeout(timer);
+        timer = setTimeout(recalc, 200);
+    }
+
+    function render(result) {
+        if (result.external && showSales) {
+            const s = result.external.slab;
+            document.getElementById('ext-slab').textContent = s.current_slab + ' — ' + s.applied_rate_description;
+            document.getElementById('ext-inc').textContent = parseFloat(result.external.incentive).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const wrap = document.getElementById('ext-next-wrap');
+            const topMsg = document.getElementById('ext-top-msg');
+            if (s.next_threshold) {
+                wrap.classList.remove('d-none');
+                topMsg.classList.add('d-none');
+                document.getElementById('ext-gap').textContent = parseFloat(s.gap_to_next_slab).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+                document.getElementById('ext-next-label').textContent = s.next_slab_label || '';
+                document.getElementById('ext-inc-next').textContent = parseFloat(s.incentive_at_next_threshold).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            } else {
+                wrap.classList.add('d-none');
+                if (s.is_top_tier) topMsg.classList.remove('d-none');
+                else topMsg.classList.add('d-none');
+            }
+        }
+        if (result.internal_sip && showInternal) {
+            document.getElementById('int-notional').textContent = parseFloat(result.internal_sip.notional).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            document.getElementById('int-sip-inc').textContent = parseFloat(result.internal_sip.incentive).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        if (result.internal_lump && showInternal) {
+            document.getElementById('int-lump-inc').textContent = parseFloat(result.internal_lump.incentive).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        document.getElementById('combined-total').textContent = parseFloat(result.combined_incentive).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    async function recalc() {
+        const body = {
+            sales_monthly_total: showSales && inpSales ? (inpSales.value || 0) : 0,
+            delta_sip: showInternal && inpSip ? (inpSip.value || 0) : 0,
+            lump_amount: showInternal && inpLump ? (inpLump.value || 0) : 0
+        };
+        try {
+            const r = await fetch(calcUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf || ''
+                },
+                body: JSON.stringify(body)
+            });
+            const data = await r.json();
+            if (data.ok) render(data.result);
+        } catch (e) { console.warn(e); }
+    }
+
+    if (inpSales) { inpSales.addEventListener('input', scheduleRecalc); }
+    if (inpSip) { inpSip.addEventListener('input', scheduleRecalc); }
+    if (inpLump) { inpLump.addEventListener('input', scheduleRecalc); }
+
+    document.querySelectorAll('.chip-sales').forEach(function (b) {
+        b.addEventListener('click', function () {
+            if (inpSales) { inpSales.value = b.getAttribute('data-v'); scheduleRecalc(); }
+        });
+    });
+    document.querySelectorAll('.chip-sip').forEach(function (b) {
+        b.addEventListener('click', function () {
+            if (inpSip) { inpSip.value = b.getAttribute('data-v'); scheduleRecalc(); }
+        });
+    });
+    document.querySelectorAll('.chip-lump').forEach(function (b) {
+        b.addEventListener('click', function () {
+            if (inpLump) { inpLump.value = b.getAttribute('data-v'); scheduleRecalc(); }
+        });
+    });
+
+    document.getElementById('btn-reset').addEventListener('click', function () {
+        if (inpSales) inpSales.value = 0;
+        if (inpSip) inpSip.value = 0;
+        if (inpLump) inpLump.value = 0;
+        scheduleRecalc();
+    });
+
+    const initial = {{ initial_json | tojson }};
+    render(initial);
+})();
+</script>
+{% endblock %}

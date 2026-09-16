@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+
+{% block title %}Workflow {{ workflow.id }} - Issues{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <div class="page-title-right">
+                    <ol class="breadcrumb m-0">
+                        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('rec_execution.dashboard') }}">Recommendation Execution</a></li>
+                        <li class="breadcrumb-item active">Workflow {{ workflow.id }}</li>
+                    </ol>
+                </div>
+                <h4 class="page-title">
+                    <i class="fas fa-tasks me-2"></i>Workflow {{ workflow.id }} - Issues
+                </h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Info -->
+    <div class="row mb-3">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h4 class="mb-1">{{ workflow.monthly_investment.client.name }}</h4>
+                            <p class="text-muted mb-0">
+                                Stage: <span class="badge bg-info">{{ workflow.current_stage }}</span>
+                                | Investment Date: {{ workflow.investment_date.strftime('%Y-%m-%d') if workflow.investment_date else 'N/A' }}
+                                | Planned: ₹{{ "{:,.0f}".format(workflow.planned_amount) if workflow.planned_amount else '0' }}
+                                | <a href="{{ url_for('main.view_monthly_investment', id=workflow.monthly_investment_id) }}">View Monthly Investment</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">
+                        Client SLA (Recommendation Execution)
+                        {% if stage_sla and stage_sla|length > 0 %}
+                        <span class="badge bg-primary ms-1">Override ON</span>
+                        {% endif %}
+                        {% if exception_count and exception_count > 0 %}
+                        <span class="badge bg-light text-dark ms-1">Exceptions: {{ exception_count }}</span>
+                        {% endif %}
+                    </h6>
+                    <form method="POST" action="{{ url_for('rec_execution.set_client_sla', client_id=workflow.monthly_investment.client_id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label mb-0 small">FUNDS</label>
+                                <input class="form-control form-control-sm" type="number" min="0" max="60" name="sla_FUNDS"
+                                       value="{{ stage_sla.get('FUNDS', 3) }}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label mb-0 small">RECOS</label>
+                                <input class="form-control form-control-sm" type="number" min="0" max="60" name="sla_RECOS"
+                                       value="{{ stage_sla.get('RECOS', 2) }}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label mb-0 small">EXEC</label>
+                                <input class="form-control form-control-sm" type="number" min="0" max="60" name="sla_EXEC"
+                                       value="{{ stage_sla.get('EXEC', 5) }}">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label mb-0 small">STALL_ANY</label>
+                                <input class="form-control form-control-sm" type="number" min="0" max="60" name="sla_STALL_ANY"
+                                       value="{{ stage_sla.get('STALL_ANY', 7) }}">
+                            </div>
+                            <div class="col-12">
+                                <input class="form-control form-control-sm" type="text" name="notes"
+                                       placeholder="Optional note (why these SLAs?)">
+                            </div>
+                            <div class="col-12">
+                                <button class="btn btn-sm btn-outline-primary w-100" type="submit">
+                                    Save SLA
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+
+                    <hr>
+
+                    <h6 class="text-muted mb-2">Learned Patterns</h6>
+                    {% if patterns %}
+                        {% for pattern in patterns %}
+                        <span class="badge bg-info me-1 mb-1">
+                            {{ pattern.pattern_type }}: {{ pattern.pattern_value }}
+                        </span>
+                        {% endfor %}
+                    {% else %}
+                        <small class="text-muted">No patterns learned yet</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Issues -->
+    <form id="resolveForm" action="{{ url_for('rec_execution.resolve_issues') }}" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="resolution" value="fixed">
+        
+        <div class="row mb-3">
+            <div class="col-12">
+                <button type="submit" class="btn btn-success" id="resolveBtn" disabled>
+                    <i class="fas fa-check"></i> Resolve Selected (<span id="selectedCount">0</span>)
+                </button>
+                <button type="button" class="btn btn-outline-secondary ms-2" id="exceptionBtn"
+                        onclick="bulkResolveAs('exception')">
+                    Mark Exception (Skip)
+                </button>
+                <button type="button" class="btn btn-outline-primary ms-2" id="createAlertBtn"
+                        onclick="createAlertFromSelected()">
+                    Create Alert
+                </button>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="header-title">
+                            <span class="badge bg-warning me-2">{{ total_issues }}</span>
+                            Open Issues
+                        </h4>
+                    </div>
+                    <div class="card-body p-0">
+                        {% if issues %}
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th width="40">
+                                        <input type="checkbox" class="form-check-input" 
+                                               onchange="toggleAll(this)">
+                                    </th>
+                                    <th>Issue</th>
+                                    <th width="100">Severity</th>
+                                    <th width="160">Assigned To</th>
+                                    <th width="120">Date</th>
+                                    <th width="100">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for issue in issues %}
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input issue-checkbox" 
+                                               name="issue_ids[]" value="{{ issue.id }}"
+                                               onchange="updateCount()">
+                                    </td>
+                                    <td>
+                                        <div>{{ issue.message }}</div>
+                                        {% if issue.suggested_action %}
+                                        <br><small class="text-info">
+                                            <i class="fas fa-lightbulb"></i>
+                                            {% if issue.check_name == 'workflow_stalled' and issue.details and issue.details.get('workflow_id') %}
+                                                Review <a href="{{ url_for('rec_execution.workflow_issues', id=issue.details.get('monthly_investment_id') or issue.details.workflow_id) }}">workflow {{ issue.details.workflow_id }}</a> and move to next stage
+                                            {% elif issue.details and issue.details.get('workflow_id') %}
+                                                {{ issue.suggested_action }} <a href="{{ url_for('rec_execution.workflow_issues', id=issue.details.get('monthly_investment_id') or issue.details.workflow_id) }}">View workflow {{ issue.details.workflow_id }}</a>
+                                            {% else %}
+                                                {{ issue.suggested_action }}
+                                            {% endif %}
+                                        </small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if issue.severity == 'critical' else 'warning' if issue.severity == 'warning' else 'info' }}">
+                                            {{ issue.severity }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <select class="form-select form-select-sm"
+                                                aria-label="Assignee for issue {{ issue.id }}"
+                                                onchange="reassignOne({{ issue.id }}, this.value)">
+                                            <option value="0" {% if not issue.assigned_to %}selected{% endif %}>Unassigned</option>
+                                            {% for u in assignee_users|default([]) %}
+                                            <option value="{{ u.id }}" {% if issue.assigned_to == u.id %}selected{% endif %}>{{ u.username }}</option>
+                                            {% endfor %}
+                                            {% if issue.assigned_to and issue.assigned_to not in (assignee_user_ids|default([])) %}
+                                            <option value="{{ issue.assigned_to }}" selected>
+                                                {{ issue.assigned_user.username if issue.assigned_user else ('User #' ~ issue.assigned_to) }} (inactive)
+                                            </option>
+                                            {% endif %}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <small>{{ issue.detected_at.strftime('%Y-%m-%d') if issue.detected_at else 'N/A' }}</small>
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-success" 
+                                                onclick="quickResolve({{ issue.id }}, 'fixed')" title="Mark Fixed">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                            <h5>No Issues</h5>
+                            <p class="text-muted">All checks passed for this workflow.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+function toggleAll(checkbox) {
+    const checkboxes = document.querySelectorAll('.issue-checkbox');
+    checkboxes.forEach(cb => cb.checked = checkbox.checked);
+    updateCount();
+}
+
+function updateCount() {
+    const checked = document.querySelectorAll('.issue-checkbox:checked').length;
+    document.getElementById('selectedCount').textContent = checked;
+    document.getElementById('resolveBtn').disabled = checked === 0;
+}
+
+function reassignOne(issueId, assignedTo) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("data_integrity.reassign_issues") }}';
+    const csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = 'csrf_token';
+    csrf.value = '{{ csrf_token() }}';
+    form.appendChild(csrf);
+    const issueInput = document.createElement('input');
+    issueInput.type = 'hidden';
+    issueInput.name = 'issue_ids[]';
+    issueInput.value = issueId;
+    form.appendChild(issueInput);
+    const asg = document.createElement('input');
+    asg.type = 'hidden';
+    asg.name = 'assigned_to';
+    asg.value = assignedTo;
+    form.appendChild(asg);
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function quickResolve(issueId, resolution) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("rec_execution.resolve_issues") }}';
+    
+    const csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = 'csrf_token';
+    csrf.value = '{{ csrf_token() }}';
+    form.appendChild(csrf);
+    
+    const issueInput = document.createElement('input');
+    issueInput.type = 'hidden';
+    issueInput.name = 'issue_ids[]';
+    issueInput.value = issueId;
+    form.appendChild(issueInput);
+    
+    const resInput = document.createElement('input');
+    resInput.type = 'hidden';
+    resInput.name = 'resolution';
+    resInput.value = resolution;
+    form.appendChild(resInput);
+    
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function bulkResolveAs(resolution) {
+    // If nothing selected, apply to all visible issues
+    const selected = document.querySelectorAll('.issue-checkbox:checked');
+    if (selected.length === 0) {
+        document.querySelectorAll('.issue-checkbox').forEach(cb => cb.checked = true);
+        updateCount();
+    }
+    const form = document.getElementById('resolveForm');
+    form.querySelector('input[name=\"resolution\"]').value = resolution;
+    form.submit();
+}
+
+function createAlertFromSelected() {
+    let selected = Array.from(document.querySelectorAll('.issue-checkbox:checked')).map(cb => cb.value);
+    // If nothing selected, create alert from all visible issues
+    if (!selected.length) {
+        selected = Array.from(document.querySelectorAll('.issue-checkbox')).map(cb => cb.value);
+    }
+    if (!selected.length) return;
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("rec_execution.create_alert_from_issues") }}';
+
+    const csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = 'csrf_token';
+    csrf.value = '{{ csrf_token() }}';
+    form.appendChild(csrf);
+
+    selected.forEach(id => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'issue_ids[]';
+        inp.value = id;
+        form.appendChild(inp);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+}
+
+// Initialize button states on load
+window.addEventListener('load', updateCount);
+</script>
+{% endblock %}

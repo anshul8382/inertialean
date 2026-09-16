@@ -1,0 +1,653 @@
+{% extends "base.html" %}
+
+{% block title %}Portfolio Construction{% endblock %}
+
+{% block content %}
+{% from 'partials/mobile/macros.html' import maint_child_open, maint_desktop_open, maint_desktop_close %}
+{{ maint_child_open('Portfolio construction', url_for('main.maintenance_portfolio_modelling'), 'Reconstruct holdings as of a specific date. Scroll to the form below.') }}
+{{ maint_desktop_open('container-fluid') }}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">
+                        <i class="fas fa-calculator text-primary"></i>
+                        Portfolio Construction
+                    </h4>
+                    <p class="text-muted mb-0">Reconstruct portfolio holdings as of a specific date</p>
+                </div>
+                <div class="card-body">
+                    <form id="constructionForm">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="clientSearch"><strong>Select Client:</strong></label>
+                                    <div class="position-relative">
+                                        <input 
+                                            type="text" 
+                                            class="form-control" 
+                                            id="clientSearch" 
+                                            name="client_search"
+                                            placeholder="Search for a client by name..." 
+                                            autocomplete="off"
+                                            required
+                                        >
+                                        <input type="hidden" id="clientId" name="client_id" required>
+                                        <div id="clientSearchResults" class="list-group position-absolute w-100" style="top: 100%; z-index: 1000; display: none; max-height: 300px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
+                                    </div>
+                                    <small class="form-text text-muted">Type at least 2 characters to search</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="targetDate"><strong>Target Date:</strong></label>
+                                    <input type="date" class="form-control" id="targetDate" name="target_date" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="applyAdjustments"><strong>Apply Corporate Action Adjustments:</strong></label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="applyAdjustments" name="apply_adjustments" checked>
+                                        <label class="form-check-label" for="applyAdjustments">
+                                            Apply corporate action adjustments
+                                        </label>
+                                    </div>
+                                    <small class="form-text text-muted">Reverse splits, bonuses, mergers to get accurate historical quantities</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="saveSnapshot"><strong>Save Snapshot:</strong></label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="saveSnapshot" name="save_snapshot">
+                                        <label class="form-check-label" for="saveSnapshot">
+                                            Save snapshot for audit trail
+                                        </label>
+                                    </div>
+                                    <small class="form-text text-muted">Creates audit files for debugging and verification</small>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="matchingMethod"><strong>Matching Method:</strong></label>
+                                    <select class="form-control" id="matchingMethod" name="matching_method">
+                                        <option value="fifo">FIFO (First In, First Out)</option>
+                                        <option value="lifo">LIFO (Last In, First Out)</option>
+                                    </select>
+                                    <small class="form-text text-muted">Method for matching transactions</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="priceBasis"><strong>Price Basis:</strong></label>
+                                    <select class="form-control" id="priceBasis" name="price_basis">
+                                        <option value="adjusted">Adjusted Prices</option>
+                                        <option value="unadjusted">Unadjusted Prices</option>
+                                    </select>
+                                    <small class="form-text text-muted">Use corporate action adjusted prices or raw historical prices</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>&nbsp;</label>
+                                    <div>
+                                        <button type="submit" class="btn btn-primary btn-lg">
+                                            <i class="fas fa-calculator"></i> Construct Portfolio
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary btn-lg ml-2" onclick="clearForm()">
+                                            <i class="fas fa-eraser"></i> Clear
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results Section -->
+    <div id="resultsSection" class="row mt-4" style="display: none;">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-pie text-success"></i>
+                        Portfolio Construction Results
+                    </h5>
+                    <div>
+                        <button type="button" class="btn btn-success" onclick="downloadReport()" id="downloadBtn" style="display: none;">
+                            <i class="fas fa-download"></i> Download Report
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Summary Cards -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="card bg-primary text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Total Holdings</h6>
+                                    <h4 id="totalHoldings">-</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-success text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Total Value</h6>
+                                    <h4 id="totalValue">-</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-info text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Total Cost</h6>
+                                    <h4 id="totalCost">-</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card bg-warning text-white">
+                                <div class="card-body">
+                                    <h6 class="card-title">Total Gains</h6>
+                                    <h4 id="totalGains">-</h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Holdings Table -->
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover" id="holdingsTable">
+                            <thead class="thead-dark">
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Quantity</th>
+                                    <th>Average Price</th>
+                                    <th>Current Price</th>
+                                    <th>Current Value</th>
+                                    <th>Unrealized P&L</th>
+                                    <th>P&L %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="holdingsTableBody">
+                                <!-- Holdings will be populated here -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Construction Details -->
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h6 class="mb-0">Construction Details</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <strong>Client:</strong> <span id="clientName">-</span><br>
+                                            <strong>Target Date:</strong> <span id="constructionDate">-</span><br>
+                                            <strong>Source:</strong> <span id="constructionSource">-</span>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <strong>Corporate Actions:</strong> <span id="corporateActions">-</span><br>
+                                            <strong>Matching Method:</strong> <span id="matchingMethodUsed">-</span><br>
+                                            <strong>Price Basis:</strong> <span id="priceBasisUsed">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="text-center mt-4" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+        <p class="mt-2">Constructing portfolio...</p>
+    </div>
+
+    <!-- Error Alert -->
+    <div id="errorAlert" class="alert alert-danger mt-4" style="display: none;">
+        <h5><i class="fas fa-exclamation-triangle"></i> Error</h5>
+        <p id="errorMessage"></p>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+{% endblock %}
+
+{% block scripts %}
+<!-- External libraries for PDF/Excel download -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// Store portfolio data globally for download
+var currentPortfolioData = null;
+var currentClientName = '';
+var currentReportDate = '';
+var logoUrl = '{{ url_for("static", filename="images/inertia-logo.png") }}';
+
+// Robust jQuery loading and scoping
+(function() {
+    var checkJQuery = setInterval(function() {
+        if (typeof jQuery !== 'undefined') {
+            clearInterval(checkJQuery);
+            init(jQuery);
+        }
+    }, 50);
+    
+    function init($) {
+        $(document).ready(function() {
+            // Client Search Functionality
+            let searchTimeout;
+            const searchInput = $('#clientSearch');
+            const searchResults = $('#clientSearchResults');
+            const clientIdInput = $('#clientId');
+
+            function debounceSearch() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(function() {
+                    performClientSearch();
+                }, 300);
+            }
+
+            function performClientSearch() {
+                const searchTerm = searchInput.val().trim();
+                if (searchTerm.length < 2) {
+                    searchResults.hide().empty();
+                    return;
+                }
+
+                searchResults.html('<div class="list-group-item"><i class="fas fa-spinner fa-spin"></i> Searching...</div>').show();
+
+                $.ajax({
+                    url: '/clients-v2/api/',
+                    method: 'GET',
+                    data: {
+                        search: searchTerm,
+                        per_page: 10
+                    },
+                    success: function(response) {
+                        if (response && response.success && response.data && response.data.length > 0) {
+                            displaySearchResults(response.data);
+                        } else {
+                            searchResults.html('<div class="list-group-item text-muted">No clients found</div>').show();
+                        }
+                    },
+                    error: function(xhr) {
+                        console.error('Client search error:', xhr);
+                        searchResults.html('<div class="list-group-item text-danger">Error searching clients</div>').show();
+                    }
+                });
+            }
+
+            function displaySearchResults(clients) {
+                let html = '';
+                clients.forEach(function(client) {
+                    const email = client.email || 'No email';
+                    const riskProfile = client.risk_profile || 'N/A';
+                    html += `
+                        <a href="#" class="list-group-item list-group-item-action client-search-result"
+                           data-client-id="${client.id}" data-client-name="${escapeHtml(client.name)}">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${escapeHtml(client.name)}</h6>
+                                <small class="text-muted">ID: ${client.id}</small>
+                            </div>
+                            <p class="mb-1 text-muted small">${escapeHtml(email)}</p>
+                            <small class="text-muted">Risk: ${escapeHtml(riskProfile)}</small>
+                        </a>`;
+                });
+                searchResults.html(html || '<div class="list-group-item text-muted">No clients found</div>').show();
+            }
+
+            function escapeHtml(text) {
+                if (!text) return '';
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            searchInput.on('input', debounceSearch);
+            searchInput.on('focus', function() {
+                if (searchInput.val().trim().length >= 2) performClientSearch();
+            });
+
+            $(document).on('click', '.client-search-result', function(e) {
+                e.preventDefault();
+                const clientId = $(this).data('client-id');
+                const clientName = $(this).data('client-name');
+                clientIdInput.val(clientId);
+                searchInput.val(clientName);
+                searchResults.hide();
+                searchInput[0].setCustomValidity('');
+            });
+
+            $(document).on('click', function(e) {
+                if (!$(e.target).closest('#clientSearch, #clientSearchResults').length) searchResults.hide();
+            });
+
+            const constructionForm = document.getElementById('constructionForm');
+            if (constructionForm) {
+                constructionForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    constructPortfolio();
+                });
+            }
+        });
+    }
+})();
+
+// Global functions for form
+function clearForm() {
+    document.getElementById('constructionForm').reset();
+    document.getElementById('clientId').value = '';
+    document.getElementById('clientSearch').value = '';
+    document.getElementById('clientSearchResults').style.display = 'none';
+    document.getElementById('resultsSection').style.display = 'none';
+    document.getElementById('errorAlert').style.display = 'none';
+    var downloadBtn = document.getElementById('downloadBtn');
+    if (downloadBtn) downloadBtn.style.display = 'none';
+    if (document.getElementById('clientSearch')) document.getElementById('clientSearch').setCustomValidity('');
+}
+
+function constructPortfolio() {
+    const form = document.getElementById('constructionForm');
+    const formData = new FormData(form);
+    const clientId = document.getElementById('clientId').value;
+    const targetDate = formData.get('target_date');
+    
+    if (!clientId) {
+        const searchInput = document.getElementById('clientSearch');
+        if (searchInput) {
+            searchInput.setCustomValidity('Please select a client');
+            searchInput.reportValidity();
+        }
+        return;
+    }
+    
+    document.getElementById('loadingSpinner').style.display = 'block';
+    document.getElementById('resultsSection').style.display = 'none';
+    document.getElementById('errorAlert').style.display = 'none';
+    
+    const csrfToken = document.querySelector('meta[name=csrf-token]') ? 
+                      document.querySelector('meta[name=csrf-token]').getAttribute('content') : '';
+
+    fetch(`/review/api/portfolio-construction/${clientId}?as_of_date=${targetDate}`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        if (data.success) {
+            displayResults(data.portfolio, clientId, targetDate);
+        } else {
+            showError(data.error || 'Failed to construct portfolio');
+        }
+    })
+    .catch(error => {
+        document.getElementById('loadingSpinner').style.display = 'none';
+        showError('Network error: ' + error.message);
+    });
+}
+
+function displayResults(portfolioData, clientId, targetDate) {
+    currentPortfolioData = portfolioData;
+    currentClientName = document.getElementById('clientSearch').value || 'Selected Client';
+    currentReportDate = targetDate;
+
+    document.getElementById('totalHoldings').textContent = portfolioData.holdings.length;
+    document.getElementById('totalValue').textContent = formatCurrency(portfolioData.total_value);
+    document.getElementById('totalCost').textContent = formatCurrency(portfolioData.total_cost);
+    document.getElementById('totalGains').textContent = formatCurrency(portfolioData.unrealized_pnl);
+    
+    document.getElementById('clientName').textContent = currentClientName;
+    document.getElementById('constructionDate').textContent = targetDate;
+    document.getElementById('constructionSource').textContent = 'Forward Calculation';
+    document.getElementById('corporateActions').textContent = 'Applied';
+    document.getElementById('matchingMethodUsed').textContent = 'FIFO';
+    document.getElementById('priceBasisUsed').textContent = 'Weighted Average Cost';
+    
+    const tbody = document.getElementById('holdingsTableBody');
+    tbody.innerHTML = '';
+    
+    portfolioData.holdings.forEach(holding => {
+        const row = document.createElement('tr');
+        const pnl = holding.unrealized_pnl;
+        const pnlPercent = holding.total_cost > 0 ? (pnl / holding.total_cost * 100) : 0;
+        const pnlClass = pnl >= 0 ? 'text-success' : 'text-danger';
+        
+        row.innerHTML = `
+            <td><strong>${holding.symbol}</strong></td>
+            <td>${formatNumber(holding.quantity)}</td>
+            <td>${formatCurrency(holding.average_price)}</td>
+            <td>${formatCurrency(holding.current_price)}</td>
+            <td>${formatCurrency(holding.current_value)}</td>
+            <td class="${pnlClass}">${formatCurrency(pnl)}</td>
+            <td class="${pnlClass}">${formatPercentage(pnlPercent)}</td>
+        `;
+        tbody.appendChild(row);
+    });
+    
+    var downloadBtn = document.getElementById('downloadBtn');
+    if (downloadBtn) downloadBtn.style.display = 'inline-block';
+    document.getElementById('resultsSection').style.display = 'block';
+}
+
+function downloadReport() {
+    var rows = [];
+    document.querySelectorAll('#holdingsTableBody tr').forEach(function(row) {
+        var cells = row.querySelectorAll('td');
+        if (cells.length >= 7) {
+            rows.push({
+                symbol: cells[0].textContent.trim(),
+                quantity: cells[1].textContent.trim(),
+                avgPrice: cells[2].textContent.trim(),
+                currentPrice: cells[3].textContent.trim(),
+                currentValue: cells[4].textContent.trim(),
+                unrealizedPnL: cells[5].textContent.trim(),
+                pnlPercent: cells[6].textContent.trim()
+            });
+        }
+    });
+    if (rows.length === 0) {
+        alert('No holdings to download');
+        return;
+    }
+    var totalQuantity = 0, totalCurrentValue = 0, totalUnrealizedPnL = 0;
+    rows.forEach(function(r) {
+        totalQuantity += parseFloat(r.quantity.replace(/,/g, '')) || 0;
+        totalCurrentValue += parseFloat(r.currentValue.replace(/[₹,]/g, '')) || 0;
+        totalUnrealizedPnL += parseFloat(r.unrealizedPnL.replace(/[₹,]/g, '')) || 0;
+    });
+    var totalCost = totalCurrentValue - totalUnrealizedPnL;
+    var totalPnLPercent = totalCost > 0 ? ((totalUnrealizedPnL / totalCost) * 100).toFixed(2) + '%' : '0%';
+    var totals = {
+        quantity: formatNumber(totalQuantity),
+        currentValue: formatCurrency(totalCurrentValue),
+        unrealizedPnL: formatCurrency(totalUnrealizedPnL),
+        pnlPercent: totalPnLPercent
+    };
+    var format = confirm('Choose download format:\n\nClick OK for PDF\nClick Cancel for Excel');
+    if (format) {
+        downloadPDF(rows, totals);
+    } else {
+        downloadExcel(rows, totals);
+    }
+}
+
+function downloadPDF(rows, totals) {
+    var jsPDF = window.jspdf;
+    if (!jsPDF || !jsPDF.jsPDF) {
+        alert('PDF library not loaded. Please refresh and try again.');
+        return;
+    }
+    var doc = new jsPDF.jsPDF();
+    var logoImg = document.querySelector('img[src*="inertia-logo"]');
+    var logoDataUrl = null;
+    if (logoImg && logoImg.complete) {
+        try {
+            var canvas = document.createElement('canvas');
+            canvas.width = logoImg.naturalWidth || 200;
+            canvas.height = logoImg.naturalHeight || 60;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(logoImg, 0, 0);
+            logoDataUrl = canvas.toDataURL('image/png');
+        } catch (e) {}
+    }
+    if (logoDataUrl) {
+        generatePDFWithLogo(doc, rows, totals, logoDataUrl);
+    } else {
+        var img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function() {
+            try {
+                var c = document.createElement('canvas');
+                c.width = img.width;
+                c.height = img.height;
+                var ctx = c.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                generatePDFWithLogo(doc, rows, totals, c.toDataURL('image/png'));
+            } catch (e) {
+                generatePDFWithoutLogo(doc, rows, totals);
+            }
+        };
+        img.onerror = function() { generatePDFWithoutLogo(doc, rows, totals); };
+        img.src = logoUrl;
+        return;
+    }
+}
+
+function generatePDFWithLogo(doc, rows, totals, logoDataUrl) {
+    doc.setFontSize(16);
+    doc.text('Portfolio Summary Report', 105, 20, { align: 'center' });
+    if (logoDataUrl) {
+        try { doc.addImage(logoDataUrl, 'PNG', 170, 10, 30, 10); } catch (e) {}
+    }
+    doc.setFontSize(12);
+    doc.text('Client: ' + currentClientName, 20, 35);
+    doc.text('Report Date: ' + currentReportDate, 20, 42);
+    doc.text('Generated: ' + new Date().toLocaleDateString(), 20, 49);
+    var tableData = rows.map(function(row) {
+        return [row.symbol, row.quantity, row.avgPrice, row.currentPrice, row.currentValue, row.unrealizedPnL, row.pnlPercent];
+    });
+    tableData.push(['TOTAL', totals.quantity, '-', '-', totals.currentValue, totals.unrealizedPnL, totals.pnlPercent]);
+    doc.autoTable({
+        head: [['Symbol', 'Quantity', 'Avg Price', 'Current Price', 'Current Value', 'Unrealized P&L', 'P&L %']],
+        body: tableData,
+        startY: 60,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [66, 139, 202] },
+        alternateRowStyles: { fillColor: [245, 245, 245] }
+    });
+    doc.save('Portfolio_Construction_' + currentClientName.replace(/\s+/g, '_') + '_' + currentReportDate + '.pdf');
+}
+
+function generatePDFWithoutLogo(doc, rows, totals) {
+    doc.setFontSize(16);
+    doc.text('Portfolio Summary Report', 105, 20, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text('Client: ' + currentClientName, 20, 35);
+    doc.text('Report Date: ' + currentReportDate, 20, 42);
+    doc.text('Generated: ' + new Date().toLocaleDateString(), 20, 49);
+    var tableData = rows.map(function(row) {
+        return [row.symbol, row.quantity, row.avgPrice, row.currentPrice, row.currentValue, row.unrealizedPnL, row.pnlPercent];
+    });
+    tableData.push(['TOTAL', totals.quantity, '-', '-', totals.currentValue, totals.unrealizedPnL, totals.pnlPercent]);
+    doc.autoTable({
+        head: [['Symbol', 'Quantity', 'Avg Price', 'Current Price', 'Current Value', 'Unrealized P&L', 'P&L %']],
+        body: tableData,
+        startY: 60,
+        styles: { fontSize: 9 },
+        headStyles: { fillColor: [66, 139, 202] },
+        alternateRowStyles: { fillColor: [245, 245, 245] }
+    });
+    doc.save('Portfolio_Construction_' + currentClientName.replace(/\s+/g, '_') + '_' + currentReportDate + '.pdf');
+}
+
+function downloadExcel(rows, totals) {
+    if (typeof XLSX === 'undefined') {
+        alert('Excel library not loaded. Please refresh and try again.');
+        return;
+    }
+    var wb = XLSX.utils.book_new();
+    var data = [
+        ['Portfolio Summary Report'],
+        [],
+        ['Client:', currentClientName],
+        ['Report Date:', currentReportDate],
+        ['Generated:', new Date().toLocaleDateString()],
+        [],
+        ['Symbol', 'Quantity', 'Average Price', 'Current Price', 'Current Value', 'Unrealized P&L', 'P&L %']
+    ];
+    rows.forEach(function(row) {
+        data.push([
+            row.symbol,
+            parseFloat(row.quantity.replace(/,/g, '')) || 0,
+            parseFloat(row.avgPrice.replace(/[₹,]/g, '')) || 0,
+            parseFloat(row.currentPrice.replace(/[₹,]/g, '')) || 0,
+            parseFloat(row.currentValue.replace(/[₹,]/g, '')) || 0,
+            parseFloat(row.unrealizedPnL.replace(/[₹,]/g, '')) || 0,
+            parseFloat(row.pnlPercent.replace(/[%,]/g, '')) || 0
+        ]);
+    });
+    data.push([
+        'TOTAL',
+        parseFloat(totals.quantity.replace(/,/g, '')) || 0,
+        '',
+        '',
+        parseFloat(totals.currentValue.replace(/[₹,]/g, '')) || 0,
+        parseFloat(totals.unrealizedPnL.replace(/[₹,]/g, '')) || 0,
+        parseFloat(totals.pnlPercent.replace(/[%,]/g, '')) || 0
+    ]);
+    var ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{ wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Portfolio Summary');
+    XLSX.writeFile(wb, 'Portfolio_Construction_' + currentClientName.replace(/\s+/g, '_') + '_' + currentReportDate + '.xlsx');
+}
+
+function showError(message) {
+    document.getElementById('errorMessage').textContent = message;
+    document.getElementById('errorAlert').style.display = 'block';
+}
+
+function formatCurrency(amount) {
+    return '₹' + parseFloat(amount).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function formatNumber(number) {
+    return parseFloat(number).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 4});
+}
+
+function formatPercentage(percentage) {
+    return parseFloat(percentage).toFixed(2) + '%';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    const targetDateInput = document.getElementById('targetDate');
+    if (targetDateInput) targetDateInput.value = today;
+});
+</script>
+{% endblock %}

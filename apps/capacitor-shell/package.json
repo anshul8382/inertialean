@@ -1,0 +1,41 @@
+{
+  "name": "inertia-capacitor-shell",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Capacitor native shell (iOS + Android) loading the full INERTIA web app",
+  "scripts": {
+    "config": "node scripts/load-config.js",
+    "sync": "npm run config && npx cap sync",
+    "sync:android": "npm run config && npx cap sync android",
+    "sync:ios": "npm run config && npx cap sync ios",
+    "open:ios": "npx cap open ios",
+    "open:android": "npx cap open android",
+    "run:ios": "npm run sync && npx cap run ios",
+    "run:android": "npm run sync && npx cap run android",
+    "build:icon": "node scripts/build-app-icon.js",
+    "copy:icons": "node scripts/copy-icons.js",
+    "generate:assets": "capacitor-assets generate --iconBackgroundColor \"#2563eb\" --splashBackgroundColor \"#2563eb\" --splashBackgroundColorDark \"#2563eb\"",
+    "prepare:icons": "npm run build:icon && npm run generate:assets && node scripts/patch-android-adaptive-icon.js && npm run copy:icons"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/app": "^6.0.2",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.0",
+    "@capacitor/keyboard": "^6.0.3",
+    "@capacitor/splash-screen": "^6.0.3",
+    "@capacitor/status-bar": "^6.0.2"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^6.2.0",
+    "sharp": "^0.34.5",
+    "typescript": "~5.3.0"
+  },
+  "capacitor": {
+    "platforms": [
+      "ios",
+      "android"
+    ]
+  }
+}

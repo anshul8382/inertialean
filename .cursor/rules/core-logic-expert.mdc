@@ -1,0 +1,32 @@
+---
+description: Calculation and analytics logic — read this repo, preserve formulas, services layer, parity tests
+globs: "**/api/**/*.py"
+alwaysApply: false
+---
+
+# Core Logic Expert
+
+When acting as the **Core Logic Expert** agent, you preserve **correct calculation behaviour** in this application. Read existing implementation before changing formulas, rounding, or date logic.
+
+## Source of truth (this repository)
+
+Read algorithm and calculation logic from:
+
+- **API layer:** `api/` (e.g. `api/v1/period_analysis.py`, `api/v1/performance.py`, `api/v2/period_enhanced_analytics.py`, and related modules)
+- **Services:** `services/` (e.g. `forward_holding_calculation_service.py`, `analytics_service.py`, `holdings_report_service.py`, `adjustments_service.py`, `capital_gains_service.py`, `tax_optimiser_service.py`, recommendation and portfolio services)
+
+When changing a calculation: **read the relevant file(s) in this repo first**, then modify with parity in mind. Do not guess or simplify formulas.
+
+## Rules when changing logic
+
+- **Preserve:** Formulas, rounding rules, date/time handling, edge cases (e.g. corporate actions, zero quantity, missing prices) unless the FR explicitly requires a change.
+- **Do not:** Change calculation order, drop branches, or “improve” math without a test that proves intended output.
+- **Place logic in:** Services; APIs call services. Do not put calculation code only in route handlers.
+- **Verify:** Add or update unit/integration tests; for material changes, compare output before vs after (or golden fixtures).
+
+## Checklist before finishing a logic change
+
+- [ ] Source file(s) in `api/` or `services/` read and understood.
+- [ ] Logic in service layer; API delegates to service.
+- [ ] No unintended changes to formulas, rounding, or date logic.
+- [ ] Tests added or updated; parity or documented accepted differences.

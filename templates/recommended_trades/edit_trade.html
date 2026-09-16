@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Recommended Trade{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Edit Recommended Trade</h2>
+                <a href="{{ url_for('recommended_trades.client_recommended_trades', client_id=trade.client_id) }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Trades
+                </a>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Trade Details</h5>
+                </div>
+                <div class="card-body">
+                    {% set recommended_action = (trade.action or '')|lower %}
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label>Client</label>
+                                    <input type="text" class="form-control" value="{{ trade.client.name }}" readonly>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="security_id">Security *</label>
+                                    <select class="form-control" id="security_id" name="security_id" required>
+                                        <option value="">Select Security</option>
+                                        {% for security in securities %}
+                                        <option value="{{ security.id }}" 
+                                                data-price="{{ security.current_price or 0 }}"
+                                                {% if security.id == trade.security_id %}selected{% endif %}>
+                                            {{ security.symbol }} - {{ security.name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="action">Action *</label>
+                                    <select class="form-control" id="action" name="action" required>
+                                        <option value="buy" {% if recommended_action == 'buy' %}selected{% endif %}>Buy</option>
+                                        <option value="sell" {% if recommended_action == 'sell' %}selected{% endif %}>Sell</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="quantity">Quantity *</label>
+                                    <input type="number" class="form-control" id="quantity" name="quantity" step="1" min="0" value="{% if trade.quantity is not none %}{{ trade.quantity|int }}{% endif %}" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="target_price">Recommended Price *</label>
+                                    <div class="input-group">
+                                        <div class="input-group-prepend">
+                                            <span class="input-group-text">₹</span>
+                                        </div>
+                                        <input type="number" class="form-control" id="target_price" name="target_price" step="0.01" min="0" value="{{ trade.target_price }}" required>
+                                        <div class="input-group-append">
+                                            <button type="button" class="btn btn-outline-secondary" id="useCurrentPrice">
+                                                Current
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Execution Information -->
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="actual_price">Execution Price</label>
+                                    <div class="input-group">
+                                        <div class="input-group-prepend">
+                                            <span class="input-group-text">₹</span>
+                                        </div>
+                                        <input type="number" class="form-control" id="actual_price" name="actual_price" step="0.01" min="0" value="{% if trade.actual_price is not none %}{{ trade.actual_price }}{% elif trade.security.current_price is not none %}{{ trade.security.current_price }}{% endif %}" placeholder="Price when executed">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="executed_at">Execution Date</label>
+                                    <input type="date" class="form-control" id="executed_at" name="executed_at" value="{{ trade.executed_at.strftime('%Y-%m-%d') if trade.executed_at else default_execution_date_str }}">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="status">Status</label>
+                                    {% set status_default = 'cancelled' if trade.status == 'cancelled' else 'executed' %}
+                                    <select class="form-control" id="status" name="status">
+                                        <option value="pending" {% if status_default == 'pending' %}selected{% endif %}>Pending</option>
+                                        <option value="executed" {% if status_default == 'executed' %}selected{% endif %}>Executed</option>
+                                        <option value="cancelled" {% if status_default == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="notes">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="Enter any additional notes about this trade recommendation...">{{ trade.notes or '' }}</textarea>
+                        </div>
+
+                        <!-- Trade Status Info -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Trade Summary</h6>
+                                        <div id="tradeSummary">
+                                            <p><strong>Action:</strong> <span class="badge badge-{{ 'success' if recommended_action == 'buy' else 'danger' }}">{{ (trade.action or '')|upper }}</span></p>
+                                            <p><strong>Security:</strong> {{ trade.security.symbol }} - {{ trade.security.name }}</p>
+                                            <p><strong>Quantity:</strong> {{ trade.quantity|number_format(0) }}</p>
+                                            <p><strong>Recommended Price:</strong> ₹{{ trade.target_price|number_format(2) }}</p>
+                                            <p><strong>Current Price:</strong> ₹{{ trade.security.current_price|number_format(2) if trade.security.current_price is not none else 'N/A' }}</p>
+                                            {% if trade.security.current_price is not none and trade.target_price is not none %}
+                                            {% set mkt_diff = trade.security.current_price - trade.target_price %}
+                                            <p><strong>Price difference (current vs recommended):</strong>
+                                            <span class="badge badge-{{ 'success' if mkt_diff <= 0 else 'danger' }}">₹{{ mkt_diff|number_format(2) }}</span></p>
+                                            {% endif %}
+                                            <p><strong>Total Value:</strong> ₹{{ trade.total_amount|number_format(2) }}</p>
+                                            {% if trade.actual_price %}
+                                            <p><strong>Execution Price:</strong> ₹{{ trade.actual_price|number_format(2) }}</p>
+                                            <p><strong>Execution Value:</strong> ₹{{ (trade.quantity * trade.actual_price)|number_format(2) }}</p>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Trade Status</h6>
+                                        <p><strong>Status:</strong> <span class="badge badge-{{ trade.calculated_status_color }}">{{ trade.calculated_status.title() }}</span></p>
+                                        <p><strong>Created:</strong> {{ trade.created_at.strftime('%Y-%m-%d %H:%M') if trade.created_at else 'N/A' }}</p>
+                                        {% if trade.executed_at %}
+                                        <p><strong>Executed:</strong> {{ trade.executed_at.strftime('%Y-%m-%d') }}</p>
+                                        {% endif %}
+                                        {% if trade.security.current_price is not none and trade.target_price is not none %}
+                                        {% set mkt_diff2 = trade.security.current_price - trade.target_price %}
+                                        <p><strong>Price difference (current vs recommended):</strong>
+                                            <span class="badge badge-{{ 'success' if mkt_diff2 <= 0 else 'danger' }}">₹{{ mkt_diff2|number_format(2) }}</span>
+                                        </p>
+                                        {% endif %}
+                                        {% if trade.actual_price is not none %}
+                                        <p class="slippage-line mb-1"><strong class="text-dark">Slippage (execution vs recommended):</strong>
+                                            {% set slip = trade.actual_price - trade.target_price %}
+                                            <span class="text-dark font-weight-bold">₹{{ slip|number_format(2) }}</span>
+                                        </p>
+                                        {% endif %}
+                                        <p><strong>Client:</strong> {{ trade.client.name }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group mt-4">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Update Trade
+                            </button>
+                            <a href="{{ url_for('recommended_trades.client_recommended_trades', client_id=trade.client_id) }}" class="btn btn-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // Update trade summary when form fields change
+    function updateTradeSummary() {
+        const quantity = parseInt($('#quantity').val(), 10) || 0;
+        const targetPrice = parseFloat($('#target_price').val()) || 0;
+        const actualPrice = parseFloat($('#actual_price').val()) || 0;
+        const action = $('#action').val();
+        const security = $('#security_id option:selected');
+        const currentPrice = parseFloat(security.data('price')) || 0;
+        const securityText = security.text();
+        
+        if (quantity > 0 && targetPrice > 0 && action && securityText) {
+            const targetValue = quantity * targetPrice;
+            const actualValue = actualPrice > 0 ? quantity * actualPrice : 0;
+            const mktDiff = currentPrice - targetPrice;
+            const mktDiffClass = mktDiff <= 0 ? 'success' : 'danger';
+            
+            let summaryHtml = `
+                <p><strong>Action:</strong> <span class="badge badge-${action === 'buy' ? 'success' : 'danger'}">${action.toUpperCase()}</span></p>
+                <p><strong>Security:</strong> ${securityText}</p>
+                <p><strong>Quantity:</strong> ${quantity.toLocaleString()}</p>
+                <p><strong>Recommended Price:</strong> ₹${targetPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <p><strong>Current Price:</strong> ₹${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                <p><strong>Price difference (current vs recommended):</strong> <span class="badge badge-${mktDiffClass}">₹${mktDiff.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+                <p><strong>Recommended Value:</strong> ₹${targetValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            `;
+            
+            if (actualPrice > 0) {
+                const slip = actualPrice - targetPrice;
+                summaryHtml += `
+                    <p><strong>Execution Price:</strong> ₹${actualPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p><strong>Execution Value:</strong> ₹${actualValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p class="text-dark"><strong>Slippage (execution vs recommended):</strong> <span class="text-dark font-weight-bold">₹${slip.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></p>
+                `;
+            }
+            
+            $('#tradeSummary').html(summaryHtml);
+        }
+    }
+
+    // Use current price button
+    $('#useCurrentPrice').click(function() {
+        const selectedOption = $('#security_id option:selected');
+        const currentPrice = selectedOption.data('price');
+        if (currentPrice > 0) {
+            $('#target_price').val(currentPrice);
+            updateTradeSummary();
+        }
+    });
+
+    // Event listeners
+    $('#security_id, #action, #quantity, #target_price, #actual_price, #status').on('change input', updateTradeSummary);
+    $('#executed_at').on('change', updateTradeSummary);
+});
+</script>
+{% endblock %} 

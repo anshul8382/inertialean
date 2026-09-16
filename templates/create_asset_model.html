@@ -1,0 +1,139 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title mb-0">Create Asset Allocation Model</h2>
+        </div>
+        <div class="card-body">
+            <form method="POST" id="assetModelForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Model Name</label>
+                    <input type="text" class="form-control" id="name" name="name" required>
+                </div>
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description</label>
+                    <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="risk_level" class="form-label">Risk Profile</label>
+                    <select class="form-control" id="risk_level" name="risk_level" required>
+                        <option value="">Select Risk Profile</option>
+                        <option value="Conservative">Conservative</option>
+                        <option value="Moderate">Moderate</option>
+                        <option value="Aggressive">Aggressive</option>
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <h4>Asset Allocations</h4>
+                    <div id="allocations">
+                        <div class="row mb-2 allocation-row">
+                            <div class="col-md-6">
+                                <select class="form-select asset-class-select" name="asset_class_id[]" required>
+                                    <option value="">Select Asset Class</option>
+                                    {% for asset_class in asset_classes %}
+                                    <option value="{{ asset_class.id }}">{{ asset_class.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <input type="number" class="form-control allocation-percentage" name="allocation_percentage[]" 
+                                       min="0" max="100" step="0.01" required placeholder="Percentage">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-danger remove-allocation">Remove</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-secondary" id="addAllocation">Add Asset Class</button>
+                    </div>
+                    <div class="mt-2">
+                        <strong>Total Allocation: <span id="totalAllocation">0</span>%</strong>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('main.models') }}" class="btn btn-secondary">Back to Models</a>
+                    <button type="submit" class="btn btn-primary" id="submitBtn" disabled>Create Model</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const allocationsDiv = document.getElementById('allocations');
+    const addButton = document.getElementById('addAllocation');
+    const totalSpan = document.getElementById('totalAllocation');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    function updateTotal() {
+        const percentages = Array.from(document.getElementsByClassName('allocation-percentage'))
+            .map(input => parseFloat(input.value) || 0);
+        const total = percentages.reduce((sum, val) => sum + val, 0);
+        totalSpan.textContent = total.toFixed(2);
+        submitBtn.disabled = Math.abs(total - 100) > 0.01;
+    }
+    
+    function createAllocationRow() {
+        const row = document.createElement('div');
+        row.className = 'row mb-2 allocation-row';
+        row.innerHTML = `
+            <div class="col-md-6">
+                <select class="form-select asset-class-select" name="asset_class_id[]" required>
+                    <option value="">Select Asset Class</option>
+                    {% for asset_class in asset_classes %}
+                    <option value="{{ asset_class.id }}">{{ asset_class.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <input type="number" class="form-control allocation-percentage" name="allocation_percentage[]" 
+                       min="0" max="100" step="0.01" required placeholder="Percentage">
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-danger remove-allocation">Remove</button>
+            </div>
+        `;
+        return row;
+    }
+    
+    addButton.addEventListener('click', function() {
+        const row = createAllocationRow();
+        allocationsDiv.appendChild(row);
+        setupRowListeners(row);
+    });
+    
+    function setupRowListeners(row) {
+        const removeBtn = row.querySelector('.remove-allocation');
+        const percentageInput = row.querySelector('.allocation-percentage');
+        
+        removeBtn.addEventListener('click', function() {
+            row.remove();
+            updateTotal();
+        });
+        
+        percentageInput.addEventListener('input', updateTotal);
+    }
+    
+    // Setup initial row
+    const initialRow = allocationsDiv.querySelector('.allocation-row');
+    if (initialRow) {
+        setupRowListeners(initialRow);
+    }
+    
+    // Form submission validation
+    document.getElementById('assetModelForm').addEventListener('submit', function(e) {
+        const total = parseFloat(totalSpan.textContent);
+        if (Math.abs(total - 100) > 0.01) {
+            e.preventDefault();
+            alert('Total allocation must equal 100%');
+        }
+    });
+});
+</script>
+{% endblock %} 

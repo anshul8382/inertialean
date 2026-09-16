@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>Campaign Studio · Inertia</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; padding: 0; background: #060810; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 2px; }
+    select option { background: #0B0E1A; }
+    * { box-sizing: border-box; }
+    input::placeholder, textarea::placeholder { color: #252A3A; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" src="{{ url_for('static', filename='js/campaign-studio.js') }}?v=ci-paste1"></script>
+</body>
+</html>

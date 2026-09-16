@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_child_open, maint_desktop_open, maint_desktop_close %}
+
+{% block page_title %}Review corporate actions{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ca-preview-held {
+        background-color: #e8f5e9;
+    }
+    .ca-preview-held td {
+        border-left: 4px solid #2e7d32;
+    }
+    .ca-preview-skip {
+        opacity: 0.72;
+    }
+    #ca-preview-form .ca-preview-filter {
+        min-width: 0;
+        flex: 1 1 12rem;
+        max-width: 24rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{{ maint_child_open('Review corporate actions', url_for('corporate_actions.upload_corporate_actions'), 'Held names are listed first and pre-selected. Approve writes only checked rows.') }}
+{{ maint_desktop_open('container-fluid mt-4') }}
+<div class="container-fluid mt-4">
+    <h1 class="h3 mb-3">Review corporate actions</h1>
+    <p class="text-muted">
+        File: <strong>{{ filename }}</strong>.
+        PURPOSE is shown as in the file (including InvIT/REIT interest, capital return, and dividend breakdown).
+        The Dividend column is the <strong>full per-unit amount</strong> — for distributions that is interest + capital return + dividend together.
+        <strong>Held</strong> names are on top and pre-selected.
+        <strong>Not held</strong> names are also listed — tick Import to include them.
+        Use <strong>Select all</strong> / <strong>Deselect all</strong> for every importable row (or only the rows matching the filter).
+    </p>
+
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="card card-app"><div class="card-body py-3">
+                <div class="text-muted small">Held (investee)</div>
+                <div class="fs-4 fw-semibold">{{ held_count }}</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card card-app"><div class="card-body py-3">
+                <div class="text-muted small">Importable</div>
+                <div class="fs-4 fw-semibold">{{ importable_count }}</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card card-app"><div class="card-body py-3">
+                <div class="text-muted small">Skipped</div>
+                <div class="fs-4 fw-semibold">{{ skipped_count }}</div>
+            </div></div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card card-app"><div class="card-body py-3">
+                <div class="text-muted small">Rows</div>
+                <div class="fs-4 fw-semibold">{{ rows|length }}</div>
+            </div></div>
+        </div>
+    </div>
+
+    {% if not rows %}
+    <div class="alert alert-warning" role="status">No rows to review. <a href="{{ url_for('corporate_actions.upload_corporate_actions') }}">Upload another file</a>.</div>
+    {% else %}
+    <form method="post" action="{{ url_for('corporate_actions.confirm_corporate_actions_upload') }}" id="ca-preview-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="preview_id" value="{{ preview_id }}">
+
+        <div class="card card-app mb-3">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <span class="section-title mb-0">Parsed rows</span>
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <button type="button" class="btn btn-outline-primary" id="ca-select-all-btn">Select all</button>
+                    <button type="button" class="btn btn-outline-secondary" id="ca-deselect-all-btn">Deselect all</button>
+                    <span class="text-muted small" id="ca-selected-count" aria-live="polite"></span>
+                    <div class="filter-bar ca-preview-filter">
+                        <label for="ca-preview-filter" class="visually-hidden">Filter rows</label>
+                        <input type="search" id="ca-preview-filter" class="form-control" placeholder="Filter by symbol or PURPOSE" autocomplete="off">
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive" data-mobile-table="scroll">
+                    <table class="table table-app table-hover table-sm mb-0 align-middle" id="ca-preview-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th scope="col">
+                                    <div class="form-check mb-0 d-inline-flex align-items-center gap-1">
+                                        <input class="form-check-input" type="checkbox" id="ca-select-all" aria-label="Select or deselect all visible importable rows">
+                                        <span>Import</span>
+                                    </div>
+                                </th>
+                                <th scope="col">Status</th>
+                                <th scope="col">SYMBOL</th>
+                                <th scope="col">Company</th>
+                                <th scope="col">Ex-date</th>
+                                <th scope="col">PURPOSE</th>
+                                <th scope="col" class="text-num" title="Equity dividend, or full InvIT/REIT distribution (interest + capital return + dividend)">Dividend</th>
+                                <th scope="col" class="text-num">Bonus</th>
+                                <th scope="col" class="text-num">Split</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in rows %}
+                            {% set skip_labels = {
+                                'gilt_or_govt': 'Gilt / govt — skipped',
+                                'interest_payment': 'Interest payment — skipped',
+                                'unparsed': 'Could not parse PURPOSE',
+                                'unknown_symbol': 'Unknown symbol',
+                                'duplicate': 'Already in system',
+                                'missing_ex_date': 'Missing ex-date'
+                            } %}
+                            <tr class="{% if r.is_held %}ca-preview-held{% endif %} {% if not r.importable %}ca-preview-skip{% endif %}"
+                                data-symbol="{{ r.symbol|lower }}"
+                                data-purpose="{{ (r.purpose or '')|lower }}">
+                                <td>
+                                    {% if r.importable %}
+                                    <div class="form-check">
+                                        <input class="form-check-input ca-import-cb" type="checkbox"
+                                               name="include_{{ r.preview_index }}"
+                                               id="inc_{{ r.preview_index }}"
+                                               {% if r.default_checked %}checked{% endif %}
+                                               aria-label="Import {{ r.symbol }}">
+                                    </div>
+                                    {% else %}
+                                    <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if r.is_held %}
+                                    <span class="badge bg-success">Held{% if r.holders_count %} · {{ r.holders_count }}{% endif %}</span>
+                                    {% elif r.importable %}
+                                    <span class="badge bg-light text-dark border">Not held</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ skip_labels.get(r.skip_reason, r.skip_reason or 'Skipped') }}</span>
+                                    {% endif %}
+                                    {% if r.duplicate_types %}
+                                    <span class="badge bg-warning text-dark">Duplicate {{ r.duplicate_types|join(', ') }}</span>
+                                    {% endif %}
+                                </td>
+                                <td><code>{{ r.symbol }}</code></td>
+                                <td>{{ r.company_name or r.security_name or '—' }}</td>
+                                <td>{{ r.ex_date or '—' }}</td>
+                                <td class="small" title="{{ r.purpose or '' }}">{{ r.purpose or '—' }}</td>
+                                <td class="text-num">{% if r.dividend %}₹{{ r.dividend }}{% else %}—{% endif %}</td>
+                                <td class="text-num">{{ r.bonus or '—' }}</td>
+                                <td class="text-num">{{ r.split or '—' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="action-bar mobile-action-stack mb-4">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-check" aria-hidden="true"></i> Approve selected
+            </button>
+            <button type="submit" class="btn btn-outline-secondary" form="ca-cancel-form">Cancel</button>
+        </div>
+    </form>
+    <form id="ca-cancel-form" method="post" action="{{ url_for('corporate_actions.cancel_corporate_actions_upload') }}" class="d-none">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    </form>
+    {% endif %}
+</div>
+{{ maint_desktop_close() }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var input = document.getElementById('ca-preview-filter');
+    var table = document.getElementById('ca-preview-table');
+    var selectAllBtn = document.getElementById('ca-select-all-btn');
+    var deselectAllBtn = document.getElementById('ca-deselect-all-btn');
+    var headerCb = document.getElementById('ca-select-all');
+    var countEl = document.getElementById('ca-selected-count');
+    if (!table) return;
+
+    function importBoxes(visibleOnly) {
+        var boxes = Array.prototype.slice.call(table.querySelectorAll('tbody input.ca-import-cb'));
+        if (!visibleOnly) return boxes;
+        return boxes.filter(function (cb) {
+            var tr = cb.closest('tr');
+            return tr && !tr.hidden;
+        });
+    }
+
+    function syncHeader() {
+        var visible = importBoxes(true);
+        var checked = visible.filter(function (cb) { return cb.checked; }).length;
+        if (headerCb) {
+            headerCb.disabled = visible.length === 0;
+            headerCb.indeterminate = checked > 0 && checked < visible.length;
+            headerCb.checked = visible.length > 0 && checked === visible.length;
+        }
+        if (countEl) {
+            countEl.textContent = visible.length
+                ? (checked + ' of ' + visible.length + ' visible selected')
+                : 'No importable rows in view';
+        }
+    }
+
+    function setAll(checked) {
+        importBoxes(true).forEach(function (cb) { cb.checked = checked; });
+        syncHeader();
+    }
+
+    function applyFilter() {
+        if (!input) return;
+        var q = (input.value || '').trim().toLowerCase();
+        table.querySelectorAll('tbody tr').forEach(function (tr) {
+            if (!q) { tr.hidden = false; return; }
+            var hay = (tr.getAttribute('data-symbol') || '') + ' ' + (tr.getAttribute('data-purpose') || '');
+            tr.hidden = hay.indexOf(q) === -1;
+        });
+        syncHeader();
+    }
+
+    if (input) {
+        var timer = null;
+        input.addEventListener('input', function () {
+            clearTimeout(timer);
+            timer = setTimeout(applyFilter, 300);
+        });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); applyFilter(); }
+        });
+    }
+    table.addEventListener('change', function (e) {
+        if (e.target && e.target.classList.contains('ca-import-cb')) syncHeader();
+    });
+    if (selectAllBtn) selectAllBtn.addEventListener('click', function () { setAll(true); });
+    if (deselectAllBtn) deselectAllBtn.addEventListener('click', function () { setAll(false); });
+    if (headerCb) headerCb.addEventListener('change', function () { setAll(headerCb.checked); });
+    syncHeader();
+})();
+</script>
+{% endblock %}

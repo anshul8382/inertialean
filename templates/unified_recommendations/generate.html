@@ -1,0 +1,358 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import rec_mobile_open, rec_mobile_close, rec_desktop_open, rec_desktop_close %}
+
+{% block title %}Generate Unified Recommendations{% endblock %}
+
+{% block content %}
+{{ rec_mobile_open('Generate recommendations', url_for('unified_recommendations.unified_recommendations'), 'Pick client, amount, and workflow source.') }}
+<a href="#generateForm" class="im-settings-link im-scroll-to-desktop"><i class="fas fa-magic"></i><span>Open generate form</span><i class="fas fa-chevron-down text-muted"></i></a>
+{{ rec_mobile_close('The form is below — tap “Open generate form” or scroll down.') }}
+{{ rec_desktop_open() }}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Generate Unified Recommendations</h1>
+        <a href="{{ url_for('unified_recommendations.unified_recommendations') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Recommendations
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Generate Recommendations</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('unified_recommendations.generate_unified_recommendations') }}" id="generateForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="mb-3">
+                            <label for="clientSearch" class="form-label">Select Client</label>
+                            <div class="position-relative">
+                                <input 
+                                    type="text" 
+                                    class="form-control" 
+                                    id="clientSearch" 
+                                    name="client_search"
+                                    placeholder="Search for a client by name..." 
+                                    autocomplete="off"
+                                    required
+                                >
+                                <input type="hidden" id="client_id" name="client_id" required>
+                                <div id="clientSearchResults" class="list-group position-absolute w-100" style="top: 100%; z-index: 1000; display: none; max-height: 300px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
+                            </div>
+                            <small class="form-text text-muted">Type at least 2 characters to search</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="investment_amount" class="form-label">Investment Amount (₹)</label>
+                            <input type="number" class="form-control" id="investment_amount" name="investment_amount" 
+                                   step="0.01" placeholder="Enter amount (use negative for withdrawals)">
+                            <div class="form-text">
+                                <ul class="mb-0">
+                                    <li>Positive amount: Investment/Addition</li>
+                                    <li>Negative amount: Withdrawal</li>
+                                    <li>Zero amount: Rebalancing only</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="source_type" class="form-label">Recommendation Type</label>
+                            <select class="form-select" id="source_type" name="source_type">
+                                <option value="monthly_investment" selected>Monthly Investment</option>
+                                <option value="adhoc">Ad-hoc Recommendation</option>
+                                <option value="workflow">Workflow</option>
+                                <option value="withdrawal">Withdrawal</option>
+                                <option value="rebalancing">Portfolio Rebalancing</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3" id="workflow_id_group">
+                            <label for="workflow_id" class="form-label">Workflow (Optional)</label>
+                            <select class="form-select" id="workflow_id" name="workflow_id" disabled>
+                                <option value="">Select a workflow...</option>
+                            </select>
+                            <div class="form-text" id="workflow_helper_text">
+                                Select a client to view active workflows.
+                            </div>
+                            <div id="workflow_auto_selected_badge" class="mt-1" style="display:none;">
+                                <span class="badge bg-success"><i class="fas fa-check-circle"></i> Monthly workflow auto-selected</span>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-magic"></i> Generate Recommendations
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">How It Works</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Unified Recommendation Process:</h6>
+                    <ol>
+                        <li><strong>Asset-First Analysis:</strong> System analyzes current vs target asset allocations</li>
+                        <li><strong>Smart Security Selection:</strong> Prioritizes hot stocks and underallocated securities</li>
+                        <li><strong>Interactive Review:</strong> You can modify both asset and security allocations</li>
+                        <li><strong>Client Communication:</strong> Send final recommendations to client</li>
+                        <li><strong>Execution:</strong> Record actual trades based on client feedback</li>
+                    </ol>
+
+                    <h6>Security Prioritization:</h6>
+                    <ul>
+                        <li><strong>Priority 1:</strong> Hot stocks if underallocated (MUST include)</li>
+                        <li><strong>Priority 2:</strong> Hot stocks even if allocated (CAN include)</li>
+                        <li><strong>Priority 3:</strong> Model stocks that are underallocated</li>
+                        <li><strong>Sell Only:</strong> Stocks removed from model or significantly overallocated</li>
+                    </ul>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Note:</strong> This unified system replaces the previous three separate recommendation systems for consistency and better results.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{{ rec_desktop_close() }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Cache-busting comment: v3.0 - Defensive jQuery loading
+// jQuery is loaded in base.html before this scripts block  
+// Use jQuery directly - no $ alias to avoid any scoping issues
+(function() {
+    'use strict';
+    
+    // Defensive: Wait for both jQuery and window.jQuery to be available
+    function waitForJQuery(callback, maxAttempts) {
+        maxAttempts = maxAttempts || 100; // Max 5 seconds (100 * 50ms)
+        var attempts = 0;
+        
+        function check() {
+            attempts++;
+            if (typeof jQuery !== 'undefined' && typeof window.jQuery !== 'undefined') {
+                callback();
+            } else if (attempts < maxAttempts) {
+                setTimeout(check, 50);
+            } else {
+                console.error('jQuery failed to load after', attempts * 50, 'ms');
+            }
+        }
+        check();
+    }
+    
+    waitForJQuery(function() {
+        // jQuery is definitely available now - use it directly
+        // NEVER use $ - always use jQuery to avoid scoping issues
+        console.log('jQuery loaded successfully, initializing client search');
+        var jq = jQuery; // Local reference
+        
+        // Verify jq is available
+        if (typeof jq === 'undefined') {
+            console.error('jq is undefined even though jQuery exists!');
+            return;
+        }
+        
+        jq(document).ready(function() {
+            console.log('DOM ready, setting up client search handlers');
+            // Client Search Functionality
+            // Use local jq reference instead of jQuery to be extra safe
+            let searchTimeout;
+            const searchInput = jq('#clientSearch');
+            const searchResults = jq('#clientSearchResults');
+            const clientIdInput = jq('#client_id');
+
+            function debounceSearch() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(function() {
+                    performClientSearch();
+                }, 300);
+            }
+
+            function performClientSearch() {
+                const searchTerm = searchInput.val().trim();
+                if (searchTerm.length < 2) {
+                    searchResults.hide().empty();
+                    return;
+                }
+
+                searchResults.html('<div class="list-group-item"><i class="fas fa-spinner fa-spin"></i> Searching...</div>').show();
+
+                jq.ajax({
+                    url: '/clients-v2/api/',
+                    method: 'GET',
+                    data: {
+                        search: searchTerm,
+                        per_page: 10
+                    },
+                    success: function(response) {
+                        if (response && response.success && response.data && response.data.length > 0) {
+                            displaySearchResults(response.data);
+                        } else {
+                            searchResults.html('<div class="list-group-item text-muted">No clients found</div>').show();
+                        }
+                    },
+                    error: function(xhr) {
+                        console.error('Client search error:', xhr);
+                        searchResults.html('<div class="list-group-item text-danger">Error searching clients</div>').show();
+                    }
+                });
+            }
+
+            function displaySearchResults(clients) {
+                let html = '';
+                clients.forEach(function(client) {
+                    const email = client.email || 'No email';
+                    const riskProfile = client.risk_profile || 'N/A';
+                    html += `
+                        <a href="#" class="list-group-item list-group-item-action client-search-result"
+                           data-client-id="${client.id}" data-client-name="${escapeHtml(client.name)}">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">${escapeHtml(client.name)}</h6>
+                                <small class="text-muted">ID: ${client.id}</small>
+                            </div>
+                            <p class="mb-1 text-muted small">${escapeHtml(email)}</p>
+                            <small class="text-muted">Risk: ${escapeHtml(riskProfile)}</small>
+                        </a>`;
+                });
+                searchResults.html(html || '<div class="list-group-item text-muted">No clients found</div>').show();
+            }
+
+            function escapeHtml(text) {
+                if (!text) return '';
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            searchInput.on('input', debounceSearch);
+            searchInput.on('focus', function() {
+                if (searchInput.val().trim().length >= 2) performClientSearch();
+            });
+
+            jq(document).on('click', '.client-search-result', function(e) {
+                e.preventDefault();
+                var $this = jq(this);
+                const clientId = $this.data('client-id');
+                const clientName = $this.data('client-name');
+                clientIdInput.val(clientId);
+                searchInput.val(clientName);
+                searchResults.hide();
+                searchInput[0].setCustomValidity('');
+                if (needsWorkflow(sourceTypeSelect.value)) loadWorkflowsForClient(clientId, { force: true });
+            });
+
+            jq(document).on('click', function(e) {
+                var $target = jq(e.target);
+                if (!$target.closest('#clientSearch, #clientSearchResults').length) {
+                    searchResults.hide();
+                }
+            });
+
+            // Workflow Management
+            const sourceTypeSelect = document.getElementById('source_type');
+            const workflowIdGroup = document.getElementById('workflow_id_group');
+            const workflowSelect = document.getElementById('workflow_id');
+            const workflowHelperText = document.getElementById('workflow_helper_text');
+            const investmentAmountInput = document.getElementById('investment_amount');
+            const workflowCache = {};
+
+            const needsWorkflow = (type) => type === 'workflow' || type === 'monthly_investment';
+
+            function loadWorkflowsForClient(clientId, { force = false } = {}) {
+                if (!clientId) return;
+                if (!force && workflowCache[clientId]) {
+                    populateWorkflowSelect(clientId, workflowCache[clientId]);
+                    return;
+                }
+                workflowHelperText.textContent = 'Loading workflows…';
+                fetch(`/api/client/${clientId}/workflows`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            workflowCache[clientId] = data.workflows;
+                            populateWorkflowSelect(clientId, data.workflows);
+                        } else {
+                            workflowHelperText.textContent = 'Could not load workflows.';
+                        }
+                    })
+                    .catch(() => {
+                        workflowHelperText.textContent = 'Error loading workflows.';
+                    });
+            }
+
+            function populateWorkflowSelect(clientId, workflows) {
+                workflowSelect.innerHTML = '<option value="">Select a workflow…</option>';
+                workflows.forEach(w => {
+                    const opt = document.createElement('option');
+                    opt.value = w.id;
+                    opt.textContent = w.label;
+                    opt.dataset.source = w.source;
+                    workflowSelect.appendChild(opt);
+                });
+                workflowSelect.disabled = workflows.length === 0;
+
+                // Auto-select the best matching workflow based on source type
+                const autoSelectedBadge = document.getElementById('workflow_auto_selected_badge');
+                autoSelectedBadge.style.display = 'none';
+
+                if (workflows.length > 0) {
+                    const currentType = sourceTypeSelect.value;
+                    let autoSelect = null;
+
+                    if (currentType === 'monthly_investment') {
+                        // Prefer monthly_investment source workflows, pick most recent
+                        autoSelect = workflows.find(w => w.source === 'monthly_investment');
+                        if (!autoSelect) autoSelect = workflows[0]; // fallback to newest
+                    } else if (currentType === 'workflow') {
+                        autoSelect = workflows[0]; // pick most recent
+                    }
+
+                    if (autoSelect) {
+                        workflowSelect.value = autoSelect.id;
+                        if (currentType === 'monthly_investment') {
+                            autoSelectedBadge.style.display = 'block';
+                        }
+                    }
+                    workflowHelperText.textContent = `${workflows.length} active workflow(s) found.`;
+                } else {
+                    workflowHelperText.textContent = 'No active workflows found for this client.';
+                }
+            }
+
+            sourceTypeSelect.addEventListener('change', function() {
+                const requires = needsWorkflow(this.value);
+                workflowIdGroup.style.display = requires ? 'block' : 'none';
+                if (requires) {
+                    const cid = clientIdInput.val();
+                    if (cid && workflowCache[cid]) {
+                        // Workflows already cached — just re-populate with new auto-select
+                        populateWorkflowSelect(cid, workflowCache[cid]);
+                    } else {
+                        loadWorkflowsForClient(cid);
+                    }
+                }
+            });
+
+            // Trigger initial state based on default source_type value
+            workflowIdGroup.style.display = needsWorkflow(sourceTypeSelect.value) ? 'block' : 'none';
+
+            jq('#generateForm').on('submit', function(e) {
+                if (!clientIdInput.val()) {
+                    e.preventDefault();
+                    searchInput[0].setCustomValidity('Please select a client');
+                    searchInput[0].reportValidity();
+                }
+            });
+        });
+    });
+})();
+</script>
+{% endblock %}

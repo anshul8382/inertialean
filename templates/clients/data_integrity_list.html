@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Data integrity — clients{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h1 class="h3 mb-1">Data integrity</h1>
+      <p class="text-muted mb-0">Clients needing attention (cashflow↔trades, open issues, prices). Advisor-scoped.</p>
+    </div>
+    {% if pack.as_of %}
+    <small class="text-muted">As of {{ pack.as_of[:19] }} UTC</small>
+    {% endif %}
+  </div>
+
+  <div class="mb-3">
+    <span class="badge bg-danger">Not matched: {{ pack.counts.get('not_matched', 0) }}</span>
+    <span class="badge bg-warning text-dark">Needs review: {{ pack.counts.get('needs_review', 0) }}</span>
+    <span class="badge bg-success">Matched (listed): {{ pack.counts.get('matched', 0) }}</span>
+  </div>
+
+  <div class="card">
+    <div class="table-responsive" data-mobile-table="scroll">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>Client</th>
+            {% if show_advisor %}<th>Advisor</th>{% endif %}
+            <th>Overall</th>
+            <th>Open sections</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in pack.rows or [] %}
+          <tr>
+            <td>{{ r.client_name }}</td>
+            {% if show_advisor %}<td>{{ r.advisor_name or '—' }}</td>{% endif %}
+            <td><span class="badge {{ r.badge_class }}">{{ r.overall_label }}</span></td>
+            <td>{{ r.open_section_count }}</td>
+            <td class="text-end">
+              <a class="btn btn-sm btn-outline-primary" href="{{ url_for('clients.data_integrity', client_id=r.client_id) }}">Open</a>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="text-muted p-3">No clients need data-integrity attention in your book.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

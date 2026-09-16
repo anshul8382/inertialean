@@ -1,0 +1,16 @@
+<a href="{{ hub_url }}" class="im-list-card im-hub-tile">
+  <div class="im-list-card__header">
+    <div>
+      <h2 class="im-list-card__title"><i class="{{ hub_icon }} me-2"></i>{{ hub_title }}</h2>
+      <p class="im-list-card__meta">{{ hub_desc }}</p>
+    </div>
+    <i class="fas fa-chevron-right text-muted"></i>
+  </div>
+  {% if hub_badges %}
+  <div class="im-list-card__row">
+    {% for badge in hub_badges %}
+      <span class="badge bg-{{ badge.color|default('secondary') }} me-1">{{ badge.label }}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
+</a>

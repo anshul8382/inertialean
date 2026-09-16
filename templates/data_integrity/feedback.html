@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Data Integrity Feedback{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <div class="page-title-right">
+                    <ol class="breadcrumb m-0">
+                        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('data_integrity.dashboard') }}">Data Integrity</a></li>
+                        <li class="breadcrumb-item active">Feedback</li>
+                    </ol>
+                </div>
+                <h4 class="page-title">
+                    <i class="fas fa-lightbulb me-2"></i>Feedback & Suggestions
+                </h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="btn-group" role="group">
+                            <a href="?status=all" class="btn btn-{{ 'primary' if status_filter == 'all' else 'outline-primary' }}">
+                                All
+                            </a>
+                            <a href="?status=open" class="btn btn-{{ 'primary' if status_filter == 'open' else 'outline-primary' }}">
+                                Open
+                            </a>
+                            <a href="?status=in_review" class="btn btn-{{ 'primary' if status_filter == 'in_review' else 'outline-primary' }}">
+                                In Review
+                            </a>
+                            <a href="?status=addressed" class="btn btn-{{ 'primary' if status_filter == 'addressed' else 'outline-primary' }}">
+                                Addressed
+                            </a>
+                        </div>
+                        <a href="{{ url_for('data_integrity.add_feedback') }}" class="btn btn-success">
+                            <i class="fas fa-plus me-1"></i> Add Feedback
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback List -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body p-0">
+                    {% if feedback_items %}
+                        {% for fb in feedback_items %}
+                        <div class="border-bottom p-3">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <span class="badge bg-{{ 'success' if fb.status == 'addressed' else 'warning' if fb.status == 'in_review' else 'secondary' }} me-2">
+                                            {{ fb.status.replace('_', ' ').title() }}
+                                        </span>
+                                        <span class="badge bg-light text-dark me-2">{{ fb.category }}</span>
+                                        {% if fb.related_check %}
+                                        <span class="badge bg-info">{{ fb.related_check }}</span>
+                                        {% endif %}
+                                    </div>
+                                    {% if fb.title %}
+                                    <h5 class="mb-1">{{ fb.title }}</h5>
+                                    {% endif %}
+                                    <p class="mb-2">{{ fb.description }}</p>
+                                    <small class="text-muted">
+                                        By {{ fb.creator.name if fb.creator else 'Unknown' }} on 
+                                        {{ fb.created_at.strftime('%Y-%m-%d %H:%M') if fb.created_at else 'N/A' }}
+                                    </small>
+                                    
+                                    {% if fb.response %}
+                                    <div class="mt-2 p-2 bg-light rounded">
+                                        <small class="text-muted">Response:</small>
+                                        <p class="mb-0">{{ fb.response }}</p>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                
+                                {% if fb.status == 'open' %}
+                                <div class="ms-3">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#respondModal"
+                                            data-id="{{ fb.id }}"
+                                            data-description="{{ fb.description }}">
+                                        <i class="fas fa-reply"></i> Respond
+                                    </button>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-comments text-muted fa-3x mb-3"></i>
+                            <h5>No Feedback Yet</h5>
+                            <p class="text-muted">Be the first to submit feedback!</p>
+                            <a href="{{ url_for('data_integrity.add_feedback') }}" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Add Feedback
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Respond Modal -->
+<div class="modal fade" id="respondModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="respondForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Respond to Feedback</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="bg-light p-2 rounded" id="feedbackDescription"></p>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Status</label>
+                        <select name="status" class="form-select">
+                            <option value="in_review">In Review</option>
+                            <option value="addressed">Addressed</option>
+                            <option value="declined">Declined</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Response</label>
+                        <textarea name="response" class="form-control" rows="3" 
+                                  placeholder="Explain what action was taken..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Response</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const respondModal = document.getElementById('respondModal');
+    respondModal.addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        const id = button.getAttribute('data-id');
+        const description = button.getAttribute('data-description');
+        
+        document.getElementById('feedbackDescription').textContent = description;
+        document.getElementById('respondForm').action = '/data-integrity/feedback/' + id + '/respond';
+    });
+});
+</script>
+{% endblock %}

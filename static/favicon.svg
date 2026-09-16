@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="INERTIA">
+  <rect width="32" height="32" rx="6" fill="#2563eb"/>
+  <path d="M16 26 Q18 18 20 10 Q20 8 22 10 Q20 12 20 14 Q18 20 16 26" fill="#32CD32"/>
+  <path d="M20 14 Q24 12 26 16 Q24 18 22 20 Q20 18 20 16" fill="#e2e8f0"/>
+  <path d="M18 18 Q14 16 12 18 Q14 22 16 24 Q18 22 18 18" fill="#e2e8f0"/>
+</svg>

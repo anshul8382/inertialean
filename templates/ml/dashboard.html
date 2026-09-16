@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+
+{% block title %}ML Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-brain text-primary"></i>
+                        ML Dashboard
+                    </h1>
+                    <p class="text-muted mb-0">
+                        Machine Learning System Management
+                    </p>
+                </div>
+                <div>
+                    <button class="btn btn-success me-2" onclick="trainModels()">
+                        <i class="fas fa-cogs"></i> Train Models
+                    </button>
+                    <button class="btn btn-primary" onclick="enhanceAllReviews()">
+                        <i class="fas fa-magic"></i> Enhance All Reviews
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ML System Status -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-left-primary shadow h-100">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Reviews
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ stats.total_reviews }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-file-alt fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-left-success shadow h-100">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                ML Enhanced
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ stats.ml_enhanced_count }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-brain fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-left-info shadow h-100">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Coverage
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ "%.1f"|format(stats.ml_coverage_percent) }}%
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-percentage fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card border-left-{{ 'success' if stats.models_trained else 'warning' }} shadow h-100">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-{{ 'success' if stats.models_trained else 'warning' }} text-uppercase mb-1">
+                                Models Status
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ 'Trained' if stats.models_trained else 'Not Trained' }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-{{ 'check-circle' if stats.models_trained else 'exclamation-triangle' }} fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Training Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-cogs"></i> Model Training
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h6>Training Status</h6>
+                            <p class="text-muted">
+                                {% if stats.models_trained %}
+                                    <i class="fas fa-check-circle text-success"></i>
+                                    Models are trained and ready for predictions
+                                {% else %}
+                                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                                    Models need to be trained with historical data
+                                {% endif %}
+                            </p>
+                            
+                            <div class="alert alert-info">
+                                <h6><i class="fas fa-info-circle"></i> Training Information</h6>
+                                <ul class="mb-0">
+                                    <li>Uses Random Forest algorithms for risk, performance, and allocation prediction</li>
+                                    <li>Requires at least 10 completed reviews with sufficient data</li>
+                                    <li>Training process may take several minutes</li>
+                                    <li>Models are automatically saved and can be reused</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <button class="btn btn-success btn-lg mb-3" onclick="trainModels()">
+                                    <i class="fas fa-cogs"></i><br>
+                                    Train Models
+                                </button>
+                                <p class="text-muted small">
+                                    Click to train ML models with historical review data
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent ML Enhanced Reviews -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-history"></i> Recent ML Enhanced Reviews
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if stats.recent_ml_reviews %}
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Client</th>
+                                        <th>Review Type</th>
+                                        <th>Completed</th>
+                                        <th>Recommendations</th>
+                                        <th>High Priority</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in stats.recent_ml_reviews %}
+                                    <tr>
+                                        <td>
+                                            <strong>{{ item.review.client.name }}</strong>
+                                        </td>
+                                        <td>{{ item.review.review_type }}</td>
+                                        <td>{{ item.review.completed_at.strftime('%b %d, %Y') if item.review.completed_at else 'N/A' }}</td>
+                                        <td>
+                                            <span class="badge bg-info">{{ item.recommendation_count }}</span>
+                                        </td>
+                                        <td>
+                                            {% if item.high_priority_count > 0 %}
+                                                <span class="badge bg-danger">{{ item.high_priority_count }}</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary">0</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <a href="{{ url_for('ml.get_ml_recommendations', review_id=item.review.id) }}" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-eye"></i> View ML
+                                            </a>
+                                            <a href="{{ url_for('review.review_detail', review_id=item.review.id) }}" 
+                                               class="btn btn-sm btn-outline-secondary">
+                                                <i class="fas fa-file-alt"></i> Review
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                            <h5>No ML Enhanced Reviews</h5>
+                            <p class="text-muted">No reviews have been enhanced with ML recommendations yet.</p>
+                            <button class="btn btn-primary" onclick="enhanceAllReviews()">
+                                <i class="fas fa-magic"></i> Enhance All Reviews
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Actions -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-tools"></i> System Actions
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card border-light">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-cogs fa-3x text-primary mb-3"></i>
+                                    <h5>Train ML Models</h5>
+                                    <p class="text-muted">
+                                        Train machine learning models using historical review data to improve prediction accuracy.
+                                    </p>
+                                    <button class="btn btn-primary" onclick="trainModels()">
+                                        <i class="fas fa-cogs"></i> Train Models
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-light">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-magic fa-3x text-success mb-3"></i>
+                                    <h5>Enhance All Reviews</h5>
+                                    <p class="text-muted">
+                                        Add ML recommendations to all completed reviews that don't have them yet.
+                                    </p>
+                                    <button class="btn btn-success" onclick="enhanceAllReviews()">
+                                        <i class="fas fa-magic"></i> Enhance All
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function trainModels() {
+    if (!confirm('This will train ML models using historical data. This process may take several minutes. Continue?')) {
+        return;
+    }
+    
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Training...';
+    button.disabled = true;
+    
+    // Submit form to train models
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("ml.train_ml_models") }}';
+    
+    // Add CSRF token
+    const csrfToken = document.createElement('input');
+    csrfToken.type = 'hidden';
+    csrfToken.name = 'csrf_token';
+    csrfToken.value = '{{ csrf_token() }}';
+    form.appendChild(csrfToken);
+    
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function enhanceAllReviews() {
+    if (!confirm('This will add ML recommendations to all completed reviews. This may take some time. Continue?')) {
+        return;
+    }
+    
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+    button.disabled = true;
+    
+    // Make API call to enhance all reviews
+    fetch('/api/ml/enhance-all-reviews', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`Successfully enhanced ${data.enhanced_count} reviews. ${data.failed_count} failed.`);
+            window.location.reload();
+        } else {
+            alert('Error enhancing reviews: ' + data.error);
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error enhancing reviews');
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+</script>
+{% endblock %}

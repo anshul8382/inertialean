@@ -1,0 +1,376 @@
+{% extends "base.html" %}
+
+{% block title %}Performance Timeline Test{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="card shadow mb-4">
+        <div class="card-header">
+          <h4 class="mb-0">
+            <i class="fas fa-chart-line text-primary"></i>
+            Performance Timeline Test
+          </h4>
+          <p class="text-muted mb-0">Uses forward calculation + cashflows + benchmark DCA (monthly points)</p>
+        </div>
+        <div class="card-body">
+          <form id="timelineForm" class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label"><strong>Select Client</strong></label>
+              <select class="form-control" id="clientSelect" required>
+                <option value="">Choose...</option>
+                {% for client in clients %}
+                  <option value="{{ client.id }}">{{ client.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label"><strong>Start Date</strong></label>
+              <input type="date" class="form-control" id="startDate">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label"><strong>End Date</strong></label>
+              <input type="date" class="form-control" id="endDate">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <button type="submit" class="btn btn-primary w-100" id="loadButton">
+                <i class="fas fa-play"></i> <span id="loadButtonText">Load</span>
+                <span id="loadButtonSpinner" style="display:none;">
+                  <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...
+                </span>
+              </button>
+            </div>
+          </form>
+
+          <div class="alert alert-danger mt-3" id="errorBox" style="display:none;"></div>
+          <div class="alert alert-info mt-3" id="loadingBox" style="display:none;">
+            <i class="fas fa-spinner fa-spin"></i> Loading performance data... This may take a moment.
+          </div>
+        </div>
+      </div>
+
+      <div class="card shadow mb-4" id="resultsCard" style="display:none;">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0"><i class="fas fa-chart-area text-success"></i> Charts</h5>
+          <div class="text-muted small" id="metaLine"></div>
+        </div>
+        <div class="card-body">
+          <!-- Debug Section -->
+          <div class="mb-4">
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#debugSection" aria-expanded="false">
+              <i class="fas fa-bug"></i> Show/Hide Debug Data
+            </button>
+            <div class="collapse mt-3" id="debugSection">
+              <div class="card card-body bg-light">
+                <h6>Raw API Response (First 5 points):</h6>
+                <pre id="rawApiData" class="small" style="max-height: 200px; overflow-y: auto;"></pre>
+                <hr>
+                <h6>Data Passed to Chart.js:</h6>
+                <pre id="chartData" class="small" style="max-height: 200px; overflow-y: auto;"></pre>
+              </div>
+            </div>
+          </div>
+          
+          <div class="row">
+            <div class="col-lg-12 mb-4">
+              <canvas id="valueChart" height="110"></canvas>
+            </div>
+            <div class="col-lg-12">
+              <canvas id="breakdownChart" height="110"></canvas>
+            </div>
+          </div>
+
+          <!-- Data Tables (temporary for verification) -->
+          <div class="mt-4">
+            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#dataTablesSection" aria-expanded="false">
+              <i class="fas fa-table"></i> Show/Hide Data Tables (Temporary)
+            </button>
+            <div class="collapse mt-3" id="dataTablesSection">
+              <div class="card card-body">
+                <h6 class="mb-2">Chart Points (what’s plotted)</h6>
+                <div class="table-responsive">
+                  <table class="table table-sm table-striped table-bordered align-middle" id="chartPointsTable"></table>
+                </div>
+                <hr>
+                <h6 class="mb-2">API Debug: Portfolio month-end data</h6>
+                <div class="table-responsive">
+                  <table class="table table-sm table-striped table-bordered align-middle" id="portfolioDebugTable"></table>
+                </div>
+                <hr>
+                <h6 class="mb-2">API Debug: Benchmark DCA data</h6>
+                <div class="table-responsive">
+                  <table class="table table-sm table-striped table-bordered align-middle" id="benchmarkDebugTable"></table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  let valueChart = null;
+  let breakdownChart = null;
+
+  function showError(msg) {
+    const box = document.getElementById('errorBox');
+    box.textContent = msg;
+    box.style.display = 'block';
+  }
+
+  function clearError() {
+    const box = document.getElementById('errorBox');
+    box.textContent = '';
+    box.style.display = 'none';
+  }
+
+  function showLoading() {
+    document.getElementById('loadingBox').style.display = 'block';
+    document.getElementById('errorBox').style.display = 'none';
+    const btn = document.getElementById('loadButton');
+    btn.disabled = true;
+    document.getElementById('loadButtonText').style.display = 'none';
+    document.getElementById('loadButtonSpinner').style.display = 'inline';
+    document.getElementById('resultsCard').style.display = 'none';
+  }
+
+  function hideLoading() {
+    document.getElementById('loadingBox').style.display = 'none';
+    const btn = document.getElementById('loadButton');
+    btn.disabled = false;
+    document.getElementById('loadButtonText').style.display = 'inline';
+    document.getElementById('loadButtonSpinner').style.display = 'none';
+  }
+
+  function destroyCharts() {
+    if (valueChart) { valueChart.destroy(); valueChart = null; }
+    if (breakdownChart) { breakdownChart.destroy(); breakdownChart = null; }
+  }
+
+  function inr(x) {
+    const n = Number(x || 0);
+    return '₹' + n.toLocaleString('en-IN', { maximumFractionDigits: 0 });
+  }
+
+  function fmtNum(x, digits = 2) {
+    if (x === null || x === undefined || x === '') return '';
+    const n = Number(x);
+    if (!Number.isFinite(n)) return String(x);
+    return n.toLocaleString('en-IN', { maximumFractionDigits: digits });
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
+  }
+
+  function renderTable(tableId, columns, rows) {
+    const el = document.getElementById(tableId);
+    if (!el) return;
+
+    const thead = `<thead><tr>${columns.map(c => `<th class="small">${escapeHtml(c.label)}</th>`).join('')}</tr></thead>`;
+    const tbodyRows = (rows || []).map(r => {
+      const tds = columns.map(c => {
+        const raw = r ? r[c.key] : undefined;
+        const val = c.format ? c.format(raw, r) : (raw ?? '');
+        return `<td class="small">${escapeHtml(val)}</td>`;
+      }).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+
+    el.innerHTML = thead + `<tbody>${tbodyRows}</tbody>`;
+  }
+
+  document.getElementById('timelineForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    clearError();
+    destroyCharts();
+    showLoading();
+
+    const clientId = document.getElementById('clientSelect').value;
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+
+    if (!clientId) {
+      hideLoading();
+      showError('Please select a client.');
+      return;
+    }
+
+    const params = new URLSearchParams();
+    if (startDate) params.set('start_date', startDate);
+    if (endDate) params.set('end_date', endDate);
+    // Temporary: always request debug payload so we can render tables
+    params.set('debug', 'true');
+
+    const url = `/api/v1/clients/${clientId}/performance/timeline?` + params.toString();
+
+    try {
+      const resp = await fetch(url, { headers: { 'Accept': 'application/json' }});
+      const payload = await resp.json();
+      hideLoading();
+      if (!payload.success) {
+        showError(payload.message || payload.error || 'Failed to load timeline. ' + (payload.details ? JSON.stringify(payload.details) : ''));
+        return;
+      }
+
+      const data = payload.data;
+      const points = data.points || [];
+      if (!points.length) {
+        showError('No points returned for this range.');
+        return;
+      }
+
+      // Debug: Show raw API data
+      document.getElementById('rawApiData').textContent = JSON.stringify(points.slice(0, 5), null, 2) + 
+        (points.length > 5 ? `\n... (showing first 5 of ${points.length} total points)` : '');
+
+      document.getElementById('resultsCard').style.display = 'block';
+      document.getElementById('metaLine').textContent =
+        `${data.client_name} • ${data.start_date} → ${data.end_date} • Benchmark: ${data.benchmark_name}`;
+
+      const labels = points.map(p => p.date);
+      const portfolioValue = points.map(p => p.portfolio_value);
+      const benchmarkValue = points.map(p => p.benchmark_value);
+      const netInvestment = points.map(p => p.net_investment);
+      const gains = points.map(p => p.gains);
+      const benchmarkGains = points.map(p => p.benchmark_gains);
+
+      // Debug: Show processed chart data
+      const chartDataDebug = {
+        labels: labels.slice(0, 5).concat(labels.length > 5 ? [`... (${labels.length} total)`] : []),
+        portfolioValue_first10: portfolioValue.slice(0, 10),
+        benchmarkValue_first10: benchmarkValue.slice(0, 10),
+        netInvestment_first10: netInvestment.slice(0, 10),
+        gains_first10: gains.slice(0, 10),
+        stats: {
+          portfolioValue_min: Math.min(...portfolioValue),
+          portfolioValue_max: Math.max(...portfolioValue),
+          portfolioValue_avg: (portfolioValue.reduce((a, b) => a + b, 0) / portfolioValue.length).toFixed(2),
+          portfolioValue_sum: portfolioValue.reduce((a, b) => a + b, 0).toFixed(2),
+          benchmarkValue_min: Math.min(...benchmarkValue),
+          benchmarkValue_max: Math.max(...benchmarkValue),
+          benchmarkValue_avg: (benchmarkValue.reduce((a, b) => a + b, 0) / benchmarkValue.length).toFixed(2),
+          totalPoints: points.length,
+          nonZeroPortfolioValues: portfolioValue.filter(v => v !== 0).length,
+          nonZeroBenchmarkValues: benchmarkValue.filter(v => v !== 0).length
+        }
+      };
+      document.getElementById('chartData').textContent = JSON.stringify(chartDataDebug, null, 2);
+
+      // Render data tables (temporary)
+      renderTable('chartPointsTable', [
+        { key: 'date', label: 'Date' },
+        { key: 'portfolio_value', label: 'Portfolio Value', format: (v) => inr(v) },
+        { key: 'portfolio_cost', label: 'Portfolio Cost', format: (v) => inr(v) },
+        { key: 'net_investment', label: 'Net Investment', format: (v) => inr(v) },
+        { key: 'gains', label: 'Gains', format: (v) => inr(v) },
+        { key: 'benchmark_value', label: `${data.benchmark_name} Value`, format: (v) => inr(v) },
+        { key: 'benchmark_gains', label: `${data.benchmark_name} Gains`, format: (v) => inr(v) },
+        { key: 'error', label: 'Error', format: (v) => v ? String(v) : '' },
+      ], points);
+
+      const dbg = data.debug || {};
+      const portfolioDbg = dbg.portfolio_data || [];
+      const benchmarkDbg = dbg.benchmark_data || [];
+
+      renderTable('portfolioDebugTable', [
+        { key: 'date', label: 'Date' },
+        { key: 'total_value', label: 'total_value', format: (v) => fmtNum(v, 2) },
+        { key: 'total_cost', label: 'total_cost', format: (v) => fmtNum(v, 2) },
+        { key: 'net_investment', label: 'net_investment', format: (v) => fmtNum(v, 2) },
+        { key: 'total_invested', label: 'total_invested', format: (v) => fmtNum(v, 2) },
+        { key: 'total_withdrawn', label: 'total_withdrawn', format: (v) => fmtNum(v, 2) },
+        { key: 'gains', label: 'gains', format: (v) => fmtNum(v, 2) },
+        { key: 'holdings_count', label: 'holdings_count', format: (v) => fmtNum(v, 0) },
+        { key: 'error', label: 'error', format: (v) => v ? String(v) : '' },
+      ], portfolioDbg);
+
+      renderTable('benchmarkDebugTable', [
+        { key: 'date', label: 'Date' },
+        { key: 'benchmark_price', label: 'benchmark_price', format: (v) => fmtNum(v, 4) },
+        { key: 'benchmark_units', label: 'benchmark_units', format: (v) => fmtNum(v, 6) },
+        { key: 'benchmark_value', label: 'benchmark_value', format: (v) => fmtNum(v, 2) },
+        { key: 'cashflow_events_count', label: 'cashflow_events_count', format: (v) => fmtNum(v, 0) },
+        { key: 'error', label: 'error', format: (v) => v ? String(v) : '' },
+      ], benchmarkDbg);
+
+      const vc = document.getElementById('valueChart').getContext('2d');
+      valueChart = new Chart(vc, {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Portfolio Value', data: portfolioValue, borderColor: '#198754', backgroundColor: 'rgba(25,135,84,0.08)', tension: 0.25, fill: true },
+            { label: `${data.benchmark_name} (DCA)`, data: benchmarkValue, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.06)', tension: 0.25, fill: true },
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: ${inr(ctx.parsed.y)}`
+              }
+            }
+          },
+          scales: {
+            y: { ticks: { callback: (v) => inr(v) } }
+          }
+        }
+      });
+
+      const bc = document.getElementById('breakdownChart').getContext('2d');
+      breakdownChart = new Chart(bc, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Net Investment', data: netInvestment, backgroundColor: 'rgba(108,117,125,0.6)', stack: 'stack1' },
+            { label: 'Gains (Value - Net Investment)', data: gains, backgroundColor: 'rgba(25,135,84,0.6)', stack: 'stack1' },
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: ${inr(ctx.parsed.y)}`
+              }
+            }
+          },
+          scales: {
+            x: { stacked: true },
+            y: { stacked: true, ticks: { callback: (v) => inr(v) } }
+          }
+        }
+      });
+
+    } catch (err) {
+      hideLoading();
+      showError('Network/parse error: ' + err.message);
+    }
+  });
+
+  document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date();
+    const end = today.toISOString().split('T')[0];
+    const start = new Date(today);
+    start.setFullYear(start.getFullYear() - 1);
+    document.getElementById('endDate').value = end;
+    document.getElementById('startDate').value = start.toISOString().split('T')[0];
+  });
+</script>
+{% endblock %}
+

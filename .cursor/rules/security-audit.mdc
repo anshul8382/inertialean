@@ -1,0 +1,82 @@
+---
+description: VAPT / security agent — repeatable static security audit gating every change
+alwaysApply: false
+globs: ["**/*.py", "**/*.html", "config.py", "requirements.txt"]
+---
+
+# Security Audit Agent (VAPT)
+
+Three layered scans gate every release:
+
+| Layer | Module / runner | Report |
+|-------|------------------|--------|
+| **Static codebase scan** | `agents/security_audit_agent.py` → `scripts/run_security_audit.py` | `docs/SECURITY_VAPT_REPORT.md` |
+| **Dependency vulnerabilities** (Python + Node) | `scripts/run_dependency_audit.py` (`pip-audit` + `npm audit`) | `docs/DEPENDENCY_AUDIT.md` |
+| **DAST baseline** (optional, opt-in via `ZAP_TARGET_URL`) | `scripts/run_zap_baseline.py` (Dockerized OWASP ZAP) | `docs/ZAP_BASELINE_REPORT.md` + `reports/zap/*.html` |
+
+**Static-scan suppression file:** `.security_audit_ignore` (one `check_id` per line)
+
+## Four threat themes
+
+| Theme | What it covers |
+|-------|----------------|
+| **EXTERNAL** | SQLi, XSS, CSRF bypass, hardcoded secrets, weak crypto, open redirect, path traversal, command injection, insecure session/cookie config, file-upload hardening, missing TLS verification, missing webhook signature |
+| **INTERNAL** | Raw-SQL admin consoles, bulk exports without audit logging, plaintext PII columns (PAN/Aadhaar/bank), sensitive data in logs, missing per-client access checks |
+| **COMPLIANCE** | Mandatory 2FA enforcement, AuditLog model + service, API auth guards on `/api/v1` and `/api/v2`, secure cookies in production, password policy strength, session lifetime, DB-encryption-at-rest for PII |
+| **CONFIG** | `debug=True` in entry points, JWT key strength, unpinned dependencies, dev-server bind to `0.0.0.0`, default credentials |
+
+## When to invoke
+
+- Before merging any change to `routes/`, `api/`, `services/`, `templates/`, `config.py`, or `requirements.txt`.
+- During the **development gate** loop (see `.cursor/rules/development-gate.mdc`).
+- Weekly in CI (`scripts/run_agent_approval_loop.py` runs it automatically).
+
+## Commands
+
+```bash
+# Static scan + write report
+python3 scripts/run_security_audit.py --write-report
+
+# Show only HIGH/CRITICAL findings
+python3 scripts/run_security_audit.py --severity high
+
+# Fail CI if any CRITICAL finding is present (exit code 2)
+python3 scripts/run_security_audit.py --fail-on critical
+
+# Focus on insider risks
+python3 scripts/run_security_audit.py --theme INTERNAL
+
+# Dependency vulnerability scan (Python + Capacitor)
+python3 scripts/run_dependency_audit.py --write-report
+python3 scripts/run_dependency_audit.py --fail-on high       # CI gate
+
+# OWASP ZAP baseline DAST against staging (Docker required)
+ZAP_TARGET_URL=http://<staging-host>:5001 \
+  python3 scripts/run_zap_baseline.py --write-report
+python3 scripts/run_zap_baseline.py --include-active         # full active scan
+```
+
+All three are wired into `scripts/run_agent_approval_loop.py`. ZAP auto-skips
+(exit code 3) when `ZAP_TARGET_URL` is not set or Docker is missing, so the
+loop stays green on dev machines.
+
+## Triage policy
+
+| Severity | Required action |
+|----------|------------------|
+| critical | Block release until fixed |
+| high     | Fix before next deploy; otherwise capture in `docs/SECURITY_VAPT_REPORT.md` with owner + due date |
+| medium   | Fix within the sprint; group by file when many duplicates |
+| low      | Backlog; revisit during next compliance review |
+| info     | Informational only |
+
+## Adding new checks
+
+1. Open `agents/security_audit_agent.py`.
+2. Decorate a new function with `@register("SEC-<THEME>-<NNN>")`.
+3. Return a list of `Finding(...)` with `theme`, `severity`, `title`, `file`, `line`, `evidence`, `description`, and a **concrete `fix`** (not vague advice).
+4. Add the check_id to the report taxonomy in `docs/SECURITY_VAPT_REPORT.md` (auto-generated on next run).
+
+## Preserve canonical features
+
+The agent is read-only. Findings are advisory. Do **not** delete legitimate features (`clients_v2`, JWT auth, API v2, Intelligence Hub) to silence a finding — instead add a `.security_audit_ignore` entry with a justification comment.

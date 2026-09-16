@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Assignments{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h1 class="h3 mb-1"><i class="fas fa-user-tag text-primary"></i> Assignments</h1>
+            <p class="text-muted mb-0">Assign clients to an advisor and leads to an owner (manager/admin only).</p>
+        </div>
+        <a href="{{ url_for('users.list_users') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-users"></i> Manage users
+        </a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {% if tab == 'clients' %}active{% endif %}"
+               href="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients', q=search, advisor_id=filter_advisor_id, unassigned=1 if unassigned_only else none) }}">
+                <i class="fas fa-user-tie"></i> Clients
+                <span class="badge bg-secondary ms-1">{{ pagination.total }}</span>
+            </a>
+        </li>
+        <li class="nav-item" role="presentation">
+            <a class="nav-link {% if tab == 'leads' %}active{% endif %}"
+               href="{{ url_for('main.maintenance_client_advisor_assignments', tab='leads', lq=lq, owner_id=filter_owner_id) }}">
+                <i class="fas fa-funnel-dollar"></i> Leads
+                <span class="badge bg-secondary ms-1">{{ lead_pagination.total }}</span>
+            </a>
+        </li>
+    </ul>
+
+    {% if tab == 'clients' %}
+    {% include 'maintenance/_assignments_clients_tab.html' %}
+    {% else %}
+    {% include 'maintenance/_assignments_leads_tab.html' %}
+    {% endif %}
+</div>
+{% endblock %}

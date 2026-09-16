@@ -1,0 +1,55 @@
+# Development Gate — Pass Every Change Through Expert Units
+
+**Workflow:** (1) Feature brief + agent recommendations → (2) user go-ahead → (3) implement → (4) tests + "how to test" → (5) user test → process finetune. Template: **`docs/DEVELOP_WORKFLOW.md`**.
+
+**This repo is canonical** — do not delete production features when auditing. See preserve list below.
+
+**Re-run approval:** `python3 scripts/run_agent_approval_loop.py --write-status`
+
+**Every commit (enforced):** `./scripts/install_git_hooks.sh` then commits run `run_agent_approval_loop.py --pre-commit` (blocks on FAIL). See `docs/DEVELOP_WORKFLOW.md` §6.
+
+## Databases and migrations
+
+**Canonical:** **`docs/DB_MIGRATION_AND_TEST_PROCESS.md`**.
+
+1. **Develop SQL on local** `inertia_app2025_dev` (`127.0.0.1:3306`) — not tunneled prod.
+2. Additive scripts only: `migrations/add_*.py` with `checkfirst=True`.
+3. If prod lags: **gate** (`services/db_cutover.py` + `DEFER_DB_FEATURES`) and document in **`docs/DB_CUTOVER_REGISTRY.md`**.
+4. **Cutover:** backup → same migrations on **`inertia_app2025_test` then `inertia_app2025`** → clear defer → restart → mark registry **Completed**.
+5. **After cutover:** refresh `_test` with **prod data only** (`--data-only`). If test has test-only DDL, never full-drop the test DB — data-only only.
+
+Never `flask db upgrade` on prod. See `.local/deployment-agent/CURSOR_AGENT.md`, `docs/DEPLOY_WORKFLOW.md`.
+
+## Preserve (do not regress)
+
+clients_v2, JWT mobile auth, api/v2 period analysis/transactions, enhanced_review, tax optimiser, Intelligence Hub, Ops Tasks, `agents/registry.py`, optional NAV blueprints.
+
+## Expert units (consolidated)
+
+| Unit | Rule file | Pass condition |
+|------|-----------|----------------|
+| **Delivery quality** | `delivery-quality.mdc` | Maps to FR(s); acceptance criteria; tests planned or added; role/access covered. |
+| **Guideline Manager** | `guideline-manager.mdc` | Correctness/auditability; testable; simpler option considered. **Prod DB lag:** gate + document in `docs/DB_CUTOVER_REGISTRY.md` — never prod `flask db upgrade` without cutover plan. |
+| **Core Logic Expert** | `core-logic-expert.mdc` | Calculation changes: read current impl; formulas in services; parity testable. |
+| **SEBI regulatory** | `sebi-regulatory.mdc` | Client/advice/agreement changes: audit trail, suitability, disclosures, regulator export; run checklist §1–2. If `DEFER_DB_FEATURES` includes `audit_log`, note **partial** DB audit until cutover. |
+| **Engineering** | `engineering.mdc` | Logic in services; client access; secrets from env; module alignment; **domain + layer rules** if client-scoped or new module. New tables: additive `migrations/add_*.py` + registry entry — not Alembic head on prod. |
+| **Security (VAPT)** | `security-audit.mdc` | Auth/routes/API/templates/config changes: `python3 scripts/run_security_audit.py --severity high`; no new CRITICAL. |
+| **UI Guidelines** | `ui-guidelines.mdc` | Template/static changes: WCAG 2.1 AA, responsive, finance-app clarity. |
+| **Mobile Optimiser** | `mobile-optimiser.mdc` | User-facing: Capacitor-safe shared templates; `docs/MOBILE_UI_DEVELOPER_CHECKLIST.md`; run `python3 scripts/run_mobile_ui_check.py`; manual test ≤991px or Capacitor. API note for Expo if applicable. |
+
+**App-specific rules (narrow scope):** `agents.mdc` (runtime Python agents), `task-assignment.mdc`, `enhanced-tax-optimiser.mdc`.
+
+## How to apply
+
+1. Note which units apply (e.g. new API → Engineering, Delivery quality, Security; client data → + SEBI regulatory).
+2. Substantial features: feature brief + user go-ahead first.
+3. Satisfy each applicable unit or state N/A with reason.
+4. **User-facing UI:** Mobile Optimiser — confirm checklist in `docs/MOBILE_UI_DEVELOPER_CHECKLIST.md`; run `python3 scripts/run_mobile_ui_check.py`.
+5. After implementation: run tests; present results and manual test steps (include mobile/Capacitor steps when templates/static changed).
+
+## When a unit is N/A
+
+- **Core Logic:** only for calculation/analytics changes.
+- **SEBI regulatory:** only for client/advice/agreement/disclosure/reporting.
+- **Mobile / UI:** user-facing templates/static/API — Mobile Optimiser checklist + `run_mobile_ui_check.py`; UI Guidelines for WCAG/responsive.
+- Pure refactors: Engineering + Guideline Manager minimum.

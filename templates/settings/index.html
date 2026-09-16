@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Settings' %}
+  {% include 'partials/mobile/app_header.html' %}
+  <a href="{{ url_for('settings.cron_jobs') }}" class="im-settings-link"><i class="fas fa-clock"></i><span>Cron jobs</span><i class="fas fa-chevron-right text-muted"></i></a>
+  <a href="{{ url_for('settings.system_info') }}" class="im-settings-link"><i class="fas fa-server"></i><span>System info</span><i class="fas fa-chevron-right text-muted"></i></a>
+  <a href="{{ url_for('settings.service_readiness') }}" class="im-settings-link"><i class="fas fa-heartbeat"></i><span>Service readiness</span><i class="fas fa-chevron-right text-muted"></i></a>
+  <a href="{{ url_for('settings.application_logs') }}" class="im-settings-link"><i class="fas fa-file-alt"></i><span>Application logs</span><i class="fas fa-chevron-right text-muted"></i></a>
+  <a href="{{ url_for('settings.holdings_cycle') }}" class="im-settings-link"><i class="fas fa-sync"></i><span>Holdings cycle</span><i class="fas fa-chevron-right text-muted"></i></a>
+</div>
+<div class="im-desktop-only im-collapsed-on-mobile container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">System Settings</h1>
+    </div>
+
+    <div class="row">
+        <!-- Cron Jobs Management -->
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-clock"></i> Cron Jobs Management
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Manage automated tasks and scheduled reports.</p>
+                    <a href="{{ url_for('settings.cron_jobs') }}" class="btn btn-primary">
+                        <i class="fas fa-cog"></i> Manage Cron Jobs
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Google Calendar (Ops tasks) -->
+        {% if has_endpoint('google_calendar.calendar_connect') %}
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fab fa-google"></i> Google Calendar &amp; Tasks
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">When you are <strong>assigned</strong> an ops task with a deadline, we can sync it to your primary Google <strong>Calendar</strong> (deadline event) and to your default Google <strong>Tasks</strong> list. If you create or host a <strong>meeting</strong> and your account is used as the calendar host, invites go to team participants and the client/lead email.</p>
+                    <p class="text-muted small mb-2">In Google Cloud Console, enable <strong>Google Calendar API</strong> and <strong>Google Tasks API</strong> for the OAuth client. Set <code>GOOGLE_CALENDAR_CLIENT_ID</code> / <code>SECRET</code> and the redirect URI, run DB migrations, then click <strong>Connect Google Calendar</strong> here. If you connected before Tasks was enabled, disconnect and connect again to grant Tasks access.</p>
+                    {% if current_user.google_calendar_refresh_token %}
+                    <p class="small text-success mb-2"><i class="fas fa-check-circle"></i> Connected</p>
+                    <form method="post" action="{{ url_for('google_calendar.calendar_disconnect') }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">Disconnect Google</button>
+                    </form>
+                    {% else %}
+                    <a href="{{ url_for('google_calendar.calendar_connect') }}" class="btn btn-primary">
+                        <i class="fab fa-google"></i> Connect Google (Calendar &amp; Tasks)
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- System Information -->
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-server"></i> System Information
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">View system status and application information.</p>
+                    <a href="{{ url_for('settings.system_info') }}" class="btn btn-info">
+                        <i class="fas fa-info-circle"></i> System Info
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Holdings Cycle Management -->
+    <div class="row">
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-sync-alt"></i> Holdings Cycle Management
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Monitor monthly holdings processing cycle and mismatch reports.</p>
+                    <a href="{{ url_for('settings.holdings_cycle') }}" class="btn btn-success">
+                        <i class="fas fa-chart-line"></i> View Holdings Cycle
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-file-invoice"></i> Zoho Books
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-2">Push/send invoices from onboarding. Use a <strong>Server-based</strong> Zoho API client (not Self Client) with redirect URI matching <code>ZOHO_REDIRECT_URI</code>.</p>
+                    <p class="small text-muted mb-2"><strong>Prod checklist:</strong> HTTPS redirect URI in Zoho console + <code>.env</code>, org ID matching the Books org, refresh token from Connect Zoho, then restart.</p>
+                    {% if zoho_status %}
+                    <ul class="small text-muted mb-3">
+                        <li>API: <code>{{ zoho_status.api_base }}</code></li>
+                        <li>Org ID in .env: <code>{{ zoho_status.organization_id or '—' }}</code></li>
+                        <li>Refresh token: {% if zoho_status.refresh_token_set %}<span class="text-success">set</span>{% else %}<span class="text-danger">missing</span>{% endif %}</li>
+                        <li>Orgs visible to token:
+                            {% if zoho_status.organizations %}
+                                {% for o in zoho_status.organizations %}<code>{{ o.name }} ({{ o.id }})</code>{% if not loop.last %}, {% endif %}{% endfor %}
+                            {% else %}
+                                <span class="text-warning">none</span>
+                            {% endif %}
+                        </li>
+                        {% if zoho_status.error %}<li class="text-danger">{{ zoho_status.error }}</li>{% endif %}
+                    </ul>
+                    {% endif %}
+                    {% if current_user.is_admin %}
+                    <a href="{{ url_for('settings.zoho_connect') }}" class="btn btn-primary">
+                        <i class="fas fa-link"></i> Connect Zoho (browser OAuth)
+                    </a>
+                    {% else %}
+                    <p class="small text-muted mb-0">Admin required to connect.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-signature"></i> Leegality
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-2">Agreement e-sign uses env vars only (no OAuth UI). Configure on the server and restart.</p>
+                    {% if leegality_status %}
+                    <ul class="small text-muted mb-0">
+                        <li>API base: <code>{{ leegality_status.api_base }}</code></li>
+                        <li>Auth token: {% if leegality_status.auth_token_set %}<span class="text-success">set</span>{% else %}<span class="text-danger">missing</span>{% endif %}</li>
+                        <li>Private salt: {% if leegality_status.private_salt_set %}<span class="text-success">set</span>{% else %}<span class="text-warning">missing</span>{% endif %}</li>
+                        <li>Profile ID: <code>{{ leegality_status.profile_id or '—' }}</code></li>
+                        <li>Firm signer: {{ leegality_status.firm_signer_name or '—' }} &lt;{{ leegality_status.firm_signer_email or '—' }}&gt;</li>
+                        <li>Invitee order: <code>{{ leegality_status.invitee_order }}</code></li>
+                    </ul>
+                    {% else %}
+                    <p class="small text-muted mb-0">Set <code>LEEGALITY_*</code> in <code>.env</code> (see <code>.env.example</code>).</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-xl-6 col-lg-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-user-check"></i> Onboarding approvals &amp; proposal CC
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">Who can approve advisor- vs manager-created proposals/invoices. Proposal emails also CC this list (+ advisor by default).</p>
+                    <form method="post" action="{{ url_for('settings.save_onboarding_approvals') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-group">
+                            <label>Approve advisor-created work</label>
+                            <select class="form-control" name="approve_advisor_work">
+                                <option value="manager" {% if onboarding_approval.advisor_work == 'manager' %}selected{% endif %}>Manager (or admin)</option>
+                                <option value="admin" {% if onboarding_approval.advisor_work == 'admin' %}selected{% endif %}>Admin only</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Approve manager-created work</label>
+                            <select class="form-control" name="approve_manager_work">
+                                <option value="admin" {% if onboarding_approval.manager_work == 'admin' %}selected{% endif %}>Admin</option>
+                                <option value="manager" {% if onboarding_approval.manager_work == 'manager' %}selected{% endif %}>Another manager (or admin)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Proposal email CC (comma-separated)</label>
+                            <input class="form-control" name="proposal_email_cc" value="{{ proposal_email_cc or '' }}" placeholder="ops@example.com, anshul@…">
+                        </div>
+                        {% if current_user.is_admin or current_user.is_manager %}
+                        <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                        {% else %}
+                        <p class="small text-muted mb-0">Manager/admin required to save.</p>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Status -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-tachometer-alt"></i> Quick Status
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <div class="h4 text-primary" id="active-jobs">-</div>
+                                <div class="text-muted">Active Cron Jobs</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <div class="h4 text-success" id="reports-count">-</div>
+                                <div class="text-muted">Daily Reports</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <div class="h4 text-info" id="monitoring-count">-</div>
+                                <div class="text-muted">Monitoring Jobs</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <div class="h4 text-warning" id="last-update">-</div>
+                                <div class="text-muted">Last Update</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Load quick status
+    loadQuickStatus();
+    
+    // Refresh status every 30 seconds
+    setInterval(loadQuickStatus, 30000);
+});
+
+function loadQuickStatus() {
+    $.ajax({
+        url: '{{ url_for("settings.get_cron_status") }}',
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                updateQuickStatus(data.jobs);
+            }
+        },
+        error: function() {
+            console.log('Failed to load cron status');
+        }
+    });
+}
+
+function updateQuickStatus(jobs) {
+    let activeCount = 0;
+    let reportsCount = 0;
+    let monitoringCount = 0;
+    
+    for (let jobId in jobs) {
+        const job = jobs[jobId];
+        if (job.enabled) {
+            activeCount++;
+            
+            if (job.category === 'Reports') {
+                reportsCount++;
+            } else if (job.category === 'Monitoring') {
+                monitoringCount++;
+            }
+        }
+    }
+    
+    $('#active-jobs').text(activeCount);
+    $('#reports-count').text(reportsCount);
+    $('#monitoring-count').text(monitoringCount);
+    $('#last-update').text(new Date().toLocaleTimeString());
+}
+</script>
+{% endblock %}

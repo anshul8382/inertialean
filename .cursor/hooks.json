@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/run_agent_approval_loop.sh",
+        "timeout": 900,
+        "failClosed": false
+      }
+    ]
+  }
+}

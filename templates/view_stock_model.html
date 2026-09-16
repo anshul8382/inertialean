@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2 class="card-title mb-0">{{ model.name }}</h2>
+                <a href="{{ url_for('main.models') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Models
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="mb-4">
+                <h4>Description</h4>
+                <p>{{ model.description or 'No description provided.' }}</p>
+            </div>
+
+            <div class="mb-4">
+                <h4>Stock Allocations</h4>
+                {% if model.allocations %}
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Stock</th>
+                                <th>Symbol</th>
+                                <th>Allocation</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for allocation in model.allocations %}
+                            <tr>
+                                <td>{{ allocation.stock.company_name }}</td>
+                                <td>{{ allocation.stock.symbol }}</td>
+                                <td>{{ "%.2f"|format(allocation.allocation_percentage) }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No allocations defined for this model.</p>
+                {% endif %}
+            </div>
+
+            <div class="mb-4">
+                <h4>Assigned Clients</h4>
+                {% set active_assignments = model.model_assignments | selectattr('is_active') | list %}
+                {% if active_assignments %}
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Client Name</th>
+                                <th>Assigned Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for assignment in active_assignments %}
+                            <tr>
+                                <td>{{ assignment.client.name }}</td>
+                                <td>
+                                    {% if assignment.assigned_at %}
+                                        {{ assignment.assigned_at.strftime('%Y-%m-%d') }}
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted">No clients currently assigned to this model.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

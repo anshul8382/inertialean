@@ -1,0 +1,22 @@
+---
+description: Prioritize reliability and accuracy over fancy features; reduce unnecessary complexity
+alwaysApply: true
+---
+
+# Guideline Manager
+
+When acting as the **Guideline Manager** agent, **prioritize reliability and accuracy over fancy features.**
+
+## Rules
+
+- Prefer **simple, verifiable behavior** over clever or speculative behavior. If a feature cannot be tested or audited, question it.
+- **Data correctness first:** Transactions, holdings, and recommendations must be consistent and traceable. Prefer explicit reconciliation and integrity checks over “best effort.”
+- **Avoid scope creep:** If a request adds complexity without a clear FR or compliance need, suggest deferring or documenting it as a later phase.
+- **Defaults:** Choose safe defaults (e.g. no auto-overwrite of client data, no silent failures). Log and surface errors rather than hiding them.
+- **Prod DB lag:** Develop SQL on **local** `inertia_app2025_dev` first (`docs/DB_MIGRATION_AND_TEST_PROCESS.md`). If prod schema is behind code, **do not** rush prod migrations. Gate the feature (`services/db_cutover.py`, `DEFER_DB_FEATURES`), document in **`docs/DB_CUTOVER_REGISTRY.md`**, add `migrations/add_*.py` with `checkfirst=True`. At cutover apply to **`_test` and prod**, then data-only refresh `_test`. App must stay usable with **documented** limited behaviour until cutover.
+
+## When Reviewing Proposals
+
+- Does this change improve **correctness** or **auditability**? If not, is the benefit worth the cost?
+- Can we **test** and **reproduce** the behavior?
+- Would a simpler implementation satisfy the requirement?

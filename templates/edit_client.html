@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Client{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Edit Client</h1>
+        <a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Client Details
+        </a>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Edit Client Information</h6>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('clients.edit_client', client_id=client.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ client.name }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="email" class="form-label">Email</label>
+                    <input type="email" class="form-control" id="email" name="email" value="{{ client.email }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="phone" class="form-label">Phone</label>
+                    <input type="tel" class="form-control" id="phone" name="phone" value="{{ client.phone }}" required>
+                </div>
+                <div class="mb-3">
+                    <label for="address" class="form-label">Address</label>
+                    <textarea class="form-control" id="address" name="address" rows="3">{{ client.address or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="risk_profile" class="form-label">Risk Profile</label>
+                    <select class="form-select" id="risk_profile" name="risk_profile" required>
+                        <option value="">Select Risk Profile</option>
+                        <option value="conservative" {% if client.risk_profile == 'conservative' %}selected{% endif %}>Conservative</option>
+                        <option value="moderate" {% if client.risk_profile == 'moderate' %}selected{% endif %}>Moderate</option>
+                        <option value="aggressive" {% if client.risk_profile == 'aggressive' %}selected{% endif %}>Aggressive</option>
+                    </select>
+                </div>
+                {% if client.risk_profile_updated_at %}
+                <div class="mb-3">
+                    <label for="risk_profile_updated_at" class="form-label">Risk Profile Last Updated</label>
+                    <input type="text" class="form-control" id="risk_profile_updated_at" name="risk_profile_updated_at" 
+                           value="{{ client.risk_profile_updated_at.strftime('%Y-%m-%d %H:%M:%S') if client.risk_profile_updated_at else 'Never updated' }}" readonly>
+                </div>
+                {% endif %}
+                <div class="mb-3">
+                </div>
+                <div class="mb-3">
+                    {{ form.date_of_birth.label(class="form-label") }}
+                    {{ form.date_of_birth(class="form-control") }}
+                    {% if form.date_of_birth.errors %}
+                    <div class="text-danger">
+                        {% for error in form.date_of_birth.errors %}
+                        <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="mb-3">
+                    {{ form.starting_aua.label(class="form-label") }}
+                    {{ form.starting_aua(class="form-control") }}
+                    {% if form.starting_aua.errors %}
+                    <div class="text-danger">
+                        {% for error in form.starting_aua.errors %}
+                        <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="mb-3">
+                    {{ form.designation.label(class="form-label") }}
+                    {{ form.designation(class="form-control") }}
+                    {% if form.designation.errors %}
+                    <div class="text-danger">
+                        {% for error in form.designation.errors %}
+                        <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="mb-3">
+                    {{ form.linkedin_profile_url.label(class="form-label") }}
+                    {{ form.linkedin_profile_url(class="form-control") }}
+                    {% if form.linkedin_profile_url.errors %}
+                    <div class="text-danger">
+                        {% for error in form.linkedin_profile_url.errors %}
+                        <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="mb-3">
+                    {{ form.date_of_joining.label(class="form-label") }}
+                    {{ form.date_of_joining(class="form-control") }}
+                    {% if form.date_of_joining.errors %}
+                    <div class="text-danger">
+                        {% for error in form.date_of_joining.errors %}
+                        <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="mb-3">
+                    {{ form.type_of_engagement.label(class="form-label") }}
+                    {{ form.type_of_engagement(class="form-control") }}
+                    <small class="form-text text-muted">e.g., SIP, Lumpsum, SRP (comma-separated for multiple)</small>
+                    {% if form.type_of_engagement.errors %}
+                    <div class="text-danger">
+                        {% for error in form.type_of_engagement.errors %}
+                        <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="mb-3">
+                    <div class="form-check">
+                        {{ form.portfolio_inherited(class="form-check-input") }}
+                        {{ form.portfolio_inherited.label(class="form-check-label") }}
+                    </div>
+                    {% if form.portfolio_inherited.errors %}
+                    <div class="text-danger">
+                        {% for error in form.portfolio_inherited.errors %}
+                        <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="mb-3">
+                    {{ form.company_name.label(class="form-label") }}
+                    {{ form.company_name(class="form-control") }}
+                    {% if form.company_name.errors %}
+                    <div class="text-danger">
+                        {% for error in form.company_name.errors %}
+                        <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="mb-3">
+                    {{ form.industry.label(class="form-label") }}
+                    {{ form.industry(class="form-control") }}
+                    {% if form.industry.errors %}
+                    <div class="text-danger">
+                        {% for error in form.industry.errors %}
+                        <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="mb-3">
+                    {{ form.planning_synopsis.label(class="form-label") }}
+                    {{ form.planning_synopsis(class="form-control") }}
+                    <small class="form-text text-muted">Short summary of latest planning / recommendations discussed with the client.</small>
+                    {% if form.planning_synopsis.errors %}
+                    <div class="text-danger">
+                        {% for error in form.planning_synopsis.errors %}
+                        <span>{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

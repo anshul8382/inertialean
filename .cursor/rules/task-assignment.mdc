@@ -1,0 +1,31 @@
+---
+description: When editing task assignment, OpsTask, or review workflow assignment
+globs: services/task_assignment_service.py,agents/task_assignment_agent.py,routes/task_assignment_rules.py,**/task*assignment*
+---
+
+# Task Assignment Rules
+
+## TaskAssignmentRule
+- rule_type: `workflow_stage` | `issue_category` | `review_status`
+- match_value: varies by type
+  - workflow_stage: FUNDS, RECOS, NOTIFY, EXEC, UPDATE, COMPLETED
+  - issue_category: PORTFOLIO_PERFORMANCE, RECOMMENDATION_MATCH, CASHFLOW, etc.
+  - review_status: initiated, sent, meeting, closed
+
+## Service Functions
+- `get_assignee_for_workflow_stage(workflow)` – monthly investment workflows
+- `get_assignee_for_issue(issue)` – DataIntegrityIssue
+- `get_assignee_for_review_status(workflow)` – ReviewWorkflow
+- `apply_review_assignment(workflow)` – sets assigned_to + creates OpsTask if open
+- `create_ops_task_from_issue(issue)` – DataIntegrityIssue → OpsTask
+- `create_ops_task_from_review_workflow(workflow)` – open ReviewWorkflow → OpsTask
+
+## OpsTask Links
+- `data_integrity_issue_id` – when created from DataIntegrityIssue
+- `review_workflow_id` – when created from ReviewWorkflow
+- Only create for open reviews (initiated, sent, meeting); skip closed
+
+## Admin
+- UI: `/admin/task-assignment-rules`
+- Blueprint: `routes/task_assignment_rules.py`
+- Seed: `python migrations/seed_task_assignment_rules.py`

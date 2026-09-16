@@ -1,0 +1,560 @@
+{% extends "base.html" %}
+
+{% block title %}Add Corporate Action - Inertia Invest{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-card {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        padding: 30px;
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    
+    .form-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+        margin: -30px -30px 30px -30px;
+    }
+    
+    .form-group label {
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .form-group label .required {
+        color: #dc3545;
+    }
+    
+    .action-type-selector {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .action-type-option {
+        position: relative;
+    }
+    
+    .action-type-option input[type="radio"] {
+        position: absolute;
+        opacity: 0;
+    }
+    
+    .action-type-label {
+        display: block;
+        padding: 15px;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    
+    .action-type-option input[type="radio"]:checked + .action-type-label {
+        border-color: #667eea;
+        background: #f0f3ff;
+        font-weight: 600;
+    }
+    
+    .action-type-label:hover {
+        border-color: #667eea;
+        transform: translateY(-2px);
+    }
+    
+    .help-text {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+    
+    .example-box {
+        background: #f8f9fa;
+        border-left: 4px solid #667eea;
+        padding: 15px;
+        margin-top: 20px;
+        border-radius: 5px;
+    }
+    
+    .example-box h6 {
+        color: #667eea;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    
+    .example-item {
+        margin-bottom: 8px;
+        font-size: 0.9rem;
+    }
+    
+    .btn-submit {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+        padding: 12px 40px;
+        font-size: 1.1rem;
+    }
+    
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <!-- Back Button -->
+            <a href="{{ url_for('corporate_actions.list_actions') }}" class="btn btn-outline-secondary mb-3">
+                <i class="fas fa-arrow-left"></i> Back to List
+            </a>
+        </div>
+    </div>
+    
+    <div class="form-card">
+        <div class="form-header">
+            <h3 class="mb-0"><i class="fas fa-plus-circle"></i> Add Corporate Action</h3>
+            <p class="mb-0 mt-2" style="opacity: 0.9;">Record a new corporate action for a security</p>
+        </div>
+        
+        <form method="POST" action="{{ url_for('corporate_actions.add_action') }}" id="add-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <!-- Security Selection -->
+            <div class="form-group">
+                <label for="security_id" id="security_label">
+                    <span id="security_label_text">Security</span> <span class="required">*</span>
+                </label>
+                <select name="security_id" id="security_id" class="form-control" required>
+                    <option value="">-- Select Security --</option>
+                    {% for security in securities %}
+                    <option value="{{ security.id }}">
+                        {{ security.symbol }} - {{ security.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <small class="help-text" id="security_help_text">Select the security for which this action applies</small>
+            </div>
+            
+            <!-- Action Type -->
+            <div class="form-group">
+                <label>
+                    Action Type <span class="required">*</span>
+                </label>
+                <div class="action-type-selector">
+                    {% for type in action_types %}
+                    <div class="action-type-option">
+                        <input type="radio" name="action_type" id="type_{{ type }}" 
+                               value="{{ type }}" required>
+                        <label for="type_{{ type }}" class="action-type-label">
+                            <i class="fas fa-sitemap"></i><br>
+                            {{ type }}
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Action Date -->
+            <div class="form-group">
+                <label for="action_date">
+                    Action Date <span class="required">*</span>
+                </label>
+                <input type="date" name="action_date" id="action_date" 
+                       class="form-control" required>
+                <small class="help-text">The effective date of the corporate action</small>
+            </div>
+            
+            <!-- Ratio -->
+            <div class="form-group">
+                <label for="ratio">
+                    Ratio <span class="required">*</span>
+                </label>
+                <input type="text" name="ratio" id="ratio" 
+                       class="form-control" placeholder="e.g., 10.0 for 10:1 split" 
+                       pattern="[0-9]+\.?[0-9]*" required>
+                <small class="help-text" id="ratio-help">
+                    Enter the ratio value (see examples below)
+                </small>
+            </div>
+            
+            <!-- Conditional fields for MERGER -->
+            <div id="merger-fields" class="form-group" style="display: none;">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> <strong>Merger Information</strong><br>
+                    The source security (merging company) will be converted into the target security (selected above).
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <label>
+                            Target Security (Receiving Company) <span class="required">*</span>
+                        </label>
+                        <input type="text" class="form-control" id="target_security_display" 
+                               readonly style="background-color: #f8f9fa; font-weight: 600;">
+                        <small class="help-text">This is the security you selected above</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="source_security_id">
+                            Source Security (Merging Company) <span class="required">*</span>
+                        </label>
+                        <select name="source_security_id" id="source_security_id" class="form-control" required>
+                            <option value="">-- Select Source Security --</option>
+                            {% for security in securities %}
+                            <option value="{{ security.id }}">
+                                {{ security.symbol }} - {{ security.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="help-text">
+                            The company that is being merged INTO the target security
+                        </small>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <label for="swap_ratio_from">Shares of Source Company</label>
+                        <input type="number" name="swap_ratio_from" id="swap_ratio_from" 
+                               class="form-control" step="0.000001" min="0.000001" 
+                               placeholder="e.g., 2">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="swap_ratio_to">Shares of Target Company</label>
+                        <input type="number" name="swap_ratio_to" id="swap_ratio_to" 
+                               class="form-control" step="0.000001" min="0.000001" 
+                               placeholder="e.g., 1">
+                    </div>
+                </div>
+                <small class="help-text">
+                    Example: If 2 shares of Source = 1 share of Target, enter 2 and 1. Ratio will be auto-calculated.
+                </small>
+            </div>
+
+            <!-- Conditional fields for DEMERGER -->
+            <div id="demerger-fields" class="form-group" style="display: none;">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> <strong>Demerger Information</strong><br>
+                    The original security (source) must be in holdings. Select the demerged entity (target) and enter the ratio.
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="source_security_id_demerger">
+                            Source Security (Original Company - Must be in Holdings) <span class="required">*</span>
+                        </label>
+                        <select name="source_security_id" id="source_security_id_demerger" class="form-control" required>
+                            <option value="">-- Select Source Security --</option>
+                            {% for security in securities_with_holdings %}
+                            <option value="{{ security.id }}">
+                                {{ security.symbol }} - {{ security.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="help-text">
+                            <i class="fas fa-check-circle text-success"></i> Only securities with holdings are shown
+                        </small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="target_security_id_demerger">
+                            Target Security (Demerged Entity - New Company) <span class="required">*</span>
+                        </label>
+                        <select name="security_id" id="target_security_id_demerger" class="form-control" required>
+                            <option value="">-- Select Target Security --</option>
+                            {% for security in securities %}
+                            <option value="{{ security.id }}">
+                                {{ security.symbol }} - {{ security.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="help-text">Select the new demerged entity security</small>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <label for="demerger_ratio_from">Shares of Original Company</label>
+                        <input type="number" name="demerger_ratio_from" id="demerger_ratio_from" 
+                               class="form-control" step="0.000001" min="0.000001" 
+                               placeholder="e.g., 10">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="demerger_ratio_to">Shares of Demerged Entity</label>
+                        <input type="number" name="demerger_ratio_to" id="demerger_ratio_to" 
+                               class="form-control" step="0.000001" min="0.000001" 
+                               placeholder="e.g., 1">
+                    </div>
+                </div>
+                <small class="help-text">
+                    Example: If 10 shares of Original = 1 share of Demerged Entity, enter 10 and 1. Ratio will be auto-calculated.
+                </small>
+            </div>
+            
+            <!-- Description -->
+            <div class="form-group">
+                <label for="description">
+                    Description <span class="text-muted">(Optional)</span>
+                </label>
+                <textarea name="description" id="description" 
+                          class="form-control" rows="3" 
+                          placeholder="Additional details about this corporate action"></textarea>
+            </div>
+            
+            <!-- Examples Box -->
+            <div class="example-box">
+                <h6><i class="fas fa-info-circle"></i> Ratio Examples</h6>
+                <div class="example-item">
+                    <strong>Stock Split (10:1):</strong> Ratio = <code>10.0</code>
+                    <span class="text-muted">(Each old share becomes 10 new shares)</span>
+                </div>
+                <div class="example-item">
+                    <strong>Bonus (1:1):</strong> Ratio = <code>2.0</code>
+                    <span class="text-muted">(1 bonus share for every 1 held = total 2)</span>
+                </div>
+                <div class="example-item">
+                    <strong>Bonus (1:2):</strong> Ratio = <code>1.5</code>
+                    <span class="text-muted">(1 bonus share for every 2 held = 50% increase)</span>
+                </div>
+                <div class="example-item">
+                    <strong>Dividend:</strong> Ratio = <code>5.0</code>
+                    <span class="text-muted">(₹5 per share dividend amount)</span>
+                </div>
+                <div class="example-item">
+                    <strong>Merger (2:1):</strong> Ratio = <code>0.5</code>
+                    <span class="text-muted">(2 shares of source = 1 share of target, so 1 share of source = 0.5 shares of target)</span>
+                </div>
+                <div class="example-item">
+                    <strong>Demerger (10:1):</strong> Ratio = <code>0.1</code>
+                    <span class="text-muted">(10 shares of original = 1 share of demerged entity, so 1 share of original = 0.1 shares of demerged)</span>
+                </div>
+            </div>
+            
+            <!-- Submit Button -->
+            <div class="form-group mt-4 text-center">
+                <button type="submit" class="btn btn-primary btn-submit">
+                    <i class="fas fa-save"></i> Add Corporate Action
+                </button>
+                <a href="{{ url_for('corporate_actions.list_actions') }}" 
+                   class="btn btn-secondary ml-3">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    console.log('Corporate action form loaded'); // Debug line
+    
+    function toggleMergerDemergerFields() {
+        const actionType = $('input[name="action_type"]:checked').val();
+        console.log('Action type selected:', actionType); // Debug line
+        
+        // Hide all conditional fields first
+        $('#merger-fields, #demerger-fields').hide();
+        $('#merger-fields input, #demerger-fields input, #merger-fields select, #demerger-fields select')
+            .prop('required', false);
+        
+        // Show/hide main security dropdown based on action type
+        const mainSecurityGroup = $('#security_id').closest('.form-group');
+        
+        // Update security label based on action type
+        if (actionType === 'MERGER') {
+            $('#security_label_text').text('Target Security (Receiving Company)');
+            $('#security_help_text').text('Select the target security that will receive the merged shares');
+            mainSecurityGroup.show();
+            $('#merger-fields').show();
+            console.log('Showing merger fields'); // Debug line
+            $('#source_security_id, #swap_ratio_from, #swap_ratio_to').prop('required', true);
+            // Update target security display
+            const selectedSecurityText = $('#security_id option:selected').text();
+            if (selectedSecurityText && selectedSecurityText !== '-- Select Security --') {
+                $('#target_security_display').val(selectedSecurityText);
+            }
+        } else if (actionType === 'DEMERGER') {
+            // Hide main security dropdown, use the one in demerger fields instead
+            mainSecurityGroup.hide();
+            $('#demerger-fields').show();
+            console.log('Showing demerger fields'); // Debug line
+            $('#source_security_id_demerger, #target_security_id_demerger, #demerger_ratio_from, #demerger_ratio_to')
+                .prop('required', true);
+        } else {
+            $('#security_label_text').text('Security');
+            $('#security_help_text').text('Select the security for which this action applies');
+            mainSecurityGroup.show();
+        }
+    }
+    
+    // Update displays when security selection changes (for MERGER)
+    $('#security_id').change(function() {
+        const actionType = $('input[name="action_type"]:checked').val();
+        const selectedSecurityText = $(this).find('option:selected').text();
+        
+        if (actionType === 'MERGER' && selectedSecurityText !== '-- Select Security --') {
+            $('#target_security_display').val(selectedSecurityText);
+        }
+    });
+    
+    // Sync target security dropdown for DEMERGER with main security_id (for form submission)
+    $('#target_security_id_demerger').change(function() {
+        // Copy the value to the main security_id field (hidden for demerger)
+        $('#security_id').val($(this).val());
+    });
+    
+    // Update help text AND toggle fields when action type changes
+    $('input[name="action_type"]').on('change', function() {
+        console.log('Action type changed to:', $(this).val()); // Debug line
+        const type = $(this).val();
+        let helpText = '';
+        
+        switch(type) {
+            case 'SPLIT':
+                helpText = 'Stock Split (10:1): Ratio = 10.0 (Each old share becomes 10 new shares)';
+                $('#ratio').attr('placeholder', 'e.g., 10.0 for 10:1 split');
+                break;
+            case 'BONUS':
+                helpText = 'Bonus (1:1): Ratio = 1.0 (1 bonus share for every 1 held = total 2)';
+                $('#ratio').attr('placeholder', 'e.g., 1.0 for 1:1 bonus');
+                break;
+            case 'DIVIDEND':
+                helpText = 'Dividend: Ratio = 5.0 (₹5 per share dividend amount)';
+                $('#ratio').attr('placeholder', 'e.g., 5.0 for ₹5 per share');
+                break;
+            case 'RIGHTS':
+                helpText = 'Enter the rights issue ratio (e.g., 1.5 for 1:2 rights)';
+                $('#ratio').attr('placeholder', 'e.g., 1.5 for 1:2 rights');
+                break;
+            case 'MERGER':
+                helpText = 'Merger Ratio: Enter how many shares of target company per share of source company.<br>Example: If 2 shares of Source = 1 share of Target, ratio = 0.5 (1/2)';
+                $('#ratio').attr('placeholder', 'e.g., 0.5 for 2:1 merger');
+                break;
+            case 'DEMERGER':
+                helpText = 'Demerger Ratio: Enter how many shares of demerged entity per share of original.<br>Example: If 10 shares of Original = 1 share of Demerged, ratio = 0.1 (1/10)';
+                $('#ratio').attr('placeholder', 'e.g., 0.1 for 10:1 demerger');
+                break;
+        }
+        
+        $('#ratio-help').html(helpText);
+        // IMPORTANT: Call toggle function AFTER a small delay to ensure DOM is ready
+        setTimeout(function() {
+            toggleMergerDemergerFields();
+        }, 100);
+    });
+    
+    // Also attach click handler to radio buttons directly (in case change event doesn't fire)
+    $('input[type="radio"][name="action_type"]').on('click', function() {
+        console.log('Radio button clicked:', $(this).val());
+        setTimeout(function() {
+            toggleMergerDemergerFields();
+        }, 50);
+    });
+    
+    // Force show on page load if MERGER/DEMERGER is already selected (for page refresh)
+    if ($('input[name="action_type"]:checked').length > 0) {
+        setTimeout(function() {
+            toggleMergerDemergerFields();
+        }, 200);
+    }
+    
+    // Calculate ratio from swap ratios for MERGER
+    $('#swap_ratio_from, #swap_ratio_to').on('input', function() {
+        const from = parseFloat($('#swap_ratio_from').val());
+        const to = parseFloat($('#swap_ratio_to').val());
+        if (from && to && to > 0) {
+            $('#ratio').val((to / from).toFixed(6));
+        }
+    });
+    
+    // Calculate ratio from swap ratios for DEMERGER
+    $('#demerger_ratio_from, #demerger_ratio_to').on('input', function() {
+        const from = parseFloat($('#demerger_ratio_from').val());
+        const to = parseFloat($('#demerger_ratio_to').val());
+        if (from && to && from > 0) {
+            $('#ratio').val((to / from).toFixed(6));
+        }
+    });
+    
+    // Initialize on page load
+    toggleMergerDemergerFields();
+    
+    // Form validation
+    $('#add-form').submit(function(e) {
+        const securityId = $('#security_id').val();
+        const actionType = $('input[name="action_type"]:checked').val();
+        const actionDate = $('#action_date').val();
+        const ratio = $('#ratio').val();
+        
+        if (!securityId || !actionType || !actionDate || !ratio) {
+            e.preventDefault();
+            alert('Please fill in all required fields');
+            return false;
+        }
+        
+        // Validate ratio is a positive number
+        const ratioNum = parseFloat(ratio);
+        if (isNaN(ratioNum) || ratioNum <= 0) {
+            e.preventDefault();
+            alert('Ratio must be a positive number');
+            return false;
+        }
+        
+        // Validate MERGER/DEMERGER specific fields
+        if (actionType === 'MERGER') {
+            const sourceSecurityId = $('#source_security_id').val();
+            if (!sourceSecurityId) {
+                e.preventDefault();
+                alert('Source security is required for MERGER actions');
+                return false;
+            }
+            if (sourceSecurityId === securityId) {
+                e.preventDefault();
+                alert('Source and target securities must be different');
+                return false;
+            }
+        } else if (actionType === 'DEMERGER') {
+            // Get target security from demerger dropdown
+            const targetSecurityId = $('#target_security_id_demerger').val();
+            if (!targetSecurityId) {
+                e.preventDefault();
+                alert('Target security (demerged entity) is required for DEMERGER actions');
+                return false;
+            }
+            // Update main security_id with target value
+            $('#security_id').val(targetSecurityId);
+            
+            const sourceSecurityId = $('#source_security_id_demerger').val();
+            if (!sourceSecurityId) {
+                e.preventDefault();
+                alert('Source security (original company) is required for DEMERGER actions');
+                return false;
+            }
+            if (sourceSecurityId === targetSecurityId) {
+                e.preventDefault();
+                alert('Source and target securities must be different');
+                return false;
+            }
+        }
+        
+        return true;
+    });
+    
+    // Set max date to today
+    const today = new Date().toISOString().split('T')[0];
+    $('#action_date').attr('max', today);
+});
+</script>
+{% endblock %}
+
+
+
+
+

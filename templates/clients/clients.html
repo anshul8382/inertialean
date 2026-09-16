@@ -1,0 +1,621 @@
+{% extends "base.html" %}
+
+{% block title %}Clients{% endblock %}
+
+{% block content %}
+{% set activity_filter = activity_filter|default('active') %}
+{% set clients_list_url = url_for('clients_v2.list_clients') %}
+
+{# ── Mobile app UI (native-style) ── #}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Clients' %}
+  {% set mobile_header_action_url = url_for('main.add_client') %}
+  {% set mobile_header_action_class = 'btn-success' %}
+  {% set mobile_header_action_icon = 'fas fa-plus' %}
+  {% set mobile_header_action_label = 'Add client' %}
+  {% include 'partials/mobile/app_header.html' %}
+
+  <div class="im-mobile-search">
+    <i class="fas fa-search"></i>
+    <input type="search" id="imMobileClientSearch" placeholder="Search clients…" autocomplete="off" aria-label="Search clients">
+  </div>
+
+  <div class="im-mobile-filter-row mb-3">
+    <select class="form-select form-select-sm" id="imMobileActivityFilter" data-base-url="{{ clients_list_url }}" aria-label="Client status filter">
+      <option value="active" {% if activity_filter == 'active' %}selected{% endif %}>Active only</option>
+      <option value="inactive" {% if activity_filter == 'inactive' %}selected{% endif %}>Inactive only</option>
+      <option value="all" {% if activity_filter == 'all' %}selected{% endif %}>All</option>
+    </select>
+  </div>
+
+  <div class="im-list-stack" id="imMobileClientList">
+    {% for client in clients %}
+      {% include 'partials/mobile/client_card.html' %}
+    {% else %}
+      <div class="im-empty-state">
+        <i class="fas fa-users d-block"></i>
+        <p>No clients found</p>
+      </div>
+    {% endfor %}
+  </div>
+
+  <a href="{{ url_for('main.add_client') }}" class="im-fab" aria-label="Add client">
+    <i class="fas fa-plus"></i>
+  </a>
+</div>
+
+{# ── Desktop UI (unchanged) ── #}
+<div class="im-desktop-only im-collapsed-on-mobile container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0" style="color: #495057;">Clients</h1>
+        <a href="{{ url_for('main.add_client') }}" class="d-none d-sm-inline-block btn shadow-sm" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+            <i class="fas fa-plus fa-sm text-white-50"></i> Add New Client
+        </a>
+    </div>
+    
+    <!-- Search and Filter Controls -->
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <div class="input-group">
+                <input type="text" class="form-control" id="searchInput" placeholder="Search clients...">
+                <div class="input-group-append">
+                    <button class="btn btn-outline-secondary" type="button" id="searchBtn">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <select class="form-control" id="statusFilter">
+                <option value="">All Health</option>
+                <option value="excellent">Excellent</option>
+                <option value="good">Good</option>
+                <option value="warning">Warning</option>
+                <option value="critical">Critical</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-control" id="activityFilter" data-base-url="{{ clients_list_url }}" aria-label="Client status filter">
+                <option value="active" {% if activity_filter == 'active' %}selected{% endif %}>Active only</option>
+                <option value="inactive" {% if activity_filter == 'inactive' %}selected{% endif %}>Inactive only</option>
+                <option value="all" {% if activity_filter == 'all' %}selected{% endif %}>All</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-control" id="riskProfileFilter">
+                <option value="">All Risk Profiles</option>
+                <option value="conservative">Conservative</option>
+                <option value="moderate">Moderate</option>
+                <option value="aggressive">Aggressive</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button class="btn" id="refreshBtn" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center" style="background-color: #4a7c59; color: white;">
+            <h6 class="m-0 font-weight-bold" style="color: white;">Client List</h6>
+            <div id="loadingIndicator" class="d-none">
+                <i class="fas fa-spinner fa-spin" style="color: white;"></i> Loading...
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="clientsTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Engagement</th>
+                            <th>Health</th>
+                            <th>Score</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for client in clients %}
+                        <tr class="{% if not client.is_active %}table-secondary{% endif %}">
+                            <td>{{ client.name }}</td>
+                            <td>{{ client.email|display_email }}</td>
+                            <td>{{ client.phone|display_phone }}</td>
+                            <td>
+                                {% if client.is_active %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set status_data = client_statuses.get(client.id, {}) %}
+                                {% if status_data %}
+                                    {% set status = status_data.get('status', 'unknown') %}
+                                    {% set status_class = 'bg-success' if status == 'excellent' else 'bg-info' if status == 'good' else 'bg-warning' if status == 'warning' else 'bg-danger' if status == 'critical' else 'bg-secondary' %}
+                                    <span class="badge {{ status_class }}" title="{{ status_data.get('details', {}).get('total_active_alerts', 0) }} active alerts">
+                                        {{ status|title }}
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-secondary" title="Status not available">
+                                        Unknown
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set status_data = client_statuses.get(client.id, {}) %}
+                                {% if status_data %}
+                                    {% set score = status_data.get('score', 0) %}
+                                    {% set score_class = 'text-success' if score >= 80 else 'text-info' if score >= 60 else 'text-warning' if score >= 40 else 'text-danger' %}
+                                    <span class="{{ score_class }} fw-bold" title="Health Score: {{ score }}/100">
+                                        {{ score }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="btn btn-sm" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="{{ url_for('clients.edit_client', client_id=client.id) }}" class="btn btn-sm" style="background-color: #a8e6a8; border-color: #a8e6a8; color: white;">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <form method="POST" action="{{ url_for('clients.toggle_client_active', client_id=client.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="{% if client.is_active %}Mark inactive{% else %}Mark active{% endif %}">
+                                        <i class="fas fa-{% if client.is_active %}pause{% else %}play{% endif %}"></i>
+                                    </button>
+                                </form>
+                                {% if current_user.is_admin %}
+                                <button type="button" class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#deleteModal{{ client.id }}" onclick="loadDeletePreview({{ client.id }})">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+
+                        <!-- Delete Modal -->
+                        <div class="modal fade" id="deleteModal{{ client.id }}" tabindex="-1" aria-labelledby="deleteModalLabel{{ client.id }}" aria-hidden="true">
+                            <div class="modal-dialog modal-lg">
+                                <div class="modal-content">
+                                    <div class="modal-header" style="background-color: #dc3545; color: white;">
+                                        <h5 class="modal-title" id="deleteModalLabel{{ client.id }}" style="color: white;">
+                                            <i class="fas fa-exclamation-triangle"></i> Confirm Delete Client
+                                        </h5>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="alert alert-danger">
+                                            <strong>Warning:</strong> This action cannot be undone!
+                                        </div>
+                                        <p>Are you sure you want to delete client <strong>"{{ client.name }}"</strong>?</p>
+                                        
+                                        <div id="deletePreview{{ client.id }}" style="display: none;">
+                                            <hr>
+                                            <h6><strong>This will permanently delete the following data:</strong></h6>
+                                            <div id="deleteSummary{{ client.id }}">
+                                                <div class="text-center">
+                                                    <div class="spinner-border spinner-border-sm" role="status">
+                                                        <span class="visually-hidden">Loading...</span>
+                                                    </div>
+                                                    <span class="ms-2">Loading deletion summary...</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form action="{{ url_for('clients.delete_client', client_id=client.id) }}" method="POST" style="display: inline;">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-danger">
+                                                <i class="fas fa-trash"></i> Delete Client
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<a href="{{ url_for('main.models') }}" class="btn" style="background-color: #6c757d; border-color: #6c757d; color: white;">Back to Models</a>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        // Note: Using regular table instead of DataTables for v2 route
+        // DataTables initialization removed to avoid library dependency issues
+
+        // API Integration Functions
+        // Detect if we're using v2 route and use appropriate API endpoint
+        const isV2Route = window.location.pathname.includes('/clients-v2');
+        const API_BASE = isV2Route ? '/clients-v2/api' : '/api/v1/clients';
+        
+        // Show/hide loading indicator
+        function showLoading() {
+            $('#loadingIndicator').removeClass('d-none');
+        }
+        
+        function hideLoading() {
+            $('#loadingIndicator').addClass('d-none');
+        }
+        
+        // Show notification
+        function showNotification(message, type = 'info') {
+            const alertClass = type === 'error' ? 'alert-danger' : 
+                              type === 'success' ? 'alert-success' : 'alert-info';
+            
+            const notification = $(`
+                <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            `);
+            
+            $('.container-fluid').prepend(notification);
+            
+            // Auto-dismiss after 5 seconds
+            setTimeout(() => {
+                notification.alert('close');
+            }, 5000);
+        }
+        
+        // Load clients from API
+        function loadClientsFromAPI(params = {}) {
+            showLoading();
+            
+            // Build query string
+            const queryParams = new URLSearchParams();
+            if (params.search) queryParams.append('search', params.search);
+            if (params.status) queryParams.append('status', params.status);
+            if (params.risk_profile) queryParams.append('risk_profile', params.risk_profile);
+            if (params.activity) queryParams.append('activity', params.activity);
+            if (params.page) queryParams.append('page', params.page);
+            if (params.per_page) queryParams.append('per_page', params.per_page);
+            
+            const url = `${API_BASE}/?${queryParams.toString()}`;
+            
+            $.ajax({
+                url: url,
+                method: 'GET',
+                success: function(response) {
+                    if (response.success) {
+                        updateTableWithAPIData(response.data);
+                    } else {
+                        showNotification('Failed to load clients: ' + response.message, 'error');
+                    }
+                },
+                error: function(xhr) {
+                    let errorMessage = 'Failed to load clients';
+                    try {
+                        const errorResponse = JSON.parse(xhr.responseText);
+                        errorMessage = errorResponse.message || errorMessage;
+                    } catch (e) {
+                        if (xhr.status === 401) {
+                            errorMessage = 'Authentication required. Please refresh the page and login again.';
+                        } else if (xhr.status === 403) {
+                            errorMessage = 'Access denied. You do not have permission to view clients.';
+                        } else if (xhr.status === 429) {
+                            errorMessage = 'Rate limit exceeded. Please wait a moment and try again.';
+                        }
+                    }
+                    showNotification(errorMessage, 'error');
+                },
+                complete: function() {
+                    hideLoading();
+                }
+            });
+        }
+        
+        // Update table with API data
+        function updateTableWithAPIData(clients) {
+            // Update table body with new data
+            const tbody = $('#clientsTable tbody');
+            tbody.empty();
+            
+            clients.forEach(function(client) {
+                const healthStatus = client.health_status || client.status;
+                const statusBadge = getStatusBadge(healthStatus, client.active_alerts);
+                const engagementBadge = client.is_active
+                    ? '<span class="badge bg-success">Active</span>'
+                    : '<span class="badge bg-secondary">Inactive</span>';
+                const actions = getActionButtons(client.id, client.is_active);
+                const rowClass = client.is_active ? '' : 'table-secondary';
+                
+                const row = `
+                    <tr class="${rowClass}">
+                        <td>${client.name}</td>
+                        <td>${client.email}</td>
+                        <td>${client.phone || '-'}</td>
+                        <td>${engagementBadge}</td>
+                        <td>${statusBadge}</td>
+                        <td>${client.health_score || '-'}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        }
+        
+        // Generate status badge HTML
+        function getStatusBadge(status, activeAlerts) {
+            const statusClass = {
+                'excellent': 'bg-success',
+                'good': 'bg-info', 
+                'warning': 'bg-warning',
+                'critical': 'bg-danger'
+            }[status] || 'bg-secondary';
+            
+            return `<span class="badge ${statusClass}" title="${activeAlerts || 0} active alerts">${status || 'unknown'}</span>`;
+        }
+        
+        // Generate action buttons HTML
+        function getActionButtons(clientId, isActive) {
+            const baseUrl = isV2Route ? '/clients-v2' : '/client';
+            const editUrl = isV2Route ? `/clients-v2/${clientId}/edit` : `/clients/${clientId}/edit`;
+            const toggleIcon = isActive ? 'pause' : 'play';
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            return `
+                <a href="${baseUrl}/${clientId}" class="btn btn-sm" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                    <i class="fas fa-eye"></i>
+                </a>
+                <a href="${editUrl}" class="btn btn-sm" style="background-color: #a8e6a8; border-color: #a8e6a8; color: white;">
+                    <i class="fas fa-edit"></i>
+                </a>
+                <form method="POST" action="/clients/${clientId}/toggle-active" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="${csrfToken}">
+                    <button type="submit" class="btn btn-sm btn-outline-secondary" title="${isActive ? 'Mark inactive' : 'Mark active'}">
+                        <i class="fas fa-${toggleIcon}"></i>
+                    </button>
+                </form>
+                <button type="button" class="btn btn-danger btn-sm" onclick="deleteClient(${clientId})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+        }
+        
+        function getActivityFilterParam() {
+            return $('#activityFilter').val() || 'active';
+        }
+        
+        function navigateWithActivityFilter(activity) {
+            const baseUrl = $('#activityFilter').data('base-url') || '{{ clients_list_url }}';
+            window.location.href = baseUrl + '?activity=' + encodeURIComponent(activity);
+        }
+        
+        $('#activityFilter').change(function() {
+            navigateWithActivityFilter($(this).val());
+        });
+        
+        $('#imMobileActivityFilter').change(function() {
+            navigateWithActivityFilter($(this).val());
+        });
+        
+        // Load deletion preview
+        function loadDeletePreview(clientId) {
+            const previewDiv = document.getElementById('deletePreview' + clientId);
+            const summaryDiv = document.getElementById('deleteSummary' + clientId);
+            
+            if (!previewDiv || !summaryDiv) return;
+            
+            // Show preview section
+            previewDiv.style.display = 'block';
+            
+            // Load summary
+            fetch(`/client/${clientId}/delete-preview`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        summaryDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                        return;
+                    }
+                    
+                    if (!data.detailed || Object.keys(data.detailed).length === 0) {
+                        summaryDiv.innerHTML = '<div class="alert alert-info">No related records found. Safe to delete.</div>';
+                        return;
+                    }
+                    
+                    // Group by criticality
+                    const critical = [];
+                    const nonCritical = [];
+                    
+                    for (const [tableName, info] of Object.entries(data.detailed)) {
+                        const item = {
+                            name: tableName,
+                            count: info.count,
+                            description: info.description || '',
+                            indirect: info.indirect || false
+                        };
+                        if (info.critical) {
+                            critical.push(item);
+                        } else {
+                            nonCritical.push(item);
+                        }
+                    }
+                    
+                    let html = '';
+                    
+                    // Summary stats
+                    html += `<div class="mb-3">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card border-danger">
+                                    <div class="card-body text-center">
+                                        <h5 class="text-danger">${data.total_records || 0}</h5>
+                                        <small>Total Records</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-warning">
+                                    <div class="card-body text-center">
+                                        <h5 class="text-warning">${data.critical_records || 0}</h5>
+                                        <small>Critical Records</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-info">
+                                    <div class="card-body text-center">
+                                        <h5 class="text-info">${data.total_tables || 0}</h5>
+                                        <small>Tables Affected</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                    
+                    // Critical data section
+                    if (critical.length > 0) {
+                        html += `<div class="alert alert-danger">
+                            <strong><i class="fas fa-exclamation-triangle"></i> CRITICAL DATA</strong> - Financial and transaction records
+                        </div>`;
+                        html += '<ul class="list-group list-group-flush mb-3">';
+                        critical.forEach(item => {
+                            const indirect = item.indirect ? ' <span class="badge bg-secondary">indirect</span>' : '';
+                            html += `<li class="list-group-item d-flex justify-content-between align-items-start">
+                                <div class="ms-2 me-auto">
+                                    <div class="fw-bold"><i class="fas fa-database text-danger"></i> ${item.name}${indirect}</div>
+                                    <small class="text-muted">${item.description}</small>
+                                </div>
+                                <span class="badge bg-danger rounded-pill">${item.count}</span>
+                            </li>`;
+                        });
+                        html += '</ul>';
+                    }
+                    
+                    // Non-critical data section
+                    if (nonCritical.length > 0) {
+                        html += `<div class="alert alert-info">
+                            <strong><i class="fas fa-info-circle"></i> SUPPORT DATA</strong> - Configuration and support records
+                        </div>`;
+                        html += '<ul class="list-group list-group-flush">';
+                        nonCritical.forEach(item => {
+                            const indirect = item.indirect ? ' <span class="badge bg-secondary">indirect</span>' : '';
+                            html += `<li class="list-group-item d-flex justify-content-between align-items-start">
+                                <div class="ms-2 me-auto">
+                                    <div class="fw-bold"><i class="fas fa-database text-info"></i> ${item.name}${indirect}</div>
+                                    <small class="text-muted">${item.description}</small>
+                                </div>
+                                <span class="badge bg-info rounded-pill">${item.count}</span>
+                            </li>`;
+                        });
+                        html += '</ul>';
+                    }
+                    
+                    summaryDiv.innerHTML = html;
+                })
+                .catch(error => {
+                    console.error('Error loading delete preview:', error);
+                    summaryDiv.innerHTML = '<div class="alert alert-danger">Error loading deletion summary. Please try again.</div>';
+                });
+        }
+        
+        // Delete client via API
+        function deleteClient(clientId) {
+            if (!confirm('Are you sure you want to delete this client?')) {
+                return;
+            }
+            
+            showLoading();
+            
+            $.ajax({
+                url: `${API_BASE}/${clientId}`,
+                method: 'DELETE',
+                success: function(response) {
+                    if (response.success) {
+                        showNotification('Client deleted successfully', 'success');
+                        loadClientsFromAPI(); // Reload the list
+                    } else {
+                        showNotification('Failed to delete client: ' + response.message, 'error');
+                    }
+                },
+                error: function(xhr) {
+                    let errorMessage = 'Failed to delete client';
+                    try {
+                        const errorResponse = JSON.parse(xhr.responseText);
+                        errorMessage = errorResponse.message || errorMessage;
+                    } catch (e) {
+                        if (xhr.status === 401) {
+                            errorMessage = 'Authentication required';
+                        } else if (xhr.status === 403) {
+                            errorMessage = 'Access denied';
+                        }
+                    }
+                    showNotification(errorMessage, 'error');
+                },
+                complete: function() {
+                    hideLoading();
+                }
+            });
+        }
+        
+        // Event handlers
+        $('#searchBtn').click(function() {
+            const searchTerm = $('#searchInput').val();
+            loadClientsFromAPI({ search: searchTerm, activity: getActivityFilterParam() });
+        });
+        
+        $('#searchInput').keypress(function(e) {
+            if (e.which === 13) { // Enter key
+                $('#searchBtn').click();
+            }
+        });
+        
+        $('#statusFilter').change(function() {
+            const status = $(this).val();
+            const riskProfile = $('#riskProfileFilter').val();
+            const search = $('#searchInput').val();
+            
+            loadClientsFromAPI({
+                search: search,
+                status: status,
+                risk_profile: riskProfile,
+                activity: getActivityFilterParam()
+            });
+        });
+        
+        $('#riskProfileFilter').change(function() {
+            const riskProfile = $(this).val();
+            const status = $('#statusFilter').val();
+            const search = $('#searchInput').val();
+            
+            loadClientsFromAPI({
+                search: search,
+                status: status,
+                risk_profile: riskProfile,
+                activity: getActivityFilterParam()
+            });
+        });
+        
+        $('#refreshBtn').click(function() {
+            const search = $('#searchInput').val();
+            const status = $('#statusFilter').val();
+            const riskProfile = $('#riskProfileFilter').val();
+            
+            loadClientsFromAPI({
+                search: search,
+                status: status,
+                risk_profile: riskProfile,
+                activity: getActivityFilterParam()
+            });
+        });
+        
+        // Make deleteClient globally available
+        window.deleteClient = deleteClient;
+        
+        // Health/status refresh only on demand (Refresh button / filters) — avoids slow repeat API calls
+
+        // API integration ready (notification removed for cleaner UI)
+    });
+</script>
+{% endblock %} 

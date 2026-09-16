@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>{% block title %}{% block page_title %}{% endblock %} - INERTIA Equities For Wealth{% endblock %}</title>
+
+    <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+    <link rel="icon" href="{{ url_for('static', filename='favicon-32.png') }}" type="image/png" sizes="32x32">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', filename='css/style.css') }}?v={{ range(1000, 9999) | random }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/mobile-layout.css') }}?v={{ range(1000, 9999) | random }}" rel="stylesheet">
+    
+    <style>
+        /* Clean Navigation Styles */
+        .navbar {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .navbar-nav .nav-link {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        .navbar-nav .dropdown-menu {
+            border: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        .navbar-nav .dropdown-item {
+            padding: 0.5rem 1rem;
+            font-size: 0.9rem;
+        }
+        .navbar-nav .dropdown-item:hover {
+            background-color: #f8f9fa;
+        }
+        /* Responsive adjustments */
+        @media (max-width: 1200px) {
+            .navbar-nav .nav-link {
+                padding: 0.4rem 0.6rem;
+                font-size: 0.85rem;
+            }
+        }
+        @media (max-width: 768px) {
+            .navbar-nav .nav-link {
+                padding: 0.3rem 0.5rem;
+                font-size: 0.8rem;
+            }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="modern-app">
+    {% block navbar %}
+    {% if current_user.is_authenticated %}
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <div class="navbar-header">
+                <a class="navbar-brand d-flex align-items-center" href="{{ url_for('main.dashboard') }}">
+                    <img src="{{ url_for('static', filename='images/inertia-logo.png') }}" 
+                         alt="INERTIA Equities For Wealth" 
+                         height="45" 
+                         class="me-2">
+                </a>
+            </div>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <!-- Dashboard -->
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'main.dashboard' %}active{% endif %}" href="{{ url_for('main.dashboard') }}">
+                            <i class="fas fa-home"></i> Dashboard
+                        </a>
+                    </li>
+                    
+                    <!-- Clients -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if 'clients' in request.endpoint or 'leads' in request.endpoint or (request.endpoint and request.endpoint.startswith('invoices.')) %}active{% endif %}" href="#" id="clientsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-users"></i> Clients
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item {% if request.endpoint == 'main.clients' %}active{% endif %}" href="{{ url_for('main.clients') }}">
+                                <i class="fas fa-users"></i> All Clients
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'main.add_client' %}active{% endif %}" href="{{ url_for('main.add_client') }}">
+                                <i class="fas fa-user-plus"></i> Add Client
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'leads.list_leads' %}active{% endif %}" href="{{ url_for('leads.list_leads') }}">
+                                <i class="fas fa-list"></i> All Leads
+                            </a></li>
+                            {% if config.get('NAV_INVOICES_ENABLED') %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('invoices.') %}active{% endif %}" href="{{ url_for('invoices.list_invoices') }}">
+                                <i class="fas fa-file-invoice-dollar"></i> Invoices
+                            </a></li>
+                            {% endif %}
+                        </ul>
+                    </li>
+                    
+                    <!-- Investments -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if 'portfolio' in request.endpoint or 'investments' in request.endpoint %}active{% endif %}" href="#" id="investmentsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-chart-pie"></i> Investments
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item {% if request.endpoint in ('main.list_monthly_investments', 'monthly_investments.list_monthly_investments', 'monthly_investments.new_monthly_investment', 'monthly_investments.view_monthly_investment', 'monthly_investments.monthly_investments_root') %}active{% endif %}" href="{{ url_for('main.list_monthly_investments') }}">
+                                <i class="fas fa-calendar-alt"></i> Monthly investments
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'review.portfolio_construction' %}active{% endif %}" href="{{ url_for('review.portfolio_construction') }}">
+                                <i class="fas fa-calculator"></i> Portfolio Construction
+                            </a></li>
+                        </ul>
+                    </li>
+                    
+                    <!-- Transactions -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if 'transactions' in request.endpoint or 'cashflows' in request.endpoint %}active{% endif %}" href="#" id="transactionsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-exchange-alt"></i> Transactions
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item {% if request.endpoint == 'main.transactions' %}active{% endif %}" href="{{ url_for('main.transactions') }}">
+                                <i class="fas fa-list"></i> All Transactions
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'main.list_cashflows' %}active{% endif %}" href="{{ url_for('main.list_cashflows') }}">
+                                <i class="fas fa-money-bill-wave"></i> Cashflows
+                            </a></li>
+                        </ul>
+                    </li>
+                    
+                    <!-- Dashboards -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint and (request.endpoint == 'main.list_monthly_investments' or request.endpoint in ('clients.list_review_schedules', 'main.list_review_schedules') or (request.endpoint.startswith('workflows.') and request.endpoint != 'workflows.workflow_dashboard')) %}active{% endif %}" href="#" id="dashboardsDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-th-large"></i> Dashboards
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item {% if request.endpoint == 'main.list_monthly_investments' %}active{% endif %}" href="{{ url_for('main.list_monthly_investments') }}">
+                                <i class="fas fa-calendar-week"></i> Monthly investments
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'workflows.list_workflows' %}active{% endif %}" href="{{ url_for('workflows.list_workflows') }}">
+                                <i class="fas fa-list"></i> All workflows
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint in ('clients.list_review_schedules', 'main.list_review_schedules') %}active{% endif %}" href="{{ url_for('clients.list_review_schedules') }}">
+                                <i class="fas fa-calendar-check"></i> Reviews
+                            </a></li>
+                        </ul>
+                    </li>
+                    
+                    <!-- Attendance -->
+                    {% if not current_user.is_admin %}
+                    <li class="nav-item {% if user_can_access_incentive_simulator() %}dropdown{% endif %}">
+                        {% if user_can_access_incentive_simulator() %}
+                        <a class="nav-link dropdown-toggle {% if 'attendance' in request.endpoint %}active{% endif %}" href="#" id="attendanceNavDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-calendar-check"></i> Attendance
+                        </a>
+                        <ul class="dropdown-menu" aria-labelledby="attendanceNavDropdown">
+                            <li><a class="dropdown-item" href="/attendance"><i class="fas fa-calendar-check"></i> My Attendance</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('attendance.incentive_simulator') }}"><i class="fas fa-flask"></i> Incentive simulator</a></li>
+                        </ul>
+                        {% else %}
+                        <a class="nav-link {% if 'attendance' in request.endpoint %}active{% endif %}" href="/attendance">
+                            <i class="fas fa-calendar-check"></i> Attendance
+                        </a>
+                        {% endif %}
+                    </li>
+                    {% else %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if 'attendance' in request.endpoint %}active{% endif %}" href="#" id="attendanceDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-calendar-check"></i> Attendance
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item {% if request.endpoint == 'attendance.attendance_dashboard' %}active{% endif %}" href="/attendance">
+                                <i class="fas fa-calendar-check"></i> My Attendance
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'attendance.mark_attendance' %}active{% endif %}" href="/attendance/mark">
+                                <i class="fas fa-plus"></i> Mark Attendance
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'attendance.user_claims' %}active{% endif %}" href="/attendance/claims">
+                                <i class="fas fa-receipt"></i> My Claims
+                            </a></li>
+                            {% if user_can_access_incentive_simulator() %}
+                            <li><a class="dropdown-item" href="{{ url_for('attendance.incentive_simulator') }}"><i class="fas fa-flask"></i> Incentive simulator</a></li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'attendance.admin_attendance_management' %}active{% endif %}" href="/attendance/admin">
+                                <i class="fas fa-users-cog"></i> Manage Attendance
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'attendance.admin_claims_management' %}active{% endif %}" href="/attendance/admin/claims">
+                                <i class="fas fa-file-invoice-dollar"></i> Manage Claims
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'attendance.admin_salary_calculation' %}active{% endif %}" href="/attendance/admin/salary-calculation">
+                                <i class="fas fa-calculator"></i> Salary Calculation
+                            </a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+                    
+                    <!-- Admin -->
+                    {% if current_user.is_admin %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle {% if 'admin' in request.endpoint or (request.endpoint and (request.endpoint.startswith('main.database_browser') or request.endpoint.startswith('main.sql_query'))) %}active{% endif %}" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-cog"></i> Admin
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item {% if request.endpoint == 'main.admin_dashboard' %}active{% endif %}" href="{{ url_for('main.admin_dashboard') }}">
+                                <i class="fas fa-tachometer-alt"></i> Admin Dashboard
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'main.user_management' %}active{% endif %}" href="{{ url_for('main.user_management') }}">
+                                <i class="fas fa-users-cog"></i> User Management
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'main.system_settings' %}active{% endif %}" href="{{ url_for('main.system_settings') }}">
+                                <i class="fas fa-cogs"></i> System Settings
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li class="dropdown-header text-muted small">Database</li>
+                            <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('main.database_browser') %}active{% endif %}" href="{{ url_for('main.database_browser') }}">
+                                <i class="fas fa-database"></i> Database browser
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('main.sql_query') %}active{% endif %}" href="{{ url_for('main.sql_query') }}">
+                                <i class="fas fa-terminal"></i> SQL query
+                            </a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+                </ul>
+                
+                <!-- User Menu -->
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-user"></i> {{ current_user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{{ url_for('auth.profile') }}">
+                                <i class="fas fa-user-circle"></i> Profile
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('two_factor.setup_2fa') }}">
+                                <i class="fas fa-shield-alt"></i> 2FA Security
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+    {% endblock %}
+
+    <main class="container-fluid mt-4">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{{ url_for('static', filename='js/mobile-config.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/mobile-layout.js') }}"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
+
+
+
+
+
+

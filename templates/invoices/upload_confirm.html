@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Confirm invoice import{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h1 class="h3 mb-0"><i class="fas fa-user-check"></i> Confirm client matches</h1>
+        <div class="d-flex gap-2">
+            <form method="post" action="{{ url_for('invoices.cancel_invoice_upload') }}" class="d-inline" onsubmit="return confirm('Discard this import preview?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-secondary">Cancel</button>
+            </form>
+            <a href="{{ url_for('invoices.list_invoices') }}" class="btn btn-outline-secondary">Invoices</a>
+        </div>
+    </div>
+
+    <p class="text-muted">
+        File: <strong>{{ filename }}</strong>. For each row, compare <strong>customer name from the file</strong> with the <strong>client in the database</strong> you select.
+        Adjust the dropdown if the suggestion is wrong. Uncheck a row to skip importing it.
+    </p>
+
+    {% if other_rows %}
+    <div class="alert alert-secondary small">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-1">
+            <strong>Not importable (duplicates in DB/file or invalid data):</strong>
+            {% if skipped_export_count %}
+            <a class="btn btn-sm btn-outline-secondary flex-shrink-0" href="{{ url_for('invoices.export_invoice_import_skipped', preview_id=preview_id) }}">
+                <i class="fas fa-download"></i> Download {{ skipped_export_count }} row(s) as CSV
+            </a>
+            {% endif %}
+        </div>
+        <ul class="mb-0 mt-1">
+            {% for r in other_rows %}
+            <li>Row {{ r.source_row_num }} — {{ r.invoice_number or '—' }} — {{ r.message or r.status }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if not ready_rows %}
+    <div class="alert alert-warning">No rows to import. <a href="{{ url_for('invoices.upload_invoices') }}">Upload another file</a>.</div>
+    {% else %}
+    <form method="post" action="{{ url_for('invoices.confirm_invoice_upload') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="preview_id" value="{{ preview_id }}">
+
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:2.5rem;">Import</th>
+                        <th>Row</th>
+                        <th>Invoice #</th>
+                        <th>Name in file</th>
+                        <th>Email in file</th>
+                        <th>Suggested match (DB)</th>
+                        <th style="min-width:220px;">Database client</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in ready_rows %}
+                    <tr>
+                        <td class="text-center">
+                            <input class="form-check-input" type="checkbox" name="include_{{ r.preview_index }}" id="inc_{{ r.preview_index }}" checked>
+                        </td>
+                        <td>{{ r.source_row_num }}</td>
+                        <td><code>{{ r.invoice_number }}</code></td>
+                        <td class="fw-semibold">{{ r.file_customer_name }}</td>
+                        <td class="small text-muted">{{ r.file_email }}</td>
+                        <td>
+                            {% if r.suggested_client_name %}
+                            <span class="text-success">{{ r.suggested_client_name }}</span>
+                            <span class="badge bg-light text-dark border ms-1">{{ r.match_reason }}</span>
+                            {% else %}
+                            <span class="text-warning">No auto-match — choose client</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm" name="client_id_{{ r.preview_index }}" aria-label="Client for {{ r.invoice_number }}">
+                                <option value="">— Select client —</option>
+                                {% for c in clients %}
+                                <option value="{{ c.id }}" {% if r.suggested_client_id and r.suggested_client_id == c.id %}selected{% endif %}>{{ c.name }}{% if c.email %} — {{ c.email }}{% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-check"></i> Confirm import
+            </button>
+            <span class="text-muted small align-self-center">Creates invoices only for checked rows with a selected client.</span>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Agreements Overview{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h1 class="mb-1"><i class="fas fa-file-contract"></i> Agreements overview</h1>
+      <div class="text-muted small">
+        Clients scanned: <strong>{{ summary.clients_scanned }}</strong> ·
+        Missing / incomplete: <strong>{{ summary.missing_or_incomplete }}</strong>
+      </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-primary" href="{{ url_for('main.maintenance_billing') }}">
+        <i class="fas fa-file-invoice-dollar"></i> Billing hub
+      </a>
+      <a class="btn btn-secondary" href="{{ url_for('main.dashboard') }}">
+        <i class="fas fa-arrow-left"></i> Dashboard
+      </a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header">
+      <strong>Filters</strong>
+    </div>
+    <div class="card-body">
+      <form method="GET" class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label" for="q">Search client</label>
+          <input class="form-control" id="q" name="q" value="{{ q }}" placeholder="Type client name…" />
+        </div>
+        <div class="col-md-4">
+          <div class="form-check mt-4">
+            <input class="form-check-input" type="checkbox" id="missing_only" name="missing_only" {% if missing_only %}checked{% endif %} />
+            <label class="form-check-label" for="missing_only">
+              Show missing/incomplete only
+            </label>
+          </div>
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-filter"></i> Apply
+          </button>
+          <a class="btn btn-outline-secondary" href="{{ url_for('agreements.agreements_overview') }}">
+            <i class="fas fa-times"></i> Clear
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header">
+      <strong>Agreement readiness</strong>
+    </div>
+    <div class="card-body">
+      {% if rows %}
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Client</th>
+              <th>Agreement</th>
+              <th>Status</th>
+              <th>Signed</th>
+              <th>Billing frequency</th>
+              <th>Schedule</th>
+              <th>Rates</th>
+              <th>Issues</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            {% set has_hard = (r.flags|selectattr('severity', 'equalto', 'hard')|list|length) > 0 %}
+            <tr class="{% if has_hard %}table-danger{% endif %}">
+              <td>
+                <a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_name }}</a>
+              </td>
+              <td>
+                {% if r.agreement_id %}
+                  <a href="{{ url_for('agreements.view_agreement', agreement_id=r.agreement_id) }}">#{{ r.agreement_id }}</a>
+                {% else %}
+                  <span class="text-muted">None</span>
+                {% endif %}
+              </td>
+              <td>{{ r.agreement_status or '-' }}</td>
+              <td>
+                {% if r.signed_date %}
+                  {{ r.signed_date.strftime('%Y-%m-%d') }}
+                {% else %}
+                  <span class="text-muted">-</span>
+                {% endif %}
+              </td>
+              <td>{{ r.billing_frequency or 'yearly (default)' }}</td>
+              <td>
+                {% if r.has_active_billing_schedule %}
+                  <span class="badge bg-success">OK</span>
+                {% else %}
+                  <span class="badge bg-danger">Missing</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if r.has_active_billing_rates %}
+                  <span class="badge bg-success">OK</span>
+                {% else %}
+                  <span class="badge bg-danger">Missing</span>
+                {% endif %}
+              </td>
+              <td style="min-width: 260px;">
+                {% if r.flags %}
+                  <ul class="mb-0 small">
+                    {% for f in r.flags %}
+                      <li><strong>{{ f.severity|upper }}</strong>: {{ f.message }}</li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <span class="text-muted">No issues</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="btn-group" role="group">
+                  {% if r.agreement_id %}
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('agreements.update_agreement_details', agreement_id=r.agreement_id) }}" title="Update terms">
+                      <i class="fas fa-edit"></i>
+                    </a>
+                  {% endif %}
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.client_details', client_id=r.client_id) }}" title="Client">
+                    <i class="fas fa-user"></i>
+                  </a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center text-muted py-4">
+        No results.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Add Recommended Trade{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Add Recommended Trade</h2>
+                <a href="{{ url_for('recommended_trades.client_recommended_trades', client_id=request.args.get('client_id', 0)) }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Trades
+                </a>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Trade Details</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="client_id">Client *</label>
+                                    <select class="form-control" id="client_id" name="client_id" required>
+                                        <option value="">Select Client</option>
+                                        {% for client in clients %}
+                                        <option value="{{ client.id }}" {% if request.args.get('client_id')|int == client.id %}selected{% endif %}>
+                                            {{ client.name }} ({{ client.email|display_email }})
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="security_id">Security *</label>
+                                    <select class="form-control" id="security_id" name="security_id" required>
+                                        <option value="">Select Security</option>
+                                        {% for security in securities %}
+                                        <option value="{{ security.id }}" data-price="{{ security.current_price or 0 }}">
+                                            {{ security.symbol }} - {{ security.name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="action">Action *</label>
+                                    <select class="form-control" id="action" name="action" required>
+                                        <option value="">Select Action</option>
+                                        <option value="buy">Buy</option>
+                                        <option value="sell">Sell</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="quantity">Quantity *</label>
+                                    <input type="number" class="form-control" id="quantity" name="quantity" step="1" min="0" required>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="form-group">
+                                    <label for="target_price">Target Price *</label>
+                                    <div class="input-group">
+                                        <div class="input-group-prepend">
+                                            <span class="input-group-text">₹</span>
+                                        </div>
+                                        <input type="number" class="form-control" id="target_price" name="target_price" step="0.01" min="0" required>
+                                        <div class="input-group-append">
+                                            <button type="button" class="btn btn-outline-secondary" id="useCurrentPrice">
+                                                Current
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="notes">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="Enter any additional notes about this trade recommendation..."></textarea>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Trade Summary</h6>
+                                        <div id="tradeSummary">
+                                            <p class="text-muted">Fill in the details above to see the trade summary.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Current Market Info</h6>
+                                        <div id="marketInfo">
+                                            <p class="text-muted">Select a security to see current market information.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group mt-4">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Recommended Trade
+                            </button>
+                            <a href="{{ url_for('recommended_trades.client_recommended_trades', client_id=request.args.get('client_id', 0)) }}" class="btn btn-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // Update trade summary when form fields change
+    function updateTradeSummary() {
+        const quantity = parseFloat($('#quantity').val()) || 0;
+        const price = parseFloat($('#target_price').val()) || 0;
+        const action = $('#action').val();
+        const security = $('#security_id option:selected').text();
+        
+        if (quantity > 0 && price > 0 && action && security) {
+            const total = quantity * price;
+            $('#tradeSummary').html(`
+                <p><strong>Action:</strong> <span class="badge badge-${action === 'buy' ? 'success' : 'danger'}">${action.toUpperCase()}</span></p>
+                <p><strong>Security:</strong> ${security}</p>
+                <p><strong>Quantity:</strong> ${quantity.toLocaleString()}</p>
+                <p><strong>Price:</strong> ₹${price.toLocaleString()}</p>
+                <p><strong>Total Amount:</strong> ₹${total.toLocaleString()}</p>
+            `);
+        } else {
+            $('#tradeSummary').html('<p class="text-muted">Fill in the details above to see the trade summary.</p>');
+        }
+    }
+
+    // Update market info when security changes
+    function updateMarketInfo() {
+        const securityId = $('#security_id').val();
+        const selectedOption = $('#security_id option:selected');
+        const currentPrice = selectedOption.data('price');
+        
+        if (securityId && currentPrice > 0) {
+            $('#marketInfo').html(`
+                <p><strong>Current Price:</strong> ₹${parseFloat(currentPrice).toLocaleString()}</p>
+                <p><strong>Last Updated:</strong> <small class="text-muted">Live data</small></p>
+            `);
+        } else if (securityId) {
+            $('#marketInfo').html(`
+                <p><strong>Current Price:</strong> <span class="text-muted">Not available</span></p>
+            `);
+        } else {
+            $('#marketInfo').html('<p class="text-muted">Select a security to see current market information.</p>');
+        }
+    }
+
+    // Use current price button
+    $('#useCurrentPrice').click(function() {
+        const selectedOption = $('#security_id option:selected');
+        const currentPrice = selectedOption.data('price');
+        if (currentPrice > 0) {
+            $('#target_price').val(currentPrice);
+            updateTradeSummary();
+        }
+    });
+
+    // Event listeners
+    $('#client_id, #security_id, #action, #quantity, #target_price').on('change input', updateTradeSummary);
+    $('#security_id').on('change', updateMarketInfo);
+
+    // Initial update
+    updateTradeSummary();
+    updateMarketInfo();
+});
+</script>
+{% endblock %} 

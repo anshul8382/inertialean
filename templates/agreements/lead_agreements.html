@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}Lead Agreements - {{ lead.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="card-title">Agreements for {{ lead.name }}</h4>
+                        <p class="card-text mb-0">
+                            Email: {{ lead.email }} | Phone: {{ lead.phone }} | Status: {{ lead.status|title }}
+                        </p>
+                    </div>
+                    <div>
+                        <a href="{{ url_for('agreements.create_agreement', lead_id=lead.id) }}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Create New Agreement
+                        </a>
+                        <a href="{{ url_for('agreements.record_existing_agreement', lead_id=lead.id) }}" class="btn btn-success">
+                            <i class="fas fa-file-upload"></i> Record Existing Agreement
+                        </a>
+                        <a href="{{ url_for('leads.view_lead', lead_id=lead.id) }}" class="btn btn-secondary">
+                            <i class="fas fa-arrow-left"></i> Back to Lead
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if agreements %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Template</th>
+                                        <th>Advisory Model</th>
+                                        <th>Asset Types</th>
+                                        <th>Status</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for agreement in agreements %}
+                                    <tr>
+                                        <td>
+                                            {% if agreement.template %}
+                                                <strong>{{ agreement.template.name }}</strong>
+                                            {% else %}
+                                                <span class="badge bg-info">Existing Agreement</span>
+                                            {% endif %}
+                                            {% if agreement.notes %}
+                                                <br><small class="text-muted">{{ agreement.notes[:50] }}{% if agreement.notes|length > 50 %}...{% endif %}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% set agreement_config = agreement.agreement_data|from_json if agreement.agreement_data else {} %}
+                                            {% if agreement_config.get('advisory_model') == 'aua' %}
+                                                <span class="badge bg-info">AUA Mode</span>
+                                            {% elif agreement_config.get('advisory_model') == 'fixed_fee' %}
+                                                <span class="badge bg-warning">Fixed Fee</span>
+                                            {% else %}
+                                                <span class="text-muted">Not specified</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if agreement_config.get('asset_types') %}
+                                                {% set asset_classes = [] %}
+                                                {% for var in agreement.variables %}
+                                                    {% if var.variable_type == 'asset_type' %}
+                                                        {% set _ = asset_classes.append(var.variable_value) %}
+                                                    {% endif %}
+                                                {% endfor %}
+                                                {% if asset_classes %}
+                                                    <small>{{ asset_classes[:2]|join(', ') }}{% if asset_classes|length > 2 %} +{{ asset_classes|length - 2 }}{% endif %}</small>
+                                                {% else %}
+                                                    <span class="text-muted">None selected</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-muted">None selected</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if agreement.status == 'completed' else 'warning' if agreement.status == 'sent' else 'info' if agreement.status == 'generated' else 'secondary' }}">
+                                                {{ agreement.status|title }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {{ agreement.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                        </td>
+                                        <td>
+                                            <div class="btn-group" role="group">
+                                                <a href="{{ url_for('agreements.view_agreement', agreement_id=agreement.id) }}" 
+                                                   class="btn btn-sm btn-outline-primary" title="View">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                                {% if agreement.generated_pdf_path %}
+                                                    <a href="{{ url_for('agreements.download_agreement', agreement_id=agreement.id) }}" 
+                                                       class="btn btn-sm btn-outline-success" title="Download PDF">
+                                                        <i class="fas fa-download"></i>
+                                                    </a>
+                                                {% endif %}
+                                                <a href="{{ url_for('agreements.fill_agreement_variables', agreement_id=agreement.id) }}" 
+                                                   class="btn btn-sm btn-outline-secondary" title="Edit Variables">
+                                                    <i class="fas fa-edit"></i>
+                                                </a>
+                                                {% set delete_block = delete_block_reasons.get(agreement.id) %}
+                                                {% if not delete_block %}
+                                                    <form method="POST"
+                                                          action="{{ url_for('agreements.delete_agreement', agreement_id=agreement.id) }}"
+                                                          class="d-inline"
+                                                          onsubmit="return confirm('Delete this agreement permanently? This cannot be undone.');">
+                                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                {% else %}
+                                                    <button type="button"
+                                                            class="btn btn-sm btn-outline-danger disabled"
+                                                            title="{{ delete_block }}"
+                                                            disabled>
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                {% endif %}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-file-contract fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No agreements found for this lead</h5>
+                            <p class="text-muted">Create your first agreement to get started</p>
+                            <a href="{{ url_for('agreements.create_agreement', lead_id=lead.id) }}" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Create Agreement
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Available Templates Section -->
+    {% if templates %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Available Templates</h5>
+                    <p class="card-text mb-0">Click on a template to create a new agreement</p>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for template in templates %}
+                        <div class="col-md-4 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h6 class="card-title">{{ template.name }}</h6>
+                                    {% if template.description %}
+                                        <p class="card-text text-muted">{{ template.description[:100] }}{% if template.description|length > 100 %}...{% endif %}</p>
+                                    {% endif %}
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span class="badge bg-info">{{ template.template_type.upper() }}</span>
+                                        {% if template.variables %}
+                                            {% set vars = template.variables|from_json %}
+                                            <span class="badge bg-secondary">{{ vars|length }} variables</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="card-footer">
+                                    <a href="{{ url_for('agreements.create_agreement', lead_id=lead.id) }}?template_id={{ template.id }}" 
+                                       class="btn btn-primary btn-sm w-100 mb-2">
+                                        <i class="fas fa-plus"></i> Use Template
+                                    </a>
+                                    <a href="{{ url_for('agreements.view_template', template_id=template.id) }}#replace-word-file"
+                                       class="btn btn-outline-secondary btn-sm w-100">
+                                        <i class="fas fa-upload"></i> Replace Word file
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

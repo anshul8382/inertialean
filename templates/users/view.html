@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+
+{% block title %}{{ user.username }} - User Details{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">User Details</h1>
+        <div>
+            <a href="{{ url_for('users.list_users') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Users
+            </a>
+            <a href="{{ url_for('users.edit_user', user_id=user.id) }}" class="btn btn-primary">
+                <i class="fas fa-edit"></i> Edit User
+            </a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-user"></i> User Information
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-borderless">
+                                <tr>
+                                    <th width="30%">Username:</th>
+                                    <td>
+                                        <strong>{{ user.username }}</strong>
+                                        {% if user.id == current_user.id %}
+                                            <span class="badge bg-info ms-2">You</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Email:</th>
+                                    <td>{{ user.email }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Role:</th>
+                                    <td>
+                                        {% if user.is_admin %}
+                                            <span class="badge bg-danger">Admin</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">User</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Status:</th>
+                                    <td>
+                                        {% if user.is_active %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">Inactive</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-borderless">
+                                <tr>
+                                    <th width="30%">Email Verified:</th>
+                                    <td>
+                                        {% if user.email_verified %}
+                                            <span class="badge bg-success">Verified</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">Pending</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Created:</th>
+                                    <td>
+                                        {% if user.created_at %}
+                                            {{ user.created_at.strftime('%Y-%m-%d %H:%M') }}
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>Last Login:</th>
+                                    <td>
+                                        {% if user.last_login %}
+                                            {{ user.last_login.strftime('%Y-%m-%d %H:%M') }}
+                                        {% else %}
+                                            <span class="text-muted">Never</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th>User ID:</th>
+                                    <td><code>{{ user.id }}</code></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if user.id != current_user.id %}
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-cogs"></i> User Management
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="d-grid">
+                                <button type="button" 
+                                        class="btn btn-outline-warning mb-2" 
+                                        onclick="resetPassword({{ user.id }}, '{{ user.username }}')">
+                                    <i class="fas fa-key"></i> Send Password Reset Email
+                                </button>
+                                <small class="text-muted">Send a password reset link to the user's email address.</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-grid">
+                                <button type="button" 
+                                        class="btn btn-outline-{{ 'success' if not user.is_active else 'warning' }} mb-2" 
+                                        onclick="toggleStatus({{ user.id }}, '{{ user.username }}', {{ user.is_active|lower }})">
+                                    <i class="fas fa-{{ 'check' if not user.is_active else 'ban' }}"></i> 
+                                    {{ 'Activate' if not user.is_active else 'Deactivate' }} User
+                                </button>
+                                <small class="text-muted">
+                                    {% if user.is_active %}
+                                        Deactivate user to prevent login access.
+                                    {% else %}
+                                        Activate user to restore login access.
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-bar"></i> User Statistics
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="border-end">
+                                <h4 class="text-primary mb-1">
+                                    {% if user.created_at %}
+                                        {{ ((now - user.created_at).days) }}
+                                    {% else %}
+                                        0
+                                    {% endif %}
+                                </h4>
+                                <small class="text-muted">Days Active</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <h4 class="text-success mb-1">
+                                {% if user.last_login %}
+                                    {{ ((now - user.last_login).days) }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </h4>
+                            <small class="text-muted">Days Since Last Login</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-info-circle"></i> Quick Actions
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('users.edit_user', user_id=user.id) }}" class="btn btn-outline-primary">
+                            <i class="fas fa-edit"></i> Edit User Information
+                        </a>
+                        {% if user.id != current_user.id %}
+                            <button type="button" class="btn btn-outline-warning" onclick="resetPassword({{ user.id }}, '{{ user.username }}')">
+                                <i class="fas fa-key"></i> Reset Password
+                            </button>
+                            <button type="button" class="btn btn-outline-{{ 'success' if not user.is_active else 'warning' }}" onclick="toggleStatus({{ user.id }}, '{{ user.username }}', {{ user.is_active|lower }})">
+                                <i class="fas fa-{{ 'check' if not user.is_active else 'ban' }}"></i> 
+                                {{ 'Activate' if not user.is_active else 'Deactivate' }}
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-shield-alt"></i> Security Status
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span>Email Verification</span>
+                            {% if user.email_verified %}
+                                <span class="badge bg-success">Verified</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Pending</span>
+                            {% endif %}
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar bg-{{ 'success' if user.email_verified else 'warning' }}" style="width: {{ '100' if user.email_verified else '50' }}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span>Account Status</span>
+                            {% if user.is_active %}
+                                <span class="badge bg-success">Active</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">Inactive</span>
+                            {% endif %}
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar bg-{{ 'success' if user.is_active else 'warning' }}" style="width: {{ '100' if user.is_active else '0' }}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span>Login Activity</span>
+                            {% if user.last_login %}
+                                <span class="badge bg-info">Recent</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Never</span>
+                            {% endif %}
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div class="progress-bar bg-{{ 'info' if user.last_login else 'secondary' }}" style="width: {{ '100' if user.last_login else '0' }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Reset Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to send a password reset email to <strong id="resetUsername"></strong>?</p>
+                <p class="text-muted small">The user will receive an email with a link to reset their password.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="resetPasswordForm" method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-warning">Send Reset Email</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toggle Status Modal -->
+<div class="modal fade" id="toggleStatusModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Toggle User Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="toggleStatusMessage"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="toggleStatusForm" method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" class="btn btn-warning">Confirm</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<script>
+function resetPassword(userId, username) {
+    document.getElementById('resetUsername').textContent = username;
+    document.getElementById('resetPasswordForm').action = `/users/${userId}/reset-password`;
+    new bootstrap.Modal(document.getElementById('resetPasswordModal')).show();
+}
+
+function toggleStatus(userId, username, isActive) {
+    const action = isActive ? 'deactivate' : 'activate';
+    const message = `Are you sure you want to ${action} user <strong>${username}</strong>?`;
+    document.getElementById('toggleStatusMessage').innerHTML = message;
+    document.getElementById('toggleStatusForm').action = `/users/${userId}/toggle-status`;
+    new bootstrap.Modal(document.getElementById('toggleStatusModal')).show();
+}
+</script>
+{% endblock %} 

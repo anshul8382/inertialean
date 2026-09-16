@@ -1,0 +1,935 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link %}
+
+{% block title %}Historical Price Upload{% endblock %}
+
+{% block content %}
+{{ maint_hub_open('Price upload', 'CSV upload, benchmarks, AMFI NAV sync.', url_for('main.maintenance_reference_data')) }}
+  {{ maint_link('fa-eye', 'View historical prices', url_for('historical_prices.view_historical_prices')) }}
+  {{ maint_link('fa-sync', 'AMFI India MF NAV', url_for('historical_prices.upload_page') ~ '#amfi-india-mf-nav', 'Sync NAV and search schemes') }}
+{{ maint_hub_close('Upload sections below — scroll for CSV, benchmarks, and fund tools.') }}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-upload"></i> Historical Price Upload
+                    </h3>
+                    <div class="card-tools">
+                        <a href="{{ url_for('historical_prices.view_historical_prices') }}" class="btn btn-success btn-sm me-2">
+                            <i class="fas fa-eye"></i> View Prices
+                        </a>
+                        <button type="button" class="btn btn-info btn-sm" onclick="refreshStatus()">
+                            <i class="fas fa-sync-alt"></i> Refresh Status
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h5><i class="fas fa-info-circle"></i> Upload Instructions</h5>
+                        
+                        <div class="alert alert-warning mb-3" style="background-color: #fff3cd; border-color: #ffc107;">
+                            <h6><i class="fas fa-exclamation-triangle"></i> <strong>IMPORTANT: File Name Format</strong></h6>
+                            <p class="mb-2"><strong>Expected format:</strong></p>
+                            <code>Quote-Equity-SYMBOL-EQ-DD-MM-YYYY-to-DD-MM-YYYY.csv</code>
+                            <p class="mt-2 mb-2"><strong>Example:</strong></p>
+                            <code>Quote-Equity-DIXON-EQ-01-01-2025-to-19-10-2025.csv</code>
+                            <ul class="mt-2 mb-0">
+                                <li>System will verify stock symbol matches the upload target</li>
+                                <li>System will verify date range includes the requested year</li>
+                                <li>Date range can be longer than one year (must include requested dates)</li>
+                            </ul>
+                        </div>
+                        
+                        <p><strong>File Format Required:</strong></p>
+                        <ul>
+                            <li>CSV or Excel file</li>
+                            <li><strong>Required columns:</strong> 
+                                <ul>
+                                    <li><code>Date</code> (or any column with "date" in the name)</li>
+                                    <li><code>close</code> (or any column with "close" in the name)</li>
+                                </ul>
+                            </li>
+                            <li>Date format: YYYY-MM-DD, DD-MM-YYYY, or DD-Mon-YY</li>
+                            <li>Close price should be numeric (commas in numbers are handled)</li>
+                            <li><strong>Column names are case-insensitive</strong></li>
+                        </ul>
+                        <p><strong>Example CSV format:</strong></p>
+                        <pre><code>Date,series,OPEN,HIGH,LOW,PREV. CLOSE,ltp,close,vwap,52W H,52W L,VOLUME,VALUE,No of trades
+2023-01-01,EQ,1000.00,1020.00,995.00,1005.00,1010.00,1010.00,1007.50,1200.00,900.00,1000000,1010000000,5000
+2023-01-02,EQ,1010.00,1030.00,1005.00,1010.00,1025.00,1025.00,1017.50,1200.00,900.00,1200000,1220000000,6000</code></pre>
+                    </div>
+
+                    <!-- Benchmark Data Upload Section - Only show if data is missing -->
+                    {% set nifty_has_missing_data = false %}
+                    {% for year in range(2014, 2026) %}
+                        {% if not nifty_status.get(year, {}).has_data %}
+                            {% set nifty_has_missing_data = true %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if nifty_has_missing_data %}
+                    <div class="card mb-4 border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">
+                                <i class="fas fa-chart-line"></i> Benchmark Index Upload (Nifty 50)
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-info">
+                                <h6><i class="fas fa-info-circle"></i> Nifty 50 Data Upload</h6>
+                                <p>Upload year-wise Nifty 50 historical data. Each file should contain one year of data.</p>
+                                <p><strong>File Format:</strong></p>
+                                <ul>
+                                    <li>CSV or Excel file</li>
+                                    <li>Required columns: <code>Date</code>, <code>Close</code> (case-insensitive)</li>
+                                    <li>Date format: YYYY-MM-DD or DD-MM-YYYY</li>
+                                </ul>
+                                <p class="mb-0"><strong>Example:</strong> <code>NIFTY50_2024.csv</code> or <code>Nifty_2023.xlsx</code></p>
+                            </div>
+
+                <div class="row">
+                    {% set years = range(2014, 2026) %}
+                    {% for year in years %}
+                                <div class="col-md-3 col-sm-6 mb-3">
+                                    <div class="card">
+                                        <div class="card-body text-center">
+                                            <h6>Year {{ year }}</h6>
+                                            
+                                            {% if nifty_status[year] %}
+                                                {% if nifty_status[year].has_data %}
+                                                    <span class="badge badge-success mb-2">
+                                                        <i class="fas fa-check"></i> Uploaded
+                                                    </span>
+                                                    <p class="small text-muted mb-2">{{ nifty_status[year].record_count }} records</p>
+                                                {% else %}
+                                                    <span class="badge badge-warning mb-2">
+                                                        <i class="fas fa-clock"></i> Pending
+                                                    </span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="badge badge-warning mb-2">
+                                                    <i class="fas fa-clock"></i> Pending
+                                                </span>
+                                            {% endif %}
+                                            
+                                            <div class="upload-section mt-2">
+                                                {% if not nifty_status.get(year, {}).has_data %}
+                                                <input type="file" 
+                                                       id="nifty_file_{{ year }}" 
+                                                       class="form-control-file d-none" 
+                                                       accept=".csv,.xlsx,.xls">
+                                                <button class="btn btn-sm btn-primary" 
+                                                        onclick="document.getElementById('nifty_file_{{ year }}').click()">
+                                                    <i class="fas fa-upload"></i> Upload
+                                                </button>
+                                                {% else %}
+                                                <div class="text-center">
+                                                    <span class="badge badge-success">
+                                                        <i class="fas fa-check"></i> Data Available
+                                                    </span>
+                                                    <br>
+                                                    <small class="text-muted">Historical data already uploaded</small>
+                                                </div>
+                                                {% endif %}
+                                                <div id="nifty_upload_status_{{ year }}" class="mt-2"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Separator -->
+                    <hr class="my-4">
+
+                    <h4 class="mb-3"><i class="fas fa-chart-line"></i> All Securities Historical Prices</h4>
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle"></i> Securities Upload</h6>
+                        <p class="mb-0">Upload historical price data for all securities including stocks, debt instruments, ETFs, REITs, and other asset classes. Listed when <strong>yearly coverage</strong> fails, or there is <strong>a block of 7 or more consecutive calendar dates</strong> with no saved close between existing prices (holes yearly % often hides). Use <strong>Request company for upload</strong> below to re-upload when coverage looks fine but prices are wrong.</p>
+                    </div>
+
+                    <!-- Manual force-upload request (Option A: query + session) -->
+                    <div class="card card-outline card-secondary mb-4" id="force-upload-request">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-hand-pointer"></i> Request company for upload</h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-muted small mb-3">
+                                Add a security even when it is not flagged for missing data — for correcting incorrect closes.
+                                Selection is kept in your session until you clear it.
+                            </p>
+                            <div class="row align-items-end">
+                                <div class="col-md-5 mb-2 position-relative">
+                                    <label for="forceSecuritySearch" class="form-label">Search security</label>
+                                    <input type="text"
+                                           id="forceSecuritySearch"
+                                           class="form-control"
+                                           placeholder="Type symbol or name (min 2 characters)"
+                                           autocomplete="off"
+                                           aria-autocomplete="list"
+                                           aria-controls="forceSecurityDropdown">
+                                    <div id="forceSecurityDropdown"
+                                         class="dropdown-menu w-100"
+                                         style="max-height: 280px; overflow-y: auto;"
+                                         role="listbox"></div>
+                                    <input type="hidden" id="forceSecurityId" value="">
+                                    <small id="forceSecuritySelected" class="text-muted"></small>
+                                </div>
+                                <div class="col-md-4 mb-2">
+                                    <label for="forceYears" class="form-label">Years (optional)</label>
+                                    <input type="text"
+                                           id="forceYears"
+                                           class="form-control"
+                                           placeholder="e.g. 2023,2024 — blank = from first trade">
+                                </div>
+                                <div class="col-md-3 mb-2">
+                                    <button type="button" class="btn btn-secondary w-100" id="forceUploadAddBtn" onclick="addForceUploadRequest()">
+                                        <i class="fas fa-plus"></i> Add to upload list
+                                    </button>
+                                </div>
+                            </div>
+                            {% if force_upload_queue|default([]) %}
+                            <div class="mt-3 d-flex flex-wrap gap-2 align-items-center">
+                                <span class="small text-muted me-2">In queue:</span>
+                                {% for item in force_upload_queue %}
+                                <a href="{{ url_for('historical_prices.upload_page', clear_force=item.security_id) }}"
+                                   class="badge bg-secondary text-decoration-none"
+                                   title="Remove from queue">
+                                    #{{ item.security_id }}{% if item.years %} ({{ item.years|join(', ') }}){% endif %}
+                                    <i class="fas fa-times"></i>
+                                </a>
+                                {% endfor %}
+                                <a href="{{ url_for('historical_prices.upload_page', clear_force=1) }}"
+                                   class="btn btn-outline-secondary btn-sm ms-2">Clear all</a>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {% if securities_data %}
+                        <div class="row">
+                            {% for security in securities_data %}
+                            <div class="col-md-6 col-lg-4 mb-4">
+                                <div class="card card-outline {% if security.requested_manually %}card-warning{% else %}card-primary{% endif %}">
+                                    <div class="card-header">
+                                        <h5 class="card-title">
+                                            {{ security.symbol }}
+                                            {% if security.name %}
+                                                <small class="text-muted">- {{ security.name }}</small>
+                                            {% endif %}
+                                        </h5>
+                                        <div class="card-tools">
+                                            {% if security.requested_manually %}
+                                            <span class="badge badge-warning mb-1" style="font-size: 0.8rem; padding: 0.3rem 0.6rem;">
+                                                <i class="fas fa-hand-pointer"></i> Manual request
+                                            </span>
+                                            <br>
+                                            {% endif %}
+                                            <span class="badge badge-info mb-1" style="font-size: 0.8rem; padding: 0.3rem 0.6rem;">
+                                                <i class="fas fa-tag"></i> {{ security.security_type if security.security_type else 'Security' }}
+                                            </span>
+                                            <br>
+                                            <span class="badge badge-dark" style="font-size: 0.9rem; padding: 0.4rem 0.8rem; background-color: #2c3e50 !important;">
+                                                <i class="fas fa-calendar-alt"></i> First Trade: {{ security.first_transaction_date.strftime('%Y-%m-%d') if security.first_transaction_date else '—' }}
+                                            </span>
+                                            {% if security.requested_manually %}
+                                            <br>
+                                            <a href="{{ url_for('historical_prices.upload_page', clear_force=security.security_id) }}"
+                                               class="btn btn-outline-secondary btn-sm mt-1"
+                                               title="Remove from manual upload queue">
+                                                <i class="fas fa-times"></i> Remove request
+                                            </a>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        {% if security.request_note %}
+                                        <div class="alert alert-secondary py-2 small mb-3">
+                                            <i class="fas fa-info-circle"></i> {{ security.request_note }}
+                                        </div>
+                                        {% endif %}
+                                        {% if security.gap_strip_note %}
+                                        <div class="alert alert-warning py-2 small mb-3">
+                                            <i class="fas fa-exclamation-triangle"></i> {{ security.gap_strip_note }}
+                                        </div>
+                                        {% endif %}
+                                        {% for year_range in security.year_ranges %}
+                                        <div class="mb-3">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <h6 class="mb-0">Year {{ year_range.year }}</h6>
+                                                {% if year_range.forced_upload %}
+                                                    <span class="badge badge-warning">
+                                                        <i class="fas fa-upload"></i> Re-upload
+                                                    </span>
+                                                {% elif year_range.has_historical_data %}
+                                                    <span class="badge badge-success">
+                                                        <i class="fas fa-check"></i> Uploaded
+                                                    </span>
+                                                {% else %}
+                                                    <span class="badge badge-warning">
+                                                        <i class="fas fa-clock"></i> Pending
+                                                    </span>
+                                                {% endif %}
+                                            </div>
+                                            
+                                            <div class="mb-2">
+                                                <small class="text-muted">
+                                                    <i class="fas fa-calendar"></i> 
+                                                    {{ year_range.start_date.strftime('%Y-%m-%d') }} to {{ year_range.end_date.strftime('%Y-%m-%d') }}
+                                                </small>
+                                                <br>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-database"></i>
+                                                    {{ year_range.available_days }} / {{ year_range.expected_days }} trading days ({{ year_range.coverage_percent }}%)
+                                                </small>
+                                                {% if year_range.gap_strip_note %}
+                                                <br>
+                                                <small class="text-warning"><i class="fas fa-wave-square"></i> {{ year_range.gap_strip_note }}</small>
+                                                {% endif %}
+                                            </div>
+                                            
+                                            <div class="upload-section">
+                                                {% if not year_range.has_historical_data %}
+                                                <input type="file" 
+                                                       id="file_{{ security.security_id }}_{{ year_range.year }}" 
+                                                       class="form-control-file d-none" 
+                                                       accept=".csv,.xlsx,.xls"
+                                                       onchange="uploadFile({{ security.security_id }}, {{ year_range.year }}, this)">
+                                                
+                                                <button type="button" 
+                                                        class="btn btn-primary btn-sm btn-block"
+                                                        onclick="document.getElementById('file_{{ security.security_id }}_{{ year_range.year }}').click()">
+                                                    <i class="fas fa-upload"></i> Upload {{ year_range.year }}
+                                                </button>
+                                                {% else %}
+                                                <div class="text-center">
+                                                    <span class="badge badge-success">
+                                                        <i class="fas fa-check"></i> Data Available
+                                                    </span>
+                                                    <br>
+                                                    <small class="text-muted">Historical data already uploaded</small>
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-warning">
+                            <h5><i class="fas fa-exclamation-triangle"></i> No uploads suggested here</h5>
+                            <p class="mb-0">No transaction-linked securities matched the “missing yearly coverage” or “7+ consecutive calendar dates without closes” checks. Use <strong>Request company for upload</strong> above to correct incorrect prices, or <strong>View Prices</strong> for one-off edits.</p>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Separator -->
+                <hr class="my-4">
+
+                <!-- Mutual Fund Section -->
+                <h4 class="mb-3"><i class="fas fa-chart-line"></i> Mutual Fund Historical Prices</h4>
+                
+                <div class="row">
+                    {% set mutual_funds = [
+                        {'symbol': 'MON100', 'name': 'Monthly 100 Fund'},
+                        {'symbol': 'LIQUIDBEES', 'name': 'Liquid Bees Fund'}
+                    ] %}
+                    {% for fund in mutual_funds %}
+                    <div class="col-md-6 mb-4">
+                        <div class="card card-outline card-success">
+                            <div class="card-header">
+                                <h5 class="card-title">
+                                    <i class="fas fa-chart-area"></i> {{ fund.symbol }}
+                                    <small class="text-muted">- {{ fund.name }}</small>
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                {% set years = range(2014, 2026) %}
+                                {% for year in years %}
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0">Year {{ year }}</h6>
+                                        <span class="badge badge-warning" id="fund_status_{{ fund.symbol }}_{{ year }}">
+                                            <i class="fas fa-clock"></i> Pending
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="upload-section">
+                                        <input type="file" 
+                                               id="fund_file_{{ fund.symbol }}_{{ year }}" 
+                                               class="form-control-file d-none" 
+                                               accept=".csv,.xlsx,.xls"
+                                               onchange="uploadMutualFund('{{ fund.symbol }}', {{ year }}, this)">
+                                        
+                                        <button type="button" 
+                                                class="btn btn-success btn-sm btn-block"
+                                                onclick="document.getElementById('fund_file_{{ fund.symbol }}_{{ year }}').click()">
+                                            <i class="fas fa-upload"></i> Upload {{ year }}
+                                        </button>
+                                        
+                                        <div id="fund_upload_status_{{ fund.symbol }}_{{ year }}" class="mt-2"></div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- AMFI India mutual fund NAV (anchor for Maintenance → Data upload deep link) -->
+                <hr class="my-4" id="amfi-india-mf-nav">
+                <h4 class="mb-3"><i class="fas fa-cloud-download-alt"></i> India MF — AMFI daily NAV</h4>
+                <div class="card card-outline card-warning mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Sync from AMFI (NAVAll.txt)</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small mb-2">
+                            Link each mutual fund security by storing <code>amfi_scheme_code</code> in
+                            <strong>Additional information</strong> (JSON), e.g.
+                            <code>{"amfi_scheme_code":"120503"}</code>, or use the API below.
+                            Then run sync to upsert <code>historical_price</code> for the NAV date in the file and refresh <code>current_price</code>.
+                        </p>
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <button type="button" class="btn btn-warning" id="amfiSyncBtn" onclick="syncAmfiDailyNav()">
+                                <i class="fas fa-sync"></i> Sync AMFI daily NAV
+                            </button>
+                        </div>
+                        <div id="amfiSyncStatus" class="small mb-3"></div>
+                        <hr>
+                        <h6 class="text-muted">Search schemes (from cached AMFI file, ~10 min)</h6>
+                        <div class="form-row align-items-end">
+                            <div class="col-md-6 mb-2">
+                                <input type="text" class="form-control" id="amfiSearchQ" placeholder="e.g. axis bluechip" maxlength="80">
+                            </div>
+                            <div class="col-md-3 mb-2">
+                                <button type="button" class="btn btn-outline-secondary btn-block" onclick="searchAmfiSchemes()">Search</button>
+                            </div>
+                        </div>
+                        <pre id="amfiSearchResults" class="bg-light p-2 small" style="max-height:220px;overflow:auto;"></pre>
+                        <h6 class="text-muted mt-3">Create security from scheme code</h6>
+                        <div class="form-row">
+                            <div class="col-md-4 mb-2">
+                                <input type="text" class="form-control" id="amfiCreateCode" placeholder="AMFI scheme code" maxlength="16">
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <input type="text" class="form-control" id="amfiCreateSymbol" placeholder="Optional symbol (default MF{code})" maxlength="20">
+                            </div>
+                            <div class="col-md-4 mb-2">
+                                <button type="button" class="btn btn-outline-primary btn-block" onclick="createAmfiMutualFund()">Create MF security</button>
+                            </div>
+                        </div>
+                        <div id="amfiCreateStatus" class="small text-muted"></div>
+                    </div>
+                </div>
+
+                <!-- Separator -->
+                <hr class="my-4">
+
+                <!-- Debt ETF Section -->
+                <h4 class="mb-3"><i class="fas fa-chart-line"></i> Debt ETF Historical Prices</h4>
+                
+                <div class="row">
+                    {% set debt_etfs = [
+                        {'symbol': 'EBBETF0425', 'name': 'EBB ETF 2025'},
+                        {'symbol': 'EBBETF0430', 'name': 'EBB ETF 2030'},
+                        {'symbol': 'EBBETF0431', 'name': 'EBB ETF 2031'}
+                    ] %}
+                    {% for etf in debt_etfs %}
+                    <div class="col-md-4 mb-4">
+                        <div class="card card-outline card-info">
+                            <div class="card-header">
+                                <h5 class="card-title">
+                                    <i class="fas fa-chart-area"></i> {{ etf.symbol }}
+                                    <small class="text-muted">- {{ etf.name }}</small>
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                {% set years = range(2014, 2026) %}
+                                {% for year in years %}
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-2">
+                                        <h6 class="mb-0">Year {{ year }}</h6>
+                                        <span class="badge badge-warning" id="etf_status_{{ etf.symbol }}_{{ year }}">
+                                            <i class="fas fa-clock"></i> Pending
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="upload-section">
+                                        <input type="file" 
+                                               id="etf_file_{{ etf.symbol }}_{{ year }}" 
+                                               class="form-control-file d-none" 
+                                               accept=".csv,.xlsx,.xls"
+                                               onchange="uploadDebtETF('{{ etf.symbol }}', {{ year }}, this)">
+                                        
+                                        <button type="button" 
+                                                class="btn btn-info btn-sm btn-block"
+                                                onclick="document.getElementById('etf_file_{{ etf.symbol }}_{{ year }}').click()">
+                                            <i class="fas fa-upload"></i> Upload {{ year }}
+                                        </button>
+                                        
+                                        <div id="etf_upload_status_{{ etf.symbol }}_{{ year }}" class="mt-2"></div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Upload Progress Modal -->
+<div class="modal fade" id="uploadModal" tabindex="-1" role="dialog" aria-labelledby="uploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="uploadModalLabel">Uploading Historical Prices</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="progress">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
+                </div>
+                <div class="mt-3">
+                    <p class="mb-0" id="uploadStatus">Preparing upload...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal" id="closeModalBtn" style="display: none;">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function uploadFile(securityId, year, fileInput) {
+    const file = fileInput.files[0];
+    if (!file) return;
+    
+    // Show modal
+    $('#uploadModal').modal('show');
+    $('#uploadStatus').text('Uploading file...');
+    $('.progress-bar').css('width', '30%');
+    
+    // Create form data
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('security_id', securityId);
+    formData.append('year', year);
+    
+    // Upload file
+    fetch('/historical-prices/upload', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        $('.progress-bar').css('width', '100%');
+        
+        if (data.success) {
+            $('#uploadStatus').html(`
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i> Upload successful!
+                    <br>Processed ${data.processed_count} records
+                    ${data.error_count > 0 ? `<br>Errors: ${data.error_count}` : ''}
+                </div>
+            `);
+            
+            // Refresh the page after a short delay
+            setTimeout(() => {
+                location.reload();
+            }, 2000);
+        } else {
+            $('#uploadStatus').html(`
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle"></i> Upload failed: ${data.message}
+                </div>
+            `);
+        }
+        
+        $('#closeModalBtn').show();
+    })
+    .catch(error => {
+        $('.progress-bar').css('width', '100%');
+        $('#uploadStatus').html(`
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle"></i> Upload failed: ${error.message}
+            </div>
+        `);
+        $('#closeModalBtn').show();
+    });
+}
+
+// Handle Nifty file uploads
+document.querySelectorAll('[id^="nifty_file_"]').forEach(input => {
+    input.addEventListener('change', function(e) {
+        const year = this.id.split('_').pop();
+        const file = e.target.files[0];
+        
+        if (!file) return;
+        
+        const statusDiv = document.getElementById(`nifty_upload_status_${year}`);
+        statusDiv.innerHTML = '<div class="spinner-border spinner-border-sm text-primary" role="status"></div> Uploading...';
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('year', year);
+        
+        fetch('/historical-prices/upload-nifty', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                let message = `${data.uploaded} records uploaded`;
+                if (data.cleared > 0) {
+                    message = `Cleared ${data.cleared} old records, uploaded ${data.uploaded} new records`;
+                }
+                statusDiv.innerHTML = `<div class="alert alert-success p-2 mb-0">
+                    <i class="fas fa-check"></i> ${message}
+                </div>`;
+                
+                // Hide the upload button and show success state
+                const uploadButton = document.querySelector(`button[onclick*="nifty_file_${year}"]`);
+                if (uploadButton) {
+                    uploadButton.style.display = 'none';
+                }
+                
+                // Update the status badge to show uploaded
+                const cardBody = uploadButton.closest('.card-body');
+                const badge = cardBody.querySelector('.badge');
+                if (badge) {
+                    badge.className = 'badge badge-success mb-2';
+                    badge.innerHTML = '<i class="fas fa-check"></i> Uploaded';
+                }
+                
+                // Update record count
+                const recordCount = cardBody.querySelector('.small.text-muted');
+                if (recordCount) {
+                    recordCount.textContent = `${data.uploaded} records`;
+                }
+                
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                statusDiv.innerHTML = `<div class="alert alert-danger p-2 mb-0">
+                    <i class="fas fa-times"></i> ${data.error || 'Upload failed'}
+                </div>`;
+            }
+        })
+        .catch(error => {
+            statusDiv.innerHTML = `<div class="alert alert-danger p-2 mb-0">
+                <i class="fas fa-times"></i> Upload failed: ${error.message}
+            </div>`;
+        });
+    });
+});
+
+function refreshStatus() {
+    location.reload();
+}
+
+(function initForceUploadRequest() {
+    const searchInput = document.getElementById('forceSecuritySearch');
+    const dropdown = document.getElementById('forceSecurityDropdown');
+    const hiddenId = document.getElementById('forceSecurityId');
+    const selectedLabel = document.getElementById('forceSecuritySelected');
+    if (!searchInput || !dropdown || !hiddenId) return;
+
+    let debounceTimer = null;
+
+    function hideDropdown() {
+        dropdown.classList.remove('show');
+        dropdown.innerHTML = '';
+    }
+
+    function selectSecurity(id, symbol, name) {
+        hiddenId.value = String(id);
+        searchInput.value = symbol;
+        if (selectedLabel) {
+            selectedLabel.textContent = name ? (symbol + ' — ' + name) : symbol;
+        }
+        hideDropdown();
+    }
+
+    searchInput.addEventListener('input', function () {
+        const q = (searchInput.value || '').trim();
+        hiddenId.value = '';
+        if (selectedLabel) selectedLabel.textContent = '';
+        clearTimeout(debounceTimer);
+        if (q.length < 2) {
+            hideDropdown();
+            return;
+        }
+        debounceTimer = setTimeout(function () {
+            fetch('/historical-prices/api/securities/search?q=' + encodeURIComponent(q))
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    const securities = (data && data.securities) || [];
+                    dropdown.innerHTML = '';
+                    if (!securities.length) {
+                        dropdown.innerHTML = '<span class="dropdown-item-text text-muted">No matches</span>';
+                        dropdown.classList.add('show');
+                        return;
+                    }
+                    securities.forEach(function (s) {
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'dropdown-item';
+                        btn.setAttribute('role', 'option');
+                        btn.textContent = s.symbol + (s.name ? ' — ' + s.name : '');
+                        btn.addEventListener('click', function () {
+                            selectSecurity(s.id, s.symbol, s.name || '');
+                        });
+                        dropdown.appendChild(btn);
+                    });
+                    dropdown.classList.add('show');
+                })
+                .catch(function () {
+                    hideDropdown();
+                });
+        }, 300);
+    });
+
+    document.addEventListener('click', function (e) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            hideDropdown();
+        }
+    });
+})();
+
+function addForceUploadRequest() {
+    const sid = (document.getElementById('forceSecurityId') || {}).value;
+    if (!sid) {
+        alert('Select a security from the search results first.');
+        return;
+    }
+    const yearsRaw = ((document.getElementById('forceYears') || {}).value || '').trim();
+    const params = new URLSearchParams();
+    params.set('force_security_id', sid);
+    if (yearsRaw) {
+        params.set('years', yearsRaw);
+    }
+    window.location.href = '/historical-prices/?' + params.toString();
+}
+
+function _csrfHeadersJson() {
+    const t = document.querySelector('meta[name=csrf-token]');
+    return {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': t ? t.getAttribute('content') : ''
+    };
+}
+
+function syncAmfiDailyNav() {
+    const el = document.getElementById('amfiSyncStatus');
+    const btn = document.getElementById('amfiSyncBtn');
+    el.textContent = 'Syncing…';
+    btn.disabled = true;
+    fetch('/historical-prices/api/amfi/sync-daily', {
+        method: 'POST',
+        headers: _csrfHeadersJson(),
+        body: '{}'
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        if (data.success) {
+            el.innerHTML = '<span class="text-success">' + JSON.stringify(data.stats, null, 2) + '</span>';
+        } else {
+            el.innerHTML = '<span class="text-danger">' + (data.error || 'Failed') + '</span>';
+        }
+    })
+    .catch(e => { btn.disabled = false; el.textContent = 'Error: ' + e.message; });
+}
+
+function searchAmfiSchemes() {
+    const q = document.getElementById('amfiSearchQ').value.trim();
+    const out = document.getElementById('amfiSearchResults');
+    if (q.length < 2) {
+        out.textContent = 'Enter at least 2 characters.';
+        return;
+    }
+    out.textContent = 'Loading…';
+    fetch('/historical-prices/api/amfi/schemes?q=' + encodeURIComponent(q) + '&limit=30')
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            out.textContent = JSON.stringify(data.schemes, null, 2);
+        } else {
+            out.textContent = data.error || 'Search failed';
+        }
+    })
+    .catch(e => { out.textContent = 'Error: ' + e.message; });
+}
+
+function createAmfiMutualFund() {
+    const code = document.getElementById('amfiCreateCode').value.trim();
+    const sym = document.getElementById('amfiCreateSymbol').value.trim();
+    const st = document.getElementById('amfiCreateStatus');
+    if (!code) {
+        st.textContent = 'Scheme code required.';
+        return;
+    }
+    st.textContent = 'Creating…';
+    const body = { amfi_scheme_code: code };
+    if (sym) body.symbol = sym;
+    fetch('/historical-prices/api/amfi/create-mutual-fund-security', {
+        method: 'POST',
+        headers: _csrfHeadersJson(),
+        body: JSON.stringify(body)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            st.textContent = 'Created id=' + data.security_id + ' symbol=' + data.symbol;
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            st.textContent = data.error || 'Failed';
+        }
+    })
+    .catch(e => { st.textContent = 'Error: ' + e.message; });
+}
+
+// Auto-refresh status every 30 seconds
+setInterval(refreshStatus, 30000);
+
+// Handle Mutual Fund file uploads
+function uploadMutualFund(fundSymbol, year, fileInput) {
+    const file = fileInput.files[0];
+    if (!file) return;
+    
+    const statusDiv = document.getElementById(`fund_upload_status_${fundSymbol}_${year}`);
+    statusDiv.innerHTML = '<div class="spinner-border spinner-border-sm text-primary" role="status"></div> Uploading...';
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('fund_symbol', fundSymbol);
+    formData.append('year', year);
+    
+    fetch('/historical-prices/upload-mutual-fund', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            let message = `${data.uploaded} records uploaded`;
+            if (data.cleared > 0) {
+                message = `Cleared ${data.cleared} old records, uploaded ${data.uploaded} new records`;
+            }
+            statusDiv.innerHTML = `<div class="alert alert-success p-2 mb-0">
+                <i class="fas fa-check"></i> ${message}
+            </div>`;
+            
+            // Hide the upload button and show success state
+            const uploadButton = document.querySelector(`button[onclick*="fund_file_${fundSymbol}_${year}"]`);
+            if (uploadButton) {
+                uploadButton.style.display = 'none';
+            }
+            
+            // Update the status badge to show uploaded
+            const statusBadge = document.getElementById(`fund_status_${fundSymbol}_${year}`);
+            if (statusBadge) {
+                statusBadge.className = 'badge badge-success';
+                statusBadge.innerHTML = '<i class="fas fa-check"></i> Uploaded';
+            }
+            
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            statusDiv.innerHTML = `<div class="alert alert-danger p-2 mb-0">
+                <i class="fas fa-times"></i> ${data.error || 'Upload failed'}
+            </div>`;
+        }
+    })
+    .catch(error => {
+        statusDiv.innerHTML = `<div class="alert alert-danger p-2 mb-0">
+            <i class="fas fa-times"></i> Upload failed: ${error.message}
+        </div>`;
+    });
+}
+
+// Handle Debt ETF file uploads
+function uploadDebtETF(etfSymbol, year, fileInput) {
+    const file = fileInput.files[0];
+    if (!file) return;
+    
+    const statusDiv = document.getElementById(`etf_upload_status_${etfSymbol}_${year}`);
+    statusDiv.innerHTML = '<div class="spinner-border spinner-border-sm text-primary" role="status"></div> Uploading...';
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('etf_symbol', etfSymbol);
+    formData.append('year', year);
+    
+    fetch('/historical-prices/upload-debt-etf', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            let message = `${data.uploaded} records uploaded`;
+            if (data.cleared > 0) {
+                message = `Cleared ${data.cleared} old records, uploaded ${data.uploaded} new records`;
+            }
+            statusDiv.innerHTML = `<div class="alert alert-success p-2 mb-0">
+                <i class="fas fa-check"></i> ${message}
+            </div>`;
+            
+            // Hide the upload button and show success state
+            const uploadButton = document.querySelector(`button[onclick*="etf_file_${etfSymbol}_${year}"]`);
+            if (uploadButton) {
+                uploadButton.style.display = 'none';
+            }
+            
+            // Update the status badge to show uploaded
+            const statusBadge = document.getElementById(`etf_status_${etfSymbol}_${year}`);
+            if (statusBadge) {
+                statusBadge.className = 'badge badge-success';
+                statusBadge.innerHTML = '<i class="fas fa-check"></i> Uploaded';
+            }
+            
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            statusDiv.innerHTML = `<div class="alert alert-danger p-2 mb-0">
+                <i class="fas fa-times"></i> ${data.error || 'Upload failed'}
+            </div>`;
+        }
+    })
+    .catch(error => {
+        statusDiv.innerHTML = `<div class="alert alert-danger p-2 mb-0">
+            <i class="fas fa-times"></i> Upload failed: ${error.message}
+        </div>`;
+    });
+}
+</script>
+{{ maint_desktop_close() }}
+{% endblock %}

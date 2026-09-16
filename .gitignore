@@ -1,0 +1,145 @@
+# Airflow temporary files
+airflow/*.pid
+airflow/*.err
+airflow/*.out
+airflow/logs/*
+!airflow/logs/.gitkeep
+airflow/airflow-webserver-monitor.pid
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments (use one: venv/ on Mac)
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs (top-level logs/ only — airflow/logs/ has its own rules above)
+*.log
+/logs/
+
+# Runtime artifacts / local uploads
+gunicorn_nohup.out
+gunicorn.pid
+instance/hybrid_report_jobs/
+instance/tmp/
+uploads/
+tmp/
+jinja_trace.txt
+static/agreements/*.pdf
+static/invoices/portfolio_snapshots/*.json
+
+# Database
+*.db
+*.sqlite
+
+# Environment variables
+.env
+.env.local
+.env.save
+.env.backup*
+.env.*
+
+# Google / OAuth secrets (never commit)
+service_account.json
+**/service_account.json
+credentials.json
+**/credentials.json
+client_secret*.json
+token.json
+**/token.json
+*.pem
+id_rsa
+id_ed25519
+*.p12
+
+# Local-only tooling (deployment agent, SSH config) — never commit or deploy
+.local/
+.deploy_preserve/
+
+# Debug scripts with hardcoded credentials
+debug*.py
+check_*.py
+analyze_db.py
+fix_transaction_upload_issues.py
+comprehensive_*.py
+show_model_structure.py
+validate_relationships.py
+
+# Local codebase tarballs (scripts/codebase_backup.py, CODEBASE_BACKUP_ROOT)
+backups/daily/*.tar.gz
+backups/recommendation_action_repair_*.json
+backups/*.sql.gz
+backups/*.sql
+backups/inertia_app_code_*.tar.gz
+backups/inertia_app_git_*.bundle
+
+# Mobile (Expo)
+apps/mobile/node_modules/
+apps/mobile/.node-local/
+apps/mobile/.expo/
+apps/mobile/dist/
+apps/mobile/.env
+apps/capacitor-shell/node_modules/
+apps/capacitor-shell/.env
+apps/capacitor-shell/capacitor.config.json
+apps/capacitor-shell/android/.gradle/
+apps/capacitor-shell/android/app/build/
+apps/capacitor-shell/android/build/
+apps/capacitor-shell/ios/App/Pods/
+apps/capacitor-shell/ios/App/build/
+apps/capacitor-shell/ios/DerivedData/
+
+# Runtime / local-only (never commit)
+.venv/
+flask_sessions/
+airflow/airflow.db-shm
+airflow/airflow.db-wal
+.env.save
+.env.backup*
+*.backup
+*.before_*
+asset_class_backup_*.json
+query_*.sql
+scripts/sql_queries/
+scripts/migration/backup_*.sql
+
+# Help assistant pending proposals (local only)
+docs/.help_knowledge_pending.json
+
+# Generated audit reports (Markdown copies live under docs/)
+reports/*.json
+reports/lighthouse_latest.json.local
+
+# Cursor local hook/runtime state
+.cursor/.hook-state/

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}2FA Backup Codes{% endblock %}
+
+{% block content %}
+<div class="container im-auth-mobile">
+    <div class="row justify-content-center">
+        <div class="col-xl-8 col-lg-10 col-md-12">
+            <div class="card o-hidden border-0 shadow-lg my-5">
+                <div class="card-body p-0">
+                    <div class="row">
+                        <div class="col-lg-12">
+                            <div class="p-5">
+                                <div class="text-center">
+                                    <h1 class="h4 text-gray-900 mb-4">Two-Factor Authentication Enabled!</h1>
+                                    <p class="mb-4">Your backup codes are listed below. Save them in a secure location.</p>
+                                </div>
+
+                                <div class="alert alert-warning">
+                                    <h6><i class="fas fa-exclamation-triangle"></i> Important Security Notice</h6>
+                                    <ul class="mb-0">
+                                        <li>Save these backup codes in a secure location</li>
+                                        <li>Each code can only be used once</li>
+                                        <li>If you lose your authenticator app, use these codes to access your account</li>
+                                        <li>Do not share these codes with anyone</li>
+                                    </ul>
+                                </div>
+
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h5>Your Backup Codes:</h5>
+                                        <div class="bg-light p-3 rounded">
+                                            {% for code in backup_codes %}
+                                                <div class="row mb-2">
+                                                    <div class="col-6">
+                                                        <code class="text-primary">{{ code }}</code>
+                                                    </div>
+                                                    <div class="col-6">
+                                                        <small class="text-muted">Unused</small>
+                                                    </div>
+                                                </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h5>What to do next:</h5>
+                                        <ol>
+                                            <li>Print or write down these codes</li>
+                                            <li>Store them in a secure location</li>
+                                            <li>Consider using a password manager</li>
+                                            <li>Test your 2FA setup by logging out and back in</li>
+                                        </ol>
+                                    </div>
+                                </div>
+
+                                <hr>
+
+                                <div class="text-center">
+                                    <button class="btn btn-success" onclick="printBackupCodes()">
+                                        <i class="fas fa-print"></i> Print Backup Codes
+                                    </button>
+                                    <a href="{{ url_for('main.dashboard') }}" class="btn btn-primary ml-2">
+                                        <i class="fas fa-check"></i> Continue to Dashboard
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function printBackupCodes() {
+    const printWindow = window.open('', '_blank');
+    const backupCodes = {{ backup_codes | tojson }};
+    
+    printWindow.document.write(`
+        <html>
+            <head>
+                <title>2FA Backup Codes - Inertia Investment</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 20px; }
+                    .header { text-align: center; margin-bottom: 30px; }
+                    .codes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+                    .code { padding: 10px; border: 1px solid #ccc; text-align: center; font-family: monospace; }
+                    .footer { margin-top: 30px; font-size: 12px; color: #666; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>Two-Factor Authentication Backup Codes</h1>
+                    <p>Inertia Investment Management</p>
+                    <p>Generated: ${new Date().toLocaleString()}</p>
+                </div>
+                
+                <div class="codes">
+                    ${backupCodes.map(code => `<div class="code">${code}</div>`).join('')}
+                </div>
+                
+                <div class="footer">
+                    <p><strong>Important:</strong> Store these codes securely. Each code can only be used once.</p>
+                </div>
+            </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+    printWindow.print();
+}
+</script>
+{% endblock %}

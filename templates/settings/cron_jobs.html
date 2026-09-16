@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}Cron Jobs Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Cron Jobs Management</h1>
+        <a href="{{ url_for('settings.index') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Settings
+        </a>
+    </div>
+
+    {% for category, jobs in jobs_by_category.items() %}
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-{{ 'chart-bar' if category == 'Reports' else 'eye' if category == 'Monitoring' else 'cog' }}"></i>
+                {{ category }}
+            </h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Job Name</th>
+                            <th>Description</th>
+                            <th>Schedule</th>
+                            <th>Status</th>
+                            <th>Last Log</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for job in jobs %}
+                        <tr>
+                            <td>
+                                <strong>{{ job.name }}</strong>
+                                <br><small class="text-muted">{{ job.id }}</small>
+                            </td>
+                            <td>{{ job.description }}</td>
+                            <td>
+                                <code>{{ job.schedule }}</code>
+                                <br><small class="text-muted">{{ cron_manager.get_schedule_description(job.schedule) }}</small>
+                            </td>
+                            <td>
+                                {% if job.enabled %}
+                                    <span class="badge badge-success">Active</span>
+                                {% else %}
+                                    <span class="badge badge-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if job.last_log %}
+                                    <small class="text-muted">{{ job.last_log[:50] }}{% if job.last_log|length > 50 %}...{% endif %}</small>
+                                {% else %}
+                                    <small class="text-muted">No logs</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <!-- Toggle Button -->
+                                    <button type="button" class="btn btn-{{ 'warning' if job.enabled else 'success' }} btn-sm toggle-job" 
+                                            data-job-id="{{ job.id }}" 
+                                            title="{{ 'Disable' if job.enabled else 'Enable' }}">
+                                        <i class="fas fa-{{ 'pause' if job.enabled else 'play' }}"></i>
+                                    </button>
+                                    
+                                    <!-- Test Button -->
+                                    <button type="button" class="btn btn-info btn-sm test-job" 
+                                            data-job-id="{{ job.id }}" 
+                                            title="Test Run">
+                                        <i class="fas fa-play"></i>
+                                    </button>
+                                    
+                                    <!-- Schedule Button -->
+                                    <button type="button" class="btn btn-primary btn-sm" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#scheduleModal{{ job.id }}" 
+                                            title="Update Schedule">
+                                        <i class="fas fa-clock"></i>
+                                    </button>
+                                    
+                                    <!-- Logs Button -->
+                                    <a href="{{ url_for('settings.view_cron_logs', job_id=job.id) }}" 
+                                       class="btn btn-secondary btn-sm" 
+                                       title="View Logs">
+                                        <i class="fas fa-file-alt"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Schedule Update Modals -->
+{% for category, jobs in jobs_by_category.items() %}
+    {% for job in jobs %}
+    <div class="modal fade" id="scheduleModal{{ job.id }}" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Update Schedule - {{ job.name }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form class="update-schedule-form" data-job-id="{{ job.id }}">
+                    <div class="modal-body">
+                        <div class="form-group">
+                            <label for="schedule{{ job.id }}">Cron Schedule</label>
+                            <input type="text" class="form-control" id="schedule{{ job.id }}" 
+                                   name="schedule" value="{{ job.schedule }}" 
+                                   placeholder="* * * * *">
+                            <small class="form-text text-muted">
+                                Format: minute hour day month weekday<br>
+                                Examples: "0 9 * * *" (daily at 9 AM), "0 * * * *" (hourly)
+                            </small>
+                        </div>
+                        <div class="form-group">
+                            <label>Current Schedule Description</label>
+                            <p class="form-control-plaintext">{{ cron_manager.get_schedule_description(job.schedule) }}</p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Update Schedule</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    console.log('Cron jobs page loaded');
+    
+    // Toggle job status
+    $(document).on('click', '.toggle-job', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const jobId = $(this).data('job-id');
+        const button = $(this);
+        console.log('Toggle clicked for job:', jobId);
+        
+        // Show loading state
+        button.prop('disabled', true);
+        
+        $.ajax({
+            url: `/settings/cron-jobs/${jobId}/toggle`,
+            method: 'POST',
+            success: function(data) {
+                console.log('Toggle response:', data);
+                if (data.success) {
+                    // Reload page to show updated status
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            },
+            error: function(xhr) {
+                console.error('Toggle error:', xhr.responseText);
+                alert('Error toggling job status');
+            },
+            complete: function() {
+                button.prop('disabled', false);
+            }
+        });
+    });
+    
+    // Test job
+    $(document).on('click', '.test-job', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const jobId = $(this).data('job-id');
+        const button = $(this);
+        console.log('Test clicked for job:', jobId);
+        
+        // Show loading state
+        button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+        
+        $.ajax({
+            url: `/settings/cron-jobs/${jobId}/test`,
+            method: 'POST',
+            success: function(data) {
+                console.log('Test response:', data);
+                if (data.success) {
+                    alert('Test completed successfully!');
+                } else {
+                    alert('Test failed: ' + (data.error || 'Unknown error'));
+                }
+            },
+            error: function(xhr) {
+                console.error('Test error:', xhr.responseText);
+                alert('Error running test');
+            },
+            complete: function() {
+                // Reset button
+                button.prop('disabled', false).html('<i class="fas fa-play"></i>');
+            }
+        });
+    });
+    
+    // Update schedule
+    $('.update-schedule-form').submit(function(e) {
+        e.preventDefault();
+        
+        const form = $(this);
+        const jobId = form.data('job-id');
+        const schedule = form.find('input[name="schedule"]').val();
+        
+        console.log('Updating schedule for job:', jobId, 'schedule:', schedule);
+        
+        $.ajax({
+            url: `/settings/cron-jobs/${jobId}/update-schedule`,
+            method: 'POST',
+            data: {
+                schedule: schedule
+            },
+            success: function(data) {
+                if (data.success) {
+                    // Close modal and reload page
+                    const modal = bootstrap.Modal.getInstance(form.closest('.modal'));
+                    if (modal) modal.hide();
+                    location.reload();
+                } else {
+                    alert('Error: ' + (data.error || 'Unknown error'));
+                }
+            },
+            error: function(xhr) {
+                console.error('Update schedule error:', xhr.responseText);
+                alert('Error updating schedule');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

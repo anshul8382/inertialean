@@ -1,0 +1,517 @@
+{% extends 'base.html' %}
+{% from 'partials/mobile/macros.html' import rec_mobile_open, rec_mobile_close, rec_desktop_open, rec_desktop_close %}
+
+{% block content %}
+{{ rec_mobile_open('Email preview — ' ~ client.name, url_for('unified_recommendations.security_distribution', client_id=client.id, session_id=session_id) if session_id else url_for('unified_recommendations.unified_recommendations'), 'Edit recipients and preview, then send.') }}
+{% include 'partials/mobile/rec_email_preview_mobile.html' %}
+{{ rec_mobile_close() }}
+{{ rec_desktop_open('container-fluid mt-4 rec-workflow-mobile') }}
+    <div class="row rec-summary-grid">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-envelope"></i> Email Preview - {{ client.name }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <!-- Planning Synopsis -->
+                    {% if client.planning_synopsis %}
+                    <div class="alert alert-info mb-3">
+                        <h6 class="alert-heading"><i class="fas fa-lightbulb"></i> Planning Synopsis</h6>
+                        <p class="mb-0 small">{{ client.planning_synopsis|nl2br }}</p>
+                    </div>
+                    {% endif %}
+                    <!-- Email Configuration Form -->
+                    <form id="emailForm" method="POST" action="{{ url_for('unified_recommendations.send_to_client') }}" class="rec-email-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="client_id" value="{{ client.id }}">
+                        <input type="hidden" name="session_id" value="{{ session_id }}">
+                        
+                        <div class="row mb-4 rec-form-stack">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="emailSubject"><strong>Email Subject:</strong></label>
+                                    <input type="text" 
+                                           class="form-control" 
+                                           id="emailSubject" 
+                                           name="subject" 
+                                           value="{{ default_subject }}"
+                                           required>
+                                    <small class="form-text text-muted">You can edit the email subject line</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="recipientEmail"><strong>Recipient Email(s): <span class="text-danger">*</span></strong></label>
+                                    <input type="text"
+                                           class="form-control"
+                                           id="recipientEmail"
+                                           name="recipient_email"
+                                           value="{{ default_recipient_email }}"
+                                           required
+                                           placeholder="e.g. primary@example.com">
+                                    <small class="form-text text-muted">Primary client email (To).</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group mb-4">
+                            <label for="ccEmail"><strong>CC Email(s):</strong></label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="ccEmail"
+                                   name="cc_email"
+                                   value="{{ default_cc_email|default('') }}"
+                                   placeholder="e.g. spouse@example.com, recommendations@equities4wealth.com">
+                            <small class="form-text text-muted">
+                                Includes firm copy addresses and client secondary emails (if configured). Edit before sending if needed.
+                            </small>
+                        </div>
+                        
+                        <div class="form-group mb-4">
+                            <label for="customMessage"><strong>Custom Message (Optional):</strong></label>
+                            <textarea class="form-control" 
+                                      id="customMessage" 
+                                      name="custom_message" 
+                                      rows="6"
+                                      placeholder="Add a personal message that will appear at the beginning of the email...">{{ default_custom_message|default('') }}</textarea>
+                            <small class="form-text text-muted">This message will appear before the recommendations table</small>
+                        </div>
+                        
+                        <!-- Email Preview -->
+                        <div class="mb-4">
+                            <div class="d-flex flex-column flex-md-row justify-content-between align-items-stretch align-items-md-center mb-3 gap-2 rec-page-header">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-eye"></i> Email Preview
+                                </h5>
+                                <button type="button" 
+                                        class="btn btn-primary btn-sm" 
+                                        onclick="generateNewRecommendation()"
+                                        title="Save current recommendations and generate new ones">
+                                    <i class="fas fa-plus-circle"></i> Generate New Recommendation
+                                </button>
+                            </div>
+                            <div class="border rounded p-4 rec-email-preview-pane" style="background-color: #f8f9fa; max-height: 600px; overflow-y: auto;">
+                                <ul class="nav nav-tabs" id="previewTabs" role="tablist">
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link active" id="rich-tab" data-bs-toggle="tab" data-bs-target="#rich" type="button" role="tab">
+                                            Rich (HTML)
+                                        </button>
+                                    </li>
+                                    <li class="nav-item" role="presentation">
+                                        <button class="nav-link" id="plain-tab" data-bs-toggle="tab" data-bs-target="#plain" type="button" role="tab">
+                                            Plain text
+                                        </button>
+                                    </li>
+                                </ul>
+                                <div class="tab-content" style="background-color: white; border: 1px solid #ddd; border-top: none; border-radius: 0 0 4px 4px; padding: 20px; min-height: 400px;">
+                                    <div class="tab-pane fade show active" id="rich" role="tabpanel">
+                                        <div id="emailPreview" contenteditable="true" style="min-height: 360px;">
+                                            {# SAFE: advisor preview of server-rendered recommendation email HTML #}
+                                            {{ email_html|safe }}
+                                        </div>
+                                    </div>
+                                    <div class="tab-pane fade" id="plain" role="tabpanel">
+                                        <div class="mb-2 d-flex justify-content-end">
+                                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="copyPlainText()">
+                                                <i class="fas fa-copy"></i> Copy plain text
+                                            </button>
+                                        </div>
+                                        <textarea id="emailPlainText" class="form-control" rows="18" style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">{{ email_text|default('') }}</textarea>
+                                        <small class="form-text text-muted mt-2">
+                                            <i class="fas fa-info-circle"></i> Plain text is email-client friendly and feels more personal.
+                                        </small>
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted mt-2">
+                                    <i class="fas fa-info-circle"></i> You can edit the email content directly in the preview above
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Send Format -->
+                        <div class="form-group mb-3">
+                            <label><strong>Send format:</strong></label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="send_format" id="sendFormatHtml" value="html" checked>
+                                <label class="form-check-label" for="sendFormatHtml">Rich (HTML)</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="send_format" id="sendFormatPlain" value="plain_text">
+                                <label class="form-check-label" for="sendFormatPlain">Plain text</label>
+                            </div>
+                            <small class="form-text text-muted">Choose plain text if you want a simpler, more human-looking email.</small>
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <div class="rec-mobile-action-bar-inline mt-4">
+                                {% if session_id %}
+                                <a href="{{ url_for('unified_recommendations.security_distribution', client_id=client.id, session_id=session_id) }}" 
+                                   class="btn btn-secondary">
+                                    <i class="fas fa-arrow-left"></i> Back to Security Distribution
+                                </a>
+                                {% else %}
+                                <a href="{{ url_for('unified_recommendations.unified_recommendations') }}" 
+                                   class="btn btn-secondary">
+                                    <i class="fas fa-arrow-left"></i> Back
+                                </a>
+                                {% endif %}
+                                <button type="button" 
+                                        class="btn btn-info" 
+                                        onclick="refreshPreview()">
+                                    <i class="fas fa-sync"></i> Refresh Preview
+                                </button>
+                                <button type="button"
+                                        class="btn btn-outline-secondary"
+                                        onclick="copyRichHtml()">
+                                    <i class="fas fa-copy"></i> Copy rich
+                                </button>
+                                <button type="submit" 
+                                        class="btn btn-success btn-lg" 
+                                        id="sendEmailBtn">
+                                    <i class="fas fa-paper-plane"></i> Send Email
+                                </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Summary Card -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Recommendation Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6 col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">Total Recommendations</h6>
+                                <h3>{{ recommendations|length }}</h3>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">Current Portfolio Value</h6>
+                                <h3>₹{{ "%.2f"|format(total_value) }}</h3>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">Investment Amount</h6>
+                                <h3>₹{{ "%.2f"|format(investment_amount) }}</h3>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-center">
+                                <h6 class="text-muted">Total After Investment</h6>
+                                <h3>₹{{ "%.2f"|format(total_value_after_investment) }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{ rec_desktop_close() }}
+
+<script>
+// Refresh preview with updated subject and message
+function refreshPreview() {
+    const subject = document.getElementById('emailSubject').value;
+    const customMessage = document.getElementById('customMessage').value;
+    const previewDiv = document.getElementById('emailPreview');
+    const plainTextArea = document.getElementById('emailPlainText');
+    
+    // Show loading state
+    previewDiv.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Refreshing preview...</div>';
+    if (plainTextArea) {
+        plainTextArea.value = 'Refreshing preview...';
+    }
+    
+    // Get session_id from hidden input or template variable
+    const sessionId = {{ session_id|default('null') }};
+    
+    if (!sessionId) {
+        previewDiv.innerHTML = '<div class="alert alert-danger">Session ID is missing. Please save recommendations first.</div>';
+        return;
+    }
+    
+    // Make AJAX call to regenerate preview
+    fetch('{{ url_for("unified_recommendations.preview_email") }}?client_id={{ client.id }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            client_id: {{ client.id }},
+            session_id: sessionId,
+            subject: subject,
+            custom_message: customMessage
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Failed to refresh preview');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            // Update preview HTML
+            previewDiv.innerHTML = data.email_html;
+            if (plainTextArea && typeof data.email_text === 'string') {
+                plainTextArea.value = data.email_text;
+            }
+            
+            // Show success message briefly
+            const toast = document.createElement('div');
+            toast.className = 'alert alert-info alert-dismissible fade show position-fixed';
+            toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
+            toast.innerHTML = `
+                <i class="fas fa-check"></i> Preview refreshed!
+                <button type="button" class="close" data-dismiss="alert">
+                    <span>&times;</span>
+                </button>
+            `;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 2000);
+        } else {
+            const errorMsg = data.error || 'Error refreshing preview';
+            previewDiv.innerHTML = `<div class="alert alert-danger">${errorMsg}</div>`;
+        }
+    })
+    .catch(error => {
+        console.error('Error refreshing preview:', error);
+        previewDiv.innerHTML = '<div class="alert alert-danger">Error refreshing preview. Please try again.</div>';
+        if (plainTextArea) {
+            plainTextArea.value = 'Error refreshing preview. Please try again.';
+        }
+    });
+}
+
+function copyPlainText() {
+    const el = document.getElementById('emailPlainText');
+    if (!el) return;
+    el.focus();
+    el.select();
+    document.execCommand('copy');
+    markWorkflowNotified('copied plain text');
+}
+
+function copyRichHtml() {
+    const el = document.getElementById('emailPreview');
+    if (!el) return;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    document.execCommand('copy');
+    sel.removeAllRanges();
+    markWorkflowNotified('copied rich email');
+}
+
+function markWorkflowNotified(sourceLabel) {
+    const markNotifyUrl = '/unified-recommendations/mark-notify';
+    const hiddenSessionIdEl = document.querySelector('input[name="session_id"]');
+    const sessionIdToSend = hiddenSessionIdEl ? hiddenSessionIdEl.value : null;
+    if (!sessionIdToSend) {
+        console.warn('Missing session_id; skipping workflow notify update.');
+        return;
+    }
+
+    fetch(markNotifyUrl, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            session_id: sessionIdToSend,
+            source: sourceLabel
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data || !data.success) {
+            console.warn('Workflow notify update failed:', data && data.error);
+        }
+    })
+    .catch(error => {
+        console.warn('Workflow notify update error:', error);
+    });
+}
+
+function generateNewRecommendation() {
+    // Get client_id and session_id
+    const clientId = {{ client.id }};
+    const sessionId = {{ session_id|default('null') }};
+    
+    // Show confirmation dialog
+    if (!confirm('This will save current recommendations and redirect to generate new recommendations. Continue?')) {
+        return;
+    }
+    
+    // Show loading state
+    const button = event.target.closest('button');
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    
+    // Recommendations are already saved in the database via session_id
+    // (that's how we got to the email preview page)
+    // Just redirect to generate page
+    window.location.href = '{{ url_for("unified_recommendations.generate_unified_recommendations") }}';
+}
+
+// Handle form submission
+document.getElementById('emailForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const sendBtn = document.getElementById('sendEmailBtn');
+    const originalText = sendBtn.innerHTML;
+    
+    // Disable button and show loading
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+    
+    // Get form data - this reads the CURRENT value from the input field (user can edit it)
+    const recipientEmail = document.getElementById('recipientEmail').value.trim();
+    const ccEmail = document.getElementById('ccEmail') ? document.getElementById('ccEmail').value.trim() : '';
+    console.log('Sending email to recipient from UI input:', recipientEmail);
+    
+    function splitEmails(raw) {
+        if (!raw) return [];
+        // split by comma/semicolon/whitespace/newline
+        return raw
+            .split(/[,\s;]+/g)
+            .map(s => s.trim())
+            .filter(Boolean);
+    }
+
+    function isValidEmail(email) {
+        // basic, consistent with backend
+        return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email);
+    }
+
+    // Validate email(s)
+    const emails = splitEmails(recipientEmail);
+    const invalid = emails.filter(e => !isValidEmail(e));
+    if (emails.length === 0 || invalid.length > 0) {
+        const msg = invalid.length > 0
+            ? `Invalid email(s): ${invalid.join(', ')}`
+            : 'Please enter at least one valid email address';
+        alert(msg);
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = originalText;
+        return;
+    }
+    
+    const sendFormat = (document.querySelector('input[name="send_format"]:checked') || {}).value || 'html';
+    const editedEmailHtml = document.getElementById('emailPreview') ? document.getElementById('emailPreview').innerHTML : '';
+    const editedEmailText = document.getElementById('emailPlainText') ? document.getElementById('emailPlainText').value : '';
+    const hiddenSessionIdEl = document.querySelector('input[name="session_id"]');
+    const sessionIdToSend = hiddenSessionIdEl ? hiddenSessionIdEl.value : null;
+    
+    const formData = {
+        client_id: {{ client.id }},
+        session_id: sessionIdToSend,
+        recipient_email: recipientEmail,
+        cc_email: ccEmail,
+        subject: document.getElementById('emailSubject').value,
+        custom_message: document.getElementById('customMessage').value,
+        send_format: sendFormat,
+        edited_email_html: editedEmailHtml,
+        edited_email_text: editedEmailText
+    };
+    
+    // Send email
+    fetch('{{ url_for("unified_recommendations.send_to_client") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(async (response) => {
+        const contentType = response.headers.get('content-type') || '';
+        let payload = null;
+        if (contentType.includes('application/json')) {
+            payload = await response.json();
+        } else {
+            const txt = await response.text();
+            payload = { success: false, error: `Non-JSON response (${response.status}). ${txt.slice(0, 400)}` };
+        }
+        if (!response.ok && payload && payload.error) {
+            throw new Error(payload.error);
+        }
+        return payload;
+    })
+    .then(data => {
+        if (data && data.success) {
+            // Show success message with the actual recipient email that was sent
+            const actualRecipient = data.recipient_email || recipientEmail;
+            console.log('Email sent successfully to:', actualRecipient);
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show';
+            alert.innerHTML = `
+                <i class="fas fa-check-circle"></i> 
+                <strong>Success!</strong> Email sent successfully to ${actualRecipient}
+                <button type="button" class="close" data-dismiss="alert">
+                    <span>&times;</span>
+                </button>
+            `;
+            document.querySelector('.card-body').insertBefore(alert, document.getElementById('emailForm'));
+            
+            // Redirect after 2 seconds
+            setTimeout(() => {
+                window.location.href = '{{ url_for("unified_recommendations.unified_recommendations") }}';
+            }, 2000);
+        } else {
+            alert('Error sending email: ' + ((data && data.error) || 'Unknown error'));
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = originalText;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error sending email: ' + (error && error.message ? error.message : 'Please try again.'));
+        sendBtn.disabled = false;
+        sendBtn.innerHTML = originalText;
+    });
+});
+</script>
+
+<style>
+#emailPreview {
+    background-color: white;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+#emailPreview table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#emailPreview table th,
+#emailPreview table td {
+    padding: 8px;
+    border: 1px solid #ddd;
+    text-align: left;
+}
+
+#emailPreview table th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+}
+</style>
+{% endblock %}
+

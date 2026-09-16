@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Recommendations{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Generate Recommendations</h1>
+        <a href="{{ url_for('main.recommendations') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Recommendations
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Generate for Client</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('main.generate_recommendations') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="mb-3">
+                            <label for="client_id" class="form-label">Select Client</label>
+                            <select class="form-select" id="client_id" name="client_id" required>
+                                <option value="">Choose a client...</option>
+                                {% for client in clients %}
+                                <option value="{{ client.id }}">{{ client.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="investment_amount" class="form-label">Investment Amount (₹)</label>
+                            <input type="number" class="form-control" id="investment_amount" name="investment_amount" 
+                                   min="0" step="0.01" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="expiry_date" class="form-label">Expiry Date</label>
+                            <input type="date" class="form-control" id="expiry_date" name="expiry_date">
+                            <small class="text-muted">Leave empty for no expiry</small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-magic"></i> Generate Recommendations
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Instructions</h5>
+                </div>
+                <div class="card-body">
+                    <h6>How it works:</h6>
+                    <ol>
+                        <li>Select a client from the dropdown</li>
+                        <li>Enter the investment amount (if any)</li>
+                        <li>Optionally set an expiry date for the recommendations</li>
+                        <li>Click "Generate Recommendations"</li>
+                    </ol>
+
+                    <h6>What happens next:</h6>
+                    <ul>
+                        <li>The system will analyze the client's current portfolio</li>
+                        <li>Compare it with their assigned models</li>
+                        <li>Generate buy/sell recommendations</li>
+                        <li>Show you the results for review</li>
+                    </ul>
+
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Note:</strong> Recommendations are based on:
+                        <ul class="mb-0">
+                            <li>Client's assigned asset allocation model</li>
+                            <li>Client's assigned security allocation model</li>
+                            <li>Current market prices</li>
+                            <li>Portfolio rebalancing needs</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

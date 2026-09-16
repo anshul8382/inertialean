@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="card shadow">
+        <div class="card-header py-3">
+            <h5 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-edit"></i> Edit Security: {{ security.symbol }}
+            </h5>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                {{ form.csrf_token }}
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.symbol.label(class="form-label") }}
+                        {{ form.symbol(class="form-control") }}
+                        {% if form.symbol.errors %}
+                        <div class="text-danger">
+                            {% for error in form.symbol.errors %}
+                            <small>{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        {{ form.name.label(class="form-label") }}
+                        {{ form.name(class="form-control") }}
+                        {% if form.name.errors %}
+                        <div class="text-danger">
+                            {% for error in form.name.errors %}
+                            <small>{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.type.label(class="form-label") }}
+                        {{ form.type(class="form-select") }}
+                        {% if form.type.errors %}
+                        <div class="text-danger">
+                            {% for error in form.type.errors %}
+                            <small>{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        {{ form.asset_class_id.label(class="form-label") }}
+                        {{ form.asset_class_id(class="form-select") }}
+                        {% if form.asset_class_id.errors %}
+                        <div class="text-danger">
+                            {% for error in form.asset_class_id.errors %}
+                            <small>{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        {{ form.current_price.label(class="form-label") }}
+                        {{ form.current_price(class="form-control") }}
+                        {% if form.current_price.errors %}
+                        <div class="text-danger">
+                            {% for error in form.current_price.errors %}
+                            <small>{{ error }}</small>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+        </div>
+
+                    <div class="col-md-6 mb-3">
+                <label for="refresh_interval" class="form-label">Refresh Interval (minutes)</label>
+                <input type="number" class="form-control" id="refresh_interval" name="refresh_interval" 
+                               value="{{ (security.refresh_interval // 60) if security.refresh_interval else 5 }}" min="1" max="60">
+                <div class="form-text">How often should the security price be updated (1-60 minutes)</div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    {{ form.description.label(class="form-label") }}
+                    {{ form.description(class="form-control", rows=3) }}
+                    {% if form.description.errors %}
+                    <div class="text-danger">
+                        {% for error in form.description.errors %}
+                        <small>{{ error }}</small>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <div class="mb-3">
+                    <small class="text-muted">
+                        <strong>Last Updated:</strong> {{ security.last_updated.strftime('%Y-%m-%d %H:%M:%S') if security.last_updated else 'Never' }}
+                    </small>
+            </div>
+
+                <div class="d-flex gap-2">
+                    {{ form.submit(class="btn btn-primary") }}
+                    <a href="{{ url_for('main.securities') }}" class="btn btn-secondary">Cancel</a>
+                </div>
+        </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

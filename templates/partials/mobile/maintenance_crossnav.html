@@ -1,0 +1,13 @@
+{# Quick jump between maintenance hub sections (mobile) #}
+<nav class="im-maint-crossnav mt-3 pt-2 border-top" aria-label="Maintenance sections">
+  <p class="im-more-menu__section-title">Maintenance</p>
+  <a href="{{ url_for('main.data_upload_links') }}" class="im-more-menu__link"><i class="fas fa-upload"></i> Data upload</a>
+  <a href="{{ url_for('main.maintenance_trade_data') }}" class="im-more-menu__link"><i class="fas fa-exchange-alt"></i> Trade data</a>
+  <a href="{{ url_for('main.maintenance_reference_data') }}" class="im-more-menu__link"><i class="fas fa-book"></i> Reference data</a>
+  <a href="{{ url_for('main.maintenance_recommendations') }}" class="im-more-menu__link"><i class="fas fa-calendar-check"></i> Recommendations</a>
+  <a href="{{ url_for('main.maintenance_reviews') }}" class="im-more-menu__link"><i class="fas fa-clipboard-list"></i> Reviews</a>
+  <a href="{{ url_for('main.maintenance_portfolio_modelling') }}" class="im-more-menu__link"><i class="fas fa-calculator"></i> Portfolio modelling</a>
+  {% if user_is_manager %}
+  <a href="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients') }}" class="im-more-menu__link"><i class="fas fa-user-tag"></i> Assignments</a>
+  {% endif %}
+</nav>

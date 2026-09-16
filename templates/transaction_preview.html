@@ -1,0 +1,648 @@
+{% extends "base.html" %}
+
+{% block title %}Transaction Preview{% endblock %}
+
+{% block extra_css %}
+<style>
+    .preview-container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    
+    .preview-header {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .transaction-row {
+        transition: background-color 0.2s;
+    }
+    
+    .transaction-row:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .transaction-row.selected {
+        background-color: #e3f2fd;
+    }
+    
+    .error-message {
+        color: #dc3545;
+        font-size: 0.875rem;
+    }
+    
+    .success-message {
+        color: #198754;
+        font-size: 0.875rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="preview-container">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Transaction Preview</h2>
+            <div>
+                <button id="backToUpload" class="btn btn-secondary me-2">
+                    <i class="fas fa-arrow-left"></i> Back to Upload
+                </button>
+                <button id="cancelProcessing" class="btn btn-outline-danger">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button id="testButton" class="btn btn-warning ms-2">
+                    <i class="fas fa-bug"></i> Test
+                </button>
+                <button id="loadTestData" class="btn btn-info ms-2" onclick="window.location.href='/transactions/preview/test?client_id=26';" style="background-color: #17a2b8 !important; color: white !important;">
+                    <i class="fas fa-database"></i> Load Test Data
+                </button>
+                <button id="testLoadData" class="btn btn-success ms-2" onclick="alert('Test button works!'); console.log('Test load data clicked');" style="background-color: #28a745 !important; color: white !important;">
+                    <i class="fas fa-check"></i> Test Load
+                </button>
+                <button id="directTest" class="btn btn-danger ms-2" onclick="window.location.href='/transactions/preview/test?client_id=26';" style="background-color: #dc3545 !important; color: white !important;">
+                    <i class="fas fa-external-link-alt"></i> Direct Test
+                </button>
+            </div>
+        </div>
+
+        <!-- Preview Header -->
+        <div class="preview-header">
+            <div class="row">
+                <div class="col-md-3">
+                    <strong>File:</strong> <span id="fileName">Loading...</span>
+                </div>
+                <div class="col-md-3">
+                    <strong>Total Rows:</strong> <span id="totalRows">0</span>
+                </div>
+                <div class="col-md-3">
+                    <strong>Valid Transactions:</strong> <span id="validCount">0</span>
+                </div>
+                <div class="col-md-3">
+                    <strong>Selected:</strong> <span id="selectedCount">0</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Messages -->
+        <div id="errorMessages" class="alert alert-warning d-none">
+            <h6><i class="fas fa-exclamation-triangle"></i> Validation Errors:</h6>
+            <div id="errorList"></div>
+        </div>
+
+        <!-- Selection Controls -->
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0">Selection Controls</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="selectAllCheckbox">
+                            <label class="form-check-label" for="selectAllCheckbox">
+                                Select All
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <button id="selectAll" class="btn btn-sm btn-outline-primary me-2">Select All</button>
+                        <button id="deselectAll" class="btn btn-sm btn-outline-secondary me-2">Deselect All</button>
+                        <button id="selectBuys" class="btn btn-sm btn-outline-success me-2">Select Buys</button>
+                        <button id="selectSells" class="btn btn-sm btn-outline-danger">Select Sells</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transactions Table -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Transaction Preview</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th width="5%">
+                                    <input type="checkbox" id="selectAllCheckboxHeader">
+                                </th>
+                                <th width="5%">Row</th>
+                                <th width="15%">Security</th>
+                                <th width="10%">Type</th>
+                                <th width="10%">Quantity</th>
+                                <th width="10%">Price</th>
+                                <th width="12%">Amount</th>
+                                <th width="12%">Date</th>
+                                <th width="10%">Status</th>
+                                <th width="11%">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactionsTableBody">
+                            <tr>
+                                <td colspan="10" class="text-center text-muted">
+                                    <i class="fas fa-spinner fa-spin"></i> Loading transactions...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary and Process Button -->
+        <div class="card mt-3">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h6 class="mb-1">Summary</h6>
+                        <p class="mb-0 text-muted">
+                            <span id="summaryText">No transactions selected</span>
+                        </p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <button id="processSelected" class="btn btn-primary btn-lg" disabled>
+                            <i class="fas fa-check"></i> Process Selected Transactions
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let previewData = null;
+let selectedTransactions = [];
+
+// Simple function to load test data
+function loadTestData() {
+    const clientId = new URLSearchParams(window.location.search).get('client_id') || 26;
+    window.location.href = '/transactions/preview/test?client_id=' + clientId;
+}
+
+// Simple function to show status messages
+function showStatus(message, type = 'info') {
+    // Remove existing alerts
+    $('.alert').remove();
+    
+    const alertClass = type === 'error' ? 'alert-danger' : 
+                     type === 'success' ? 'alert-success' : 
+                     type === 'info' ? 'alert-info' : 'alert-warning';
+    
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    
+    $('.preview-container').prepend(alertHtml);
+}
+
+
+// Initialize the page
+function initializePage() {
+    console.log('Initializing transaction preview page');
+    
+    // Get preview data from session storage
+    const storedData = sessionStorage.getItem('transactionPreview');
+    console.log('Stored data:', storedData);
+    console.log('Session storage keys:', Object.keys(sessionStorage));
+    
+    if (storedData) {
+        try {
+            previewData = JSON.parse(storedData);
+            console.log('Loaded preview data:', previewData);
+            populatePreview();
+        } catch (e) {
+            console.error('Error parsing preview data:', e);
+            showStatus('Error loading preview data. Please try uploading again.', 'error');
+            setTimeout(() => {
+                window.location.href = '/transactions';
+            }, 2000);
+        }
+    } else {
+        console.log('No preview data found in session storage');
+        
+        // Check if we're coming from a test or direct access
+        const urlParams = new URLSearchParams(window.location.search);
+        const clientId = urlParams.get('client_id');
+        
+        if (clientId) {
+            console.log('Client ID found in URL, loading test data');
+            loadTestData();
+        } else {
+            console.log('No preview data found, loading test data automatically');
+            showStatus('No preview data found. Loading test data for demonstration.', 'info');
+            loadTestData();
+        }
+    }
+}
+
+
+// Populate the preview table
+function populatePreview() {
+    if (!previewData) {
+        console.log('No preview data available');
+        return;
+    }
+
+    console.log('Populating preview with data:', previewData);
+
+    // Update header information
+    $('#fileName').text(previewData.file_name || 'Unknown file');
+    $('#totalRows').text(previewData.total_rows || 0);
+    $('#validCount').text(previewData.valid_transactions || 0);
+
+    // Show errors if any
+    if (previewData.errors && previewData.errors.length > 0) {
+        $('#errorMessages').removeClass('d-none');
+        const errorList = previewData.errors.map(error => `<div class="text-danger">• ${error}</div>`).join('');
+        $('#errorList').html(errorList);
+    }
+
+    // Populate transactions table
+    const tbody = $('#transactionsTableBody');
+    tbody.empty();
+
+    // Handle V2 data format (valid_transactions + problematic_rows)
+    let allTransactions = [];
+    if (previewData.valid_transactions) {
+        allTransactions = allTransactions.concat(previewData.valid_transactions.map(t => ({
+            ...t,
+            status: 'valid',
+            selected: true
+        })));
+    }
+    if (previewData.problematic_rows) {
+        allTransactions = allTransactions.concat(previewData.problematic_rows.map(t => ({
+            ...t,
+            status: 'error',
+            selected: false
+        })));
+    }
+
+    console.log('All transactions:', allTransactions);
+
+    if (allTransactions.length > 0) {
+        allTransactions.forEach((transaction, index) => {
+            const row = createTransactionRow(transaction, index);
+            tbody.append(row);
+        });
+        console.log(`Added ${allTransactions.length} transaction rows`);
+    } else {
+        console.log('No transactions to display');
+        tbody.append('<tr><td colspan="10" class="text-center text-muted">No transactions to preview</td></tr>');
+    }
+
+    // Initialize valid transactions as selected
+    selectedTransactions = allTransactions.filter(t => t.status === 'valid');
+    updateSummary();
+}
+
+// Create a transaction row
+function createTransactionRow(transaction, index) {
+    const isSelected = transaction.selected !== false;
+    const rowClass = isSelected ? 'transaction-row selected' : 'transaction-row';
+    const statusClass = transaction.status === 'valid' ? 'bg-success' : 'bg-danger';
+    const statusText = transaction.status === 'valid' ? 'Valid' : 'Error';
+    
+    // Handle V2 data format
+    const date = transaction.transaction_date || transaction.date || 'N/A';
+    const type = transaction.type || 'N/A';
+    const stock = transaction.stock || transaction.security_symbol || 'N/A';
+    const quantity = transaction.quantity || 0;
+    const price = transaction.price || 0;
+    const amount = transaction.amount || (quantity * price);
+    
+    // Show errors for problematic rows
+    let errorInfo = '';
+    if (transaction.status === 'error' && transaction.errors && transaction.errors.length > 0) {
+        errorInfo = `<br><small class="text-danger">${transaction.errors.join(', ')}</small>`;
+    }
+    
+    return `
+        <tr class="${rowClass}" data-index="${index}">
+            <td>
+                <input type="checkbox" class="transaction-checkbox" ${isSelected ? 'checked' : ''} 
+                       data-index="${index}" ${transaction.status === 'error' ? 'disabled' : ''}>
+            </td>
+            <td>${transaction.row_number || index + 1}</td>
+            <td>
+                <strong>${stock}</strong>${errorInfo}
+            </td>
+            <td>
+                <span class="badge ${type === 'BUY' ? 'bg-success' : 
+                                   type === 'SELL' ? 'bg-danger' : 
+                                   'bg-secondary'}">${type}</span>
+            </td>
+            <td>${quantity}</td>
+            <td>₹${price.toLocaleString()}</td>
+            <td>₹${amount.toLocaleString()}</td>
+            <td>${date}</td>
+            <td>
+                <span class="badge ${statusClass}">
+                    ${statusText}
+                </span>
+            </td>
+            <td>
+                ${transaction.status === 'error' ? 
+                    '<button class="btn btn-sm btn-outline-warning edit-transaction" data-index="' + index + '">Edit</button>' :
+                    '<button class="btn btn-sm btn-outline-primary toggle-transaction" data-index="' + index + '">' + 
+                    (isSelected ? 'Deselect' : 'Select') + '</button>'
+                }
+            </td>
+        </tr>
+    `;
+}
+
+// Update summary
+function updateSummary() {
+    const selectedCount = selectedTransactions.length;
+    const totalCount = previewData ? (previewData.valid_transactions?.length || 0) + (previewData.problematic_rows?.length || 0) : 0;
+    
+    $('#selectedCount').text(selectedCount);
+    $('#summaryText').text(`${selectedCount} of ${totalCount} transactions selected`);
+    
+    // Enable/disable process button
+    if (selectedCount > 0) {
+        $('#processSelected').prop('disabled', false);
+    } else {
+        $('#processSelected').prop('disabled', true);
+    }
+}
+
+// Event handlers
+function setupEventHandlers() {
+    console.log('Setting up event handlers');
+    
+    // Back to upload button
+    $('#backToUpload').on('click', function(e) {
+        e.preventDefault();
+        console.log('Back to upload clicked');
+        sessionStorage.removeItem('transactionPreview');
+        window.location.href = '/transactions';
+    });
+
+    // Cancel button
+    $('#cancelProcessing').on('click', function(e) {
+        e.preventDefault();
+        console.log('Cancel processing clicked');
+        sessionStorage.removeItem('transactionPreview');
+        window.location.href = '/transactions';
+    });
+
+    // Test button
+    $('#testButton').on('click', function(e) {
+        e.preventDefault();
+        alert('Test button works! Buttons are functional.');
+        console.log('Test button clicked');
+    });
+
+    // Test if loadTestData function exists
+    console.log('loadTestData function exists:', typeof loadTestData);
+    console.log('window.loadTestData exists:', typeof window.loadTestData);
+    
+    // Make sure function is globally accessible
+    window.loadTestData = loadTestData;
+    console.log('Made loadTestData globally accessible');
+
+    // Load test data button
+    $('#loadTestData').on('click', function(e) {
+        e.preventDefault();
+        console.log('Load test data clicked - jQuery handler');
+        alert('Load Test Data button clicked!');
+        console.log('About to call loadTestData function');
+        try {
+            loadTestData();
+            console.log('loadTestData function called successfully');
+        } catch (error) {
+            console.error('Error calling loadTestData:', error);
+            alert('Error loading test data: ' + error.message);
+        }
+    });
+
+    // Select all checkbox
+    $('#selectAllCheckbox').on('change', function() {
+        if ($(this).is(':checked')) {
+            selectAllTransactions();
+        } else {
+            deselectAllTransactions();
+        }
+    });
+
+    // Selection buttons
+    $('#selectAll').on('click', function() {
+        selectAllTransactions();
+    });
+
+    $('#deselectAll').on('click', function() {
+        deselectAllTransactions();
+    });
+
+    $('#selectBuys').on('click', function() {
+        selectTransactionsByType('BUY');
+    });
+
+    $('#selectSells').on('click', function() {
+        selectTransactionsByType('SELL');
+    });
+
+    // Process selected button
+    $('#processSelected').on('click', function() {
+        processSelectedTransactions();
+    });
+
+    // Transaction row checkboxes
+    $(document).on('change', '.transaction-checkbox', function() {
+        const index = parseInt($(this).data('index'));
+        const isChecked = $(this).is(':checked');
+        
+        if (isChecked) {
+            if (!selectedTransactions.find(t => t.row_number === previewData.preview_transactions[index].row_number)) {
+                selectedTransactions.push(previewData.preview_transactions[index]);
+            }
+        } else {
+            selectedTransactions = selectedTransactions.filter(t => 
+                t.row_number !== previewData.preview_transactions[index].row_number
+            );
+        }
+        
+        updateSummary();
+    });
+
+    // Toggle transaction buttons
+    $(document).on('click', '.toggle-transaction', function() {
+        const index = parseInt($(this).data('index'));
+        const checkbox = $(`.transaction-checkbox[data-index="${index}"]`);
+        checkbox.prop('checked', !checkbox.prop('checked')).trigger('change');
+    });
+}
+
+// Selection functions
+function selectAllTransactions() {
+    $('.transaction-checkbox').prop('checked', true);
+    selectedTransactions = [...previewData.preview_transactions];
+    updateSummary();
+}
+
+function deselectAllTransactions() {
+    $('.transaction-checkbox').prop('checked', false);
+    selectedTransactions = [];
+    updateSummary();
+}
+
+function selectTransactionsByType(type) {
+    $('.transaction-checkbox').each(function() {
+        const index = parseInt($(this).data('index'));
+        const transaction = previewData.preview_transactions[index];
+        if (transaction.type === type) {
+            $(this).prop('checked', true);
+            if (!selectedTransactions.find(t => t.row_number === transaction.row_number)) {
+                selectedTransactions.push(transaction);
+            }
+        }
+    });
+    updateSummary();
+}
+
+// Process selected transactions
+function processSelectedTransactions() {
+    if (selectedTransactions.length === 0) {
+        showStatus('Please select at least one transaction to process.', 'warning');
+        return;
+    }
+
+    console.log('Processing selected transactions:', selectedTransactions);
+    showStatus('Processing transactions...', 'info');
+    
+    // Get client ID from URL or use default
+    const urlParams = new URLSearchParams(window.location.search);
+    const clientId = urlParams.get('client_id') || 26; // Default to client 26
+    
+    $.ajax({
+        url: `/api/v1/clients/${clientId}/transactions/process`,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            transactions: selectedTransactions
+        }),
+        headers: {
+            'X-CSRFToken': $('meta[name=csrf-token]').attr('content')
+        },
+        success: function(response) {
+            if (response.success) {
+                showStatus('Transactions processed successfully!', 'success');
+                setTimeout(() => {
+                    window.location.href = '/transactions';
+                }, 2000);
+            } else {
+                showStatus(`Error processing transactions: ${response.message}`, 'error');
+            }
+        },
+        error: function(xhr) {
+            console.error('Error processing transactions:', xhr);
+            showStatus('Error processing transactions. Please try again.', 'error');
+        }
+    });
+}
+
+// Initialize when document is ready
+$(document).ready(function() {
+    console.log('jQuery loaded, DOM ready');
+    console.log('Back button exists:', $('#backToUpload').length > 0);
+    console.log('Cancel button exists:', $('#cancelProcessing').length > 0);
+    console.log('Test button exists:', $('#testButton').length > 0);
+    console.log('Load test data button exists:', $('#loadTestData').length > 0);
+    
+    // Test if function is accessible
+    console.log('loadTestDataFromAPI function exists:', typeof loadTestDataFromAPI);
+    console.log('window.loadTestDataFromAPI exists:', typeof window.loadTestDataFromAPI);
+    
+    // Test if function is accessible
+    console.log('loadTestDataSimple function exists:', typeof loadTestDataSimple);
+    console.log('window.loadTestDataSimple exists:', typeof window.loadTestDataSimple);
+    
+    // Make function globally accessible
+    window.loadTestDataSimple = loadTestDataSimple;
+    console.log('Made loadTestDataSimple globally accessible');
+    
+    // Test direct button click
+    console.log('Setting up direct click handler for loadTestData button');
+    $('#loadTestData').click(function() {
+        console.log('DIRECT CLICK HANDLER - Load test data clicked!');
+        alert('DIRECT CLICK - Load Test Data button clicked!');
+        loadTestData();
+    });
+    
+    // Test if button is clickable
+    setTimeout(function() {
+        console.log('Testing button clickability...');
+        const button = document.getElementById('loadTestData');
+        if (button) {
+            console.log('Button found in DOM:', button);
+            console.log('Button disabled:', button.disabled);
+            console.log('Button style display:', button.style.display);
+            console.log('Button offsetParent:', button.offsetParent);
+        } else {
+            console.log('Button NOT found in DOM!');
+        }
+    }, 1000);
+    
+    setupEventHandlers();
+    initializePage();
+});
+
+// Also add vanilla JS event handlers as backup
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM loaded, setting up vanilla JS handlers');
+    
+    setTimeout(function() {
+        const backButton = document.getElementById('backToUpload');
+        const cancelButton = document.getElementById('cancelProcessing');
+        const testButton = document.getElementById('testButton');
+
+        if (backButton) {
+            backButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('Back to upload clicked (vanilla JS)');
+                sessionStorage.removeItem('transactionPreview');
+                window.location.href = '/transactions';
+            });
+        }
+
+        if (cancelButton) {
+            cancelButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('Cancel processing clicked (vanilla JS)');
+                sessionStorage.removeItem('transactionPreview');
+                window.location.href = '/transactions';
+            });
+        }
+
+        if (testButton) {
+            testButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                alert('Test button works! (vanilla JS)');
+                console.log('Test button clicked (vanilla JS)');
+            });
+        }
+
+        const loadTestDataButton = document.getElementById('loadTestData');
+        if (loadTestDataButton) {
+            loadTestDataButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('Load test data clicked (vanilla JS)');
+                loadTestData();
+            });
+        }
+    }, 100);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Role Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">Role Management</h1>
+        <a href="{{ url_for('roles.add_role') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Add New Role
+        </a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">All Roles</h5>
+        </div>
+        <div class="card-body">
+            {% if roles %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Display Name</th>
+                                <th>Description</th>
+                                <th>Parent Role</th>
+                                <th>System Role</th>
+                                <th>Status</th>
+                                <th>Users</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for role in roles %}
+                            <tr>
+                                <td><strong>{{ role.name }}</strong></td>
+                                <td>{{ role.display_name }}</td>
+                                <td>{{ role.description or '-' }}</td>
+                                <td>
+                                    {% if role.parent_role %}
+                                        <span class="badge bg-info">{{ role.parent_role.display_name }}</span>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if role.is_system_role %}
+                                        <span class="badge bg-warning">System</span>
+                                    {% else %}
+                                        <span class="text-muted">Custom</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if role.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% set user_count = role.users|length %}
+                                    <span class="badge bg-primary">{{ user_count }}</span>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{{ url_for('roles.edit_role_permissions', role_id=role.id) }}" 
+                                           class="btn btn-sm btn-outline-primary" 
+                                           title="Edit Permissions">
+                                            <i class="fas fa-key"></i>
+                                        </a>
+                                        <a href="{{ url_for('roles.edit_role', role_id=role.id) }}" 
+                                           class="btn btn-sm btn-outline-secondary" 
+                                           title="Edit Role">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        {% if not role.is_system_role and role.is_active %}
+                                        <form method="POST" action="{{ url_for('roles.delete_role', role_id=role.id) }}" 
+                                              style="display: inline;" 
+                                              onsubmit="return confirm('Are you sure you want to deactivate this role?');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Deactivate">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> No roles found. <a href="{{ url_for('roles.add_role') }}">Create your first role</a>.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+
+
+
+

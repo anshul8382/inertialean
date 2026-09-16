@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Import Invoices{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-file-upload"></i> Import historical invoices</h1>
+        <a href="{{ url_for('invoices.list_invoices') }}" class="btn btn-outline-secondary">Back to invoices</a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <p class="text-muted">
+                        <strong>Step 1 of 2:</strong> Upload a <strong>Zoho Books</strong> export (<code>.csv</code>, <code>.tsv</code>, <code>.xls</code>, or <code>.xlsx</code> — first sheet is read for Excel).
+                        You will then <strong>confirm</strong> each row by matching the file customer name to a client in the database.
+                        Rows whose invoice number is <strong>already in the database</strong> or <strong>repeated in the file</strong> are skipped (no duplicates).
+                        On the confirm screen you can <strong>download skipped or invalid rows</strong> as CSV; after import, any <strong>commit failures</strong> can be downloaded from the invoice list.
+                    </p>
+                    <form method="post" enctype="multipart/form-data" action="{{ url_for('invoices.upload_invoices') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label for="file" class="form-label">File</label>
+                            <input type="file" class="form-control" id="file" name="file" accept=".csv,.tsv,.txt,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-cloud-upload-alt"></i> Upload and import</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card border-info mb-3">
+                <div class="card-header bg-info text-white py-2">Required / used columns</div>
+                <div class="card-body small">
+                    <ul class="mb-0 ps-3">
+                        <li><strong>Invoice Number</strong> — unique; duplicates skipped</li>
+                        <li><strong>Invoice Date</strong> (or Issued Date)</li>
+                        <li><strong>Due Date</strong> — falls back to invoice date</li>
+                        <li><strong>Total</strong>, <strong>SubTotal</strong></li>
+                        <li><strong>Invoice Status</strong> — maps to draft/sent/paid/overdue/cancelled</li>
+                        <li><strong>Customer Name</strong> and/or <strong>Primary Contact EmailID</strong> — must match a client you can access</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="card border-secondary mb-3">
+                <div class="card-header py-2">Optional (stored in notes or amounts)</div>
+                <div class="card-body small">
+                    <ul class="mb-0 ps-3">
+                        <li><strong>Invoice ID</strong> — reference line in notes</li>
+                        <li><strong>Notes</strong>, <strong>Item Desc</strong> / <strong>Item Name</strong></li>
+                        <li><strong>Balance</strong> — affects status when Closed</li>
+                        <li><strong>Item Tax1 Amount</strong> — or Total − SubTotal for tax</li>
+                        <li><strong>Last Payment Date</strong> / <strong>Expected Payment Date</strong> — paid date when status is paid</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="alert alert-warning small mb-0">
+                <strong>Agreement.</strong> If a client has no signed/active agreement yet, the invoice is still imported and
+                <strong>agreement is left blank</strong> until you add one. After import, the invoice list shows everyone who was missing an agreement.
+                Imported invoices have <strong>no line items</strong> (header-level only). Billing period start/end are set to the invoice date.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

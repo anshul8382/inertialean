@@ -1,0 +1,93 @@
+{# Mobile client detail — summary + quick actions (full analytics on desktop) #}
+<div class="im-mobile-only im-mobile-page" id="imClientDetailMobile">
+  {% set mobile_page_title = client.name %}
+  {% set mobile_back_url = url_for('clients_v2.list_clients') %}
+  {% set mobile_header_action_url = url_for('clients.edit_client', client_id=client.id) %}
+  {% set mobile_header_action_class = 'btn-outline-primary' %}
+  {% set mobile_header_action_icon = 'fas fa-edit' %}
+  {% set mobile_header_action_label = 'Edit client' %}
+  {% include 'partials/mobile/app_header.html' %}
+
+  {% if client_status %}
+  <section class="im-mobile-section">
+    <h2 class="im-mobile-section__title">Health</h2>
+    <div class="im-metric-grid">
+      <div class="im-metric-tile im-metric-tile--{% if client_status.status == 'excellent' %}success{% elif client_status.status == 'critical' %}danger{% else %}accent{% endif %}">
+        <p class="im-metric-tile__label">Status</p>
+        <p class="im-metric-tile__value">{{ client_status.status|title }}</p>
+      </div>
+      <div class="im-metric-tile">
+        <p class="im-metric-tile__label">Score</p>
+        <p class="im-metric-tile__value">{{ client_status.score }}/100</p>
+      </div>
+      <div class="im-metric-tile im-metric-tile--warning">
+        <p class="im-metric-tile__label">Alerts</p>
+        <p class="im-metric-tile__value">{{ client_status.details.total_active_alerts|default(0) }}</p>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="im-mobile-section">
+    <h2 class="im-mobile-section__title">Portfolio</h2>
+    <div class="im-metric-grid">
+      <div class="im-metric-tile im-metric-tile--wide im-metric-tile--success">
+        <p class="im-metric-tile__label">Current value</p>
+        <p class="im-metric-tile__value">₹{{ "{:,.0f}".format(current_value|float) if current_value else "0" }}</p>
+      </div>
+      {% if xirr is not none %}
+      <div class="im-metric-tile">
+        <p class="im-metric-tile__label">XIRR</p>
+        <p class="im-metric-tile__value">{{ "%.2f"|format(xirr|float) }}%</p>
+      </div>
+      {% endif %}
+      {% if net_investment is not none %}
+      <div class="im-metric-tile">
+        <p class="im-metric-tile__label">Net invested</p>
+        <p class="im-metric-tile__value">₹{{ "{:,.0f}".format(net_investment|float) }}</p>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if asset_class_holdings %}
+  <section class="im-mobile-section">
+    <h2 class="im-mobile-section__title">Asset allocation</h2>
+    <div class="im-list-stack">
+      {% for ac_name, ac_value in asset_class_holdings.items() %}
+      <div class="im-list-card" style="pointer-events:none">
+        <div class="im-list-card__header">
+          <h2 class="im-list-card__title">{{ ac_name }}</h2>
+          <span class="im-badge im-badge--muted">₹{{ "{:,.0f}".format(ac_value|float) }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="im-mobile-section">
+    <h2 class="im-mobile-section__title">Quick actions</h2>
+    <div class="im-quick-actions">
+      <a href="{{ url_for('unified_recommendations.client_recommendations', client_id=client.id) }}" class="im-quick-action">
+        <i class="fas fa-magic"></i><span>Recs</span>
+      </a>
+      {% if latest_monthly_investment %}
+      <a href="{{ url_for('monthly_investments.view_monthly_investment', id=latest_monthly_investment.id) }}" class="im-quick-action">
+        <i class="fas fa-calendar"></i><span>Workflow</span>
+      </a>
+      {% endif %}
+      <a href="{{ url_for('enhanced_review.period_analysis_v2') }}?client_id={{ client.id }}" class="im-quick-action">
+        <i class="fas fa-chart-line"></i><span>Review</span>
+      </a>
+      <a href="#imDesktopDetailTabs" class="im-quick-action im-scroll-to-desktop">
+        <i class="fas fa-th-list"></i><span>All tabs</span>
+      </a>
+    </div>
+  </section>
+
+  <div class="im-mobile-banner">
+    <i class="fas fa-info-circle"></i>
+    Scroll below for full tabs, charts, and tables — or use desktop for complex analysis.
+  </div>
+</div>

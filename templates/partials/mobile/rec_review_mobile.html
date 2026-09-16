@@ -1,0 +1,55 @@
+{# Mobile asset-allocation step — expects client, pending_data, session_id #}
+<div class="im-metric-grid mb-3">
+  <div class="im-metric-tile">
+    <span class="im-metric-tile__label">Investment</span>
+    <span class="im-metric-tile__value">₹{{ "{:,.0f}".format(pending_data.investment_amount|default(0.0)|float) }}</span>
+  </div>
+  <div class="im-metric-tile">
+    <span class="im-metric-tile__label">Asset classes</span>
+    <span class="im-metric-tile__value">{{ pending_data.asset_recommendations|default([])|length }}</span>
+  </div>
+</div>
+{% if client.planning_synopsis %}
+<p class="small text-muted mb-2"><i class="fas fa-lightbulb"></i> {{ client.planning_synopsis[:200] }}{% if client.planning_synopsis|length > 200 %}…{% endif %}</p>
+{% endif %}
+<div class="im-list-stack mb-3">
+  {% for rec in pending_data.asset_recommendations|default([]) %}
+  <div class="im-list-card">
+    <div class="im-list-card__header">
+      <h2 class="im-list-card__title">{{ rec.asset_class }}</h2>
+      <span class="im-badge im-badge--{% if rec.action == 'BUY' %}success{% elif rec.action == 'SELL' %}danger{% else %}muted{% endif %}">{{ rec.action|default('HOLD') }}</span>
+    </div>
+    <p class="im-list-card__meta">Target {{ "%.1f"|format(rec.target_weight|default(0.0)|float) }}% · ₹{{ "{:,.0f}".format(rec.required_change|default(0.0)|float) }}</p>
+    <button type="button" class="btn btn-primary btn-sm w-100 mt-2 edit-btn"
+            data-asset-class="{{ rec.asset_class|e }}"
+            data-amount="{{ rec.required_change|default(0.0)|float }}">
+      <i class="fas fa-cogs"></i> Open {{ rec.asset_class }}
+    </button>
+    <div class="form-check mt-2">
+      <input class="form-check-input asset-class-select" type="checkbox" data-asset-class="{{ rec.asset_class|e }}" id="mobile-ac-{{ loop.index }}" checked>
+      <label class="form-check-label" for="mobile-ac-{{ loop.index }}">Include in combined editor</label>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<div class="im-list-card im-list-card--total mb-3">
+  <div class="im-list-card__header">
+    <h2 class="im-list-card__title">Total</h2>
+  </div>
+  <p class="im-list-card__meta mb-1">
+    Current ₹{{ "{:,.0f}".format(alloc_totals.current_value) }}
+    · Target ₹{{ "{:,.0f}".format(alloc_totals.target_value) }}
+  </p>
+  <p class="im-list-card__meta mb-0">
+    Weights {{ "%.1f"|format(alloc_totals.current_weight) }}% → {{ "%.1f"|format(alloc_totals.target_weight) }}%
+    · Net allocation ₹{{ "{:,.0f}".format(alloc_totals.allocation) }}
+  </p>
+</div>
+<div class="rec-sticky-actions" aria-label="Recommendation actions">
+  <button type="button" class="btn btn-primary" id="implement-all-btn-mobile" onclick="var b=document.getElementById('implement-all-btn');if(b)b.click();">
+    <i class="fas fa-cogs"></i> Continue to securities
+  </button>
+  <button type="button" class="btn btn-success" onclick="previewEmail()">
+    <i class="fas fa-envelope"></i> Email
+  </button>
+</div>

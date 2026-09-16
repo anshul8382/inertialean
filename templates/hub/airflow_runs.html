@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Airflow scheduled jobs{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+    <div>
+      {% if config.get('NAV_INTELLIGENCE_HUB_ENABLED') %}
+      <a href="{{ url_for('hub.dashboard') }}" class="small text-muted text-decoration-none">← Intelligence Hub</a>
+      {% else %}
+      <a href="{{ url_for('airflow.dashboard') }}" class="small text-muted text-decoration-none">← Airflow</a>
+      {% endif %}
+      <h2 class="mt-1 mb-0"><i class="fas fa-wind text-info"></i> Scheduled jobs (Airflow)</h2>
+      <p class="text-muted small mb-0">Last run per DAG from metadata DB. Failed runs can raise alerts in the Hub.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      {% if airflow_ui_base %}
+      <a href="{{ airflow_ui_base }}/home" class="btn btn-outline-primary btn-sm" target="_blank" rel="noopener">Open Airflow UI</a>
+      {% endif %}
+      {% if config.get('NAV_INTELLIGENCE_HUB_ENABLED') %}
+      <a href="{{ url_for('hub.alert_center') }}" class="btn btn-outline-secondary btn-sm">Alerts</a>
+      <a href="{{ url_for('hub.operational_dashboard') }}" class="btn btn-outline-secondary btn-sm">Operational</a>
+      {% endif %}
+      <form method="post" action="{{ runs_url }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="action" value="sync_alerts"/>
+        <button type="submit" class="btn btn-warning btn-sm">Sync failure alerts</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="row mb-3">
+    <div class="col-md-4 mb-2">
+      <div class="card border-success h-100"><div class="card-body py-2">
+        <div class="small text-muted">Last run succeeded</div>
+        <div class="h4 mb-0 text-success">{{ success_count }}</div>
+      </div></div>
+    </div>
+    <div class="col-md-4 mb-2">
+      <div class="card border-danger h-100"><div class="card-body py-2">
+        <div class="small text-muted">Last run failed</div>
+        <div class="h4 mb-0 text-danger">{{ failed_count }}</div>
+      </div></div>
+    </div>
+    <div class="col-md-4 mb-2">
+      <div class="card border-secondary h-100"><div class="card-body py-2">
+        <div class="small text-muted">No run / other</div>
+        <div class="h4 mb-0 text-secondary">{{ other_count }}</div>
+      </div></div>
+    </div>
+  </div>
+
+  {% if not dag_rows %}
+  <div class="alert alert-warning">
+    No DAG metadata found. Check <code>AIRFLOW_METADATA_DB_PATH</code> (currently <code>{{ metadata_db_path }}</code>) and that Airflow has written <code>airflow.db</code>.
+  </div>
+  {% else %}
+  <div class="table-responsive card shadow-sm">
+    <table class="table table-sm table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>DAG</th>
+          <th>Paused</th>
+          <th>Schedule</th>
+          <th>Last state</th>
+          <th>Last run (start)</th>
+          <th>Failed tasks</th>
+          <th>Suggested fix</th>
+          <th>Log tail</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in dag_rows %}
+        {% set st = (d.last_state or '')|lower %}
+        <tr class="{% if st == 'failed' %}table-danger{% elif st == 'success' %}table-success{% endif %}">
+          <td>
+            <strong>{{ d.dag_id }}</strong>
+            {% if airflow_ui_base %}
+            <a class="small ms-1" href="{{ airflow_ui_base }}/dags/{{ d.dag_id }}/grid" target="_blank" rel="noopener">grid</a>
+            {% endif %}
+          </td>
+          <td>{% if d.is_paused %}<span class="badge bg-secondary">paused</span>{% else %}<span class="badge bg-success">on</span>{% endif %}</td>
+          <td class="small text-muted">{{ d.timetable_description or d.timetable_summary or '—' }}</td>
+          <td>
+            {% if st == 'failed' %}<span class="badge bg-danger">failed</span>
+            {% elif st == 'success' %}<span class="badge bg-success">success</span>
+            {% elif st %}<span class="badge bg-secondary">{{ st }}</span>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td class="small">{% if d.last_start_date %}{{ d.last_start_date }}{% else %}—{% endif %}</td>
+          <td class="small">{% if d.failed_task_ids %}{{ d.failed_task_ids | join(', ') }}{% else %}—{% endif %}</td>
+          <td class="small">{% if d.suggestion %}{{ d.suggestion }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+          <td class="small" style="max-width: 22rem;">
+            {% if d.log_excerpt %}
+            <details class="small">
+              <summary class="text-primary" style="cursor:pointer;">Show log tail</summary>
+              <pre class="small bg-dark text-light p-2 mt-1 mb-0" style="white-space:pre-wrap;max-height:14rem;overflow:auto;">{{ d.log_excerpt }}</pre>
+            </details>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="small text-muted mt-2 mb-0">
+    Use <strong>Sync failure alerts</strong> to create or update active <code>system / airflow_dag</code> alerts for failed DAGs, and to auto-resolve them when the latest run succeeds.
+    Path: <code>{{ metadata_db_path }}</code>
+  </p>
+  {% endif %}
+</div>
+{% endblock %}

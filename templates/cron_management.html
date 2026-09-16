@@ -1,0 +1,732 @@
+{% extends "base.html" %}
+
+{% block title %}Cron Jobs Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3 mb-0">Cron Jobs Management</h1>
+                <div>
+                    <button class="btn btn-primary" onclick="runAllJobs()">
+                        <i class="fas fa-play"></i> Run All Jobs
+                    </button>
+                    <button class="btn btn-info" onclick="refreshJobs()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                    <button class="btn btn-warning" onclick="syncCronJobs()">
+                        <i class="fas fa-cogs"></i> Sync Cron Jobs
+                    </button>
+                </div>
+            </div>
+
+            <!-- Status Cards -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <h4 class="card-title" id="totalJobs">-</h4>
+                                    <p class="card-text">Total Jobs</p>
+                                </div>
+                                <div class="align-self-center">
+                                    <i class="fas fa-tasks fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <h4 class="card-title" id="enabledJobs">-</h4>
+                                    <p class="card-text">Enabled Jobs</p>
+                                </div>
+                                <div class="align-self-center">
+                                    <i class="fas fa-check-circle fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-warning text-white">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <h4 class="card-title" id="disabledJobs">-</h4>
+                                    <p class="card-text">Disabled Jobs</p>
+                                </div>
+                                <div class="align-self-center">
+                                    <i class="fas fa-pause-circle fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <h4 class="card-title" id="lastRun">-</h4>
+                                    <p class="card-text">Last Run</p>
+                                </div>
+                                <div class="align-self-center">
+                                    <i class="fas fa-clock fa-2x"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Nifty Price Section -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <i class="fas fa-chart-line"></i> Nifty Price Management
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6>Current Nifty Price</h6>
+                                        <button class="btn btn-sm btn-outline-primary" onclick="getCurrentNiftyPrice()">
+                                            <i class="fas fa-sync"></i> Refresh
+                                        </button>
+                                    </div>
+                                    <div id="niftyPriceInfo" class="alert alert-info">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading current price...
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6>Update Nifty Price</h6>
+                                        <button class="btn btn-sm btn-success" onclick="updateNiftyPrice()">
+                                            <i class="fas fa-download"></i> Update Now
+                                        </button>
+                                    </div>
+                                    <div id="niftyUpdateInfo" class="alert alert-secondary">
+                                        Click "Update Now" to fetch latest Nifty price using multiple methods
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cron Jobs Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-cogs"></i> Available Cron Jobs
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="cronJobsTable">
+                            <thead>
+                                <tr>
+                                    <th>Job Name</th>
+                                    <th>Description</th>
+                                    <th>Category</th>
+                                    <th>Schedule</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cronJobsTableBody">
+                                <tr>
+                                    <td colspan="6" class="text-center">
+                                        <i class="fas fa-spinner fa-spin"></i> Loading cron jobs...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Job Details Modal -->
+<div class="modal fade" id="jobDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="jobDetailsModalTitle">Job Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="jobDetailsContent">
+                    <!-- Job details will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="runJobBtn" onclick="runJobFromModal()">Run Job</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Job Logs Modal -->
+<div class="modal fade" id="jobLogsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="jobLogsModalTitle">Job Logs</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="logLines" class="form-label">Number of lines to show:</label>
+                    <select class="form-select" id="logLines" onchange="loadJobLogs()">
+                        <option value="50">50 lines</option>
+                        <option value="100" selected>100 lines</option>
+                        <option value="200">200 lines</option>
+                        <option value="500">500 lines</option>
+                    </select>
+                </div>
+                <pre id="jobLogsContent" class="bg-dark text-light p-3" style="max-height: 500px; overflow-y: auto;">
+                    <!-- Job logs will be loaded here -->
+                </pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" onclick="loadJobLogs()">Refresh Logs</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Recipient Modal -->
+<div class="modal fade" id="addRecipientModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addRecipientModalTitle">Add Report Recipient</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="addRecipientForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="recipientEmail" class="form-label">Email Address *</label>
+                        <input type="email" class="form-control" id="recipientEmail" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="recipientName" class="form-label">Name (Optional)</label>
+                        <input type="text" class="form-control" id="recipientName" name="name" placeholder="e.g., John Doe">
+                    </div>
+                    <input type="hidden" id="currentJobId" name="job_id">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Recipient
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Schedule Modal -->
+<div class="modal fade" id="editScheduleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editScheduleModalTitle">Edit Cron Schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="editScheduleForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="scheduleInput" class="form-label">Cron Schedule *</label>
+                        <input type="text" class="form-control" id="scheduleInput" name="schedule" required 
+                               placeholder="0 9 * * *" pattern="^(\*|([0-5]?\d)) (\*|([01]?\d|2[0-3])) (\*|([012]?\d|3[01])) (\*|([0]?\d|1[0-2])) (\*|([0-6]))$">
+                        <div class="form-text">
+                            Format: minute hour day month weekday<br>
+                            Examples: <code>0 9 * * *</code> (daily at 9 AM), <code>*/15 * * * *</code> (every 15 minutes)
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="scheduleDescription" class="form-label">Description (Optional)</label>
+                        <input type="text" class="form-control" id="scheduleDescription" name="description" 
+                               placeholder="e.g., Daily at 9:00 AM">
+                    </div>
+                    <input type="hidden" id="scheduleJobId" name="job_id">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Update Schedule
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+const API_BASE = '/api/v1/cron-jobs/cron-jobs';
+let currentJobId = null;
+
+// Get CSRF token from meta tag
+function getCSRFToken() {
+    const token = document.querySelector('meta[name="csrf-token"]');
+    return token ? token.getAttribute('content') : '';
+}
+
+// Load cron jobs on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadCronJobs();
+    getCurrentNiftyPrice();
+});
+
+async function loadCronJobs() {
+    try {
+        const response = await fetch(API_BASE);
+        const data = await response.json();
+        
+        if (data.success) {
+            displayCronJobs(data.data);
+            updateStatusCards(data.data);
+        } else {
+            showAlert('Error loading cron jobs: ' + data.message, 'danger');
+        }
+    } catch (error) {
+        showAlert('Error loading cron jobs: ' + error.message, 'danger');
+    }
+}
+
+function displayCronJobs(jobs) {
+    const tbody = document.getElementById('cronJobsTableBody');
+    tbody.innerHTML = '';
+    
+    jobs.forEach(job => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                <strong>${job.name}</strong>
+                <br><small class="text-muted">${job.id}</small>
+            </td>
+            <td>${job.description}</td>
+            <td>
+                <span class="badge bg-secondary">${job.category}</span>
+            </td>
+            <td>
+                <code>${job.schedule}</code>
+            </td>
+            <td>
+                <span class="badge bg-success">Enabled</span>
+            </td>
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-sm btn-outline-primary" onclick="viewJobDetails('${job.id}')" title="View Details">
+                        <i class="fas fa-info"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-success" onclick="runJob('${job.id}')" title="Run Job">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-info" onclick="viewJobLogs('${job.id}')" title="View Logs">
+                        <i class="fas fa-file-alt"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function updateStatusCards(jobs) {
+    document.getElementById('totalJobs').textContent = jobs.length;
+    document.getElementById('enabledJobs').textContent = jobs.length; // All are enabled for now
+    document.getElementById('disabledJobs').textContent = '0';
+    document.getElementById('lastRun').textContent = 'Never';
+}
+
+async function viewJobDetails(jobId) {
+    try {
+        const response = await fetch(`${API_BASE}/${jobId}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            currentJobId = jobId;
+            document.getElementById('jobDetailsModalTitle').textContent = data.data.name;
+            
+            const content = document.getElementById('jobDetailsContent');
+            content.innerHTML = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Job Information</h6>
+                        <table class="table table-sm">
+                            <tr><td><strong>ID:</strong></td><td>${data.data.id}</td></tr>
+                            <tr><td><strong>Name:</strong></td><td>${data.data.name}</td></tr>
+                            <tr><td><strong>Description:</strong></td><td>${data.data.description}</td></tr>
+                            <tr><td><strong>Category:</strong></td><td><span class="badge bg-secondary">${data.data.category}</span></td></tr>
+                            <tr><td><strong>Schedule:</strong></td><td><code>${data.data.schedule}</code></td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Schedule</h6>
+                        <div class="mb-3">
+                            <code id="currentSchedule">${data.data.schedule}</code>
+                            <button class="btn btn-sm btn-outline-primary ms-2" onclick="showEditScheduleModal('${data.data.id}', '${data.data.schedule}')">
+                                <i class="fas fa-edit"></i> Edit
+                            </button>
+                        </div>
+                        <h6>Recipients</h6>
+                        <div id="recipientsList">
+                            <ul class="list-unstyled">
+                                ${data.data.recipients.map(email => `<li><i class="fas fa-envelope"></i> ${email}</li>`).join('')}
+                            </ul>
+                        </div>
+                        <div class="mt-2">
+                            <button class="btn btn-sm btn-primary" onclick="showAddRecipientModal('${data.data.id}')">
+                                <i class="fas fa-plus"></i> Add Recipient
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <h6>Recent Logs</h6>
+                    <pre class="bg-light p-3" style="max-height: 200px; overflow-y: auto;">${data.data.recent_logs || 'No logs available'}</pre>
+                </div>
+            `;
+            
+            new bootstrap.Modal(document.getElementById('jobDetailsModal')).show();
+        } else {
+            showAlert('Error loading job details: ' + data.message, 'danger');
+        }
+    } catch (error) {
+        showAlert('Error loading job details: ' + error.message, 'danger');
+    }
+}
+
+async function runJob(jobId) {
+    if (!confirm(`Are you sure you want to run the job "${jobId}"?`)) {
+        return;
+    }
+    
+    try {
+        showAlert(`Starting job "${jobId}"...`, 'info');
+        
+        const response = await fetch(`${API_BASE}/${jobId}/run`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Job "${jobId}" completed successfully!`, 'success');
+            if (data.data.output) {
+                console.log('Job output:', data.data.output);
+            }
+        } else {
+            showAlert(`Job "${jobId}" failed: ${data.message}`, 'danger');
+            if (data.data.error) {
+                console.error('Job error:', data.data.error);
+            }
+        }
+    } catch (error) {
+        showAlert(`Error running job "${jobId}": ${error.message}`, 'danger');
+    }
+}
+
+async function runJobFromModal() {
+    if (currentJobId) {
+        runJob(currentJobId);
+        bootstrap.Modal.getInstance(document.getElementById('jobDetailsModal')).hide();
+    }
+}
+
+async function viewJobLogs(jobId) {
+    currentJobId = jobId;
+    document.getElementById('jobLogsModalTitle').textContent = `Logs - ${jobId}`;
+    await loadJobLogs();
+    new bootstrap.Modal(document.getElementById('jobLogsModal')).show();
+}
+
+async function loadJobLogs() {
+    if (!currentJobId) return;
+    
+    const lines = document.getElementById('logLines').value;
+    
+    try {
+        const response = await fetch(`${API_BASE}/${currentJobId}/logs?lines=${lines}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            document.getElementById('jobLogsContent').textContent = data.data.log_content || 'No logs available';
+        } else {
+            document.getElementById('jobLogsContent').textContent = 'Error loading logs: ' + data.message;
+        }
+    } catch (error) {
+        document.getElementById('jobLogsContent').textContent = 'Error loading logs: ' + error.message;
+    }
+}
+
+async function runAllJobs() {
+    if (!confirm('Are you sure you want to run ALL cron jobs? This may take several minutes.')) {
+        return;
+    }
+    
+    try {
+        showAlert('Starting all cron jobs...', 'info');
+        
+        const response = await fetch(`${API_BASE}/run-all`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            const summary = data.data.summary;
+            showAlert(`All jobs completed! ${summary.successful} successful, ${summary.failed} failed`, 
+                     summary.failed > 0 ? 'warning' : 'success');
+            
+            // Display detailed results
+            console.log('Job results:', data.data.results);
+        } else {
+            showAlert(`Error running all jobs: ${data.message}`, 'danger');
+        }
+    } catch (error) {
+        showAlert(`Error running all jobs: ${error.message}`, 'danger');
+    }
+}
+
+async function getCurrentNiftyPrice() {
+    try {
+        const response = await fetch('/api/v1/cron-jobs/nifty-price/current');
+        const data = await response.json();
+        
+        if (data.success) {
+            const info = document.getElementById('niftyPriceInfo');
+            info.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="mb-1">₹${data.data.current_price.toLocaleString('en-IN', {minimumFractionDigits: 2})}</h4>
+                        <small class="text-muted">Last updated: ${new Date(data.data.last_updated).toLocaleString()}</small>
+                    </div>
+                    <div class="text-end">
+                        <small class="text-muted">Date: ${data.data.current_date}</small><br>
+                        <small class="text-muted">Records: ${data.data.total_records}</small>
+                    </div>
+                </div>
+            `;
+            info.className = 'alert alert-success';
+        } else {
+            const info = document.getElementById('niftyPriceInfo');
+            info.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${data.message}`;
+            info.className = 'alert alert-warning';
+        }
+    } catch (error) {
+        const info = document.getElementById('niftyPriceInfo');
+        info.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Error: ${error.message}`;
+        info.className = 'alert alert-danger';
+    }
+}
+
+async function updateNiftyPrice() {
+    try {
+        const info = document.getElementById('niftyUpdateInfo');
+        info.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating Nifty price...';
+        info.className = 'alert alert-info';
+        
+        const response = await fetch('/api/v1/cron-jobs/nifty-price/update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        const data = await response.json();
+        
+        if (data.success) {
+            info.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <i class="fas fa-check-circle text-success"></i> 
+                        <strong>Updated successfully!</strong><br>
+                        <small>Price: ₹${data.data.nifty_price.toLocaleString('en-IN', {minimumFractionDigits: 2})} (via ${data.data.method_used})</small>
+                    </div>
+                    <div class="text-end">
+                        <small class="text-muted">Methods tried: ${data.data.successful_methods}/${data.data.total_methods}</small>
+                    </div>
+                </div>
+            `;
+            info.className = 'alert alert-success';
+            
+            // Refresh current price display
+            getCurrentNiftyPrice();
+        } else {
+            info.innerHTML = `
+                <i class="fas fa-exclamation-triangle"></i> 
+                <strong>Update failed!</strong><br>
+                <small>${data.message}</small>
+            `;
+            info.className = 'alert alert-danger';
+        }
+    } catch (error) {
+        const info = document.getElementById('niftyUpdateInfo');
+        info.innerHTML = `<i class="fas fa-exclamation-triangle"></i> Error: ${error.message}`;
+        info.className = 'alert alert-danger';
+    }
+}
+
+function refreshJobs() {
+    loadCronJobs();
+    getCurrentNiftyPrice();
+}
+
+async function syncCronJobs() {
+    try {
+        const response = await fetch('/api/v1/cron-jobs/cron-jobs/sync', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showAlert('Cron jobs synced successfully with system crontab!', 'success');
+        } else {
+            showAlert('Error syncing cron jobs: ' + (data.message || 'Unknown error'), 'danger');
+        }
+    } catch (error) {
+        showAlert('Error syncing cron jobs: ' + error.message, 'danger');
+    }
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    
+    // Insert at the top of the container
+    const container = document.querySelector('.container-fluid');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+
+function showAddRecipientModal(jobId) {
+    document.getElementById('currentJobId').value = jobId;
+    document.getElementById('addRecipientModalTitle').textContent = `Add Recipient for ${jobId}`;
+    document.getElementById('recipientEmail').value = '';
+    document.getElementById('recipientName').value = '';
+    new bootstrap.Modal(document.getElementById('addRecipientModal')).show();
+}
+
+function showEditScheduleModal(jobId, currentSchedule) {
+    document.getElementById('scheduleJobId').value = jobId;
+    document.getElementById('editScheduleModalTitle').textContent = `Edit Schedule for ${jobId}`;
+    document.getElementById('scheduleInput').value = currentSchedule;
+    document.getElementById('scheduleDescription').value = '';
+    new bootstrap.Modal(document.getElementById('editScheduleModal')).show();
+}
+
+// Handle add recipient form submission
+document.getElementById('addRecipientForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    formData.append('action', 'add');
+    
+    try {
+        const response = await fetch(`/admin/cron-management/recipients/${formData.get('job_id')}`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        if (response.ok) {
+            showAlert('Recipient added successfully!', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('addRecipientModal')).hide();
+            
+            // Refresh the job details to show updated recipients
+            if (currentJobId) {
+                viewJobDetails(currentJobId);
+            }
+        } else {
+            showAlert('Error adding recipient. Please try again.', 'danger');
+        }
+    } catch (error) {
+        showAlert('Error adding recipient: ' + error.message, 'danger');
+    }
+});
+
+// Handle edit schedule form submission
+document.getElementById('editScheduleForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const jobId = formData.get('job_id');
+    const schedule = formData.get('schedule');
+    const description = formData.get('description');
+    
+    try {
+        const response = await fetch(`/api/v1/cron-jobs/cron-jobs/${jobId}/schedule`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({
+                schedule: schedule,
+                description: description
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            showAlert('Schedule updated successfully!', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('editScheduleModal')).hide();
+            
+            // Update the schedule display in the job details
+            document.getElementById('currentSchedule').textContent = schedule;
+            
+            // Refresh the job details to show updated schedule
+            if (currentJobId) {
+                viewJobDetails(currentJobId);
+            }
+        } else {
+            showAlert('Error updating schedule: ' + (data.message || 'Unknown error'), 'danger');
+        }
+    } catch (error) {
+        showAlert('Error updating schedule: ' + error.message, 'danger');
+    }
+});
+</script>
+{% endblock %}
+

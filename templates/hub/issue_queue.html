@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Issue Queue{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Issue Queue</h3>
+    <div>
+      <button class="btn btn-sm btn-info" onclick="analyzeSelected()">Analyze Selected</button>
+      <a href="{{ url_for('hub.operational_dashboard') }}" class="btn btn-sm btn-outline-secondary">Operational</a>
+    </div>
+  </div>
+
+  <form method="GET" class="row g-2 mb-3">
+    <div class="col-md-2">
+      <select class="form-select form-select-sm" name="severity">
+        <option value="all">All severities</option>
+        <option value="critical" {% if severity_filter=='critical' %}selected{% endif %}>Critical</option>
+        <option value="warning" {% if severity_filter=='warning' %}selected{% endif %}>Warning</option>
+        <option value="info" {% if severity_filter=='info' %}selected{% endif %}>Info</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <select class="form-select form-select-sm" name="category">
+        <option value="all">All categories</option>
+        {% for cat in all_categories %}
+        <option value="{{ cat }}" {% if category_filter==cat %}selected{% endif %}>{{ cat }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <select class="form-select form-select-sm" name="client_id">
+        <option value="">All clients</option>
+        {% for c in all_clients %}
+        <option value="{{ c.id }}" {% if client_id_filter==c.id %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select class="form-select form-select-sm" name="check">
+        <option value="all">All checks</option>
+        {% for ch in all_checks %}
+        <option value="{{ ch }}" {% if check_filter==ch %}selected{% endif %}>{{ ch }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button class="btn btn-sm btn-primary w-100">Filter</button>
+    </div>
+  </form>
+
+  <form id="issueForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="card shadow-sm">
+      <div class="card-header d-flex justify-content-between">
+        <div><input type="checkbox" id="selectAll" onchange="toggleAll(this)"> <label for="selectAll">Select all</label></div>
+        <div>
+          <button type="button" class="btn btn-sm btn-success" onclick="bulkResolve()">Resolve Selected</button>
+          <button type="button" class="btn btn-sm btn-warning" onclick="bulkAlert()">Create Alert</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th></th><th>Severity</th><th>Client</th><th>Category</th><th>Check</th><th>Message</th><th>Age</th></tr></thead>
+          <tbody>
+            {% for issue in issues.items %}
+            <tr>
+              <td><input type="checkbox" class="issue-check" value="{{ issue.id }}"></td>
+              <td>{{ issue.severity }}</td>
+              <td><a href="{{ url_for('hub.client_view', client_id=issue.client_id) }}">{{ issue.client.name if issue.client else issue.client_id }}</a></td>
+              <td>{{ issue.check_category }}</td>
+              <td>{{ issue.check_name }}</td>
+              <td>{{ issue.message|truncate(90, True, '') }}</td>
+              <td>{{ issue.detected_at | age_days }}d</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center text-muted py-4">No issues found</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </form>
+</div>
+<script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+function toggleAll(cb) { document.querySelectorAll('.issue-check').forEach(el => el.checked = cb.checked); }
+function selectedIds() { return [...document.querySelectorAll('.issue-check:checked')].map(el => el.value); }
+function analyzeSelected() {
+  const fd = new FormData();
+  fd.append('csrf_token', csrfToken);
+  selectedIds().forEach(id => fd.append('issue_ids[]', id));
+  fetch('{{ url_for("hub.ai_analyze") }}', {method: 'POST', body: fd}).then(() => window.location = '{{ url_for("hub.operational_dashboard") }}');
+}
+function bulkResolve() {
+  const fd = new FormData();
+  fd.append('csrf_token', csrfToken);
+  fd.append('resolution', 'fixed');
+  selectedIds().forEach(id => fd.append('issue_ids[]', id));
+  fetch('/api/agents/issues/bulk-resolve', {method: 'POST', body: fd}).then(() => location.reload()).catch(() => location.reload());
+}
+function bulkAlert() {
+  const fd = new FormData();
+  fd.append('csrf_token', csrfToken);
+  selectedIds().forEach(id => fd.append('issue_ids[]', id));
+  fetch('{{ url_for("hub.create_alert_bulk") }}', {method: 'POST', body: fd}).then(() => window.location='{{ url_for("hub.alert_center") }}');
+}
+</script>
+{% endblock %}

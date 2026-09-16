@@ -1,0 +1,19 @@
+<a href="{{ url_for('monthly_investments.view_monthly_investment', id=investment.id) }}" class="im-list-card im-investment-card"
+   data-im-search="{{ (investment.client.name if investment.client else '')|lower }} {{ investment.workflow.current_stage|lower if investment.workflow else '' }}">
+  <div class="im-list-card__header">
+    <div>
+      <h2 class="im-list-card__title">{{ investment.client.name if investment.client else 'Unknown' }}</h2>
+      <p class="im-list-card__meta">₹{{ "%.2f"|format(investment.planned_amount|float) }}
+        {% if investment.investment_date %} · {{ investment.investment_date.strftime('%d %b %Y') }}{% endif %}
+      </p>
+    </div>
+    <span class="im-badge im-badge--info">{{ investment.status }}</span>
+  </div>
+  <div class="im-list-card__row">
+    {% if investment.workflow %}
+    <span class="im-badge im-badge--warning">{{ investment.workflow.current_stage }}</span>
+    {% else %}
+    <span class="im-badge im-badge--muted">No workflow</span>
+    {% endif %}
+  </div>
+</a>

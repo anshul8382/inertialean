@@ -1,0 +1,73 @@
+---
+description: SEBI regulatory unit — compliance, process, and audit (merged)
+globs: "**/*.py,docs/SEBI*.md,docs/regulatory/**,**/audit*.py,scripts/audit_sebi_compliance.py"
+alwaysApply: false
+---
+
+# SEBI Regulatory Unit
+
+Single rule for **SEBI Investment Adviser** work. Three modes — use the section that matches the task.
+
+**Sources:** `docs/SEBI_COMPLIANCE_CHECKLIST.md` · `docs/SEBI_PROCESS_INSTRUCTIONS.md` · `docs/regulatory/INDEX.md` · `docs/ACCESSIBILITY_CHECKLIST.md`
+
+---
+
+## 1. Feature compliance (when building)
+
+Applies when code touches **clients, advice, agreements, disclosures, risk profiling, or reporting**.
+
+### Record-keeping & suitability
+- No silent overwrites — append, version, or log changes (who/when).
+- Store agreements, risk profile + date, suitability, recommendations (generated/sent/executed), key communications.
+- Link recommendations to risk profile; if override allowed, store **override reason** and **approver**.
+
+### Disclosures & conduct
+- Capture what was disclosed, to whom, when. Agreements: signed copy, version, client_id, date, audit link.
+- Advisor actions traceable to user + timestamp.
+
+### Audit trail
+- Log login/logout, password change, client/portfolio access, downloads, recommendation send/execute, client/advice CRUD.
+- Use `services/audit_service.log_audit_event(...)` and `AuditLog` model.
+
+### Accessibility (WCAG 2.1 AA)
+- Semantic HTML, keyboard nav, form labels, errors with `role="alert"`, no color-only meaning, accessible PDFs.
+
+### Per-feature checklist
+- [ ] Records auditable (no silent overwrites)?
+- [ ] Suitability / risk profile considered for advice?
+- [ ] Disclosures captured?
+- [ ] Critical actions audit-logged?
+- [ ] Regulator can export evidence from stored data?
+- [ ] Relevant circulars checked in `docs/regulatory/INDEX.md`?
+
+---
+
+## 2. Process (before / after each feature)
+
+Distilled from `docs/SEBI_PROCESS_INSTRUCTIONS.md` — read full doc only for regulatory wording.
+
+1. **Before:** Apply §1 for the area you touch; check circulars if ad/marketing.
+2. **During:** No silent overwrites; log critical actions; link risk profile; data exportable for regulator.
+3. **After:** Run per-feature checklist above; confirm reports still producible.
+
+**Regulator-ready reports must include:** access/auth log, agreements, risk profiles, recommendations, overrides, disclosures, audit trail, incidents — exportable (CSV/PDF), not screenshots only.
+
+---
+
+## 3. Audit mode (read-only — do not implement)
+
+Invoke when user says **"audit SEBI compliance"** or opens the checklist.
+
+1. Load `docs/SEBI_COMPLIANCE_CHECKLIST.md` (12 areas).
+2. Run `python3 scripts/audit_sebi_compliance.py` and include output.
+3. Evidence-based review: auth (`routes/auth.py`), access (`access_control.py`), audit (`services/audit_service.py`, `models/audit_log.py`), API guards, session config, accessibility templates.
+4. Classify each item: **Done** / **Partial** / **Not done** with file:line evidence.
+5. Output structured **SEBI Compliance Audit Report** with priorities — **no feature code**.
+
+**Security overlap:** VAPT findings for auth/audit/API are also in `security-audit.mdc` — cite both when relevant.
+
+---
+
+## Invoke
+
+@ SEBI · "SEBI compliance" · "compliance audit" · Python touching client/advice data

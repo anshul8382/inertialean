@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Recommendation Execution – By Client{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <div class="page-title-right">
+                    <ol class="breadcrumb m-0">
+                        {% if config.get('NAV_INTELLIGENCE_HUB_ENABLED') %}
+                        <li class="breadcrumb-item"><a href="{{ url_for('hub.operational_dashboard') }}">Operational intelligence</a></li>
+                        {% else %}
+                        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                        {% endif %}
+                        <li class="breadcrumb-item"><a href="{{ url_for('rec_execution.dashboard') }}">Recommendation execution</a></li>
+                        <li class="breadcrumb-item active">By client</li>
+                    </ol>
+                </div>
+                <h4 class="page-title"><i class="fas fa-users me-2"></i>Recommendation Execution – By Client</h4>
+            </div>
+        </div>
+    </div>
+    <div class="row mb-3">
+        <div class="col-12">
+            <p class="text-muted mb-0">All open issues merged per client. Click a client to see all their issues.</p>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><h4 class="header-title mb-0">Clients with open issues ({{ total }})</h4></div>
+                <div class="card-body p-0">
+                    {% if clients %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr><th>Client</th><th>Issues</th><th>Max severity</th><th></th></tr>
+                            </thead>
+                            <tbody>
+                                {% for c in clients %}
+                                <tr>
+                                    <td class="fw-bold">{{ c.client_name }}</td>
+                                    <td>{{ c.issue_count }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if c.max_severity == 'critical' else 'warning' if c.max_severity == 'warning' else 'info' }}">{{ c.max_severity }}</span>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('rec_execution.client_issues', client_id=c.client_id) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-list"></i> View all</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                        <h5>No open issues</h5>
+                        <p class="text-muted">No clients with open Recommendation Execution issues.</p>
+                        <a href="{{ url_for('rec_execution.dashboard') }}" class="btn btn-outline-primary">Back to dashboard</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% if total_pages > 1 %}
+    <div class="row mt-3">
+        <div class="col-12">
+            <nav>
+                <ul class="pagination justify-content-center mb-0">
+                    {% if page > 1 %}<li class="page-item"><a class="page-link" href="?page={{ page - 1 }}&per_page={{ per_page }}">Previous</a></li>{% endif %}
+                    {% for p in range(1, total_pages + 1) %}
+                        {% if p >= page - 2 and p <= page + 2 %}
+                        <li class="page-item {% if p == page %}active{% endif %}"><a class="page-link" href="?page={{ p }}&per_page={{ per_page }}">{{ p }}</a></li>
+                        {% endif %}
+                    {% endfor %}
+                    {% if page < total_pages %}<li class="page-item"><a class="page-link" href="?page={{ page + 1 }}&per_page={{ per_page }}">Next</a></li>{% endif %}
+                </ul>
+            </nav>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

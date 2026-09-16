@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Financial Analytics Results{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-chart-bar"></i> Financial Analytics Results</h1>
+        <a href="{{ url_for('financial_analytics.dashboard') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+    
+    {% if results.warnings %}
+    <div class="alert alert-warning">
+        <h5><i class="fas fa-exclamation-triangle"></i> Warnings</h5>
+        <ul class="mb-0">
+            {% for warning in results.warnings %}
+            <li>{{ warning }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    {% if results.calculated_at %}
+    <div class="alert alert-info">
+        <small>
+            <i class="fas fa-clock"></i> <strong>Calculated at:</strong> {{ results.calculated_at[:19] }} (fresh calculation, no caching)
+            {% if results.calculation_id %}
+            | <strong>Calculation ID:</strong> {{ results.calculation_id }}
+            {% endif %}
+        </small>
+    </div>
+    {% endif %}
+    
+    {% if results.has_warnings %}
+    <div class="alert alert-warning">
+        <strong><i class="fas fa-info-circle"></i> Important Note:</strong>
+        <p class="mb-0 mt-2">
+            Some calculations used fallback methods because historical data is not available for the specified date ranges. 
+            The results shown use current holdings and sector-based estimates. For accurate period-specific calculations, 
+            please upload historical price data for the missing securities.
+        </p>
+    </div>
+    {% endif %}
+    
+    {% if results.errors %}
+    <div class="alert alert-info">
+        <h5><i class="fas fa-info-circle"></i> Calculation Notes</h5>
+        <p class="mb-0">Some calculations used fallback methods but results are still provided.</p>
+    </div>
+    {% endif %}
+    
+    {% if results.results %}
+    <div class="row">
+        {% for metric_type, result in results.results.items() %}
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header {% if result.fallback_used %}bg-warning{% elif result.estimated %}bg-secondary{% else %}bg-primary{% endif %} text-white">
+                    <h5>
+                        {{ metric_type|upper }}
+                        {% if result.fallback_used %}
+                        <span class="badge bg-light text-dark">Fallback</span>
+                        {% endif %}
+                        {% if result.estimated %}
+                        <span class="badge bg-light text-dark">Estimated</span>
+                        {% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if result.success %}
+                    <div class="text-center">
+                        {% if result.value is mapping %}
+                        <h6>
+                            Portfolio XIRR:
+                            {% if result.value.portfolio_xirr is defined and result.value.portfolio_xirr is number %}
+                                {{ result.value.portfolio_xirr|round(2) }}%
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </h6>
+                        <h6>
+                            Nifty XIRR:
+                            {% if result.value.nifty_xirr is defined and result.value.nifty_xirr is number %}
+                                {{ result.value.nifty_xirr|round(2) }}%
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </h6>
+                        <h6>
+                            Outperformance:
+                            {% if result.value.outperformance is defined and result.value.outperformance is number %}
+                                {{ result.value.outperformance|round(2) }}%
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </h6>
+                        {% else %}
+                        {% if result.value is defined and result.value is number %}
+                        <h3>{{ result.value|round(3) }}</h3>
+                        {% elif result.value is defined %}
+                        <h3>{{ result.value }}</h3>
+                        {% else %}
+                        <h3>N/A</h3>
+                        {% endif %}
+                        {% endif %}
+                        {% if result.start_date %}
+                        <p class="text-muted">
+                            <strong>Period:</strong> {{ result.start_date }} to {{ result.end_date }}<br>
+                            {% if result.period_days %}
+                            <strong>Duration:</strong> {{ result.period_days }} days<br>
+                            {% endif %}
+                            {% if result.calculation_timestamp %}
+                            <strong>Calculated:</strong> {{ result.calculation_timestamp[:19] }}<br>
+                            {% endif %}
+                            {% if result.calculation_id %}
+                            <small class="text-muted">ID: {{ result.calculation_id }}</small>
+                            {% endif %}
+                        </p>
+                        {% endif %}
+                        
+                    {% if result.data_quality %}
+                    <p class="mb-0">
+                        <small class="text-muted">
+                            Data Quality: 
+                            <span class="badge {% if result.data_quality == 'accurate' %}bg-success{% elif result.data_quality == 'fallback' %}bg-warning{% elif result.data_quality == 'estimated' %}bg-secondary{% else %}bg-danger{% endif %}">
+                                {{ result.data_quality|upper }}
+                            </span>
+                        </small>
+                    </p>
+                    {% endif %}
+                    </div>
+                    
+                    {% from 'financial_analytics/metric_commentary.html' import render_metric_commentary %}
+                    {{ render_metric_commentary(metric_type, result) }}
+                    
+                    {% if result.missing_data_details %}
+                    <div class="alert alert-danger mt-3 mb-2">
+                        <strong><i class="fas fa-exclamation-triangle"></i> Missing Data Details:</strong>
+                        <ul class="mb-0 mt-2">
+                            {% for detail in result.missing_data_details %}
+                            <li>{{ detail }}</li>
+                            {% endfor %}
+                        </ul>
+                        <p class="mb-0 mt-2">
+                            <small>
+                                <a href="{{ url_for('historical_prices.upload_page') }}" class="alert-link">
+                                    <i class="fas fa-upload"></i> Upload Historical Prices
+                                </a>
+                            </small>
+                        </p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if result.missing_securities_list %}
+                    <div class="alert alert-danger mt-3 mb-2">
+                        <strong><i class="fas fa-exclamation-triangle"></i> Securities Missing Data:</strong>
+                        <table class="table table-sm table-bordered mt-2 mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Security Name</th>
+                                    <th>Reason</th>
+                                    <th>Available Days</th>
+                                    <th>Required Days</th>
+                                    <th>Coverage %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sec in result.missing_securities_list %}
+                                <tr>
+                                    <td><strong>{{ sec.symbol }}</strong></td>
+                                    <td>{{ sec.security_name if sec.security_name else '-' }}</td>
+                                    <td>{{ sec.reason }}</td>
+                                    <td>{{ sec.available_days if sec.available_days is defined else 0 }}</td>
+                                    <td>{{ sec.required_days if sec.required_days is defined else 'N/A' }}</td>
+                                    <td>
+                                        {% if sec.coverage_percent is defined %}
+                                        <span class="badge {% if sec.coverage_percent >= 80 %}bg-success{% elif sec.coverage_percent >= 50 %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ sec.coverage_percent|round(1) }}%
+                                        </span>
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        <p class="mb-0 mt-2">
+                            <a href="{{ url_for('historical_prices.upload_page') }}" class="btn btn-sm btn-primary">
+                                <i class="fas fa-upload"></i> Upload Historical Prices
+                            </a>
+                        </p>
+                    </div>
+                    {% elif result.validation_info and result.validation_info.missing_securities %}
+                    <div class="alert alert-danger mt-3 mb-2">
+                        <strong><i class="fas fa-exclamation-triangle"></i> Securities Missing Data:</strong>
+                        <table class="table table-sm table-bordered mt-2 mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Reason</th>
+                                    <th>Available Days</th>
+                                    <th>Required Days</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for sec in result.validation_info.missing_securities %}
+                                <tr>
+                                    <td><strong>{{ sec.symbol }}</strong></td>
+                                    <td>{{ sec.reason }}</td>
+                                    <td>{{ sec.available_days if sec.available_days else 0 }}</td>
+                                    <td>{{ sec.required_days if sec.required_days else 'N/A' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        <p class="mb-0 mt-2">
+                            <a href="{{ url_for('historical_prices.upload_page') }}" class="btn btn-sm btn-primary">
+                                <i class="fas fa-upload"></i> Upload Historical Prices
+                            </a>
+                        </p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if result.warnings %}
+                    <div class="alert alert-warning mt-3 mb-0">
+                        <small>
+                            <strong>Note:</strong>
+                            <ul class="mb-0">
+                                {% for warning in result.warnings %}
+                                <li>{{ warning }}</li>
+                                {% endfor %}
+                            </ul>
+                        </small>
+                    </div>
+                    {% endif %}
+                    
+                    {% if result.note %}
+                    <div class="alert alert-info mt-2 mb-0">
+                        <small>{{ result.note }}</small>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> {{ result.error }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <p>No results available. Please check your configuration and try again.</p>
+    </div>
+    {% endif %}
+    
+    <div class="mt-4">
+        <a href="{{ url_for('financial_analytics.dashboard') }}" class="btn btn-primary">
+            <i class="fas fa-calculator"></i> Calculate More Metrics
+        </a>
+    </div>
+</div>
+{% endblock %}
+

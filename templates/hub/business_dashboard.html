@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Business Intelligence{% endblock %}
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Business Hub' %}
+  {% set mobile_back_url = url_for('hub.dashboard') %}
+  {% include 'partials/mobile/app_header.html' %}
+  {% if config.get('NAV_FINANCIAL_ANALYTICS_ENABLED') %}<a href="{{ url_for('financial_analytics.dashboard') }}" class="im-settings-link"><i class="fas fa-chart-bar"></i><span>Client analytics</span><i class="fas fa-chevron-right text-muted"></i></a>{% endif %}
+  <a href="{{ url_for('main.practice_analytics') }}" class="im-settings-link"><i class="fas fa-chart-pie"></i><span>Practice analytics</span><i class="fas fa-chevron-right text-muted"></i></a>
+</div>
+<div class="im-desktop-only im-collapsed-on-mobile container mt-4">
+  <div class="mb-4">
+    <a href="{{ url_for('hub.dashboard') }}" class="small text-muted text-decoration-none">← Intelligence Hub</a>
+    <h2 class="mt-1 mb-0"><i class="fas fa-briefcase text-info"></i> Business Intelligence</h2>
+    <p class="text-muted mb-0">Practice and account insights, marketing, and growth tooling.</p>
+  </div>
+
+  <h5 class="text-muted text-uppercase small mb-3">Practice &amp; accounts</h5>
+  <div class="d-flex flex-wrap gap-2 mb-4">
+    {% if config.get('NAV_FINANCIAL_ANALYTICS_ENABLED') %}
+    <a href="{{ url_for('financial_analytics.dashboard') }}" class="btn btn-info text-white">Client analytics</a>
+    {% endif %}
+    {% if current_user.is_manager or has_route_access('main.practice_analytics') %}
+    <a href="{{ url_for('main.practice_analytics') }}" class="btn btn-outline-info">Practice analytics</a>
+    {% endif %}
+    {% if config.get('NAV_ACCOUNT_MANAGEMENT_ENABLED') and current_user.is_admin %}
+    <a href="{{ url_for('account_management.dashboard') }}" class="btn btn-outline-secondary">Account management</a>
+    {% endif %}
+    {% if current_user.is_manager or current_user.is_advisor or current_user.is_ops_manager %}
+    <a href="{{ url_for('bni_referrals.list_bni_referrals') }}" class="btn btn-outline-secondary">BNI referrals</a>
+    {% endif %}
+  </div>
+
+  {% if config.get('NAV_CAMPAIGN_STUDIO_ENABLED') %}
+  <h5 class="text-muted text-uppercase small mb-3">Marketing intelligence</h5>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{{ url_for('campaign_studio.index') }}" class="btn btn-outline-primary">
+      <i class="fas fa-paint-brush me-1"></i> Campaign Studio
+    </a>
+  </div>
+  {% endif %}
+</div>
+</div>
+{% endblock %}

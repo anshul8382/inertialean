@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link %}
+
+{% block title %}Maintenance — Billing{% endblock %}
+
+{% block content %}
+{{ maint_hub_open('Billing', 'Invoices, billing manager, and agreement readiness.', url_for('main.maintenance_reviews')) }}
+  {{ maint_link('fa-bolt', 'Generate invoice', url_for('invoices.generate_invoice_from_agreement')) }}
+  {% if current_user.is_admin or current_user.is_manager %}
+  {{ maint_link('fa-file-invoice-dollar', 'Invoices', url_for('invoices.list_invoices')) }}
+  {{ maint_link('fa-chess-king', 'Billing manager plan', url_for('invoices.manager_plan')) }}
+  {% endif %}
+  {{ maint_link('fa-file-contract', 'Agreements overview', url_for('agreements.agreements_overview')) }}
+  {{ maint_link('fa-list', 'Clients billing terms', url_for('agreements.clients_billing_terms')) }}
+{{ maint_hub_close() }}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0"><i class="fas fa-file-invoice-dollar text-primary"></i> Billing</h1>
+    <a href="{{ url_for('main.maintenance_reviews') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="fas fa-clipboard-list"></i> Reviews
+    </a>
+  </div>
+  <p class="text-muted mb-4">Generate invoices from agreements + portfolio value, track invoices, and audit agreement readiness.</p>
+
+  <div class="row g-3">
+    {% if current_user.is_admin or current_user.is_manager %}
+    <div class="col-md-4">
+      <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('invoices.list_invoices') }}">
+        <i class="fas fa-file-invoice-dollar d-block mb-2 fa-lg"></i> Invoice management
+        <small class="d-block text-muted fw-normal mt-1">List, view, edit status, import files</small>
+      </a>
+    </div>
+    {% endif %}
+    <div class="col-md-4">
+      <a class="btn btn-primary w-100 py-3" href="{{ url_for('invoices.generate_invoice_from_agreement') }}">
+        <i class="fas fa-bolt d-block mb-2 fa-lg"></i> Generate invoice
+        <small class="d-block text-muted fw-normal mt-1">Agreement → portfolio value → invoice</small>
+      </a>
+    </div>
+    {% if current_user.is_admin or current_user.is_manager %}
+    <div class="col-md-4">
+      <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('invoices.manager_plan') }}">
+        <i class="fas fa-chess-king d-block mb-2 fa-lg"></i> Billing manager plan
+        <small class="d-block text-muted fw-normal mt-1">Prioritize who to bill next</small>
+      </a>
+    </div>
+    {% endif %}
+    <div class="col-md-4">
+      <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('agreements.agreements_overview') }}">
+        <i class="fas fa-file-contract d-block mb-2 fa-lg"></i> Agreements overview
+        <small class="d-block text-muted fw-normal mt-1">Key terms + missing inputs</small>
+      </a>
+    </div>
+    <div class="col-md-4">
+      <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('agreements.clients_billing_terms') }}">
+        <i class="fas fa-list d-block mb-2 fa-lg"></i> Clients billing terms
+        <small class="d-block text-muted fw-normal mt-1">Frequency + cycle dates at a glance</small>
+      </a>
+    </div>
+  </div>
+
+{{ maint_desktop_close() }}
+{% endblock %}
+

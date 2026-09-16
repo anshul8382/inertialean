@@ -1,0 +1,91 @@
+{# Requires before include:
+   period_picker_endpoint (e.g. 'account_management.analysis')
+   period_picker_form_action (url string for GET form)
+   period_picker_active (preset id or '')
+   period_picker_is_custom (bool)
+   period_picker_date_from, period_picker_date_to (date objects)
+   period_picker_variant: 'primary' | 'success'
+   period_picker_show_label (optional bool, default true) — show "Time period" header row
+   period_picker_head_id (optional int) — preserve head filter on analysis page
+#}
+{% macro _preset_url(pname) -%}
+{%- if period_picker_head_id -%}
+{{ url_for(period_picker_endpoint, preset=pname, head_id=period_picker_head_id) }}
+{%- else -%}
+{{ url_for(period_picker_endpoint, preset=pname) }}
+{%- endif -%}
+{%- endmacro %}
+{% set ep = period_picker_endpoint %}
+{% set active = period_picker_active|default('') %}
+{% set is_custom = period_picker_is_custom|default(false) %}
+{% if period_picker_variant == 'success' %}
+    {% set A = 'btn-success' %}
+    {% set O = 'btn-outline-success' %}
+{% else %}
+    {% set A = 'btn-primary' %}
+    {% set O = 'btn-outline-primary' %}
+{% endif %}
+{% set show_hdr = period_picker_show_label|default(true) %}
+
+<div class="period-range-picker">
+    {% if show_hdr %}
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <span class="fw-semibold"><i class="fas fa-sliders-h me-1"></i> Time period</span>
+        {% if is_custom %}
+        <span class="badge bg-info text-dark">Custom range</span>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="small text-muted mb-1">Rolling windows</div>
+    <div class="d-flex flex-wrap gap-1 mb-3">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Rolling">
+            <a class="btn {{ A if active == 'last_7_days' else O }}" href="{{ _preset_url('last_7_days') }}" title="Last 7 days">7 days</a>
+            <a class="btn {{ A if active == 'last_30_days' else O }}" href="{{ _preset_url('last_30_days') }}">30 days</a>
+            <a class="btn {{ A if active == 'last_90_days' else O }}" href="{{ _preset_url('last_90_days') }}">90 days</a>
+            <a class="btn {{ A if active == 'last_180_days' else O }}" href="{{ _preset_url('last_180_days') }}">180 days</a>
+        </div>
+    </div>
+
+    <div class="small text-muted mb-1">Calendar months</div>
+    <div class="d-flex flex-wrap gap-1 mb-3">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Months">
+            <a class="btn {{ A if active == 'current_month' else O }}" href="{{ _preset_url('current_month') }}">This month</a>
+            <a class="btn {{ A if active == 'prev_month' else O }}" href="{{ _preset_url('prev_month') }}">Last month</a>
+            <a class="btn {{ A if active == 'last_6_months' else O }}" href="{{ _preset_url('last_6_months') }}">6 months</a>
+            <a class="btn {{ A if active == 'last_12_months' else O }}" href="{{ _preset_url('last_12_months') }}">12 months</a>
+        </div>
+    </div>
+
+    <div class="small text-muted mb-1">Calendar &amp; financial year (FY Apr–Mar)</div>
+    <div class="d-flex flex-wrap gap-1 mb-3">
+        <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Years">
+            <a class="btn {{ A if active == 'calendar_ytd' else O }}" href="{{ _preset_url('calendar_ytd') }}">Cal. YTD</a>
+            <a class="btn {{ A if active == 'prev_calendar_year' else O }}" href="{{ _preset_url('prev_calendar_year') }}">Prev. calendar yr</a>
+            <a class="btn {{ A if active == 'fy_current' else O }}" href="{{ _preset_url('fy_current') }}">Current FY</a>
+            <a class="btn {{ A if active == 'fy_previous' else O }}" href="{{ _preset_url('fy_previous') }}">Previous FY</a>
+        </div>
+    </div>
+
+    <details class="border rounded px-3 py-2 bg-light" {% if is_custom %}open{% endif %}>
+        <summary class="fw-semibold small user-select-none" style="cursor: pointer;">
+            Custom range{% if is_custom %} <span class="text-primary">(active)</span>{% endif %}
+        </summary>
+        <form method="get" action="{{ period_picker_form_action }}" class="row g-2 align-items-end mt-2 mb-0">
+            {% if period_picker_head_id %}
+            <input type="hidden" name="head_id" value="{{ period_picker_head_id }}">
+            {% endif %}
+            <div class="col-auto">
+                <label class="form-label small mb-0" for="pr_from_{{ ep|replace('.','_') }}">From</label>
+                <input type="date" class="form-control form-control-sm" id="pr_from_{{ ep|replace('.','_') }}" name="date_from" value="{{ period_picker_date_from.isoformat() }}" required>
+            </div>
+            <div class="col-auto">
+                <label class="form-label small mb-0" for="pr_to_{{ ep|replace('.','_') }}">To</label>
+                <input type="date" class="form-control form-control-sm" id="pr_to_{{ ep|replace('.','_') }}" name="date_to" value="{{ period_picker_date_to.isoformat() }}" required>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn {{ A }} btn-sm">Apply</button>
+            </div>
+        </form>
+    </details>
+</div>

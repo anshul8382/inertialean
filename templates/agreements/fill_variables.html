@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Fill Agreement Variables — {{ agreement.lead.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
+          <div>
+            <h5 class="mb-0 fw-semibold">
+              <i class="fas fa-edit text-primary me-2"></i>Fill Agreement Variables
+            </h5>
+            <small class="text-muted">
+              Template:
+              <a href="{{ url_for('agreements.view_template', template_id=template.id) }}#replace-word-file">
+                <strong>{{ template.name }}</strong>
+              </a>
+              &nbsp;·&nbsp;
+              Lead: <strong>{{ agreement.lead.name }}</strong>
+            </small>
+          </div>
+          <a href="{{ url_for('agreements.view_agreement', agreement_id=agreement.id) }}"
+             class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-times"></i> Cancel
+          </a>
+        </div>
+
+        <div class="card-body">
+          {% if variables %}
+          <div class="alert alert-info py-2 mb-3">
+            <i class="fas fa-info-circle me-1"></i>
+            Fill in the <strong>{{ variables | length }}</strong> placeholder(s) below.
+            Fields already pre-filled from the agreement are highlighted in green.
+            {% if raw_variables|length > variables|length %}
+            <span class="d-block mt-1 small">
+              Billing and other auto-filled clauses appear in the live preview below.
+            </span>
+            {% endif %}
+          </div>
+
+          <form method="POST" id="fillVariablesForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+            <div class="row">
+              {% for variable in variables %}
+              {% set prefilled = existing_data.get(variable, '') %}
+              <div class="col-md-6 mb-3">
+                <label for="var_{{ variable }}" class="form-label fw-semibold">
+                  {{ variable | replace('_', ' ') | title }}
+                  {% if not prefilled %}<span class="text-danger">*</span>{% endif %}
+                </label>
+                <input type="text"
+                       class="form-control agreement-var-input {% if prefilled %}border-success{% endif %}"
+                       id="var_{{ variable }}"
+                       name="var_{{ variable }}"
+                       data-variable-name="{{ variable }}"
+                       value="{{ prefilled }}"
+                       placeholder="Enter {{ variable | replace('_', ' ') | lower }}"
+                       {% if not prefilled %}required{% endif %}>
+                <small class="text-muted">Placeholder: <code>&lt;&lt;{{ variable }}&gt;&gt;</code></small>
+              </div>
+              {% endfor %}
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-primary">
+                <i class="fas fa-file-pdf me-1"></i> Generate Agreement PDF
+              </button>
+              <a href="{{ url_for('agreements.view_agreement', agreement_id=agreement.id) }}"
+                 class="btn btn-outline-secondary">Cancel</a>
+            </div>
+          </form>
+
+          {% else %}
+          <div class="alert alert-success">
+            <i class="fas fa-check-circle me-1"></i>
+            No template placeholders to fill. Redirecting to the agreement…
+          </div>
+          <script>window.location.href = "{{ url_for('agreements.view_agreement', agreement_id=agreement.id) }}";</script>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if variables %}
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header bg-white border-bottom py-2 d-flex justify-content-between align-items-center">
+          <div>
+            <span class="fw-semibold"><i class="fas fa-eye text-secondary me-1"></i> Live preview</span>
+            <small class="text-muted ms-2">Updates as you type</small>
+          </div>
+          {% if not preview_available %}
+          <span class="badge bg-warning text-dark">Template text unavailable</span>
+          {% endif %}
+        </div>
+        <div class="card-body">
+          {% if not preview_available %}
+          <div class="alert alert-warning py-2 mb-2 small">
+            Could not read the template file for preview. Ensure the template exists under
+            <code>static/uploads/templates/</code> or re-upload it. Generation may still work if the file is on disk.
+          </div>
+          {% endif %}
+          <div id="agreement-live-preview"
+               class="border rounded p-3 bg-light agreement-live-preview"
+               style="white-space: pre-wrap; font-family: inherit; min-height: 120px; max-height: 480px; overflow-y: auto;"
+               aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% if variables %}
+<script>
+(function () {
+  'use strict';
+
+  var formVariables = {{ variables | tojson }};
+  var allPlaceholders = {{ (raw_variables or variables) | tojson }};
+  var staticValues = {{ (preview_values or existing_data) | tojson }};
+  var baseContent = {{ (template_text or '') | tojson }};
+  var isHtml = {{ 'true' if (template.template_type or '')|lower == 'html' else 'false' }};
+
+  var previewEl = document.getElementById('agreement-live-preview');
+  if (!previewEl) {
+    return;
+  }
+
+  function escapeRegExp(str) {
+    return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function getSubstitutionValue(name) {
+    var inp = document.getElementById('var_' + name);
+    if (inp) {
+      return inp.value;
+    }
+    if (Object.prototype.hasOwnProperty.call(staticValues, name)) {
+      return staticValues[name] == null ? '' : String(staticValues[name]);
+    }
+    return '';
+  }
+
+  function substitutePlaceholders(content) {
+    var result = content;
+    allPlaceholders.forEach(function (name) {
+      if (!name) {
+        return;
+      }
+      var val = getSubstitutionValue(name);
+      if (!val.trim()) {
+        val = '[' + name + ']';
+      }
+      var pattern = new RegExp('<<\\s*' + escapeRegExp(name) + '\\s*>>', 'gi');
+      result = result.replace(pattern, val);
+    });
+    return result;
+  }
+
+  function updatePreview() {
+    var content = baseContent;
+    if (!content || !String(content).trim()) {
+      previewEl.textContent =
+        'Template preview is not available. Upload or restore the template file, then reload this page.';
+      return;
+    }
+    content = substitutePlaceholders(content);
+    if (isHtml) {
+      previewEl.innerHTML = content;
+    } else {
+      previewEl.textContent = content;
+    }
+  }
+
+  document.querySelectorAll('.agreement-var-input').forEach(function (inp) {
+    inp.addEventListener('input', updatePreview);
+    inp.addEventListener('change', updatePreview);
+  });
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', updatePreview);
+  } else {
+    updatePreview();
+  }
+}());
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,651 @@
+{% extends "base.html" %}
+
+{% block title %}Recommended Trades - {{ client.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Ensure target price and status are always visible with black text */
+    .target-price-cell {
+        color: black !important;
+        font-weight: bold;
+    }
+    
+    .status-badge {
+        color: black !important;
+        font-weight: bold;
+        border: 1px solid #333 !important;
+    }
+    
+    /* Ensure all badges have good contrast and proper colors */
+    .badge {
+        font-weight: bold;
+        border: 1px solid #333 !important;
+    }
+    
+    /* Specific badge color overrides for better visibility */
+    .badge-warning {
+        background-color: #ffc107 !important;
+        color: black !important;
+    }
+    
+    .badge-info {
+        background-color: #17a2b8 !important;
+        color: white !important;
+    }
+    
+    .badge-success {
+        background-color: #28a745 !important;
+        color: white !important;
+    }
+    
+    .badge-danger {
+        background-color: #dc3545 !important;
+        color: white !important;
+    }
+    
+    .badge-secondary {
+        background-color: #6c757d !important;
+        color: white !important;
+    }
+
+    .inline-trade-input {
+        min-width: 4.5rem;
+        max-width: 6rem;
+        color: #000 !important;
+    }
+    .inline-price-wrap {
+        min-width: 11rem;
+        max-width: 15rem;
+        width: 100%;
+    }
+    .inline-price-wrap .form-control {
+        min-width: 6.5rem;
+        color: #000 !important;
+        font-size: 0.95rem;
+    }
+    .session-exec-banner {
+        color: #000 !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Recommended Trades - {{ client.name }}</h2>
+                <div>
+                    <a href="{{ url_for('recommended_trades.add_recommended_trade') }}?client_id={{ client.id }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Recommended Trade
+                    </a>
+                    <a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Client
+                    </a>
+                </div>
+            </div>
+
+            <!-- Status Summary -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="card bg-warning text-white">
+                        <div class="card-body text-center">
+                            <h4>{{ recommended_trades|selectattr('status', 'equalto', 'pending')|list|length }}</h4>
+                            <p class="mb-0">Pending</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h4>{{ recommended_trades|selectattr('status', 'equalto', 'executed')|list|length }}</h4>
+                            <p class="mb-0">Executed</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-danger text-white">
+                        <div class="card-body text-center">
+                            <h4>{{ recommended_trades|selectattr('status', 'equalto', 'cancelled')|list|length }}</h4>
+                            <p class="mb-0">Cancelled</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h4>{{ recommended_trades|length }}</h4>
+                            <p class="mb-0">Total</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trades Table -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Recommended Trades</h5>
+                </div>
+                <div class="card-body">
+                    {% if recommended_trades %}
+                    {% if hold_line_count > 0 %}
+                    <div class="alert alert-info small mb-3">
+                        <strong>{{ hold_line_count }}</strong> row{{ 's' if hold_line_count != 1 else '' }} marked <strong>HOLD</strong> are allocation lines from unified recommendations (typically equity positions to keep). Only <strong>BUY</strong> and <strong>SELL</strong> rows are executed as trades; you can still edit and save HOLD quantities here.
+                    </div>
+                    {% endif %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Security</th>
+                                    <th>Action</th>
+                                    <th>Quantity</th>
+                                    <th>Target Price</th>
+                                    <th>Actual Price</th>
+                                    <th>Slippage <span class="text-muted font-weight-normal small">(exec vs rec.)</span></th>
+                                    <th>Buy/Sell Value</th>
+                                    <th>Status</th>
+                                    <th>Notes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if sorted_dates %}
+                                    {% for date in sorted_dates %}
+                                        <tr class="table-info">
+                                            <td colspan="11" style="font-weight: bold; font-size: 1.1em; background-color: #d1ecf1 !important;">
+                                                <i class="fas fa-calendar-alt"></i>
+                                                {% if date %}
+                                                    {{ date.strftime('%B %d, %Y') }}
+                                                {% else %}
+                                                    Date Not Available
+                                                {% endif %}
+                                                <span class="badge badge-secondary ml-2">{{ trades_by_date[date]|length }} trade{{ 's' if trades_by_date[date]|length != 1 else '' }}</span>
+                                            </td>
+                                        </tr>
+                                        {% for block in date_session_blocks[date] %}
+                                            {% if block.session_id %}
+                                            <tr class="table-light">
+                                                <td colspan="11" class="py-2 session-exec-banner">
+                                                    <span class="font-weight-bold"><i class="fas fa-layer-group"></i> Same recommendation</span>
+                                                    <span class="text-muted small ml-1">(batch #{{ block.session_id }})</span>
+                                                    <span class="ml-3 font-weight-bold">Execution date (batch):</span>
+                                                    <input type="date" class="form-control form-control-sm d-inline-block ml-1 align-middle session-exec-date-input" style="width: auto; max-width: 11rem;" id="session-exec-s{{ block.session_id }}-d{{ date.isoformat() if date else 'none' }}" value="{{ block.default_exec_date }}">
+                                                    <button type="button" class="btn btn-sm btn-success ml-2 align-middle js-session-save-all" data-session-id="{{ block.session_id }}" data-day-key="{{ date.isoformat() if date else 'none' }}">
+                                                        <i class="fas fa-save" aria-hidden="true"></i> Save all
+                                                    </button>
+                                                    <small class="text-muted ml-2">Saves every <strong>BUY/SELL</strong> row in this batch, marks them executed, and uses this date as <strong>executed_at</strong>. HOLD allocation rows are updated only (not executed).</small>
+                                                </td>
+                                            </tr>
+                                            {% endif %}
+                                            {% for trade in block.trades %}
+                                            {% set act = (trade.action or '')|lower %}
+                                            {% set is_hold = act == 'hold' %}
+                                        <tr data-trade-id="{{ trade.id }}" data-action="{{ act }}"{% if is_hold %} data-is-hold="1"{% endif %}{% if block.session_id %} data-session-id="{{ block.session_id }}"{% endif %}{% if is_hold %} class="table-secondary"{% endif %}>
+                                            <td>
+                                                {% if trade.created_at %}
+                                                    {{ trade.created_at.strftime('%H:%M') }}
+                                                {% elif trade.batch_created_at %}
+                                                    {{ trade.batch_created_at.strftime('%H:%M') }}
+                                                {% else %}
+                                                    -
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <strong>{{ trade.security.symbol }}</strong><br>
+                                                <small class="text-muted">{{ trade.security.name }}</small>
+                                            </td>
+                                            <td>
+                                                <span class="badge badge-{% if act == 'buy' %}success{% elif act == 'sell' %}danger{% else %}secondary{% endif %} status-badge">
+                                                    {{ (trade.action or '')|upper }}
+                                                </span>
+                                                {% if is_hold %}
+                                                <br><small class="text-muted">Allocation (no trade)</small>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <input type="number" step="1" min="0" class="form-control form-control-sm inline-trade-input inline-qty" value="{{ trade.quantity|int if trade.quantity is not none else 0 }}" aria-label="Quantity">
+                                            </td>
+                                            <td class="target-price-cell">
+                                                <div class="input-group input-group-sm inline-price-wrap">
+                                                    <div class="input-group-prepend"><span class="input-group-text">₹</span></div>
+                                                    <input type="number" step="0.01" min="0" class="form-control inline-target" value="{% if trade.target_price is not none %}{{ trade.target_price|number_format(2)|replace(',', '') }}{% else %}0{% endif %}" aria-label="Target price">
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="input-group input-group-sm inline-price-wrap">
+                                                    <div class="input-group-prepend"><span class="input-group-text">₹</span></div>
+                                                    <input type="number" step="0.01" min="0" class="form-control inline-actual" value="{% if trade.actual_price is not none %}{{ trade.actual_price|number_format(2)|replace(',', '') }}{% elif trade.security.current_price is not none %}{{ trade.security.current_price|number_format(2)|replace(',', '') }}{% endif %}" aria-label="Actual price" placeholder="">
+                                                </div>
+                                            </td>
+                                            <td class="js-inline-slippage-cell text-dark small align-middle"></td>
+                                            <td class="inline-value-cell">
+                                                {% if trade.total_amount %}
+                                                    {% if act == 'sell' %}
+                                                        <span class="text-danger font-weight-bold">-₹{{ trade.total_amount|abs|number_format(2) }}</span>
+                                                    {% else %}
+                                                        <span class="text-success font-weight-bold">+₹{{ trade.total_amount|number_format(2) }}</span>
+                                                    {% endif %}
+                                                {% else %}
+                                                    <span class="text-dark">₹0.00</span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="js-inline-status-wrap">
+                                                <span class="badge badge-{{ trade.status_color }} status-badge">
+                                                    {{ trade.status.title() }}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                {% if trade.notes %}
+                                                    <small>{{ trade.notes[:50] }}{% if trade.notes|length > 50 %}...{% endif %}</small>
+                                                {% else %}
+                                                    -
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                <button type="button" class="btn btn-sm btn-outline-primary mb-1 js-inline-save-trade" data-trade-id="{{ trade.id }}" title="{% if is_hold %}Save allocation quantities{% else %}Save quantity and prices{% endif %}">
+                                                    <i class="fas fa-save" aria-hidden="true"></i>
+                                                </button>
+                                                {% if not is_hold and trade.status == 'pending' %}
+                                                    <button class="btn btn-sm btn-success mb-1" onclick="executeTrade({{ trade.id }})">
+                                                        <i class="fas fa-check"></i> Execute
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger mb-1" onclick="cancelTrade({{ trade.id }})">
+                                                        <i class="fas fa-times"></i> Cancel
+                                                    </button>
+                                                {% endif %}
+                                                <a href="{{ url_for('recommended_trades.edit_recommended_trade', trade_id=trade.id) }}" class="btn btn-sm btn-warning mb-1">
+                                                    <i class="fas fa-edit"></i> Edit
+                                                </a>
+                                                <button class="btn btn-sm btn-outline-danger mb-1" onclick="deleteTrade({{ trade.id }})">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                            {% endfor %}
+                                        {% endfor %}
+                                    {% endfor %}
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No recommended trades found</h5>
+                        <p class="text-muted">Start by adding a recommended trade for this client.</p>
+                        <a href="{{ url_for('recommended_trades.add_recommended_trade') }}?client_id={{ client.id }}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Add First Trade
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Execute Trade Modal -->
+<div class="modal fade" id="executeTradeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Execute Trade</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="executeTradeForm" method="POST">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="actual_price">Actual Execution Price</label>
+                        <input type="number" class="form-control" id="actual_price" name="actual_price" step="0.01" required>
+                        <small class="form-text text-muted">Enter the actual price at which the trade was executed.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Execute Trade</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteTradeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete Trade</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this recommended trade? This action cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteTradeForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+    var CLIENT_ID = {{ client.id }};
+    var CSRF_TOKEN = {{ csrf_token()|tojson }};
+    var meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta && meta.getAttribute('content')) {
+        CSRF_TOKEN = meta.getAttribute('content');
+    }
+    var QUICK_UPDATE_URL = {{ url_for("recommended_trades.client_trade_quick_update", client_id=client.id)|tojson }};
+    var SESSION_SAVE_ALL_TMPL = {{ url_for("recommended_trades.session_save_all_inline", session_id=0)|tojson }};
+
+    function rowForTrade(tradeId) {
+        return document.querySelector('tr[data-trade-id="' + tradeId + '"]');
+    }
+
+    function refreshRowValueCell(tr) {
+        if (!tr) return;
+        var qtyEl = tr.querySelector('.inline-qty');
+        var targetEl = tr.querySelector('.inline-target');
+        if (!qtyEl || !targetEl) return;
+        var qty = parseInt(qtyEl.value, 10) || 0;
+        var target = parseFloat(targetEl.value);
+        if (isNaN(target)) target = 0;
+        var actualInp = tr.querySelector('.inline-actual');
+        var actualRaw = (actualInp && actualInp.value) ? parseFloat(actualInp.value) : NaN;
+        var price = (!isNaN(actualRaw) && actualRaw > 0) ? actualRaw : target;
+        var v = qty * price;
+        var act = (tr.getAttribute('data-action') || '').toLowerCase();
+        var cell = tr.querySelector('.inline-value-cell');
+        if (!cell) return;
+        var absVal = Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (tr.getAttribute('data-is-hold') === '1') {
+            cell.innerHTML = '<span class="text-muted">Hold · ₹' + absVal + '</span>';
+        } else if (act === 'sell') {
+            cell.innerHTML = '<span class="text-danger font-weight-bold">-₹' + absVal + '</span>';
+        } else {
+            cell.innerHTML = '<span class="text-success font-weight-bold">+₹' + absVal + '</span>';
+        }
+    }
+
+    /** Slippage = execution (actual) − recommended (target); warn visually if |actual−target|/target > 10%. */
+    function refreshSlippageCell(tr) {
+        if (!tr) return;
+        var targetEl = tr.querySelector('.inline-target');
+        var actualEl = tr.querySelector('.inline-actual');
+        var cell = tr.querySelector('.js-inline-slippage-cell');
+        if (!cell || !targetEl || !actualEl) return;
+        var target = parseFloat(targetEl.value);
+        var actual = parseFloat(actualEl.value);
+        if (isNaN(target) || target <= 0 || isNaN(actual) || actual <= 0) {
+            cell.innerHTML = '<span class="text-muted">—</span>';
+            cell.classList.remove('table-warning');
+            return;
+        }
+        var slip = actual - target;
+        var pctVsRec = (slip / target) * 100;
+        var dev = Math.abs(actual - target) / target;
+        var warn = dev > 0.10;
+        cell.classList.toggle('table-warning', warn);
+        var slipStr = slip.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        var pctStr = (pctVsRec >= 0 ? '+' : '') + pctVsRec.toFixed(1) + '%';
+        var html = '<span class="font-weight-bold">₹' + slipStr + '</span> ';
+        html += '<span class="text-muted">(' + pctStr + ' vs rec.)</span>';
+        if (warn) {
+            html += '<br><span class="text-danger small"><i class="fas fa-exclamation-triangle" aria-hidden="true"></i> Outside ±10% band</span>';
+        }
+        cell.innerHTML = html;
+    }
+
+    function refreshRowDerivedCells(tr) {
+        refreshSlippageCell(tr);
+        refreshRowValueCell(tr);
+    }
+
+    function wireRowInputs() {
+        document.querySelectorAll('tr[data-trade-id]').forEach(function (tr) {
+            try {
+                refreshRowDerivedCells(tr);
+            } catch (e) { console.warn('refreshRowDerivedCells', e); }
+            tr.querySelectorAll('.inline-qty, .inline-target, .inline-actual').forEach(function (inp) {
+                inp.addEventListener('input', function () { refreshRowDerivedCells(tr); });
+            });
+        });
+    }
+
+    function jsonFromResponse(r) {
+        return r.text().then(function (text) {
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                var msg = text ? text.replace(/<[^>]+>/g, ' ').trim().slice(0, 240) : '';
+                throw new Error(msg || ('HTTP ' + r.status));
+            }
+        });
+    }
+
+    function setSaveButtonState(btn, state) {
+        if (!btn) return;
+        if (state === 'loading') {
+            btn.disabled = true;
+            btn.setAttribute('aria-busy', 'true');
+            btn.dataset.prevHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Saving…';
+        } else if (state === 'done') {
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            btn.innerHTML = btn.dataset.prevHtml || '<i class="fas fa-check text-success"></i>';
+            setTimeout(function () {
+                btn.innerHTML = btn.dataset.prevHtml || '<i class="fas fa-save"></i>';
+            }, 1200);
+        } else {
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+            if (btn.dataset.prevHtml) btn.innerHTML = btn.dataset.prevHtml;
+        }
+    }
+
+    function saveInlineTradeRow(tradeId, btn) {
+        var tr = rowForTrade(tradeId);
+        if (!tr) {
+            alert('Row not found for trade ' + tradeId);
+            return;
+        }
+        var qtyEl = tr.querySelector('.inline-qty');
+        var targetEl = tr.querySelector('.inline-target');
+        var actualEl = tr.querySelector('.inline-actual');
+        if (!qtyEl || !targetEl) {
+            alert('This row has no editable fields.');
+            return;
+        }
+        var targetNum = parseFloat(targetEl.value);
+        var actualNum = actualEl ? parseFloat(actualEl.value) : NaN;
+        if (targetNum > 0 && !isNaN(actualNum) && actualNum > 0) {
+            var relDev = Math.abs(actualNum - targetNum) / targetNum;
+            if (relDev > 0.10) {
+                var pctAway = (relDev * 100).toFixed(1);
+                if (!window.confirm(
+                    'Execution price is about ' + pctAway + '% away from the recommended price (more than the ±10% band). Save anyway?'
+                )) {
+                    return;
+                }
+            }
+        }
+        setSaveButtonState(btn, 'loading');
+        var fd = new FormData();
+        fd.append('csrf_token', CSRF_TOKEN);
+        fd.append('trade_id', String(tradeId));
+        fd.append('quantity', qtyEl.value);
+        fd.append('target_price', targetEl.value);
+        fd.append('actual_price', actualEl ? (actualEl.value || '') : '');
+        fetch(QUICK_UPDATE_URL, {
+            method: 'POST',
+            body: fd,
+            credentials: 'same-origin',
+            headers: {
+                'X-CSRFToken': CSRF_TOKEN,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(function (r) {
+                return jsonFromResponse(r).then(function (data) {
+                    return { r: r, data: data };
+                });
+            })
+            .then(function (o) {
+                if (o.data && o.data.success) {
+                    refreshRowDerivedCells(tr);
+                    var stWrap = tr.querySelector('.js-inline-status-wrap');
+                    if (stWrap && o.data.status && o.data.status_color) {
+                        var label = (o.data.status + '').charAt(0).toUpperCase() + (o.data.status + '').slice(1);
+                        stWrap.innerHTML = '<span class="badge badge-' + o.data.status_color + ' status-badge">' + label + '</span>';
+                    }
+                    if (o.data.became_executed) {
+                        window.location.reload();
+                        return;
+                    }
+                    setSaveButtonState(btn, 'done');
+                } else {
+                    setSaveButtonState(btn, 'reset');
+                    alert((o.data && o.data.error) ? o.data.error : ('Save failed (HTTP ' + o.r.status + ')'));
+                }
+            })
+            .catch(function (err) {
+                setSaveButtonState(btn, 'reset');
+                alert(err.message || 'Save failed');
+            });
+    }
+
+    function saveSessionAll(btn) {
+        var sessionId = btn.getAttribute('data-session-id');
+        var dayKey = btn.getAttribute('data-day-key');
+        if (!sessionId || !dayKey) return;
+        var inputEl = document.getElementById('session-exec-s' + sessionId + '-d' + dayKey);
+        var execDate = inputEl && inputEl.value ? inputEl.value : '';
+        if (!execDate) {
+            alert('Choose an execution date for the batch (used as executed date for every trade when you save all).');
+            return;
+        }
+        var rows = [];
+        var anySlippageWarn = false;
+        document.querySelectorAll('tr[data-session-id="' + sessionId + '"]').forEach(function (tr) {
+            var tid = tr.getAttribute('data-trade-id');
+            var qtyEl = tr.querySelector('.inline-qty');
+            var targetEl = tr.querySelector('.inline-target');
+            var actualEl = tr.querySelector('.inline-actual');
+            if (!tid || !qtyEl || !targetEl) return;
+            var tNum = parseFloat(targetEl.value);
+            var aNum = actualEl ? parseFloat(actualEl.value) : NaN;
+            if (tNum > 0 && !isNaN(aNum) && aNum > 0 && Math.abs(aNum - tNum) / tNum > 0.10) {
+                anySlippageWarn = true;
+            }
+            rows.push({
+                trade_id: parseInt(tid, 10),
+                quantity: qtyEl.value,
+                target_price: targetEl.value,
+                actual_price: actualEl ? (actualEl.value || '') : ''
+            });
+        });
+        if (!rows.length) {
+            alert('No trades found in this batch.');
+            return;
+        }
+        if (anySlippageWarn) {
+            if (!window.confirm('One or more rows have execution price more than 10% away from the recommended price. Save all anyway?')) {
+                return;
+            }
+        }
+        var prevHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Saving…';
+        var fd = new FormData();
+        fd.append('csrf_token', CSRF_TOKEN);
+        fd.append('client_id', String(CLIENT_ID));
+        fd.append('execution_date', execDate);
+        fd.append('trades_json', JSON.stringify(rows));
+        var url = SESSION_SAVE_ALL_TMPL.replace(/\/session\/\d+\//, '/session/' + sessionId + '/');
+        fetch(url, {
+            method: 'POST',
+            body: fd,
+            credentials: 'same-origin',
+            headers: {
+                'X-CSRFToken': CSRF_TOKEN,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+            .then(function (r) {
+                return jsonFromResponse(r).then(function (data) {
+                    return { r: r, data: data };
+                });
+            })
+            .then(function (o) {
+                btn.disabled = false;
+                btn.innerHTML = prevHtml;
+                if (o.data && o.data.success) {
+                    window.location.reload();
+                } else {
+                    alert((o.data && o.data.error) ? o.data.error : ('Save failed (HTTP ' + o.r.status + ')'));
+                }
+            })
+            .catch(function (err) {
+                btn.disabled = false;
+                btn.innerHTML = prevHtml;
+                alert(err.message || 'Save failed');
+            });
+    }
+
+    document.body.addEventListener('click', function (ev) {
+        var saveAllBtn = ev.target.closest('.js-session-save-all');
+        if (saveAllBtn) {
+            ev.preventDefault();
+            saveSessionAll(saveAllBtn);
+            return;
+        }
+        var btn = ev.target.closest('.js-inline-save-trade');
+        if (!btn) return;
+        ev.preventDefault();
+        var tid = btn.getAttribute('data-trade-id');
+        if (!tid) return;
+        saveInlineTradeRow(parseInt(tid, 10), btn);
+    });
+
+    wireRowInputs();
+})();
+
+function executeTrade(tradeId) {
+    $('#executeTradeForm').attr('action', '{{ url_for("recommended_trades.execute_trade", trade_id=0) }}'.replace('0', tradeId));
+    const modal = new bootstrap.Modal(document.getElementById('executeTradeModal'));
+    modal.show();
+}
+
+function cancelTrade(tradeId) {
+    if (confirm('Are you sure you want to cancel this trade?')) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for("recommended_trades.cancel_trade", trade_id=0) }}'.replace('0', tradeId);
+        
+        const csrfToken = document.createElement('input');
+        csrfToken.type = 'hidden';
+        csrfToken.name = 'csrf_token';
+        csrfToken.value = '{{ csrf_token() }}';
+        
+        form.appendChild(csrfToken);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+function deleteTrade(tradeId) {
+    $('#deleteTradeForm').attr('action', '{{ url_for("recommended_trades.delete_trade", trade_id=0) }}'.replace('0', tradeId));
+    const modal = new bootstrap.Modal(document.getElementById('deleteTradeModal'));
+    modal.show();
+}
+</script>
+{% endblock %} 

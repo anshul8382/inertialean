@@ -1,0 +1,493 @@
+{% extends "base.html" %}
+
+{% block title %}Corporate Actions - Inertia Invest{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 30px;
+    }
+    
+    .stat-item {
+        background: rgba(255,255,255,0.1);
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    
+    .filter-section {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .action-badge {
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+    
+    .action-SPLIT {
+        background-color: #e3f2fd;
+        color: #1976d2;
+    }
+    
+    .action-BONUS {
+        background-color: #e8f5e9;
+        color: #388e3c;
+    }
+    
+    .action-DIVIDEND {
+        background-color: #fff3e0;
+        color: #f57c00;
+    }
+    
+    .action-RIGHTS {
+        background-color: #f3e5f5;
+        color: #7b1fa2;
+    }
+    
+    .action-MERGER {
+        background-color: #fce4ec;
+        color: #c2185b;
+    }
+    
+    .status-active {
+        color: #28a745;
+        font-weight: bold;
+    }
+    
+    .status-inactive {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    
+    .action-table {
+        background: white;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .action-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .action-table td {
+        vertical-align: middle;
+    }
+    
+    .btn-action {
+        padding: 5px 10px;
+        font-size: 0.85rem;
+        margin: 0 2px;
+    }
+    
+    .security-symbol {
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .security-name {
+        font-size: 0.85rem;
+        color: #666;
+    }
+    
+    .ratio-display {
+        font-family: monospace;
+        font-weight: 600;
+        color: #495057;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link %}
+{{ maint_hub_open('Corporate actions', 'Splits, bonuses, dividends, mergers.', url_for('main.maintenance_reference_data')) }}
+  {{ maint_link('fa-upload', 'Upload corporate actions', url_for('corporate_actions.upload_corporate_actions')) }}
+  {{ maint_link('fa-plus', 'Add corporate action', url_for('corporate_actions.add_action')) }}
+{{ maint_hub_close('Stats and actions table below.') }}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-sitemap"></i> Corporate Actions Management</h2>
+            <p class="text-muted">Manage stock splits, bonuses, dividends, and other corporate actions</p>
+        </div>
+        <div class="col-md-4 text-right">
+            <a href="{{ url_for('corporate_actions.add_action') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add Corporate Action
+            </a>
+        </div>
+    </div>
+    
+    <!-- Statistics Cards -->
+    <div class="stats-card">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-value" id="total-actions">{{ actions|length }}</div>
+                <div class="stat-label">Total Actions</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="active-actions">
+                    {{ actions|selectattr('is_active')|list|length }}
+                </div>
+                <div class="stat-label">Active Actions</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="securities-count">
+                    {{ actions|map(attribute='security_id')|unique|list|length }}
+                </div>
+                <div class="stat-label">Securities</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="recent-actions">
+                    {{ actions|selectattr('action_date')|list|length }}
+                </div>
+                <div class="stat-label">This Year</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="filter-section">
+        <form method="GET" id="filter-form">
+            <div class="row">
+                <div class="col-md-3">
+                    <label for="security_id">Security</label>
+                    <select name="security_id" id="security_id" class="form-control">
+                        <option value="">All Securities</option>
+                        {% for security in securities %}
+                        <option value="{{ security.id }}" 
+                                {% if current_security_id == security.id %}selected{% endif %}>
+                            {{ security.symbol }} - {{ security.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="action_type">Action Type</label>
+                    <select name="action_type" id="action_type" class="form-control">
+                        <option value="">All Types</option>
+                        {% for type in action_types %}
+                        <option value="{{ type }}" 
+                                {% if current_action_type == type %}selected{% endif %}>
+                            {{ type }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="year">Year</label>
+                    <select name="year" id="year" class="form-control">
+                        <option value="">All Years</option>
+                        {% for yr in years %}
+                        <option value="{{ yr }}" 
+                                {% if current_year == yr %}selected{% endif %}>
+                            {{ yr }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label>&nbsp;</label>
+                    <div>
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <i class="fas fa-filter"></i> Apply Filters
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Actions Table -->
+    <div class="action-table">
+        {% if actions %}
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Security</th>
+                    <th>Action Type</th>
+                    <th>Action Date</th>
+                    <th>Ratio</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                    <th>Source</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for action in actions %}
+                <tr>
+                    <td>
+                        <div class="security-symbol">{{ action.security.symbol }}</div>
+                        <div class="security-name">{{ action.security.name[:40] }}...</div>
+                    </td>
+                    <td>
+                        <span class="action-badge action-{{ action.action_type }}">
+                            {{ action.action_type }}
+                        </span>
+                    </td>
+                    <td>{{ action.action_date.strftime('%d %b %Y') }}</td>
+                    <td class="ratio-display">{{ action.ratio }}</td>
+                    <td>
+                        {% if action.description %}
+                        <span title="{{ action.description }}">
+                            {{ action.description[:50] }}{% if action.description|length > 50 %}...{% endif %}
+                        </span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="{% if action.is_active %}status-active{% else %}status-inactive{% endif %}"
+                              id="status-{{ action.id }}">
+                            {% if action.is_active %}
+                            <i class="fas fa-check-circle"></i> Active
+                            {% else %}
+                            <i class="fas fa-times-circle"></i> Inactive
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge badge-secondary">{{ action.source }}</span>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('corporate_actions.view_impact', action_id=action.id) }}" 
+                           class="btn btn-sm btn-info btn-action" title="View Impact Analysis">
+                            <i class="fas fa-chart-line"></i>
+                        </a>
+                        <button class="btn btn-sm btn-success btn-action toggle-btn" 
+                                data-action-id="{{ action.id }}"
+                                title="Toggle Active/Inactive">
+                            <i class="fas fa-toggle-on"></i>
+                        </button>
+                        <a href="{{ url_for('corporate_actions.edit_action', action_id=action.id) }}" 
+                           class="btn btn-sm btn-info btn-action" title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <button class="btn btn-sm btn-danger btn-action delete-btn" 
+                                data-action-id="{{ action.id }}"
+                                data-security="{{ action.security.symbol }}"
+                                data-date="{{ action.action_date.strftime('%d %b %Y') }}"
+                                title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="p-5 text-center text-muted">
+            <i class="fas fa-inbox fa-3x mb-3"></i>
+            <h5>No corporate actions found</h5>
+            <p>Add your first corporate action to get started</p>
+            <a href="{{ url_for('corporate_actions.add_action') }}" class="btn btn-primary mt-3">
+                <i class="fas fa-plus"></i> Add Corporate Action
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete this corporate action?</p>
+                <p><strong id="delete-details"></strong></p>
+                <p class="text-danger"><small>This action cannot be undone.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="delete-form" method="POST" action="" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+console.log('Corporate actions script block loaded');
+
+// Wait for DOM and jQuery to be ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM Content Loaded');
+    
+    // Check if jQuery is available
+    if (typeof jQuery === 'undefined') {
+        console.error('jQuery is not loaded!');
+        return;
+    }
+    console.log('jQuery version:', jQuery.fn.jquery);
+    
+    // Check if Bootstrap is available
+    if (typeof bootstrap === 'undefined') {
+        console.error('Bootstrap is not loaded!');
+        return;
+    }
+    console.log('Bootstrap is loaded');
+    
+    // Toggle active/inactive
+    $('.toggle-btn').click(function() {
+        const actionId = $(this).data('action-id');
+        const btn = $(this);
+        
+        $.ajax({
+            url: `/corporate-actions/toggle/${actionId}`,
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Update status display
+                    const statusSpan = $(`#status-${actionId}`);
+                    if (response.is_active) {
+                        statusSpan.removeClass('status-inactive').addClass('status-active');
+                        statusSpan.html('<i class="fas fa-check-circle"></i> Active');
+                    } else {
+                        statusSpan.removeClass('status-active').addClass('status-inactive');
+                        statusSpan.html('<i class="fas fa-times-circle"></i> Inactive');
+                    }
+                    
+                    // Show success message
+                    showAlert('success', response.message);
+                }
+            },
+            error: function(xhr) {
+                showAlert('error', 'Failed to toggle action status');
+            }
+        });
+    });
+    
+    // Delete action - use event delegation to handle dynamically added buttons
+    console.log('Binding delete button handlers, found', $('.delete-btn').length, 'buttons');
+    
+    $(document).on('click', '.delete-btn', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('Delete button clicked!');
+        
+        const actionId = $(this).data('action-id');
+        const security = $(this).data('security');
+        const date = $(this).data('date');
+        
+        console.log('Action ID:', actionId, 'Security:', security, 'Date:', date);
+        
+        if (!actionId) {
+            console.error('Action ID not found!');
+            alert('Error: Action ID not found');
+            return false;
+        }
+        
+        $('#delete-details').text(`${security} - ${date}`);
+        const deleteUrl = `/corporate-actions/delete/${actionId}`;
+        $('#delete-form').attr('action', deleteUrl);
+        console.log('Form action set to:', deleteUrl);
+        
+        // Use Bootstrap 5 modal API
+        try {
+            const deleteModalElement = document.getElementById('deleteModal');
+            if (!deleteModalElement) {
+                console.error('Delete modal element not found!');
+                alert('Error: Delete modal not found');
+                return false;
+            }
+            console.log('Creating Bootstrap modal instance');
+            const deleteModal = new bootstrap.Modal(deleteModalElement);
+            deleteModal.show();
+            console.log('Modal shown successfully');
+        } catch (error) {
+            console.error('Error showing modal:', error);
+            alert('Error showing delete confirmation: ' + error.message);
+            return false;
+        }
+        
+        return false;
+    });
+    
+    // Handle form submission - ensure action is set before submit
+    $('#delete-form').on('submit', function(e) {
+        const action = $(this).attr('action');
+        if (!action || action === '') {
+            e.preventDefault();
+            showAlert('error', 'Error: Delete action not set. Please try again.');
+            return false;
+        }
+        // Form will submit normally with the action set
+        return true;
+    });
+    
+    // Auto-submit form on filter change
+    $('#security_id, #action_type, #year').change(function() {
+        $('#filter-form').submit();
+    });
+    
+    console.log('All event handlers bound');
+});
+
+function showAlert(type, message) {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert" style="position: fixed; top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+            ${message}
+            <button type="button" class="close" data-dismiss="alert">
+                <span>&times;</span>
+            </button>
+        </div>
+    `;
+    $('body').append(alertHtml);
+    setTimeout(function() {
+        $('.alert').alert('close');
+    }, 3000);
+}
+</script>
+{% endblock %}
+
+
+
+
+

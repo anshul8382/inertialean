@@ -1,0 +1,71 @@
+# Client Data Integrity — Module Spec
+# Umbrella case page: summary on client details + sections on client DI page.
+# G8 detail remains cashflow_trade_integrity; this pack owns roll-up + G1–G7 + P1.
+
+module:
+  name: client_data_integrity
+  domain: portfolio_integrity
+  fr_ref: FR-CLIENT-DI-01
+  roles: [advisor, manager, admin]
+  trigger: manual_and_nightly
+  interactive: true
+  local_only: true
+  notes: >
+    Nightly writes ready-made snapshot (case roll-up + attention analysis).
+    Page/dashboard read snapshot. Real-time LLM only for guided chat when user asks.
+
+input:
+  fact_sources:
+    - api: cashflow_trade_case
+      fields: [status, difference, opening_book_gap, resolution]
+    - api: data_integrity_issues_open_for_client
+      fields: [id, check_name, check_category, severity, message]
+    - api: price_accuracy_findings_for_client_holdings
+      fields: [kind, symbol, security_id]
+  client_scoped: true
+
+guidelines:
+  pack: CLIENT_DATA_INTEGRITY_GUIDELINES
+  pack_path: docs/assistant_modules/CLIENT_DATA_INTEGRITY_GUIDELINES.md
+  related_packs:
+    - docs/assistant_modules/CASHFLOW_TRADE_INTEGRITY_GUIDELINES.md
+    - docs/assistant_modules/CLIENT_HEALTH_GUIDELINES.md
+  deterministic_rules:
+    - "overall status = worst section"
+    - "suggest only — never mutate books"
+    - "opening book informational; G8 owns epoch"
+    - "CA does not clear cashflow gaps"
+    - "exclude workflow A/C/D/E from this page"
+  tone: "advisor ops; one next step; cite issue/fact ids"
+
+llm:
+  model: llama3.1:8b
+  max_tokens: 400
+  temperature: 0.1
+  local_only: true
+  role: interpretation_and_guide_only
+
+output:
+  type: text_to_ui
+  schema:
+    overall_status: str
+    sections: [{id: str, status: str, title: str}]
+    message: str
+    cited_fact_ids: [str]
+  actions: []
+  approval: none
+  egress: local_only
+
+built:
+  - services/client_data_integrity_case_service.py
+  - services/client_data_integrity_analysis_service.py
+  - services/guided_chat_modules/client_data_integrity.py
+  - routes/clients.py (data_integrity, data_integrity_list)
+  - templates/clients/data_integrity.html
+  - templates/clients/data_integrity_list.html
+
+out_of_scope:
+  - monthly investment stages A*/B1
+  - review pipeline C*/D*/E1
+  - auto Task Assignment / Alert spam
+  - mutating cashflows/trades/prices

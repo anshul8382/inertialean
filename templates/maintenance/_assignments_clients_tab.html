@@ -1,0 +1,201 @@
+    <div class="card card-app shadow-sm mb-4">
+        <div class="card-header"><h5 class="card-title mb-0">Quick assign client</h5></div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients', q=search, advisor_id=filter_advisor_id, unassigned=1 if unassigned_only else none) }}" class="row g-3 align-items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-md-4">
+                    <label for="quick_client_id" class="form-label">Client</label>
+                    <select class="form-select" id="quick_client_id" name="client_id" required>
+                        <option value="">— Select client —</option>
+                        {% for c in pick_clients %}
+                        <option value="{{ c.id }}">{{ c.name }} ({{ c.email }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="quick_advisor_id" class="form-label">Advisor</label>
+                    <select class="form-select" id="quick_advisor_id" name="advisor_id" required>
+                        <option value="">— Select user —</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}">{{ u.username }}{% if u.email %} — {{ u.email }}{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="quick_notes" class="form-label">Notes (optional)</label>
+                    <input type="text" class="form-control" id="quick_notes" name="notes" maxlength="500">
+                </div>
+                <div class="col-md-1">
+                    <button type="submit" class="btn btn-primary w-100"><i class="fas fa-check"></i></button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card card-app shadow-sm mb-3">
+        <div class="card-header"><h5 class="card-title mb-0">Filter clients</h5></div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('main.maintenance_client_advisor_assignments') }}" class="row g-3 align-items-end">
+                <input type="hidden" name="tab" value="clients">
+                <div class="col-md-4">
+                    <label for="q" class="form-label">Search</label>
+                    <input type="search" class="form-control" id="q" name="q" value="{{ search }}" placeholder="Name or email">
+                </div>
+                <div class="col-md-3">
+                    <label for="advisor_id" class="form-label">Current advisor</label>
+                    <select class="form-select" id="advisor_id" name="advisor_id">
+                        <option value="">All advisors</option>
+                        {% for u in users %}
+                        <option value="{{ u.id }}" {% if filter_advisor_id == u.id %}selected{% endif %}>{{ u.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-check mt-4">
+                        <input class="form-check-input" type="checkbox" id="unassigned" name="unassigned" value="1" {% if unassigned_only %}checked{% endif %}>
+                        <label class="form-check-label" for="unassigned">Unassigned only</label>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-outline-primary w-100">Apply</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card card-app shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">Client list</h5>
+            <span class="text-muted small">{{ pagination.total }} total</span>
+        </div>
+        <div class="card-body border-bottom bg-light">
+            <form id="bulkAssignForm" method="POST" action="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients', q=search, advisor_id=filter_advisor_id, unassigned=1 if unassigned_only else none) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="bulk_entity" value="clients">
+                <input type="hidden" name="bulk_scope" id="bulk_scope" value="selected">
+                <input type="hidden" name="filter_q" value="{{ search }}">
+                <input type="hidden" name="filter_advisor_id" value="{{ filter_advisor_id or '' }}">
+                <input type="hidden" name="filter_unassigned" value="{{ '1' if unassigned_only else '' }}">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="bulk_advisor_id" class="form-label">Assign to advisor</label>
+                        <select class="form-select" id="bulk_advisor_id" name="advisor_id" required>
+                            <option value="">— Select user —</option>
+                            {% for u in users %}
+                            <option value="{{ u.id }}">{{ u.username }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="bulk_notes" class="form-label">Notes</label>
+                        <input type="text" class="form-control" id="bulk_notes" name="notes" maxlength="500">
+                    </div>
+                    <div class="col-md-5 d-flex flex-wrap gap-2 align-items-end">
+                        <button type="submit" class="btn btn-primary" id="btnAssignSelected"
+                                data-confirm="Assign checked clients on this page?">
+                            <i class="fas fa-users"></i> Assign selected
+                        </button>
+                        {% if pagination.total > 0 %}
+                        <button type="submit" class="btn btn-outline-primary" id="btnAssignAllFiltered"
+                                data-confirm="Assign all {{ pagination.total }} matching clients (all pages)?">
+                            <i class="fas fa-check-double"></i> Assign all {{ pagination.total }}
+                        </button>
+                        {% endif %}
+                        <span class="text-muted small" id="bulkSelectionHint">0 selected</span>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-app table-hover table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:2.5rem;"><input class="form-check-input" type="checkbox" id="selectAllPage" aria-label="Select all on page"></th>
+                        <th>Client</th>
+                        <th>Email</th>
+                        <th>Advisor</th>
+                        <th>Change</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in clients %}
+                    <tr>
+                        <td><input class="form-check-input client-select" type="checkbox" form="bulkAssignForm" name="client_ids" value="{{ c.id }}"></td>
+                        <td><a href="{{ url_for('clients.client_details', client_id=c.id) }}">{{ c.name }}</a></td>
+                        <td>{{ c.email }}</td>
+                        <td>{% if c.advisor_label %}<span class="text-success">{{ c.advisor_label }}</span>{% else %}<span class="text-warning">Unassigned</span>{% endif %}</td>
+                        <td>
+                            <form method="POST" action="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients', q=search, advisor_id=filter_advisor_id, unassigned=1 if unassigned_only else none) }}" class="d-flex gap-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="client_id" value="{{ c.id }}">
+                                <select class="form-select form-select-sm" name="advisor_id" required style="max-width:12rem;">
+                                    {% for u in users %}
+                                    <option value="{{ u.id }}" {% if c.advisor_id == u.id %}selected{% endif %}>{{ u.username }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center text-muted py-4">No clients match.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if pagination.pages > 1 %}
+        <div class="card-footer">
+            <ul class="pagination pagination-sm mb-0 justify-content-center">
+                <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients', page=pagination.prev_num, q=search, advisor_id=filter_advisor_id, unassigned=1 if unassigned_only else none) }}">Previous</a>
+                </li>
+                {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                    {% if p %}
+                    <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients', page=p, q=search, advisor_id=filter_advisor_id, unassigned=1 if unassigned_only else none) }}">{{ p }}</a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link">…</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients', page=pagination.next_num, q=search, advisor_id=filter_advisor_id, unassigned=1 if unassigned_only else none) }}">Next</a>
+                </li>
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+<script>
+(function () {
+    var form = document.getElementById('bulkAssignForm');
+    var scopeInput = document.getElementById('bulk_scope');
+    var selectAllPage = document.getElementById('selectAllPage');
+    var hint = document.getElementById('bulkSelectionHint');
+    var btnSelected = document.getElementById('btnAssignSelected');
+    var btnAllFiltered = document.getElementById('btnAssignAllFiltered');
+    function boxes() { return [].slice.call(document.querySelectorAll('.client-select')); }
+    function updateHint() {
+        var n = boxes().filter(function (b) { return b.checked; }).length;
+        if (hint) hint.textContent = n + ' selected';
+        if (selectAllPage) {
+            selectAllPage.checked = n > 0 && n === boxes().length;
+            selectAllPage.indeterminate = n > 0 && n < boxes().length;
+        }
+    }
+    if (selectAllPage) selectAllPage.addEventListener('change', function () {
+        var c = selectAllPage.checked; boxes().forEach(function (b) { b.checked = c; }); updateHint();
+    });
+    boxes().forEach(function (b) { b.addEventListener('change', updateHint); });
+    updateHint();
+    if (form) form.addEventListener('submit', function (ev) {
+        if (ev.submitter === btnAllFiltered) {
+            scopeInput.value = 'filtered';
+            if (!confirm(btnAllFiltered.getAttribute('data-confirm') || 'Continue?')) ev.preventDefault();
+        } else if (ev.submitter === btnSelected) {
+            scopeInput.value = 'selected';
+            if (!boxes().some(function (b) { return b.checked; })) { ev.preventDefault(); alert('Select clients or use Assign all.'); return; }
+            if (!confirm(btnSelected.getAttribute('data-confirm') || 'Continue?')) ev.preventDefault();
+        }
+    });
+})();
+</script>

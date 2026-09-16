@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Portfolio Performance{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3>Portfolio Performance Analysis</h3>
+    <a href="{{ url_for('hub.operational_dashboard') }}" class="btn btn-sm btn-outline-secondary">Operational</a>
+  </div>
+
+  <div class="row mb-3">
+    <div class="col-md-4"><div class="card"><div class="card-body text-center"><div class="h4">{{ total_issues }}</div><div class="small text-muted">Total issues</div></div></div></div>
+    <div class="col-md-4"><div class="card"><div class="card-body text-center"><div class="h4 text-info">{{ systemic|length }}</div><div class="small text-muted">Systemic</div></div></div></div>
+    <div class="col-md-4"><div class="card"><div class="card-body text-center"><div class="h4 text-danger">{{ client_specific|length }}</div><div class="small text-muted">Client-specific</div></div></div></div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header"><strong>Client-specific issues</strong></div>
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Client</th><th>Underperformance</th><th>Excess vs peers</th><th>Action</th></tr></thead>
+        <tbody>
+          {% for item in client_specific %}
+          <tr>
+            <td><a href="{{ url_for('hub.client_view', client_id=item.issue.client_id) }}">{{ item.client.name if item.client else item.issue.client_id }}</a></td>
+            <td>{{ item.underperformance_pct }}%</td>
+            <td>{{ item.excess_vs_peers }}%</td>
+            <td>
+              <form method="POST" action="{{ url_for('hub.create_alert_bulk') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="issue_ids[]" value="{{ item.issue.id }}">
+                <button class="btn btn-sm btn-danger">Create alert</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-center text-muted py-3">No client-specific issues</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

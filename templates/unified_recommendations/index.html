@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+
+{% block title %}Unified Recommendations{% endblock %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Recommendations' %}
+  {% include 'partials/mobile/app_header.html' %}
+  <form method="GET" action="{{ url_for('unified_recommendations.unified_recommendations') }}" class="mb-3" id="unifiedIndexFiltersMobile">
+    <label class="form-label small mb-1" for="m_q">Client name</label>
+    <input class="form-control mb-2" type="search" id="m_q" name="q" value="{{ filters.get('q') or '' }}" placeholder="Search client" autocomplete="off">
+    <label class="form-label small mb-1" for="m_status">Status</label>
+    <select class="form-select mb-2" id="m_status" name="status">
+      <option value="">All statuses</option>
+      {% for st in status_choices %}
+      <option value="{{ st }}" {% if filters.get('status') == st %}selected{% endif %}>{{ st|title }}</option>
+      {% endfor %}
+    </select>
+    <div class="d-flex gap-2 mb-2">
+      <div class="flex-grow-1">
+        <label class="form-label small mb-1" for="m_from">From</label>
+        <input class="form-control" type="date" id="m_from" name="date_from" value="{{ filters.date_from.isoformat() if filters.get('date_from') else '' }}">
+      </div>
+      <div class="flex-grow-1">
+        <label class="form-label small mb-1" for="m_to">To</label>
+        <input class="form-control" type="date" id="m_to" name="date_to" value="{{ filters.date_to.isoformat() if filters.get('date_to') else '' }}">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary w-100">Apply filters</button>
+    {% if filters_active %}
+    <a class="btn btn-outline-secondary w-100 mt-2" href="{{ url_for('unified_recommendations.unified_recommendations') }}">Clear</a>
+    {% endif %}
+  </form>
+  <div class="im-list-stack">
+    {% for rec in recent_recommendations|default([], true) %}
+    <a href="{{ url_for('unified_recommendations.client_recommendations', client_id=rec.client_id) }}" class="im-list-card">
+      <div class="im-list-card__header">
+        <h2 class="im-list-card__title">{{ rec.client.name if rec.client else 'Client ' ~ rec.client_id }}</h2>
+        <span class="im-badge im-badge--muted">{{ rec.display_status|title if rec.display_status else '' }}</span>
+      </div>
+      <p class="im-list-card__meta">{{ rec.display_date.strftime('%d %b %Y') if rec.display_date else '' }}</p>
+    </a>
+    {% else %}
+    <div class="im-empty-state"><p>No recommendation batches match</p></div>
+    {% endfor %}
+  </div>
+  <a href="{{ url_for('unified_recommendations.generate_unified_recommendations') }}" class="im-fab"><i class="fas fa-plus"></i></a>
+</div>
+<div class="im-desktop-only im-collapsed-on-mobile container mt-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+        <h1 class="mb-0">Unified Recommendations</h1>
+        <div class="d-flex flex-wrap gap-2">
+            {% if current_user.is_manager or current_user.is_advisor or current_user.is_ops_manager %}
+            <a href="{{ url_for('recommended_trades.add_recommended_trade') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-plus-circle"></i> Add recommended trade
+            </a>
+            {% endif %}
+            <a href="{{ url_for('unified_recommendations.generate_unified_recommendations') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Generate new recommendations
+            </a>
+        </div>
+    </div>
+
+    <div class="card card-app mb-3">
+        <div class="card-header">Filters</div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('unified_recommendations.unified_recommendations') }}" id="unifiedIndexFilters" class="filter-bar">
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-3">
+                        <label class="form-label" for="filter_client">Client</label>
+                        <select class="form-select" id="filter_client" name="client_id">
+                            <option value="">All clients</option>
+                            {% for c in filter_clients|default([], true) %}
+                            <option value="{{ c.id }}" {% if filters.get('client_id') == c.id %}selected{% endif %}>{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-2">
+                        <label class="form-label" for="filter_q">Client name</label>
+                        <input class="form-control" type="search" id="filter_q" name="q" value="{{ filters.get('q') or '' }}" placeholder="Contains…" autocomplete="off">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label" for="filter_status">Status</label>
+                        <select class="form-select" id="filter_status" name="status">
+                            <option value="">All</option>
+                            {% for st in status_choices %}
+                            <option value="{{ st }}" {% if filters.get('status') == st %}selected{% endif %}>{{ st|title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label class="form-label" for="filter_type">Type</label>
+                        <select class="form-select" id="filter_type" name="session_type">
+                            <option value="">All</option>
+                            {% for ty in type_choices %}
+                            <option value="{{ ty }}" {% if filters.get('session_type') == ty %}selected{% endif %}>{{ ty.replace('_', ' ')|title }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-1">
+                        <label class="form-label" for="filter_from">From</label>
+                        <input class="form-control" type="date" id="filter_from" name="date_from" value="{{ filters.date_from.isoformat() if filters.get('date_from') else '' }}">
+                    </div>
+                    <div class="col-6 col-md-1">
+                        <label class="form-label" for="filter_to">To</label>
+                        <input class="form-control" type="date" id="filter_to" name="date_to" value="{{ filters.date_to.isoformat() if filters.get('date_to') else '' }}">
+                    </div>
+                    <div class="col-12 col-md-1 d-flex flex-wrap gap-1">
+                        <button type="submit" class="btn btn-primary">Search</button>
+                        {% if filters_active %}
+                        <a class="btn btn-outline-secondary" href="{{ url_for('unified_recommendations.unified_recommendations') }}">Clear</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Recent Recommendations</h5>
+                    <p class="small text-muted mb-0">One row per batch (session). Multiple sends to the same client appear separately.</p>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-app" data-mobile-table="scroll">
+                            <thead>
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Amount</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- DEBUG: recent_sessions={{ recent_sessions|length if recent_sessions else 'None' }}, recent_recommendations={{ recent_recommendations|length if recent_recommendations else 'None' }} -->
+                                {% if recent_sessions and recent_sessions|length > 0 %}
+                                {% for session in recent_sessions %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ session.client.name }}</strong><br>
+                                        <small class="text-muted">{{ session.client.email|display_email }}</small>
+                                    </td>
+                                    <td>
+                                        {% if session.investment_amount %}
+                                            ₹{{ "%.2f"|format(session.investment_amount|float) }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ session.session_type|title }}</span>
+                                        {% if session.session_name %}
+                                            <br><small class="text-muted">{{ session.session_name }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if session.status == 'draft' %}bg-secondary
+                                            {% elif session.status == 'active' %}bg-primary
+                                            {% elif session.status == 'completed' %}bg-success
+                                            {% elif session.status == 'cancelled' %}bg-danger
+                                            {% else %}bg-warning{% endif %}">
+                                            {{ session.status|title }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small>{{ session.created_at.strftime('%Y-%m-%d %H:%M') if session.created_at else 'N/A' }}</small>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('unified_recommendations.client_recommendations', client_id=session.client_id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                        <button class="btn btn-sm btn-outline-danger delete-recommendation-btn" 
+                                                data-session-id="{{ session.id }}"
+                                                data-client-name="{{ session.client.name }}">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% elif recent_recommendations and recent_recommendations|length > 0 %}
+                                {% for rec in recent_recommendations %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ rec.client.name if rec.client else 'Client ' + (rec.client_id|string) }}</strong><br>
+                                        <small class="text-muted">{{ rec.client.email|display_email if rec.client and rec.client.email else 'N/A' }}</small>
+                                    </td>
+                                    <td>
+                                        ₹{{ "%.2f"|format(rec.net_signed_amount|float) }}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ rec.action_summary }}</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge 
+                                            {% if rec.display_status == 'pending' %}bg-warning
+                                            {% elif rec.display_status == 'sent' or rec.display_status == 'accepted' %}bg-primary
+                                            {% elif rec.display_status == 'executed' %}bg-success
+                                            {% else %}bg-secondary{% endif %}">
+                                            {{ rec.display_status|title if rec.display_status else 'N/A' }}
+                                        </span>
+                                        {% if rec.session_id %}
+                                        <br><small class="text-muted">Session #{{ rec.session_id }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if rec.display_date %}
+                                            <small>{{ rec.display_date.strftime('%Y-%m-%d %H:%M') }}</small>
+                                        {% elif rec.created_at %}
+                                            <small>{{ rec.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                        {% elif rec.batch_created_at %}
+                                            <small class="text-muted">{{ rec.batch_created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                        {% else %}
+                                            <small class="text-muted">N/A</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('unified_recommendations.client_recommendations', client_id=rec.client_id) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="fas fa-eye"></i> View
+                                        </a>
+                                        <a href="{{ url_for('unified_recommendations.edit_recommendation', recommendation_id=rec.id) }}" 
+                                           class="btn btn-sm btn-outline-warning">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        <button class="btn btn-sm btn-outline-danger delete-recommendation-btn" 
+                                                data-recommendation-id="{{ rec.id }}"
+                                                data-session-id="{{ rec.session_id if rec.session_id else '' }}"
+                                                data-client-name="{{ rec.client.name if rec.client else 'Client ' + (rec.client_id|string) }}">
+                                            <i class="fas fa-trash"></i> Delete
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">
+                                        <p class="mb-0">{% if filters_active %}No batches match these filters.{% else %}No recommendations found. Generate new recommendations to get started.{% endif %}</p>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card shadow">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('unified_recommendations.generate_unified_recommendations') }}" 
+                           class="btn btn-primary">
+                            <i class="fas fa-magic"></i> Generate Recommendations
+                        </a>
+                        <a href="{{ url_for('unified_recommendations.generate_unified_recommendations') }}?type=withdrawal" 
+                           class="btn btn-warning">
+                            <i class="fas fa-minus-circle"></i> Generate Withdrawal
+                        </a>
+                        <a href="{{ url_for('unified_recommendations.generate_unified_recommendations') }}?type=rebalancing" 
+                           class="btn btn-info">
+                            <i class="fas fa-balance-scale"></i> Portfolio Rebalancing
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow mt-3">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">System Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <h4 class="text-primary">{{ recent_recommendations|length if recent_recommendations else 0 }}</h4>
+                            <small class="text-muted">Total batches</small>
+                        </div>
+                        <div class="col-6">
+                            <h4 class="text-success">{{ recent_recommendations|selectattr('status', 'equalto', 'accepted')|list|length if recent_recommendations else 0 }}</h4>
+                            <small class="text-muted">Accepted</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    function bindLiveFilter(form) {
+        if (!form) return;
+        const debounceMs = 400;
+        let timer = null;
+        form.querySelectorAll('select').forEach(function (el) {
+            el.addEventListener('change', function () { form.submit(); });
+        });
+        form.querySelectorAll('input[type="search"], input[type="date"]').forEach(function (el) {
+            el.addEventListener('input', function () {
+                clearTimeout(timer);
+                timer = setTimeout(function () { form.submit(); }, debounceMs);
+            });
+            el.addEventListener('change', function () { form.submit(); });
+        });
+    }
+    bindLiveFilter(document.getElementById('unifiedIndexFilters'));
+    bindLiveFilter(document.getElementById('unifiedIndexFiltersMobile'));
+
+    // Handle delete button clicks
+    const deleteButtons = document.querySelectorAll('.delete-recommendation-btn');
+    
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const sessionId = this.getAttribute('data-session-id');
+            const recommendationId = this.getAttribute('data-recommendation-id');
+            const clientName = this.getAttribute('data-client-name') || 'this client';
+            
+            // Confirm deletion
+            if (!confirm(`Are you sure you want to delete the recommendation session for ${clientName}?\n\nThis will permanently delete:\n- The recommendation session\n- All related recommendations\n- Related email logs\n\nThis action cannot be undone.`)) {
+                return;
+            }
+            
+            // Disable button and show loading state
+            const originalHTML = this.innerHTML;
+            this.disabled = true;
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+            
+            // Prepare request data
+            const requestData = {};
+            if (sessionId) {
+                requestData.session_id = parseInt(sessionId);
+            }
+            if (recommendationId) {
+                requestData.recommendation_id = parseInt(recommendationId);
+            }
+            
+            // Get CSRF token from meta tag (set in base.html)
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            
+            // Send delete request
+            fetch('{{ url_for("unified_recommendations.delete_recommendation_session") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify(requestData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    alert(data.message || 'Recommendation deleted successfully');
+                    // Reload the page to reflect changes
+                    window.location.reload();
+                } else {
+                    // Show error message
+                    alert('Error: ' + (data.error || 'Failed to delete recommendation'));
+                    // Restore button
+                    this.disabled = false;
+                    this.innerHTML = originalHTML;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error: Failed to delete recommendation. Please try again.');
+                // Restore button
+                this.disabled = false;
+                this.innerHTML = originalHTML;
+            });
+        });
+    });
+});
+</script>
+{% endblock %}
+

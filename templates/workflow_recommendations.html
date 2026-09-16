@@ -1,0 +1,612 @@
+{% extends "base.html" %}
+
+{% block title %}Workflow Recommendations & Transactions{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>
+                    <i class="fas fa-chart-line"></i> Workflow Recommendations & Transactions
+                </h1>
+                <a href="{{ url_for('main.view_monthly_investment', id=workflow.monthly_investment_id) }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Investment
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Summary -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-info-circle"></i> Workflow Summary
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <strong>Client:</strong> {{ client.name }}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Current Stage:</strong> 
+                            <span class="badge bg-{{ workflow.current_stage.lower() }}">
+                                {{ workflow.current_stage }}
+                            </span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Planned Amount:</strong> ₹{{ "%.2f"|format(workflow.planned_amount) }}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Investment Date:</strong> 
+                            {% if workflow.investment_date %}
+                                {{ workflow.investment_date.strftime('%Y-%m-%d') }}
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Recommendations Summary -->
+                    <div class="row mt-3">
+                        <div class="col-md-12">
+                            <div class="alert alert-info">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <strong>Total Recommendations:</strong> {{ recommendations|length }}
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>Total Value:</strong> ₹<span id="totalRecommendationValue">0.00</span>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>Remaining Amount:</strong> ₹<span id="remainingAmount">0.00</span>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>Status:</strong> 
+                                        <span id="recommendationStatus" class="badge bg-warning">Pending</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Recommendations -->
+        <div class="col-md-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-lightbulb"></i> Recommendations ({{ recommendations|length }})
+                    </h5>
+                    <div>
+                        {% if workflow.current_stage == 'RECOS' %}
+                        <button type="button" class="btn btn-warning btn-sm" onclick="sendRecommendations()">
+                            <i class="fas fa-paper-plane"></i> Send Recommendations
+                        </button>
+                        {% endif %}
+                        {% if workflow.current_stage == 'EXEC' %}
+                        <button type="button" class="btn btn-success btn-sm" onclick="updateTransactions()">
+                            <i class="fas fa-exchange-alt"></i> Update Transactions
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if recommendations %}
+                        <div class="table-responsive">
+                            <table class="table table-sm" id="recommendationsTable">
+                                <thead>
+                                    <tr>
+                                        <th>Security</th>
+                                        <th>Action</th>
+                                        <th>Quantity</th>
+                                        <th>Target Price</th>
+                                        <th>Execution Price</th>
+                                        <th>Amount</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for rec in recommendations %}
+                                    <tr data-recommendation-id="{{ rec.id }}">
+                                        <td>{{ rec.security.name if rec.security else 'N/A' }}</td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if rec.action == 'buy' else 'danger' }}">
+                                                {{ rec.action|upper }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <input type="number" class="form-control form-control-sm quantity-input" 
+                                                   value="{{ "%.4f"|format(rec.quantity) if rec.quantity else '' }}" 
+                                                   step="0.0001" min="0" 
+                                                   {% if rec.status == 'executed' %}readonly{% endif %}
+                                                   onchange="calculateAmount(this)">
+                                        </td>
+                                        <td>
+                                            <input type="number" class="form-control form-control-sm target-price-input" 
+                                                   value="{{ "%.2f"|format(rec.target_price) if rec.target_price else '' }}" 
+                                                   step="0.01" min="0"
+                                                   {% if rec.status == 'executed' %}readonly{% endif %}
+                                                   onchange="calculateAmount(this)">
+                                        </td>
+                                        <td>
+                                            <input type="number" class="form-control form-control-sm execution-price-input" 
+                                                   value="{{ "%.2f"|format(rec.actual_price) if rec.actual_price else '' }}" 
+                                                   step="0.01" min="0"
+                                                   {% if rec.status == 'executed' %}readonly{% endif %}
+                                                   onchange="calculateAmount(this)">
+                                        </td>
+                                        <td>
+                                            <span class="amount-display">₹{{ "%.2f"|format(rec.total_amount) if rec.total_amount else '0.00' }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="badge bg-{{ rec.status_color }}">
+                                                {{ rec.status|title }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if rec.status != 'executed' %}
+                                            <button type="button" class="btn btn-primary btn-sm" onclick="saveRecommendation({{ rec.id }})">
+                                                <i class="fas fa-save"></i> Save
+                                            </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No recommendations found for this client.</p>
+                        {% if workflow.current_stage == 'RECOS' %}
+                        <button type="button" class="btn btn-primary" onclick="createRecommendations()">
+                            <i class="fas fa-plus"></i> Create Recommendations
+                        </button>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Transactions -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exchange-alt"></i> Transactions ({{ transactions|length }})
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if transactions %}
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Security</th>
+                                        <th>Type</th>
+                                        <th>Quantity</th>
+                                        <th>Price</th>
+                                        <th>Amount</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for trans in transactions %}
+                                    <tr>
+                                        <td>{{ trans.security.name if trans.security else 'N/A' }}</td>
+                                        <td>
+                                            <span class="badge bg-{{ 'success' if trans.type == 'buy' else 'danger' }}">
+                                                {{ trans.type|upper }}
+                                            </span>
+                                        </td>
+                                        <td>{{ "%.4f"|format(trans.quantity) }}</td>
+                                        <td>₹{{ "%.2f"|format(trans.price) }}</td>
+                                        <td>₹{{ "%.2f"|format(trans.amount) }}</td>
+                                        <td>
+                                            {% if trans.transaction_date %}
+                                                {{ trans.transaction_date.strftime('%Y-%m-%d') }}
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No transactions found for this client.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Actions Timeline -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0">
+                        <i class="fas fa-history"></i> Workflow Actions Timeline
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if workflow_actions %}
+                        <div class="timeline">
+                            {% for action in workflow_actions %}
+                            <div class="timeline-item">
+                                <div class="timeline-marker bg-primary"></div>
+                                <div class="timeline-content">
+                                    <div class="d-flex justify-content-between">
+                                        <h6 class="mb-1">{{ action.action_type|replace('_', ' ')|title }}</h6>
+                                        <small class="text-muted">
+                                            {% if action.action_date %}
+                                                {{ action.action_date.strftime('%Y-%m-%d %H:%M') }}
+                                            {% else %}
+                                                N/A
+                                            {% endif %}
+                                        </small>
+                                    </div>
+                                    {% if action.amount %}
+                                    <p class="mb-1"><strong>Amount:</strong> ₹{{ "%.2f"|format(action.amount) }}</p>
+                                    {% endif %}
+                                    {% if action.notes %}
+                                    <p class="mb-0"><strong>Notes:</strong> {{ action.notes }}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No workflow actions found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Integration Status -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-link"></i> Integration Status
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <i class="fas fa-lightbulb fa-2x text-info mb-2"></i>
+                                <h6>Recommendations</h6>
+                                <p class="mb-0">{{ recommendations|length }} created</p>
+                                <small class="text-muted">
+                                    {% if workflow.current_stage in ['NOTIFY', 'EXEC', 'UPDATE', 'COMPLETED'] %}
+                                        ✅ Auto-generated at RECOS stage
+                                    {% else %}
+                                        ⏳ Pending RECOS stage
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <i class="fas fa-exchange-alt fa-2x text-success mb-2"></i>
+                                <h6>Transactions</h6>
+                                <p class="mb-0">{{ transactions|length }} executed</p>
+                                <small class="text-muted">
+                                    {% if workflow.current_stage in ['UPDATE', 'COMPLETED'] %}
+                                        ✅ Auto-executed at EXEC stage
+                                    {% else %}
+                                        ⏳ Pending EXEC stage
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <i class="fas fa-chart-pie fa-2x text-warning mb-2"></i>
+                                <h6>Portfolio</h6>
+                                <p class="mb-0">
+                                    {% if workflow.current_stage == 'COMPLETED' %}
+                                        ✅ Updated at UPDATE stage
+                                    {% else %}
+                                        ⏳ Pending UPDATE stage
+                                    {% endif %}
+                                </p>
+                                <small class="text-muted">Holdings & values updated</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 30px;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 20px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -35px;
+    top: 5px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    border-left: 3px solid #007bff;
+}
+
+.quantity-input, .target-price-input, .execution-price-input {
+    width: 100px;
+}
+
+.amount-display {
+    font-weight: bold;
+    color: #28a745;
+}
+</style>
+
+<script>
+// Global variables
+const plannedAmount = {{ workflow.planned_amount }};
+let recommendations = [];
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    loadRecommendations();
+    calculateTotals();
+});
+
+// Load recommendations data
+function loadRecommendations() {
+    const rows = document.querySelectorAll('#recommendationsTable tbody tr');
+    recommendations = Array.from(rows).map(row => {
+        const id = row.dataset.recommendationId;
+        const quantity = parseFloat(row.querySelector('.quantity-input').value) || 0;
+        const targetPrice = parseFloat(row.querySelector('.target-price-input').value) || 0;
+        const executionPrice = parseFloat(row.querySelector('.execution-price-input').value) || 0;
+        const status = row.querySelector('.badge').textContent.trim();
+        
+        return {
+            id: id,
+            quantity: quantity,
+            targetPrice: targetPrice,
+            executionPrice: executionPrice,
+            status: status
+        };
+    });
+}
+
+// Calculate amount for a single recommendation
+function calculateAmount(input) {
+    const row = input.closest('tr');
+    const quantity = parseFloat(row.querySelector('.quantity-input').value) || 0;
+    const executionPrice = parseFloat(row.querySelector('.execution-price-input').value) || 0;
+    const targetPrice = parseFloat(row.querySelector('.target-price-input').value) || 0;
+    
+    // Use execution price if available, otherwise use target price
+    const price = executionPrice > 0 ? executionPrice : targetPrice;
+    const amount = quantity * price;
+    
+    row.querySelector('.amount-display').textContent = '₹' + amount.toFixed(2);
+    
+    // Update recommendations array
+    const recommendationId = row.dataset.recommendationId;
+    const index = recommendations.findIndex(r => r.id === recommendationId);
+    if (index !== -1) {
+        recommendations[index].quantity = quantity;
+        recommendations[index].targetPrice = targetPrice;
+        recommendations[index].executionPrice = executionPrice;
+    }
+    
+    calculateTotals();
+}
+
+// Calculate totals
+function calculateTotals() {
+    let totalValue = 0;
+    
+    recommendations.forEach(rec => {
+        const price = rec.executionPrice > 0 ? rec.executionPrice : rec.targetPrice;
+        totalValue += rec.quantity * price;
+    });
+    
+    const remainingAmount = plannedAmount - totalValue;
+    
+    document.getElementById('totalRecommendationValue').textContent = totalValue.toFixed(2);
+    document.getElementById('remainingAmount').textContent = remainingAmount.toFixed(2);
+    
+    // Update status
+    const statusElement = document.getElementById('recommendationStatus');
+    if (totalValue === 0) {
+        statusElement.textContent = 'Pending';
+        statusElement.className = 'badge bg-warning';
+    } else if (remainingAmount < 0) {
+        statusElement.textContent = 'Over Budget';
+        statusElement.className = 'badge bg-danger';
+    } else if (remainingAmount < 1000) {
+        statusElement.textContent = 'Ready';
+        statusElement.className = 'badge bg-success';
+    } else {
+        statusElement.textContent = 'In Progress';
+        statusElement.className = 'badge bg-info';
+    }
+}
+
+// Save individual recommendation
+function saveRecommendation(recommendationId) {
+    const row = document.querySelector(`tr[data-recommendation-id="${recommendationId}"]`);
+    const quantity = parseFloat(row.querySelector('.quantity-input').value) || 0;
+    const targetPrice = parseFloat(row.querySelector('.target-price-input').value) || 0;
+    const executionPrice = parseFloat(row.querySelector('.execution-price-input').value) || 0;
+    
+    const data = {
+        recommendation_id: recommendationId,
+        quantity: quantity,
+        target_price: targetPrice,
+        execution_price: executionPrice,
+        csrf_token: '{{ csrf_token() }}'
+    };
+    
+    fetch('{{ url_for("main.update_recommendation") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Recommendation updated successfully!', 'success');
+            loadRecommendations();
+            calculateTotals();
+        } else {
+            showAlert('Error updating recommendation: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Error updating recommendation: ' + error, 'danger');
+    });
+}
+
+// Send recommendations
+function sendRecommendations() {
+    if (!confirm('Are you sure you want to send these recommendations to the client?')) {
+        return;
+    }
+    
+    const data = {
+        workflow_id: {{ workflow.id }},
+        csrf_token: '{{ csrf_token() }}'
+    };
+    
+    fetch('{{ url_for("main.send_recommendations") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Recommendations sent successfully!', 'success');
+            location.reload();
+        } else {
+            showAlert('Error sending recommendations: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Error sending recommendations: ' + error, 'danger');
+    });
+}
+
+// Update transactions
+function updateTransactions() {
+    if (!confirm('Are you sure you want to create transactions from these recommendations? This will update the portfolio positions.')) {
+        return;
+    }
+    
+    const data = {
+        workflow_id: {{ workflow.id }},
+        csrf_token: '{{ csrf_token() }}'
+    };
+    
+    fetch('{{ url_for("main.create_transactions_from_recommendations") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Transactions created successfully! Portfolio updated.', 'success');
+            location.reload();
+        } else {
+            showAlert('Error creating transactions: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Error creating transactions: ' + error, 'danger');
+    });
+}
+
+// Create recommendations
+function createRecommendations() {
+    if (!confirm('Create recommendations based on portfolio model?')) {
+        return;
+    }
+    
+    const data = {
+        workflow_id: {{ workflow.id }},
+        csrf_token: '{{ csrf_token() }}'
+    };
+    
+    fetch('{{ url_for("main.create_recommendations") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Recommendations created successfully!', 'success');
+            location.reload();
+        } else {
+            showAlert('Error creating recommendations: ' + data.error, 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Error creating recommendations: ' + error, 'danger');
+    });
+}
+
+// Show alert
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    
+    const container = document.querySelector('.container');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 5000);
+}
+</script>
+{% endblock %}

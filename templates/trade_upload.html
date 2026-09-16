@@ -1,0 +1,347 @@
+{% extends 'base.html' %}
+{% from 'partials/mobile/macros.html' import maint_child_open, maint_desktop_open, maint_desktop_close %}
+
+{% block title %}Trade Upload{% endblock %}
+
+{% block extra_css %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+.preview-table { max-height: 400px; overflow-y: auto; }
+.error-row { background-color: #f8d7da; }
+.valid-row { background-color: #d1edff; }
+</style>
+{% endblock %}
+
+{% block content %}
+{{ maint_child_open('Trade upload', url_for('main.data_upload_links'), 'Upload Excel/CSV and preview before processing.') }}
+{{ maint_desktop_open('container') }}
+<div class="container">
+    <div class="d-flex align-items-center mb-3">
+        <h3 class="me-3 mb-0"><i class="fas fa-file-upload"></i> Trade Upload</h3>
+        <span class="text-muted">Upload Excel/CSV and preview before processing</span>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <form id="tradeUploadForm" onsubmit="return false;">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="uploadClientSelect" class="form-label">Client</label>
+                        <select id="uploadClientSelect" class="form-select" required>
+                            <option value="">Select Client</option>
+                            {% for c in clients %}
+                            <option value="{{ c.id }}">{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label for="fileInput" class="form-label">File</label>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="form-control" required />
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-primary w-100" onclick="previewFile()">
+                            <i class="fas fa-eye"></i> Preview
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <div id="apiStatusMessages" class="mt-3"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Preview Section -->
+<div id="previewSection" class="mt-4" style="display: none;">
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-table"></i> Preview Transactions</h5>
+            <div>
+                <span id="previewStats" class="badge bg-secondary me-2"></span>
+                <button type="button" class="btn btn-danger me-2" onclick="deleteSelectedRows()" id="deleteSelectedBtn" disabled>
+                    <i class="fas fa-trash"></i> Delete Selected
+                </button>
+                <button type="button" class="btn btn-success" onclick="confirmUpload()">
+                    <i class="fas fa-check"></i> Confirm Upload
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="preview-table">
+                <table class="table table-sm table-striped">
+                    <thead class="table-dark sticky-top">
+                        <tr>
+                            <th width="40px">
+                                <input type="checkbox" id="selectAllPreview" onchange="toggleAllPreviewRows()">
+                            </th>
+                            <th>Row</th>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Stock</th>
+                            <th>Quantity</th>
+                            <th>Price</th>
+                            <th>Status</th>
+                            <th>Error</th>
+                        </tr>
+                    </thead>
+                    <tbody id="previewTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+let previewData = [];
+let securitiesCache = {};
+
+function showAPIStatus(message, type = 'info') {
+    const alertClass = {
+        'success': 'alert-success',
+        'error': 'alert-danger',
+        'warning': 'alert-warning',
+        'info': 'alert-info'
+    }[type] || 'alert-info';
+    const statusDiv = $('#apiStatusMessages');
+    statusDiv.html(`
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `);
+}
+
+// Load securities cache
+async function loadSecurities() {
+    if (Object.keys(securitiesCache).length > 0) return;
+    const res = await fetch('/recommended_trades/api/securities');
+    const securities = await res.json();
+    // Store symbols in uppercase for consistent lookup
+    securities.forEach(sec => { securitiesCache[sec.symbol.toUpperCase()] = sec.id; });
+}
+
+// Parse date in various formats including Excel serial dates
+function parseDate(dateValue) {
+    if (!dateValue) return null;
+    
+    // If it's already a Date object
+    if (dateValue instanceof Date) {
+        return dateValue.toISOString().split('T')[0];
+    }
+    
+    // If it's a number (Excel serial date), convert it
+    if (typeof dateValue === 'number') {
+        const excelEpoch = new Date(1899, 11, 30); // Excel epoch date
+        const date = new Date(excelEpoch.getTime() + dateValue * 86400000);
+        return date.toISOString().split('T')[0];
+    }
+    
+    // Try parsing as string date
+    try {
+        const d = new Date(dateValue);
+        if (!isNaN(d.getTime())) {
+            return d.toISOString().split('T')[0];
+        }
+    } catch (e) {}
+    
+    return null;
+}
+
+// Clean price string by removing currency symbols and commas
+function cleanPrice(priceValue) {
+    if (!priceValue) return '0';
+    const priceStr = String(priceValue);
+    // Remove currency symbols (₹, $, €, etc.) and commas
+    return priceStr.replace(/[₹$,€£¥,\s]/g, '').trim();
+}
+
+// Validate single transaction row
+function validateRow(row) {
+    const errors = [];
+    if (!row.Date || !parseDate(row.Date)) errors.push('Invalid date');
+    const type = (row.Type || '').toString().toUpperCase();
+    if (!['BUY', 'SELL'].includes(type)) errors.push('Type must be BUY or SELL');
+    const qty = parseFloat(row['Transacted Units']);
+    if (isNaN(qty) || qty <= 0) errors.push('Invalid quantity');
+    const priceStr = cleanPrice(row['Transacted Price (per unit)']);
+    const price = parseFloat(priceStr);
+    if (isNaN(price) || price < 0) errors.push('Invalid price');
+    return errors;
+}
+
+// Parse file and show preview
+async function previewFile() {
+    const clientId = parseInt($('#uploadClientSelect').val());
+    const fileInput = $('#fileInput')[0];
+    if (!clientId) { showAPIStatus('Please select a client', 'error'); return; }
+    if (!fileInput.files || fileInput.files.length === 0) { showAPIStatus('Please select a file', 'error'); return; }
+    
+    const file = fileInput.files[0];
+    const allowedTypes = ['.xlsx', '.xls', '.csv'];
+    const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+    if (!allowedTypes.includes(fileExtension)) { showAPIStatus('Select Excel (.xlsx, .xls) or CSV file', 'error'); return; }
+
+    showAPIStatus('<i class="fas fa-spinner fa-spin"></i> Processing file...', 'info');
+    
+    try {
+        // Load securities
+        await loadSecurities();
+        
+        // Parse file using FileReader and XLSX
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const workbook = XLSX.read(e.target.result, { 
+                    type: 'binary',
+                    cellDates: true,  // Parse dates correctly
+                    dateNF: 'yyyy-mm-dd'  // Date format
+                });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, {
+                    raw: false,  // Don't convert dates to numbers
+                    defval: null
+                });
+                
+                // Process rows
+                previewData = jsonData.map((row, idx) => {
+                    const errors = validateRow(row);
+                    
+                    // Clean stock symbol - remove exchange prefixes (NSE:, BSE:, BOM:)
+                    const rawStock = (row.Stock || '').toString().trim();
+                    const cleanStock = rawStock.replace(/^(NSE:|BSE:|BOM:)/i, '').toUpperCase();
+                    const securityId = securitiesCache[cleanStock] || null;
+                    const hasErrors = errors.length > 0 || !securityId;
+                    
+                    const priceStr = cleanPrice(row['Transacted Price (per unit)']);
+                    const price = parseFloat(priceStr) || 0;
+                    
+                    return {
+                        row_number: idx + 2,
+                        date: parseDate(row.Date),
+                        type: (row.Type || '').toString().toUpperCase(),
+                        stock: cleanStock, // Show clean symbol in preview
+                        security_id: securityId,
+                        quantity: parseFloat(row['Transacted Units']) || 0,
+                        price: price,
+                        valid: !hasErrors,
+                        errors: securityId ? errors : [...errors, 'Security not found']
+                    };
+                });
+                
+                displayPreview();
+            } catch (error) {
+                showAPIStatus(`Failed to parse file: ${error.message}`, 'error');
+            }
+        };
+        reader.onerror = () => showAPIStatus('Failed to read file', 'error');
+        reader.readAsBinaryString(file);
+    } catch (error) {
+        showAPIStatus(`Preview failed: ${error.message}`, 'error');
+    }
+}
+
+function displayPreview() {
+    const tbody = $('#previewTableBody');
+    tbody.empty();
+    let validCount = 0; let errorCount = 0;
+    previewData.forEach((row, index) => {
+        const rowClass = row.valid ? 'valid-row' : 'error-row';
+        const statusBadge = row.valid ? '<span class="badge bg-success">Valid</span>' : '<span class="badge bg-danger">Error</span>';
+        const errorText = row.errors.length > 0 ? row.errors.join(', ') : '';
+        tbody.append(`
+            <tr class="${rowClass}" data-index="${index}">
+                <td><input type="checkbox" class="preview-row-checkbox" onchange="updateDeleteButton()"></td>
+                <td>${row.row_number}</td>
+                <td>${row.date || 'N/A'}</td>
+                <td>${row.type}</td>
+                <td>${row.stock} ${row.security_id ? `(${row.security_id})` : '(Not Found)'}</td>
+                <td>${row.quantity}</td>
+                <td>${row.price}</td>
+                <td>${statusBadge}</td>
+                <td class="text-danger">${errorText}</td>
+            </tr>
+        `);
+        if (row.valid) validCount++; else errorCount++;
+    });
+    $('#previewStats').text(`Valid: ${validCount}, Errors: ${errorCount}`);
+    $('#previewSection').show();
+    updateDeleteButton();
+    if (errorCount > 0) showAPIStatus(`Found ${errorCount} errors. Fix them or only valid rows will upload.`, 'warning');
+    else showAPIStatus(`All ${validCount} transactions are valid and ready for upload.`, 'success');
+}
+
+async function confirmUpload() {
+    const clientId = parseInt($('#uploadClientSelect').val());
+    const validTransactions = previewData.filter(r => r.valid);
+    if (validTransactions.length === 0) { showAPIStatus('No valid transactions to upload', 'error'); return; }
+    const transactions = validTransactions.map(row => ({
+        security_id: row.security_id,
+        type: row.type,
+        quantity: row.quantity,
+        price: row.price,
+        transaction_date: row.date
+    }));
+    showAPIStatus('<i class="fas fa-spinner fa-spin"></i> Uploading transactions...', 'info');
+    try {
+        const res = await fetch(`/api/v2/transactions/${clientId}/transactions/bulk`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': $('meta[name=csrf-token]').attr('content') },
+            body: JSON.stringify({ transactions })
+        });
+        const result = await res.json();
+        if (result.success) {
+            showAPIStatus(`Successfully uploaded ${result.data.created_count} transactions!`, 'success');
+            $('#previewSection').hide();
+            $('#fileInput').val('');
+        } else {
+            showAPIStatus(`Upload failed: ${result.message}`, 'error');
+        }
+    } catch (e) { showAPIStatus(`Upload failed: ${e.message}`, 'error'); }
+}
+
+// Delete functionality
+function toggleAllPreviewRows() {
+    const selectAll = $('#selectAllPreview').prop('checked');
+    $('.preview-row-checkbox').prop('checked', selectAll);
+    updateDeleteButton();
+}
+
+function updateDeleteButton() {
+    const checkedCount = $('.preview-row-checkbox:checked').length;
+    $('#deleteSelectedBtn').prop('disabled', checkedCount === 0);
+}
+
+function deleteSelectedRows() {
+    const checkedRows = $('.preview-row-checkbox:checked');
+    if (checkedRows.length === 0) return;
+    
+    if (!confirm(`Delete ${checkedRows.length} selected row(s)?`)) return;
+    
+    // Get indices of checked rows
+    const indicesToDelete = [];
+    checkedRows.each(function() {
+        const row = $(this).closest('tr');
+        const index = parseInt(row.data('index'));
+        indicesToDelete.push(index);
+    });
+    
+    // Remove from previewData (sort in descending order to avoid index shifting)
+    indicesToDelete.sort((a, b) => b - a).forEach(index => {
+        previewData.splice(index, 1);
+    });
+    
+    // Refresh the preview table
+    displayPreview();
+    showAPIStatus(`Deleted ${checkedRows.length} row(s)`, 'success');
+}
+</script>
+
+<!-- Include XLSX library for client-side file parsing -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+{% endblock %}
+
+

@@ -1,0 +1,159 @@
+{% if error %}
+<div class="alert alert-warning small mb-3">{{ error }}</div>
+{% endif %}
+<div class="mb-3">
+    <h6 class="font-weight-bold text-info">Nifty Investment Value</h6>
+    <p class="h5">₹{{ "%.2f"|format(nifty_current_value) if nifty_current_value else 0.00 }}</p>
+    <small class="text-muted">If invested in NIFTY 50 instead</small>
+</div>
+<div class="mb-3">
+    <h6 class="font-weight-bold">Nifty Absolute Return</h6>
+    <p class="h5 {% if nifty_absolute_return >= 0 %}text-success{% else %}text-danger{% endif %}">
+        {{ "%.2f"|format(nifty_absolute_return) if nifty_absolute_return else 0.00 }}%
+    </p>
+    <small class="text-muted d-block">(Nifty investment value − net cash invested) ÷ net cash invested</small>
+    <small class="text-muted d-block">Same style as portfolio absolute return; net = buys − withdrawals.</small>
+</div>
+<div class="mb-3">
+    <h6 class="font-weight-bold">Nifty XIRR</h6>
+    <p class="h5 {% if nifty_xirr >= 0 %}text-success{% else %}text-danger{% endif %}" id="niftyXIRR">
+        {{ "%.2f"|format(nifty_xirr * 100) if nifty_xirr is not none else 0.00 }}%
+    </p>
+    <small class="text-muted" id="niftyXIRRDetails">Time-weighted return on Nifty</small>
+</div>
+<div class="mb-3">
+    <h6 class="font-weight-bold">Portfolio vs Nifty (XIRR)</h6>
+    {% set xirr_diff = (xirr - nifty_xirr) * 100 if xirr is not none and nifty_xirr is not none else 0 %}
+    <p class="h5 {% if xirr_diff >= 0 %}text-success{% else %}text-danger{% endif %}" id="outperformance">
+        {{ "%.2f"|format(xirr_diff) if xirr_diff is not none else 0.00 }}%
+    </p>
+    <small class="text-muted" id="outperformanceDetails">Portfolio vs Nifty comparison</small>
+    <small class="text-muted">
+        {% if xirr_diff >= 0 %}
+            <i class="fas fa-arrow-up text-success"></i> Outperforming Nifty
+        {% else %}
+            <i class="fas fa-arrow-down text-danger"></i> Underperforming Nifty
+        {% endif %}
+    </small>
+</div>
+{% if nifty_current_value and current_value %}
+<div class="mt-3 pt-3 border-top">
+    <h6 class="font-weight-bold">Value Comparison</h6>
+    {% set value_diff = (current_value|float) - (nifty_current_value|float) %}
+    {% set value_diff_percent = (value_diff / (nifty_current_value|float)) * 100 if nifty_current_value > 0 else 0 %}
+    <p class="{% if value_diff >= 0 %}text-success{% else %}text-danger{% endif %}">
+        ₹{{ "%.2f"|format(value_diff) if value_diff else 0.00 }}
+        ({{ "%.2f"|format(value_diff_percent) if value_diff_percent else 0.00 }}%)
+    </p>
+    <small class="text-muted">Portfolio value vs Nifty investment</small>
+</div>
+{% endif %}
+{% if nifty_benchmark_breakdown %}
+<div class="mt-3">
+    <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#niftyBenchmarkCalcModal" title="How Nifty benchmark numbers are calculated">
+        <i class="fas fa-calculator"></i> Calculation details
+    </button>
+</div>
+{% set sim = nifty_benchmark_breakdown.simulation_details %}
+<div class="modal fade" id="niftyBenchmarkCalcModal" tabindex="-1" aria-labelledby="niftyBenchmarkCalcModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="niftyBenchmarkCalcModalLabel">
+                    <i class="fas fa-chart-line text-info"></i> Nifty benchmark — full calculation
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="max-height: calc(100vh - 140px); overflow-y: auto;">
+                <p class="text-muted small mb-3">
+                    Same client <strong>cashflows</strong> as portfolio XIRR: <strong>negative</strong> amount = buy Nifty units,
+                    <strong>positive</strong> = sell (up to units held). Each flow uses the Nifty <strong>close</strong> on that calendar date,
+                    or the <strong>latest prior</strong> trading day in <code>benchmark_data</code> if that date has no point.
+                </p>
+                <div class="row g-3 mb-4">
+                    <div class="col-md-4">
+                        <div class="border rounded p-2 small h-100">
+                            <div class="text-muted">Benchmark</div>
+                            <div class="fw-semibold">{{ nifty_benchmark_breakdown.benchmark_name }} (id {{ nifty_benchmark_breakdown.benchmark_id }})</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-2 small h-100">
+                            <div class="text-muted">Latest Nifty close used for valuation</div>
+                            <div class="fw-semibold">₹{{ "%.2f"|format(nifty_benchmark_breakdown.latest_benchmark_price|float) }}</div>
+                            <div class="text-muted">As of {{ nifty_benchmark_breakdown.latest_benchmark_date }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded p-2 small h-100">
+                            <div class="text-muted">Cashflow date span</div>
+                            <div>{{ nifty_benchmark_breakdown.cashflow_min_date }} → {{ nifty_benchmark_breakdown.cashflow_max_date }}</div>
+                            <div class="text-muted mt-1">Price series from {{ nifty_benchmark_breakdown.extended_start_date }}</div>
+                            <div class="text-muted">{{ nifty_benchmark_breakdown.benchmark_price_points_in_range }} daily point(s) in range</div>
+                        </div>
+                    </div>
+                </div>
+                <h6 class="fw-bold border-bottom pb-2 mb-3">End state (after all cashflows)</h6>
+                <div class="row g-2 small mb-4">
+                    <div class="col-6 col-md-4"><span class="text-muted">Units held</span><br><strong>{{ "%.6f"|format(sim.benchmark_units|float) }}</strong></div>
+                    <div class="col-6 col-md-4"><span class="text-muted">Weighted avg cost / unit</span><br><strong>₹{{ "%.4f"|format(sim.weighted_avg_price|float) }}</strong></div>
+                    <div class="col-6 col-md-4"><span class="text-muted">Terminal value</span><br><strong>₹{{ "%.2f"|format(sim.current_value|float) }}</strong></div>
+                    <div class="col-6 col-md-4"><span class="text-muted">Total invested</span><br><strong>₹{{ "%.2f"|format(sim.total_invested|float) }}</strong></div>
+                    <div class="col-6 col-md-4"><span class="text-muted">Total withdrawn</span><br><strong>₹{{ "%.2f"|format(sim.total_withdrawn|float) }}</strong></div>
+                    <div class="col-6 col-md-4"><span class="text-muted">Net (invested − withdrawn)</span><br><strong>₹{{ "%.2f"|format(sim.net_investment|float) }}</strong></div>
+                    <div class="col-6 col-md-4"><span class="text-muted">Simple return (vs net)</span><br><strong>{{ "%.2f"|format(sim.absolute_return|float) }}%</strong></div>
+                    <div class="col-6 col-md-4"><span class="text-muted">XIRR (annualized)</span><br><strong>{{ "%.2f"|format((nifty_benchmark_breakdown.nifty_xirr or 0) * 100) }}%</strong></div>
+                </div>
+                <h6 class="fw-bold border-bottom pb-2 mb-2">
+                    All cashflows (chronological)
+                    <span class="badge bg-secondary ms-1">{{ sim.cashflow_steps|length }} rows</span>
+                </h6>
+                <div class="d-flex flex-wrap gap-2 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="niftyBenchmarkStepsDownloadCsv">
+                        <i class="fas fa-file-download"></i> Download CSV
+                    </button>
+                </div>
+                <div class="table-responsive border rounded">
+                    <table class="table table-sm table-striped align-middle mb-0" id="niftyBenchmarkCashflowStepsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Date</th>
+                                <th class="text-end">Cashflow ₹</th>
+                                <th>Status</th>
+                                <th class="text-end">Nifty close</th>
+                                <th>Price date</th>
+                                <th class="text-end">Units Δ</th>
+                                <th class="text-end">Units after</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for step in sim.cashflow_steps %}
+                            <tr>
+                                <td>{{ step.cashflow_date }}</td>
+                                <td class="text-end">₹{{ "%.2f"|format(step.amount|float) }}</td>
+                                <td>
+                                    {% if step.status == 'invest' %}<span class="badge bg-success">Buy</span>
+                                    {% elif step.status == 'withdraw' %}<span class="badge bg-primary">Sell</span>
+                                    {% elif step.status == 'skipped_no_price' %}<span class="badge bg-warning text-dark">Skipped</span>
+                                    {% else %}<span class="badge bg-secondary">{{ step.status }}</span>{% endif %}
+                                </td>
+                                <td class="text-end">{% if step.benchmark_price %}₹{{ "%.2f"|format(step.benchmark_price|float) }}{% else %}—{% endif %}</td>
+                                <td>{{ step.price_as_of_date or '—' }}</td>
+                                <td class="text-end">{% if step.units_change is not none %}{{ "%.6f"|format(step.units_change|float) }}{% else %}—{% endif %}</td>
+                                <td class="text-end">{{ "%.6f"|format(step.benchmark_units_after|float) }}</td>
+                                <td class="small text-muted">{{ step.note or '' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <script type="application/json" id="niftyBenchmarkStepsData">{{ sim.cashflow_steps|tojson_safe }}</script>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Create household{% endblock %}
+{% block content %}
+<div class="container mt-4" style="max-width: 720px;">
+  <h1 class="h2 mb-3">Create household</h1>
+  <p class="text-muted">Link related clients (e.g. self, spouse, HUF) for a consolidated portfolio and review snapshot. Billing and recommendations stay separate.</p>
+  <div class="card card-app">
+    <div class="card-body">
+      <form method="POST" action="{{ url_for('households.create_household') }}" id="createHouseholdForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+          <label class="form-label" for="name">Household name</label>
+          <input class="form-control" id="name" name="name" required placeholder="e.g. Khare Family">
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="primarySearch">Primary client</label>
+          <input type="hidden" name="primary_client_id" id="primary_client_id" value="{{ primary_client_id or '' }}" required>
+          <div class="position-relative">
+            <input class="form-control" type="search" id="primarySearch" autocomplete="off"
+                   placeholder="Type at least 2 letters to search…"
+                   value="{{ primary_client_name or '' }}"
+                   aria-label="Search primary client">
+            <div id="primaryResults" class="list-group position-absolute w-100 shadow" style="top: 100%; z-index: 20; display: none; max-height: 280px; overflow-y: auto;"></div>
+          </div>
+          <div class="form-text" id="primarySelectedHint">
+            {% if primary_client_name %}Selected: {{ primary_client_name }}{% else %}Search and click a client to select.{% endif %}
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="memberSearch">Additional members (optional)</label>
+          <div class="position-relative">
+            <input class="form-control" type="search" id="memberSearch" autocomplete="off"
+                   placeholder="Search to add spouse, HUF, etc."
+                   aria-label="Search additional household members">
+            <div id="memberResults" class="list-group position-absolute w-100 shadow" style="top: 100%; z-index: 19; display: none; max-height: 280px; overflow-y: auto;"></div>
+          </div>
+          <div id="extraMembers" class="mt-2"></div>
+        </div>
+        <div class="action-bar">
+          <button type="submit" class="btn btn-primary">Create</button>
+          <a href="{{ url_for('households.list_households') }}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const roles = {{ roles|list|tojson }};
+  const extraRoles = roles.filter(function (r) { return r !== 'primary'; });
+  const extraMembers = {};
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text == null ? '' : String(text);
+    return div.innerHTML;
+  }
+
+  function sortClients(clients) {
+    return (clients || []).slice().sort(function (a, b) {
+      return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+    });
+  }
+
+  function selectedIds() {
+    const ids = [];
+    const primary = document.getElementById('primary_client_id').value;
+    if (primary) ids.push(Number(primary));
+    Object.keys(extraMembers).forEach(function (k) { ids.push(Number(k)); });
+    return ids;
+  }
+
+  function searchClients(q, done) {
+    fetch('/clients-v2/api/?' + new URLSearchParams({ search: q, per_page: 20 }))
+      .then(function (r) { return r.json(); })
+      .then(function (payload) {
+        const rows = (payload && payload.success && payload.data) ? payload.data : [];
+        done(null, sortClients(rows));
+      })
+      .catch(function (err) { done(err); });
+  }
+
+  function bindTypeahead(inputEl, resultsEl, onPick, excludeFn) {
+    let timer = null;
+    function run() {
+      const q = inputEl.value.trim();
+      if (q.length < 2) {
+        resultsEl.style.display = 'none';
+        resultsEl.innerHTML = '';
+        return;
+      }
+      resultsEl.innerHTML = '<div class="list-group-item text-muted">Searching…</div>';
+      resultsEl.style.display = 'block';
+      searchClients(q, function (err, clients) {
+        if (err) {
+          resultsEl.innerHTML = '<div class="list-group-item text-danger">Could not search clients.</div>';
+          return;
+        }
+        const skip = excludeFn() || [];
+        const shown = clients.filter(function (c) { return skip.indexOf(c.id) === -1; });
+        if (!shown.length) {
+          resultsEl.innerHTML = '<div class="list-group-item text-muted">No matching clients</div>';
+          return;
+        }
+        resultsEl.innerHTML = shown.map(function (c) {
+          return '<button type="button" class="list-group-item list-group-item-action hh-pick" data-id="' + c.id + '" data-name="' + escapeHtml(c.name) + '">' +
+            '<strong>' + escapeHtml(c.name) + '</strong>' +
+            (c.email ? '<div class="small text-muted">' + escapeHtml(c.email) + '</div>' : '') +
+            '</button>';
+        }).join('');
+      });
+    }
+    inputEl.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(run, 250);
+    });
+    inputEl.addEventListener('focus', function () {
+      if (inputEl.value.trim().length >= 2) run();
+    });
+    resultsEl.addEventListener('click', function (e) {
+      const btn = e.target.closest('.hh-pick');
+      if (!btn) return;
+      onPick(Number(btn.getAttribute('data-id')), btn.getAttribute('data-name'));
+      resultsEl.style.display = 'none';
+      resultsEl.innerHTML = '';
+    });
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('#' + inputEl.id) && !e.target.closest('#' + resultsEl.id)) {
+        resultsEl.style.display = 'none';
+      }
+    });
+  }
+
+  function renderExtra() {
+    const host = document.getElementById('extraMembers');
+    const ids = Object.keys(extraMembers);
+    if (!ids.length) {
+      host.innerHTML = '<p class="text-muted small mb-0">No additional members yet.</p>';
+      return;
+    }
+    host.innerHTML = ids.map(function (id) {
+      const m = extraMembers[id];
+      const opts = extraRoles.map(function (r) {
+        return '<option value="' + r + '"' + (m.role === r ? ' selected' : '') + '>' + (r.charAt(0).toUpperCase() + r.slice(1)) + '</option>';
+      }).join('');
+      return '<div class="d-flex flex-wrap align-items-center gap-2 border rounded p-2 mb-2">' +
+        '<input type="hidden" name="member_client_ids" value="' + id + '">' +
+        '<span class="fw-semibold">' + escapeHtml(m.name) + '</span>' +
+        '<label class="visually-hidden" for="role_' + id + '">Role</label>' +
+        '<select class="form-select form-select-sm" style="width:auto;" name="role_' + id + '" id="role_' + id + '">' + opts + '</select>' +
+        '<button type="button" class="btn btn-sm btn-outline-danger hh-remove" data-id="' + id + '">Remove</button>' +
+        '</div>';
+    }).join('');
+  }
+
+  bindTypeahead(
+    document.getElementById('primarySearch'),
+    document.getElementById('primaryResults'),
+    function (id, name) {
+      document.getElementById('primary_client_id').value = String(id);
+      document.getElementById('primarySearch').value = name;
+      document.getElementById('primarySelectedHint').textContent = 'Selected: ' + name;
+      if (extraMembers[id]) {
+        delete extraMembers[id];
+        renderExtra();
+      }
+    },
+    selectedIds
+  );
+
+  bindTypeahead(
+    document.getElementById('memberSearch'),
+    document.getElementById('memberResults'),
+    function (id, name) {
+      extraMembers[id] = { name: name, role: 'spouse' };
+      document.getElementById('memberSearch').value = '';
+      renderExtra();
+    },
+    selectedIds
+  );
+
+  document.getElementById('extraMembers').addEventListener('click', function (e) {
+    const btn = e.target.closest('.hh-remove');
+    if (!btn) return;
+    delete extraMembers[btn.getAttribute('data-id')];
+    renderExtra();
+  });
+  document.getElementById('extraMembers').addEventListener('change', function (e) {
+    const sel = e.target.closest('select[name^="role_"]');
+    if (!sel) return;
+    const id = sel.name.replace('role_', '');
+    if (extraMembers[id]) extraMembers[id].role = sel.value;
+  });
+
+  document.getElementById('createHouseholdForm').addEventListener('submit', function (e) {
+    if (!document.getElementById('primary_client_id').value) {
+      e.preventDefault();
+      alert('Search and select a primary client.');
+    }
+  });
+
+  renderExtra();
+})();
+</script>
+{% endblock %}

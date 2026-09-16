@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+
+{% block title %}{{ client.name }} - Data Integrity Issues{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <div class="page-title-right">
+                    <ol class="breadcrumb m-0">
+                        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('data_integrity.dashboard') }}">Data Integrity</a></li>
+                        <li class="breadcrumb-item active">{{ client.name }}</li>
+                    </ol>
+                </div>
+                <h4 class="page-title">
+                    <i class="fas fa-user me-2"></i>{{ client.name }} - Data Integrity Issues
+                </h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="row mb-3">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h4 class="mb-1">{{ total_issues }} Open Issues</h4>
+                            <p class="text-muted mb-0">
+                                across {{ issues_by_category|length }} categories
+                                {% if has_overrides %}
+                                | <span class="badge bg-primary">Overrides enabled</span>
+                                <span class="badge bg-light text-dark">Patterns: {{ pattern_count }}</span>
+                                <span class="badge bg-light text-dark">Exceptions: {{ exception_count }}</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <form method="post" action="{{ url_for('data_integrity.refresh_client', client_id=client.id) }}" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="next" value="{{ url_for('data_integrity.client_issues', client_id=client.id) }}">
+                                <button type="submit" class="btn btn-primary" title="Runs all integrity agents, heals cleared issues, syncs alerts/tasks, refreshes packs">
+                                    <i class="fas fa-sync-alt"></i> Refresh client checks
+                                </button>
+                            </form>
+                            <a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="btn btn-outline-primary">
+                                <i class="fas fa-user"></i> View Client Profile
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">
+                        Learned Patterns
+                        {% if has_overrides %}
+                        <span class="badge bg-primary ms-1">ON</span>
+                        {% endif %}
+                    </h6>
+                    {% if patterns %}
+                        {% for pattern in patterns %}
+                        <span class="badge bg-info me-1 mb-1">
+                            {{ pattern.pattern_type }}: {{ pattern.pattern_value }}
+                        </span>
+                        {% endfor %}
+                    {% else %}
+                        <small class="text-muted">No patterns learned yet</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Issues by Category -->
+    <div id="issuesPanel">
+        <div class="row mb-3">
+            <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+                <button type="button" class="btn btn-success" id="resolveBtn" disabled onclick="resolveSelected()">
+                    <i class="fas fa-check"></i> Resolve Selected (<span id="selectedCount">0</span>)
+                </button>
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <label for="bulkAssignee" class="form-label mb-0 small text-muted">Reassign to</label>
+                    <select id="bulkAssignee" class="form-select form-select-sm" style="min-width: 10rem;" aria-label="Reassign selected issues">
+                        <option value="">Choose user…</option>
+                        <option value="0">Unassigned</option>
+                        {% for u in assignee_users %}
+                        <option value="{{ u.id }}">{{ u.username }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="reassignBtn" disabled
+                            onclick="reassignSelected()" title="Reassign selected issues">
+                        <i class="fas fa-user-edit"></i> Reassign Selected
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        {% for cat_name, issues in issues_by_category.items() %}
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                        <h4 class="header-title mb-0">
+                            <span class="badge bg-{{ 'danger' if issues[0].severity == 'critical' else 'warning' if issues[0].severity == 'warning' else 'info' }} me-2">
+                                {{ issues|length }}
+                            </span>
+                            {{ cat_name.replace('_', ' ').title() }}
+                        </h4>
+                        {% if cat_name == 'CASHFLOW' %}
+                        <div class="d-flex gap-2 align-items-center">
+                        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.list_cashflows', client_id=client.id) }}">Open cashflows</a>
+                        <a class="btn btn-sm btn-outline-primary" href="{{ url_for('clients.cashflow_trade_integrity', client_id=client.id) }}">Cashflow vs trades</a>
+                        <form method="POST" action="{{ url_for('data_integrity.ignore_cashflow_dummy_trade_dates', client_id=client.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="dummy_date" value="2000-01-01">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary"
+                                    title="Suppress CASHFLOW month-wise checks when legacy dummy trade dates exist">
+                                Ignore Dummy Trade Dates
+                            </button>
+                        </form>
+                        </div>
+                        {% endif %}
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th width="40">
+                                        <input type="checkbox" class="form-check-input" 
+                                               onchange="toggleCategory(this, '{{ cat_name }}')">
+                                    </th>
+                                    <th>Issue</th>
+                                    <th width="100">Severity</th>
+                                    <th width="160">Assigned To</th>
+                                    <th width="120">Date</th>
+                                    <th width="100">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for issue in issues %}
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input issue-checkbox cat-{{ cat_name }}" 
+                                               value="{{ issue.id }}"
+                                               onchange="updateCount()">
+                                    </td>
+                                    <td>
+                                        <div>{{ issue.message }}</div>
+                                        {% if issue.security %}
+                                        <small class="text-muted">
+                                            <i class="fas fa-chart-line"></i> {{ issue.security.symbol }}
+                                        </small>
+                                        {% endif %}
+                                        {% if issue.recommendation_id %}
+                                        <br><small>
+                                            <a href="{{ url_for('unified_recommendations.edit_recommendation', recommendation_id=issue.recommendation_id) }}" class="text-primary">
+                                                <i class="fas fa-external-link-alt"></i> View recommendation #{{ issue.recommendation_id }}
+                                            </a>
+                                        </small>
+                                        {% endif %}
+                                        {% if issue.suggested_action %}
+                                        <br><small class="text-info">
+                                            <i class="fas fa-lightbulb"></i>
+                                            {% if issue.check_name == 'workflow_stalled' and issue.details and issue.details.get('workflow_id') %}
+                                                Review <a href="{{ url_for('rec_execution.workflow_issues', id=issue.details.get('monthly_investment_id') or issue.details.workflow_id) }}">workflow {{ issue.details.workflow_id }}</a> and move to next stage
+                                            {% elif issue.details and issue.details.get('workflow_id') %}
+                                                {{ issue.suggested_action }} <a href="{{ url_for('rec_execution.workflow_issues', id=issue.details.get('monthly_investment_id') or issue.details.workflow_id) }}">View workflow {{ issue.details.workflow_id }}</a>
+                                            {% else %}
+                                                {{ issue.suggested_action }}
+                                            {% endif %}
+                                        </small>
+                                        {% endif %}
+                                        {% if issue.check_name == 'unrecorded_superseded_session' %}
+                                        {% include 'data_integrity/_superseded_session_compare.html' %}
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'danger' if issue.severity == 'critical' else 'warning' if issue.severity == 'warning' else 'info' }}">
+                                            {{ issue.severity }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <select class="form-select form-select-sm"
+                                                aria-label="Assignee for issue {{ issue.id }}"
+                                                onchange="reassignOne({{ issue.id }}, this.value)"
+                                                title="{% if issue.details and issue.details.get('manual_assignment') %}Manually assigned{% else %}Client advisor by default; change to reassign{% endif %}">
+                                            <option value="0" {% if not issue.assigned_to %}selected{% endif %}>Unassigned</option>
+                                            {% for u in assignee_users %}
+                                            <option value="{{ u.id }}" {% if issue.assigned_to == u.id %}selected{% endif %}>{{ u.username }}</option>
+                                            {% endfor %}
+                                            {% if issue.assigned_to and issue.assigned_to not in assignee_user_ids %}
+                                            <option value="{{ issue.assigned_to }}" selected>
+                                                {{ issue.assigned_user.username if issue.assigned_user else ('User #' ~ issue.assigned_to) }} (inactive)
+                                            </option>
+                                            {% endif %}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <small>{{ issue.detected_at.strftime('%Y-%m-%d') if issue.detected_at else 'N/A' }}</small>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button type="button" class="btn btn-outline-success" 
+                                                    onclick="quickResolve({{ issue.id }}, 'fixed')" title="Mark Fixed">
+                                                <i class="fas fa-check"></i>
+                                            </button>
+                                            <button type="button" class="btn btn-outline-info"
+                                                    onclick="showFeedbackModal({{ issue.id }}, '{{ issue.check_category }}', '{{ issue.check_name }}', {{ issue.client_id }}, '{{ issue.message | e }}')"
+                                                    title="Provide Feedback">
+                                                <i class="fas fa-comment"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function toggleCategory(checkbox, category) {
+    const checkboxes = document.querySelectorAll('.cat-' + category);
+    checkboxes.forEach(cb => cb.checked = checkbox.checked);
+    updateCount();
+}
+
+function updateCount() {
+    const checked = document.querySelectorAll('.issue-checkbox:checked').length;
+    document.getElementById('selectedCount').textContent = checked;
+    document.getElementById('resolveBtn').disabled = checked === 0;
+    const reassignBtn = document.getElementById('reassignBtn');
+    if (reassignBtn) reassignBtn.disabled = checked === 0;
+}
+
+function _postIssueAction(actionUrl, fields) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = actionUrl;
+    const csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = 'csrf_token';
+    csrf.value = '{{ csrf_token() }}';
+    form.appendChild(csrf);
+    Object.keys(fields).forEach(key => {
+        const vals = Array.isArray(fields[key]) ? fields[key] : [fields[key]];
+        vals.forEach(v => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = key;
+            input.value = v;
+            form.appendChild(input);
+        });
+    });
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function resolveSelected() {
+    const ids = Array.from(document.querySelectorAll('.issue-checkbox:checked')).map(cb => cb.value);
+    if (!ids.length) return;
+    _postIssueAction('{{ url_for("data_integrity.resolve_issues") }}', {
+        'issue_ids[]': ids,
+        resolution: 'fixed'
+    });
+}
+
+function reassignOne(issueId, assignedTo) {
+    _postIssueAction('{{ url_for("data_integrity.reassign_issues") }}', {
+        'issue_ids[]': [String(issueId)],
+        assigned_to: assignedTo
+    });
+}
+
+function reassignSelected() {
+    const ids = Array.from(document.querySelectorAll('.issue-checkbox:checked')).map(cb => cb.value);
+    const assignee = document.getElementById('bulkAssignee');
+    if (!ids.length) return;
+    if (!assignee || !assignee.value) {
+        alert('Choose a user to reassign to');
+        return;
+    }
+    _postIssueAction('{{ url_for("data_integrity.reassign_issues") }}', {
+        'issue_ids[]': ids,
+        assigned_to: assignee.value
+    });
+}
+
+function quickResolve(issueId, resolution) {
+    _postIssueAction('{{ url_for("data_integrity.resolve_issues") }}', {
+        'issue_ids[]': [String(issueId)],
+        resolution: resolution
+    });
+}
+
+function showFeedbackModal(issueId, category, checkName, clientId, message) {
+    document.getElementById('feedbackIssueId').value = issueId;
+    document.getElementById('feedbackCategory').value = category;
+    document.getElementById('feedbackCheckName').value = checkName;
+    document.getElementById('feedbackClientId').value = clientId;
+    document.getElementById('feedbackMessage').textContent = message;
+    
+    const modal = new bootstrap.Modal(document.getElementById('feedbackModal'));
+    modal.show();
+}
+
+function submitFeedback() {
+    const form = document.getElementById('feedbackForm');
+    const formData = new FormData(form);
+    
+    fetch('{{ url_for("data_integrity.handle_issue_feedback") }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        alert('Error submitting feedback');
+    });
+}
+</script>
+
+<!-- Feedback Modal -->
+<div class="modal fade" id="feedbackModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-comment me-2"></i>Provide Feedback</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="feedbackForm">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" id="feedbackIssueId" name="issue_id">
+                    <input type="hidden" id="feedbackCategory" name="category">
+                    <input type="hidden" id="feedbackCheckName" name="check_name">
+                    <input type="hidden" id="feedbackClientId" name="client_id">
+                    
+                    <div class="alert alert-light mb-3">
+                        <small id="feedbackMessage"></small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">What would you like to do?</label>
+                        
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="action" id="actionFixed" value="fixed" checked>
+                            <label class="form-check-label" for="actionFixed">
+                                <strong>Fixed</strong> - Issue has been corrected in the data
+                            </label>
+                        </div>
+                        
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="action" id="actionException" value="exception">
+                            <label class="form-check-label" for="actionException">
+                                <strong>One-time Exception</strong> - Skip this specific instance only
+                            </label>
+                        </div>
+                        
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="action" id="actionPattern" value="pattern">
+                            <label class="form-check-label" for="actionPattern">
+                                <strong>Relax Rule for Client</strong> - This is normal behavior for this client
+                            </label>
+                        </div>
+                        
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="action" id="actionFalsePositive" value="false_positive">
+                            <label class="form-check-label" for="actionFalsePositive">
+                                <strong>False Positive</strong> - This check is incorrect
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3" id="patternDetails" style="display: none;">
+                        <label class="form-label">Pattern Description</label>
+                        <input type="text" class="form-control" name="pattern_description" 
+                               placeholder="e.g., Client typically buys 2x recommended quantity">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notes (optional)</label>
+                        <textarea class="form-control" name="notes" rows="2" 
+                                  placeholder="Any additional context..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitFeedback()">
+                    <i class="fas fa-check me-1"></i>Submit
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll('input[name="action"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        document.getElementById('patternDetails').style.display = 
+            this.value === 'pattern' ? 'block' : 'none';
+    });
+});
+</script>
+{% endblock %}

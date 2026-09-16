@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Financial Plan – {{ client.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-chart-pie"></i> {{ client.name }} – Financial Plan</h1>
+        <div>
+            <a href="{{ url_for('financial_planning.dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to list
+            </a>
+            {% if plan %}
+            <a href="{{ url_for('financial_planning.plan_edit', client_id=client.id) }}" class="btn btn-primary">
+                <i class="fas fa-edit"></i> Edit plan
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not plan %}
+    <div class="card border-warning">
+        <div class="card-body text-center py-5">
+            <p class="lead mb-3">No financial plan exists for this client yet.</p>
+            <a href="{{ url_for('financial_planning.plan_create', client_id=client.id) }}" class="btn btn-primary btn-lg">
+                <i class="fas fa-plus"></i> Create plan
+            </a>
+        </div>
+    </div>
+    {% else %}
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-wallet"></i> Plan summary</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Plan:</strong> {{ plan.plan_name }} &nbsp; <span class="badge bg-secondary">{{ plan.status }}</span></p>
+                    <p><strong>Plan date:</strong> {{ plan.plan_date.strftime('%Y-%m-%d') if plan.plan_date else '—' }}</p>
+                    {% if plan.review_date %}
+                    <p><strong>Review date:</strong> {{ plan.review_date.strftime('%Y-%m-%d') }}</p>
+                    {% endif %}
+                    <hr>
+                    <p><strong>Planning net worth:</strong> {{ "{:,.2f}".format(plan.planning_net_worth) }}</p>
+                    <p><strong>Monthly income:</strong> {{ "{:,.2f}".format(plan.monthly_income or 0) }}</p>
+                    <p><strong>Monthly expenses:</strong> {{ "{:,.2f}".format(plan.monthly_expenses or 0) }}</p>
+                    <p><strong>Emergency fund (current / target):</strong> {{ "{:,.2f}".format(plan.emergency_fund_current or 0) }} / {{ "{:,.2f}".format(plan.emergency_fund_target or 0) }}</p>
+                    {% if plan.risk_tolerance %}
+                    <p><strong>Risk tolerance:</strong> {{ plan.risk_tolerance }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-bullseye"></i> Goals</h5>
+            <a href="{{ url_for('financial_planning.goal_add', client_id=client.id) }}" class="btn btn-sm btn-success">
+                <i class="fas fa-plus"></i> Add goal
+            </a>
+        </div>
+        <div class="card-body">
+            {% if goals %}
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Goal</th>
+                            <th>Type</th>
+                            <th>Target</th>
+                            <th>Progress</th>
+                            <th>Target date</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for g in goals %}
+                        <tr>
+                            <td>{{ g.goal_name }}</td>
+                            <td>{{ g.goal_type }}</td>
+                            <td>{{ "{:,.2f}".format(g.target_amount) }}</td>
+                            <td>{{ "%.1f"|format(g.progress_percentage) }}% ({{ "{:,.2f}".format(g.current_progress or 0) }})</td>
+                            <td>{{ g.target_date.strftime('%Y-%m-%d') if g.target_date else '—' }}</td>
+                            <td><span class="badge bg-secondary">{{ g.status }}</span></td>
+                            <td>
+                                <a href="{{ url_for('financial_planning.goal_edit', client_id=client.id, goal_id=g.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                                <form method="post" action="{{ url_for('financial_planning.goal_delete', client_id=client.id, goal_id=g.id) }}" class="d-inline" onsubmit="return confirm('Delete this goal?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No goals yet. <a href="{{ url_for('financial_planning.goal_add', client_id=client.id) }}">Add a goal</a>.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if plan %}
+    <div class="mb-2">
+        <a href="{{ url_for('financial_planning.goals_list', client_id=client.id) }}" class="btn btn-outline-secondary">
+            <i class="fas fa-bullseye"></i> Manage goals
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

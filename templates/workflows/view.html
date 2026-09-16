@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}View Workflow{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h1><i class="fas fa-eye"></i> View Workflow</h1>
+                <div>
+                    <a href="{{ url_for('workflows.list_workflows') }}" class="btn btn-primary">
+                        <i class="fas fa-list"></i> All workflows
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Information -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Workflow Details</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Module Type:</strong>
+                            <span class="badge badge-{{ 'primary' if module_type == 'lead' else 'success' if module_type == 'client_onboarding' else 'info' if module_type == 'portfolio' else 'warning' }} text-white ml-2">
+                                {{ module_type|replace('_', ' ')|title }}
+                            </span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Record ID:</strong> {{ workflow.record_id }}
+                        </div>
+                    </div>
+                    
+                    {% if record %}
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <strong>Record Name:</strong>
+                            {% if module_type == 'lead' %}
+                                <a href="{{ url_for('leads.view_lead', lead_id=record.id) }}">{{ record.name }}</a>
+                            {% elif module_type == 'client_onboarding' %}
+                                {{ record.name }}
+                            {% elif module_type == 'portfolio' %}
+                                {% if record.client %}{{ record.client.name }}{% else %}N/A{% endif %}
+                            {% elif module_type == 'transaction' %}
+                                {% if record.client %}{{ record.client.name }}{% else %}N/A{% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Current Stage:</strong>
+                            <span class="badge badge-{{ 'success' if workflow.current_stage == 'COMPLETED' else 'warning' if workflow.get_stage_status() == 'OVERDUE' else 'info' }} {{ 'text-white' if workflow.current_stage == 'COMPLETED' else 'text-dark' }} ml-2">
+                                {{ workflow.current_stage|replace('_', ' ') }}
+                            </span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Status:</strong>
+                            <span class="badge badge-{{ 'success' if workflow.status == 'completed' else 'warning' if workflow.status == 'paused' else 'danger' if workflow.status == 'cancelled' else 'info' }} {{ 'text-white' if workflow.status in ['completed', 'cancelled'] else 'text-dark' }} ml-2">
+                                {{ workflow.status|title }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Target Completion Date:</strong>
+                            <span class="text-{{ 'danger' if workflow.get_stage_status() == 'OVERDUE' else 'dark' }}">
+                                {% if workflow.target_completion_date %}
+                                    {{ workflow.target_completion_date.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Actual Completion Date:</strong>
+                            {% if workflow.actual_completion_date %}
+                                {{ workflow.actual_completion_date.strftime('%Y-%m-%d') }}
+                            {% else %}
+                                <span class="text-muted">Not completed</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Created:</strong> {{ workflow.created_at.strftime('%Y-%m-%d %H:%M') }}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Created By:</strong> {{ workflow.creator.username if workflow.creator else 'N/A' }}
+                        </div>
+                    </div>
+
+                    {% if workflow.notes %}
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <strong>Notes:</strong>
+                            <p class="mt-2">{{ workflow.notes }}</p>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% if next_stage %}
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <strong>Next Stage:</strong> {{ next_stage|replace('_', ' ') }}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions Panel -->
+        <div class="col-lg-4">
+            {% if workflow.status == 'active' %}
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <button type="button" class="btn btn-success btn-block mb-2" onclick="openUpdateStageModal()">
+                        <i class="fas fa-edit"></i> Update Stage
+                    </button>
+                    <button type="button" class="btn btn-info btn-block mb-2" onclick="openAddActionModal()">
+                        <i class="fas fa-plus"></i> Add Action
+                    </button>
+                    {% if workflow.status == 'active' %}
+                    <form method="POST" action="{{ url_for('workflows.pause_workflow', workflow_id=workflow.id) }}" class="d-inline mb-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-warning btn-block" onclick="return confirm('Are you sure you want to pause this workflow?');">
+                            <i class="fas fa-pause"></i> Pause Workflow
+                        </button>
+                    </form>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('workflows.cancel_workflow', workflow_id=workflow.id) }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger btn-block" onclick="return confirm('Are you sure you want to cancel this workflow?');">
+                            <i class="fas fa-times"></i> Cancel Workflow
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Workflow Actions History -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Workflow Actions History</h6>
+                </div>
+                <div class="card-body">
+                    {% if workflow.actions %}
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="actionsTable" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Action Type</th>
+                                    <th>Amount</th>
+                                    <th>Notes</th>
+                                    <th>User</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for action in workflow.actions %}
+                                <tr>
+                                    <td>{{ action.action_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>
+                                        <span class="badge badge-info text-white">
+                                            {{ action.action_type|replace('_', ' ') }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if action.amount %}
+                                            ₹{{ "{:,.2f}".format(action.amount) }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ action.notes or '-' }}</td>
+                                    <td>{{ action.user.username if action.user else 'N/A' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> No actions recorded for this workflow yet.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Update Stage Modal -->
+<div class="modal fade" id="updateStageModal" tabindex="-1" role="dialog" aria-labelledby="updateStageModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="updateStageModalLabel">Update Workflow Stage</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('workflows.update_stage', workflow_id=workflow.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="form-group mb-3">
+                        <label for="new_stage">New Stage</label>
+                        <select class="form-control" id="new_stage" name="new_stage" required>
+                            <option value="">Select Stage</option>
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="workflow_notes">Notes</label>
+                        <textarea class="form-control" id="workflow_notes" name="notes" rows="3" placeholder="Add notes about this stage update..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-success">Update Stage</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Action Modal -->
+<div class="modal fade" id="addActionModal" tabindex="-1" role="dialog" aria-labelledby="addActionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addActionModalLabel">Add Workflow Action</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('workflows.add_action', workflow_id=workflow.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="form-group mb-3">
+                        <label for="action_type">Action Type</label>
+                        <select class="form-control" id="action_type" name="action_type" required>
+                            <option value="">Select Action</option>
+                            {% if available_actions %}
+                                {% for action in available_actions %}
+                                <option value="{{ action }}">{{ action|replace('_', ' ') }}</option>
+                                {% endfor %}
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="action_amount">Amount (Optional)</label>
+                        <input type="number" class="form-control" id="action_amount" name="amount" step="0.01" placeholder="Enter amount if applicable">
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="action_notes">Notes</label>
+                        <textarea class="form-control" id="action_notes" name="notes" rows="3" placeholder="Add notes about this action..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-success">Add Action</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+.badge {
+    padding: 0.35em 0.65em;
+    font-size: 0.875rem;
+}
+
+.progress {
+    background-color: #e3e6f0;
+    border-radius: 0.35rem;
+}
+
+.progress-bar {
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script>
+var GENERIC_WORKFLOW_DATA_URL = {{ url_for('workflows.api_get_workflow_data', workflow_id=workflow.id)|tojson }};
+
+$(document).ready(function () {
+    {% if workflow.actions %}
+    if (typeof $.fn.DataTable !== 'undefined' && document.getElementById('actionsTable')) {
+        $('#actionsTable').DataTable({
+            order: [[0, 'desc']],
+            pageLength: 25,
+            responsive: true
+        });
+    }
+    {% endif %}
+});
+
+function openUpdateStageModal() {
+    fetch(GENERIC_WORKFLOW_DATA_URL, { credentials: 'same-origin' })
+        .then(function (response) {
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+            return response.json();
+        })
+        .then(function (data) {
+            var stageSelect = document.getElementById('new_stage');
+            stageSelect.innerHTML = '<option value="">Select Stage</option>';
+            if (data.available_stages) {
+                data.available_stages.forEach(function (stage) {
+                    var option = document.createElement('option');
+                    option.value = stage;
+                    option.textContent = stage.replace(/_/g, ' ');
+                    if (stage === data.next_stage) {
+                        option.textContent += ' (Next)';
+                    }
+                    stageSelect.appendChild(option);
+                });
+            }
+            var modal = new bootstrap.Modal(document.getElementById('updateStageModal'));
+            modal.show();
+        })
+        .catch(function (error) {
+            console.error('Error fetching workflow data:', error);
+            alert('Error loading workflow data. Please try again.');
+        });
+}
+
+function openAddActionModal() {
+    var modal = new bootstrap.Modal(document.getElementById('addActionModal'));
+    modal.show();
+}
+</script>
+{% endblock %}
+

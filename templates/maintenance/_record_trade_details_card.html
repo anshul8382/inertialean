@@ -1,0 +1,56 @@
+{# Expects: clients (list of Client, ordered by name) #}
+<div class="col-12 col-lg-6 col-xl-5">
+    <div class="rounded-3 border border-secondary-subtle p-3 h-100">
+        <div class="d-flex flex-wrap align-items-baseline column-gap-2 row-gap-1 mb-2">
+            <h6 class="mb-0 text-body">
+                <i class="fas fa-clipboard-list text-primary me-1" aria-hidden="true"></i>Record trade details
+            </h6>
+            <span class="text-body-secondary small">Recommended trades for one client</span>
+        </div>
+        <p class="text-body-secondary small mb-2 mb-sm-3">Select a client to record executions, prices, and batch updates.</p>
+        {% if clients %}
+        <div class="row g-2 align-items-end">
+            <div class="col min-w-0">
+                <label for="recordTradeDetailsClientSelect" class="form-label small text-body-secondary mb-1">Client</label>
+                <select id="recordTradeDetailsClientSelect" class="form-select">
+                    <option value="">— Select client —</option>
+                    {% for c in clients %}
+                    <option value="{{ url_for('recommended_trades.client_recommended_trades', client_id=c.id) }}">{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="button" class="btn btn-primary px-3" id="recordTradeDetailsGoBtn" title="Open recommended trades">
+                    <i class="fas fa-arrow-right" aria-hidden="true"></i> Go
+                </button>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-body-secondary mb-0 small">No clients available.</p>
+        {% endif %}
+    </div>
+</div>
+{% if clients %}
+<script>
+(function () {
+    var sel = document.getElementById('recordTradeDetailsClientSelect');
+    var btn = document.getElementById('recordTradeDetailsGoBtn');
+    if (!sel || !btn) return;
+    function go() {
+        var href = (sel.value || '').trim();
+        if (!href) {
+            alert('Please select a client.');
+            return;
+        }
+        window.location.href = href;
+    }
+    btn.addEventListener('click', go);
+    sel.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            go();
+        }
+    });
+})();
+</script>
+{% endif %}

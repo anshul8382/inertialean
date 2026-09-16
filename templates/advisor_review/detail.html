@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}{{ detail.advisor_name }} — Advisor Review{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="{{ url_for('advisor_review.dashboard') }}">Advisor Review</a></li>
+      <li class="breadcrumb-item active" aria-current="page">{{ detail.advisor_name }}</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+      <h1 class="h3 mb-1">{{ detail.advisor_name }}</h1>
+      <p class="text-muted mb-0 small">Advisor book detail</p>
+    </div>
+    <a href="{{ url_for('advisor_review.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left"></i> Back
+    </a>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Clients</div>
+          <div class="fs-4 fw-semibold">{{ detail.client_count }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">AUM</div>
+          <div class="fs-4 fw-semibold">{{ detail.aum_display }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Review pendency</div>
+          <div class="fs-4 fw-semibold">{{ detail.pending_reviews }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small">Committed monthly</div>
+          <div class="fs-4 fw-semibold">{{ detail.committed_display }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small mb-1">MoM planned investment growth</div>
+          <div class="d-flex align-items-baseline gap-2 flex-wrap">
+            {% if detail.trend == 'up' %}
+            <span class="fs-4 fw-semibold text-success">
+              <i class="fas fa-arrow-up" aria-hidden="true"></i>
+              {% if detail.growth_pct is not none %}+{{ detail.growth_pct }}%{% else %}New{% endif %}
+            </span>
+            {% elif detail.trend == 'down' %}
+            <span class="fs-4 fw-semibold text-danger">
+              <i class="fas fa-arrow-down" aria-hidden="true"></i> {{ detail.growth_pct }}%
+            </span>
+            {% else %}
+            <span class="fs-4 fw-semibold text-muted">
+              <i class="fas fa-minus" aria-hidden="true"></i>
+              {% if detail.growth_pct is not none %}{{ detail.growth_pct }}%{% else %}—{% endif %}
+            </span>
+            {% endif %}
+          </div>
+          <div class="small text-muted mt-2">
+            {{ detail.this_month_label }}: {{ detail.this_month_display }}
+            · {{ detail.last_month_label }}: {{ detail.last_month_display }}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <div class="text-muted small mb-2">Trend (planned monthly investment)</div>
+          <div class="d-flex align-items-end gap-2" style="min-height:48px;" role="img" aria-label="Trend chart">
+            {% for m in detail.trend_months %}
+            <div class="text-center flex-fill">
+              <div class="mx-auto rounded-1 {% if loop.last %}bg-primary{% else %}bg-secondary{% endif %}"
+                   style="width:100%;max-width:28px;height:{{ m.bar_px_lg }}px;opacity:{% if loop.last %}1{% else %}0.45{% endif %};"
+                   title="{{ m.label }}: {{ m.amount_display }}"></div>
+              <div class="small text-muted mt-1" style="font-size:0.65rem;">{{ m.label.split(' ')[0] }}</div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card card-app border-0 shadow-sm">
+    <div class="card-header bg-white fw-semibold">Clients</div>
+    <div class="card-body p-0">
+      {% if detail.clients %}
+      <div class="table-responsive" data-mobile-table="scroll">
+        <table class="table table-app table-hover table-striped mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th scope="col">Client</th>
+              <th scope="col" class="text-num">AUM</th>
+              <th scope="col" class="text-num">Committed monthly</th>
+              <th scope="col" class="text-num">Pending reviews</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in detail.clients %}
+            <tr>
+              <td>
+                <a href="{{ url_for('clients.client_details', client_id=c.id) }}">{{ c.name }}</a>
+              </td>
+              <td class="text-num">{{ c.aum_display }}</td>
+              <td class="text-num">{{ c.committed_display }}</td>
+              <td class="text-num">{{ c.pending_reviews }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0 px-3 py-4">No active clients for this advisor.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

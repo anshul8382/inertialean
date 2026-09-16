@@ -1,0 +1,25 @@
+-- Create recommended_trade table
+CREATE TABLE IF NOT EXISTS `recommended_trade` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `client_id` int(11) NOT NULL,
+  `security_id` int(11) NOT NULL,
+  `action` varchar(20) NOT NULL,
+  `quantity` decimal(15,4) NOT NULL,
+  `recommended_price` decimal(15,2) NOT NULL,
+  `actual_price` decimal(15,2) DEFAULT NULL,
+  `status` varchar(20) DEFAULT 'pending',
+  `notes` text DEFAULT NULL,
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `executed_at` datetime DEFAULT NULL,
+  `created_by` int(11) NOT NULL,
+  `executed_by` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `client_id` (`client_id`),
+  KEY `security_id` (`security_id`),
+  KEY `created_by` (`created_by`),
+  KEY `executed_by` (`executed_by`),
+  CONSTRAINT `recommended_trade_ibfk_1` FOREIGN KEY (`client_id`) REFERENCES `client` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `recommended_trade_ibfk_2` FOREIGN KEY (`security_id`) REFERENCES `security` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `recommended_trade_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `user` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `recommended_trade_ibfk_4` FOREIGN KEY (`executed_by`) REFERENCES `user` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; 

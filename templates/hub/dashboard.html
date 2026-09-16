@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Intelligence Hub{% endblock %}
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Intelligence Hub' %}
+  {% include 'partials/mobile/app_header.html' %}
+  <div class="im-list-stack">
+    <a href="{{ url_for('hub.operational_dashboard') }}" class="im-list-card">
+      <div class="im-list-card__header">
+        <div>
+          <h2 class="im-list-card__title"><i class="fas fa-cogs me-2"></i>Operational</h2>
+          <p class="im-list-card__meta">Data integrity, issues, alerts</p>
+        </div>
+        <i class="fas fa-chevron-right text-muted"></i>
+      </div>
+      <div class="im-list-card__row">
+        <span class="im-badge im-badge--warning">{{ open_issues_count }} issues</span>
+        <span class="im-badge im-badge--info">{{ active_alerts_count }} alerts</span>
+      </div>
+    </a>
+    <a href="{{ url_for('hub.investment_dashboard') }}" class="im-list-card">
+      <div class="im-list-card__header">
+        <div>
+          <h2 class="im-list-card__title"><i class="fas fa-chart-line me-2"></i>Investment</h2>
+          <p class="im-list-card__meta">Performance, tax, capital gains</p>
+        </div>
+        <i class="fas fa-chevron-right text-muted"></i>
+      </div>
+    </a>
+    <a href="{{ url_for('hub.system_dashboard') }}" class="im-list-card">
+      <div class="im-list-card__header">
+        <div>
+          <h2 class="im-list-card__title"><i class="fas fa-microchip me-2"></i>System</h2>
+          <p class="im-list-card__meta">Task rules, Airflow, SLA</p>
+        </div>
+        <i class="fas fa-chevron-right text-muted"></i>
+      </div>
+    </a>
+    <a href="{{ url_for('hub.business_dashboard') }}" class="im-list-card">
+      <div class="im-list-card__header">
+        <div>
+          <h2 class="im-list-card__title"><i class="fas fa-briefcase me-2"></i>Business</h2>
+          <p class="im-list-card__meta">Analytics, referrals</p>
+        </div>
+        <i class="fas fa-chevron-right text-muted"></i>
+      </div>
+    </a>
+  </div>
+</div>
+<div class="im-desktop-only im-collapsed-on-mobile container mt-4">
+  <div class="mb-4">
+    <h2><i class="fas fa-brain text-primary"></i> Intelligence Hub</h2>
+    <p class="text-muted mb-0">Open one of the four intelligence areas. Detailed links live on each page.</p>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mb-2"><i class="fas fa-cogs text-secondary me-2"></i>Operational intelligence</h4>
+          <p class="text-muted small mb-3">Data integrity, issue queue, alerts, and operational tooling.</p>
+          <div class="small mb-3">
+            <span class="badge bg-warning text-dark me-1">{{ open_issues_count }} open issues</span>
+            <span class="badge bg-info text-dark">{{ active_alerts_count }} active alerts</span>
+          </div>
+          <div class="mt-auto">
+            <a href="{{ url_for('hub.operational_dashboard') }}" class="btn btn-primary">Open operational intelligence</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mb-2"><i class="fas fa-chart-line text-success me-2"></i>Investment intelligence</h4>
+          <p class="text-muted small mb-3">Performance timeline, tax optimiser, capital gains, pseudo trades, and CSV exports.</p>
+          <div class="mt-auto">
+            <a href="{{ url_for('hub.investment_dashboard') }}" class="btn btn-success">Open investment intelligence</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mb-2"><i class="fas fa-microchip text-dark me-2"></i>System intelligence</h4>
+          <p class="text-muted small mb-3">Task rules, roles, SLA, Airflow, and rec-execution SLA settings.</p>
+          <div class="mt-auto">
+            <a href="{{ url_for('hub.system_dashboard') }}" class="btn btn-dark">Open system intelligence</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mb-2"><i class="fas fa-briefcase text-info me-2"></i>Business intelligence</h4>
+          <p class="text-muted small mb-3">Client and practice analytics, referrals{% if config.get('NAV_CAMPAIGN_STUDIO_ENABLED') %}, and Campaign Studio (marketing){% endif %}.</p>
+          <div class="mt-auto">
+            <a href="{{ url_for('hub.business_dashboard') }}" class="btn btn-info text-white">Open business intelligence</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

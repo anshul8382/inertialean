@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Hub: {{ client.name }}{% endblock %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <a href="{{ url_for('hub.operational_dashboard') }}" class="small text-muted text-decoration-none">← Operational</a>
+      <h3 class="mt-1 mb-0">{{ client.name }}</h3>
+    </div>
+    <button class="btn btn-sm btn-info" onclick="analyzeClient()">Analyze with AI</button>
+  </div>
+
+  {% if ai_suggestions %}
+  <div class="card shadow-sm mb-3">
+    <div class="card-header"><strong>AI Suggestions</strong></div>
+    <div class="card-body p-0">
+      {% for rec in ai_suggestions %}
+      <div class="border-bottom p-3">
+        <div class="d-flex justify-content-between">
+          <div>
+            <span class="badge bg-secondary">{{ rec.action|replace('_',' ') }}</span>
+            <strong class="ms-1">{{ rec.title }}</strong>
+          </div>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-success" onclick="approveRec({{ rec|tojson|e }})">Approve</button>
+            <button class="btn btn-outline-secondary" onclick="skipRec({{ rec.issue_id }})">Skip</button>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="row">
+    <div class="col-lg-7">
+      {% for agent_name, agent_issues in issues_by_agent.items() %}
+      <div class="card shadow-sm mb-3">
+        <div class="card-header"><strong>{{ agent_name|replace('_',' ')|title }}</strong> <span class="badge bg-secondary">{{ agent_issues|length }}</span></div>
+        <div class="list-group list-group-flush">
+          {% for issue in agent_issues[:8] %}
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+              <span class="badge bg-{% if issue.severity=='critical' %}danger{% elif issue.severity=='warning' %}warning{% else %}info{% endif %}">{{ issue.severity }}</span>
+              <span class="ms-1">{{ issue.check_name }}</span>
+              <div class="small text-muted">{{ issue.message|truncate(120, True, '') }}</div>
+            </div>
+            <button class="btn btn-sm btn-outline-success" onclick="resolveIssueApi({{ issue.id }})">Resolve</button>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+      {% else %}
+      <div class="alert alert-success">No open issues for this client.</div>
+      {% endfor %}
+    </div>
+    <div class="col-lg-5">
+      <div class="card shadow-sm mb-3">
+        <div class="card-header"><strong>Active Alerts</strong> <span class="badge bg-secondary">{{ client_alerts|length }}</span></div>
+        <div class="list-group list-group-flush">
+          {% for alert in client_alerts[:8] %}
+          <div class="list-group-item d-flex justify-content-between align-items-center">
+            <div class="small">{{ alert.title|truncate(60, True, '') }}</div>
+            <form method="POST" action="{{ url_for('hub.alert_action', alert_id=alert.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="acknowledge">
+              <button class="btn btn-sm btn-outline-secondary">Ack</button>
+            </form>
+          </div>
+          {% else %}
+          <div class="list-group-item text-muted">No active alerts</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+function analyzeClient() {
+  const fd = new FormData();
+  fd.append('csrf_token', csrfToken);
+  fd.append('client_id', '{{ client.id }}');
+  fetch('{{ url_for("hub.ai_analyze") }}', {method: 'POST', body: fd}).then(() => location.reload());
+}
+function approveRec(rec) {
+  const fd = new FormData();
+  fd.append('csrf_token', csrfToken);
+  fd.append('recommendation', JSON.stringify(rec));
+  fetch('{{ url_for("hub.ai_approve") }}', {method: 'POST', body: fd}).then(() => location.reload());
+}
+function skipRec(id) {
+  const fd = new FormData();
+  fd.append('csrf_token', csrfToken);
+  fd.append('issue_id', id);
+  fetch('{{ url_for("hub.ai_skip") }}', {method: 'POST', body: fd}).then(() => location.reload());
+}
+function resolveIssueApi(issueId) {
+  const fd = new FormData();
+  fd.append('csrf_token', csrfToken);
+  fd.append('issue_ids[]', issueId);
+  fd.append('resolution', 'fixed');
+  fetch('/api/agents/issues/bulk-resolve', {method: 'POST', body: fd}).then(() => location.reload()).catch(() => location.reload());
+}
+</script>
+{% endblock %}

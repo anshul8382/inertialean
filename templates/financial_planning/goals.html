@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Goals – {{ client.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-bullseye"></i> Goals – {{ client.name }}</h1>
+        <div>
+            <a href="{{ url_for('financial_planning.client_plan', client_id=client.id) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to plan
+            </a>
+            <a href="{{ url_for('financial_planning.goal_add', client_id=client.id) }}" class="btn btn-success">
+                <i class="fas fa-plus"></i> Add goal
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            {% if goals %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Goal</th>
+                            <th>Type</th>
+                            <th>Target amount</th>
+                            <th>Current progress</th>
+                            <th>Progress %</th>
+                            <th>Target date</th>
+                            <th>Monthly contribution</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for g in goals %}
+                        <tr>
+                            <td>{{ g.goal_name }}</td>
+                            <td>{{ g.goal_type }}</td>
+                            <td>{{ "{:,.2f}".format(g.target_amount) }}</td>
+                            <td>{{ "{:,.2f}".format(g.current_progress or 0) }}</td>
+                            <td>{{ "%.1f"|format(g.progress_percentage) }}%</td>
+                            <td>{{ g.target_date.strftime('%Y-%m-%d') if g.target_date else '—' }}</td>
+                            <td>{{ "{:,.2f}".format(g.monthly_contribution or 0) }}</td>
+                            <td><span class="badge bg-secondary">{{ g.status }}</span></td>
+                            <td>
+                                <a href="{{ url_for('financial_planning.goal_edit', client_id=client.id, goal_id=g.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+                                <form method="post" action="{{ url_for('financial_planning.goal_delete', client_id=client.id, goal_id=g.id) }}" class="d-inline" onsubmit="return confirm('Delete this goal?');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted">No goals yet. <a href="{{ url_for('financial_planning.goal_add', client_id=client.id) }}">Add a goal</a>.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

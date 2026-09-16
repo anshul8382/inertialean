@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}BNI referrals{% endblock %}
+{% block content %}
+{% from 'partials/mobile/macros.html' import maint_child_open, maint_desktop_open, maint_desktop_close %}
+{{ maint_child_open('BNI referrals', url_for('main.maintenance_reference_data'), 'Referral names for weekly BNI TY Notes email.') }}
+{{ maint_desktop_open('container py-4') }}
+<div class="container py-4">
+  <h1 class="h3 mb-3"><i class="fas fa-handshake text-primary"></i> BNI referral lookup</h1>
+  <p class="text-muted">One referral name per client. Used in the weekly <strong>BNI TY Notes</strong> email (Maintenance → scheduled job Wed 4 PM IST).</p>
+
+  <div class="card mb-4 border-primary">
+    <div class="card-header bg-primary text-white"><i class="fas fa-play-circle me-1"></i> Run BNI TY Notes on demand</div>
+    <div class="card-body">
+      <p class="small text-muted mb-3">
+        Pick a <strong>UTC calendar</strong> date range (same convention as the email footer). Default is the last 7 days.
+        <strong>Preview</strong> shows the report in your browser. <strong>Email report</strong> sends the same HTML to admin and ops_manager addresses; it does <strong>not</strong> change the weekly job watermark.
+      </p>
+      <form method="post" action="{{ url_for('bni_referrals.run_bni_ty_notes_on_demand') }}" class="row g-3 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        {% if search_q %}<input type="hidden" name="q" value="{{ search_q }}"/>{% endif %}
+        <div class="col-md-3">
+          <label class="form-label">Start date (UTC)</label>
+          <input type="date" name="start_date" class="form-control" required value="{{ report_start }}"/>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">End date (UTC)</label>
+          <input type="date" name="end_date" class="form-control" required value="{{ report_end }}"/>
+        </div>
+        <div class="col-md-6 d-flex flex-wrap gap-2 align-items-end">
+          <button type="submit" name="action" value="preview" class="btn btn-outline-primary"><i class="fas fa-eye me-1"></i>Preview report</button>
+          <button type="submit" name="action" value="send_email" class="btn btn-primary" onclick="return confirm('Send BNI TY Notes email for this date range to all admin/ops_manager recipients?');"><i class="fas fa-envelope me-1"></i>Email report</button>
+        </div>
+      </form>
+      {% if report_preview_html %}
+      <div class="mt-4">
+        <p class="small text-muted mb-2">
+          Preview ({{ report_preview_bni }} BNI rows, {{ report_preview_non_bni }} non-BNI rows). Scroll inside the frame if needed.
+        </p>
+        <iframe title="BNI TY Notes preview" class="w-100 border rounded bg-white" style="min-height: 520px; height: 60vh;" sandbox="" srcdoc="{{ report_preview_html|e }}"></iframe>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-header">Add or update</div>
+    <div class="card-body">
+      <form method="post" action="{{ url_for('bni_referrals.save_bni_referral') }}" class="row g-3 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="col-md-5">
+          <label class="form-label">Client</label>
+          <select name="client_id" class="form-select" required>
+            <option value="">— Select —</option>
+            {% for c in clients_for_select %}
+            <option value="{{ c.id }}">{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label">BNI referral name</label>
+          <input type="text" name="referral_name" class="form-control" maxlength="255" placeholder="Referrer / chapter contact name"/>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100">Save</button>
+        </div>
+      </form>
+      <p class="small text-muted mb-0 mt-2">Clear the name and save to remove the lookup row for that client.</p>
+    </div>
+  </div>
+
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-auto flex-grow-1">
+      <input type="search" name="q" value="{{ search_q or '' }}" class="form-control" placeholder="Search client name…"/>
+    </div>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-outline-secondary">Search</button>
+    </div>
+  </form>
+
+  <div class="table-responsive">
+    <table class="table table-striped table-sm align-middle">
+      <thead>
+        <tr>
+          <th>Client</th>
+          <th>BNI referral name</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for client, ref in rows %}
+        <tr>
+          <td>{{ client.name }}</td>
+          <td>{{ ref.referral_name if ref else '—' }}</td>
+          <td>
+            <form method="post" action="{{ url_for('bni_referrals.save_bni_referral') }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <input type="hidden" name="client_id" value="{{ client.id }}"/>
+              <input type="hidden" name="referral_name" value=""/>
+              <button type="submit" class="btn btn-link btn-sm text-danger p-0" {% if not ref %}disabled{% endif %} onclick="return confirm('Remove BNI referral for this client?');">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3" class="text-muted">No clients match.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{ maint_desktop_close() }}
+{% endblock %}

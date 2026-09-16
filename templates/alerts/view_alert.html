@@ -1,0 +1,407 @@
+{% extends "base.html" %}
+
+{% block title %}Alert Details{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Alert Details</h1>
+        <a href="{{ url_for('alerts.list_alerts') }}" class="btn btn-primary btn-sm">
+            <i class="fas fa-arrow-left"></i> Back to Alerts
+        </a>
+    </div>
+
+    <!-- Alert Details Card -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Alert Information</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>{{ alert.title }}</h5>
+                            
+                            {% if alert.client %}
+                            <div class="mb-3">
+                                <strong>Client:</strong>
+                                <a href="{{ url_for('clients.client_details', client_id=alert.client.id) }}" class="text-primary">
+                                    {{ alert.client.name }}
+                                </a>
+                                <span class="text-muted">({{ alert.client.email|display_email }})</span>
+                            </div>
+                            {% endif %}
+                            
+                            <p class="text-muted">{{ alert.description }}</p>
+                            
+                            <div class="mb-3">
+                                <strong>Severity:</strong>
+                                {% if alert.severity == 'critical' %}
+                                    <span class="badge badge-danger">Critical</span>
+                                {% elif alert.severity == 'warning' %}
+                                    <span class="badge badge-warning">Warning</span>
+                                {% else %}
+                                    <span class="badge badge-info">Info</span>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="mb-3">
+                                <strong>Status:</strong>
+                                {% if alert.status == 'active' %}
+                                    <span class="badge badge-primary">Active</span>
+                                {% elif alert.status == 'acknowledged' %}
+                                    <span class="badge badge-warning">Acknowledged</span>
+                                {% elif alert.status == 'resolved' %}
+                                    <span class="badge badge-success">Resolved</span>
+                                {% elif alert.status == 'snoozed' %}
+                                    <span class="badge bg-secondary text-white">Snoozed</span>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="mb-3">
+                                <strong>Alert Type:</strong> {{ alert.alert_type|title }}
+                            </div>
+                            
+                            <div class="mb-3">
+                                <strong>Alert Subtype:</strong> {{ alert.alert_subtype|title if alert.alert_subtype else 'N/A' }}
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <strong>Created:</strong> {{ alert.created_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                            </div>
+                            
+                            {% if alert.acknowledged_at %}
+                            <div class="mb-3">
+                                <strong>Acknowledged:</strong> {{ alert.acknowledged_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                            </div>
+                            {% endif %}
+                            
+                            {% if alert.resolved_at %}
+                            <div class="mb-3">
+                                <strong>Resolved:</strong> {{ alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S') }}
+                            </div>
+                            {% endif %}
+                            
+                            {% if alert.snoozed_until %}
+                            <div class="mb-3">
+                                <strong>Snoozed Until:</strong> {{ alert.snoozed_until.strftime('%Y-%m-%d %H:%M:%S') }}
+                            </div>
+                            {% endif %}
+                            
+                            {% if alert.sla_timeline %}
+                            <div class="mb-3">
+                                <strong>SLA Timeline:</strong> {{ alert.sla_timeline }} hours
+                            </div>
+                            {% endif %}
+                            
+                            {% if alert.current_delay %}
+                            <div class="mb-3">
+                                <strong>Current Delay:</strong> {{ alert.current_delay }} hours
+                            </div>
+                            {% endif %}
+                            
+                            {% if alert.assigned_to %}
+                            <div class="mb-3">
+                                <strong>Assigned To:</strong> {{ alert.assigned_to }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    {% if alert.resolution_notes %}
+                    <div class="mt-4">
+                        <h6>Resolution Notes:</h6>
+                        <p>{{ alert.resolution_notes }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Notes History Card -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Notes & History</h6>
+                </div>
+                <div class="card-body">
+                    <!-- Add Note Form -->
+                    <div class="mb-4">
+                        <form id="addNoteForm" onsubmit="addNote(event, {{ alert.id }})">
+                            <div class="form-group">
+                                <label for="noteText"><strong>Add Note:</strong></label>
+                                <textarea class="form-control" id="noteText" name="note" rows="3" placeholder="Enter your note here..." required></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> Add Note
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <hr>
+                    
+                    <!-- Notes History Display -->
+                    <div>
+                        <h6><strong>History:</strong></h6>
+                        {% if alert.notes_history %}
+                            <div class="notes-history" style="max-height: 400px; overflow-y: auto; background-color: #f8f9fa; padding: 15px; border-radius: 5px; font-family: monospace; white-space: pre-wrap; font-size: 0.9em;">
+{{ alert.notes_history }}
+                            </div>
+                        {% else %}
+                            <p class="text-muted">No notes or history available yet.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Action Panel -->
+        <div class="col-lg-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Actions</h6>
+                </div>
+                <div class="card-body">
+                    {% if alert.status == 'active' %}
+                        <button type="button" class="btn btn-warning btn-block mb-3" onclick="acknowledgeAlert({{ alert.id }})">
+                            <i class="fas fa-check"></i> Acknowledge Alert
+                        </button>
+                        
+                        <button type="button" class="btn btn-success btn-block mb-3" onclick="resolveAlert({{ alert.id }})">
+                            <i class="fas fa-check-double"></i> Resolve Alert
+                        </button>
+                        
+                        <button type="button" class="btn btn-danger btn-block mb-3" onclick="escalateAlert({{ alert.id }})">
+                            <i class="fas fa-arrow-up"></i> Escalate Alert
+                        </button>
+                        
+                        <button type="button" class="btn btn-info btn-block mb-3" onclick="snoozeAlert({{ alert.id }})">
+                            <i class="fas fa-clock"></i> Snooze Alert
+                        </button>
+                    {% elif alert.status == 'acknowledged' %}
+                        <button type="button" class="btn btn-success btn-block mb-3" onclick="resolveAlert({{ alert.id }})">
+                            <i class="fas fa-check-double"></i> Resolve Alert
+                        </button>
+                        
+                        <button type="button" class="btn btn-danger btn-block mb-3" onclick="escalateAlert({{ alert.id }})">
+                            <i class="fas fa-arrow-up"></i> Escalate Alert
+                        </button>
+                        
+                        <button type="button" class="btn btn-info btn-block mb-3" onclick="snoozeAlert({{ alert.id }})">
+                            <i class="fas fa-clock"></i> Snooze Alert
+                        </button>
+                    {% else %}
+                        <div class="text-center">
+                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                            <p class="text-muted">Alert has been resolved</p>
+                        </div>
+                    {% endif %}
+                    
+                    <hr>
+                    
+                    <a href="{{ url_for('alerts.list_alerts') }}" class="btn btn-secondary btn-block">
+                        <i class="fas fa-list"></i> View All Alerts
+                    </a>
+                    
+                    <a href="{{ url_for('alerts.alert_dashboard') }}" class="btn btn-primary btn-block">
+                        <i class="fas fa-chart-bar"></i> Alert Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function acknowledgeAlert(alertId) {
+    fetch(`/alerts/${alertId}/acknowledge`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error acknowledging alert: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error acknowledging alert');
+    });
+}
+
+function resolveAlert(alertId) {
+    const notes = prompt('Please enter resolution notes:');
+    if (notes !== null) {
+        fetch(`/alerts/${alertId}/resolve`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({notes: notes})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error resolving alert: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error resolving alert');
+        });
+    }
+}
+
+function escalateAlert(alertId) {
+    if (confirm('Are you sure you want to escalate this alert?')) {
+        fetch(`/alerts/${alertId}/escalate`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error escalating alert: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error escalating alert');
+        });
+    }
+}
+
+function snoozeAlert(alertId) {
+    // Create guide message for periods over 48 hours
+    const guide = `\n\nConversion Guide (for periods > 48 hours):\n` +
+                  `3 Days = 72 Hours\n` +
+                  `4 Days = 96 Hours\n` +
+                  `5 Days = 120 Hours\n` +
+                  `6 Days = 144 Hours\n` +
+                  `7 Days = 168 Hours\n\n` +
+                  `You can enter: hours, days, or just numbers\n` +
+                  `Examples: "72", "72 hours", "3 days", "3d", "72h"`;
+    
+    const userInput = prompt(
+        'Enter snooze duration (1-168 hours / up to 7 days).\n' +
+        'Acceptable formats: hours, days, or just numbers\n' +
+        'Examples: "24", "72 hours", "3 days", "3d", "72h"\n' +
+        guide
+    );
+    
+    if (userInput === null) {
+        return; // User cancelled
+    }
+    
+    // Parse the input to extract hours
+    let hours = null;
+    const input = userInput.trim().toLowerCase();
+    
+    // Try to parse as number first (e.g., "72", "24")
+    const numberMatch = input.match(/^(\d+)$/);
+    if (numberMatch) {
+        hours = parseInt(numberMatch[1]);
+    } else {
+        // Try to parse with units
+        // Match patterns like "3 days", "3d", "72 hours", "72h", etc.
+        const daysMatch = input.match(/^(\d+)\s*(?:days?|d)$/);
+        const hoursMatch = input.match(/^(\d+)\s*(?:hours?|h)$/);
+        
+        if (daysMatch) {
+            hours = parseInt(daysMatch[1]) * 24;
+        } else if (hoursMatch) {
+            hours = parseInt(hoursMatch[1]);
+        } else {
+            // Try mixed format like "3 days 72 hours" - take the last number
+            const anyNumberMatch = input.match(/(\d+)/g);
+            if (anyNumberMatch) {
+                // Check if the input contains "day" or "d" to determine if it's days
+                if (input.includes('day') || input.includes('d')) {
+                    hours = parseInt(anyNumberMatch[anyNumberMatch.length - 1]) * 24;
+                } else {
+                    hours = parseInt(anyNumberMatch[anyNumberMatch.length - 1]);
+                }
+            }
+        }
+    }
+    
+    // Validate hours
+    if (hours === null || isNaN(hours) || hours < 1 || hours > 168) {
+        alert('Invalid input. Please enter a value between 1 and 168 hours (up to 7 days).\n\n' +
+              'Examples: "24", "72 hours", "3 days", "3d", "72h"');
+        return;
+    }
+    
+    // Send the snooze request
+    fetch(`/alerts/${alertId}/snooze`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({hours: hours})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error snoozing alert: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error snoozing alert');
+    });
+}
+
+function addNote(event, alertId) {
+    event.preventDefault();
+    const noteText = document.getElementById('noteText').value.trim();
+    
+    if (!noteText) {
+        alert('Please enter a note');
+        return;
+    }
+    
+    fetch(`/alerts/${alertId}/add-note`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        },
+        body: JSON.stringify({note: noteText})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error adding note: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error adding note');
+    });
+}
+</script>
+{% endblock %}

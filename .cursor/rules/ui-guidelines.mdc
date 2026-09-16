@@ -1,0 +1,64 @@
+---
+description: UI guidelines — modern finance app look and feel; dashboards, tables, forms, accessibility
+globs: "**/templates/**/*.html,**/static/**/*.css,**/static/**/*.js"
+alwaysApply: false
+---
+
+# UI Guidelines — Modern Finance App
+
+When editing **templates** or **static** (CSS/JS), keep the UI in sync with **modern finance applications**: clear data hierarchy, trustworthy presentation, accessible and responsive. Use the guidelines below; **read `docs/UI_GUIDELINES.md`** only when you need full patterns or examples.
+
+## Stack and consistency
+
+- **Jinja2 + Bootstrap 5** (already in use). Prefer Bootstrap components and utilities; add custom CSS only when needed. Reuse `base.html`; no one-off style soup.
+- **Shared app styles:** Use `static/css/app.css` for all list/detail/form screens: wrap content in **cards** (`card card-app`), use **tables** (`table table-app table-hover table-striped`), **action bars** (`action-bar`), **filter bars** (`filter-bar`), and **section titles** (`section-title`). Right-align numeric columns with `text-num`. This gives a consistent, modern look (cards with subtle shadow, readable table density, clear hierarchy).
+- **WCAG 2.1 Level AA** for client-facing UI. See `docs/ACCESSIBILITY_CHECKLIST.md`; semantic HTML, labels, focus, contrast, don’t rely on color alone.
+
+## Modern UI patterns (use these by default)
+
+- **List pages:** Page title (e.g. `h2`) + primary action button in a flex row; then a **filter card** (`card card-app`) with `card-header` "Filters" and form with `filter-bar`; then a **data card** with `card-header` and `table-responsive` + `table table-app table-hover table-striped`. Empty state: centered message + primary CTA inside the card.
+- **Detail pages:** Breadcrumb when nested (e.g. Client → Portfolio); title; **action bar** (`action-bar`: primary btn, outline btns, inline forms for POST). Group sections in **cards** (`card card-app`) with `card-header` for section title and table or content in `card-body`.
+- **Forms (add/edit):** Breadcrumb; title; single **card** (`card card-app`) with `card-header` "Details" and form in `card-body`. Use `form-label`, `form-control`, `form-select`; end with `action-bar` (primary submit + Cancel outline).
+- **Typography:** Use `h2` for page titles (with `mb-4`), `card-header` for section titles; avoid raw unstyled `<p>` for action rows—use `action-bar` or button groups.
+
+## Layout and nav
+
+- **Page title:** Every view has an `<h1>` (or equivalent) so users and assistive tech know where they are.
+- **Nav:** Clear labels, touch targets ≥ 44px, keyboard/screen-reader friendly. Keep current pattern (Dashboard, Clients, Workflows, etc.).
+
+## Dashboards and summaries
+
+- **Lead with what matters:** Most important number or status first. Use **summary cards** (number + short label ± trend). Group related metrics.
+- **Period/scope:** Where relevant, provide a period or scope selector (e.g. “This month”, “All”).
+- **Empty and loading:** Always handle empty state (message + primary action) and loading (skeleton or spinner). No blank areas.
+
+## Lists and tables
+
+- **Dynamic search/filter:** Search and filter inputs **must** update results **dynamically** (e.g. debounced form submit on input, or live API + DOM update). Do **not** require a separate “Search” button click; results should update as the user types (with a short debounce, e.g. 300–400 ms). Provide a “Clear” control when a filter is active. Keep an explicit Search button as fallback for accessibility (submit on Enter).
+- **Semantic tables:** `<thead>`, `<tbody>`, `<th scope="col">`. Sorting where it helps; horizontal scroll for many columns on small screens.
+- **Rows:** Readable density (min ~44px for touch); striped or subtle borders; **status = icon + text**, not color alone.
+- **Actions:** Row actions in a consistent place; `aria-label` on icon-only buttons.
+- **Empty:** Clear “No X yet” message and primary action (e.g. “Create …”).
+
+## Forms
+
+- **Labels:** Every input has a visible `<label>` (for/id or wrapping). Bootstrap: `form-label`, `form-control`, `form-select`.
+- **Validation:** Errors inline and announced (e.g. `role="alert"`, `aria-describedby`). One clear primary button; secondary actions visually secondary.
+
+## Trust and clarity (finance)
+
+- **Numbers (display only):** No decimal places in the UI — round for display; keep full precision in the backend for calculations. Use comma separators. Prefer Lakhs/Crore (e.g. "₹12.5 Lakh", "1.2 Cr") for large amounts; raw comma-separated numbers only for small or exact-display cases. Right-align in tables; clear currency/unit.
+- **Dates:** Consistent format; if relative (“2 days ago”), expose exact date (e.g. in `title` or beside it).
+- **Tone:** Professional, clear; signal security where relevant (2FA, logout). No misleading visual emphasis.
+
+## Responsive and touch
+
+- **Mobile-friendly:** Bootstrap grid; stack cards/tables on small screens; tables can become card-per-row on narrow if it helps.
+- **Global mobile stack:** All pages via `base.html` load `mobile-layout.css`, `mobile-ui.css`, `mobile-layout.js`. Follow **`docs/MOBILE_UI_DEVELOPER_CHECKLIST.md`** on every template/static change (Capacitor app uses the same files).
+- **Touch:** Buttons/links ≥ 44px tap target where possible; no hover-only critical actions.
+
+## When adding a new screen
+
+1. Reuse `base.html` and nav. 2. Add page title (`<h1>`). 3. Use Bootstrap and existing patterns. 4. Handle empty and loading. 5. Labels, errors, focus accessible. 6. Check responsive and touch. 7. If user-facing: run `python3 scripts/run_mobile_ui_check.py` per Mobile Optimiser gate.
+
+**Full doc:** `docs/UI_GUIDELINES.md`.

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}Submit Feedback{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <div class="page-title-right">
+                    <ol class="breadcrumb m-0">
+                        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('data_integrity.dashboard') }}">Data Integrity</a></li>
+                        <li class="breadcrumb-item active">Submit Feedback</li>
+                    </ol>
+                </div>
+                <h4 class="page-title">
+                    <i class="fas fa-lightbulb me-2"></i>Submit Feedback
+                </h4>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="header-title">Help Us Improve</h4>
+                    <p class="text-muted mb-0">
+                        Share your suggestions for improving the data integrity checks.
+                    </p>
+                </div>
+                <div class="card-body">
+                    <form action="{{ url_for('data_integrity.add_feedback') }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Category <span class="text-danger">*</span></label>
+                            <select name="category" class="form-select" required>
+                                <option value="">Select a category...</option>
+                                <option value="check_logic">Check Logic - The rule needs adjustment</option>
+                                <option value="false_positives">False Positives - Too many incorrect flags</option>
+                                <option value="missing_check">Missing Check - Something should be checked but isn't</option>
+                                <option value="ui_ux">UI/UX - Dashboard improvements</option>
+                                <option value="performance">Performance - Speed or efficiency issues</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Related Check (optional)</label>
+                            <select name="related_check" class="form-select">
+                                <option value="">None / General</option>
+                                {% for cat in categories %}
+                                <option value="{{ cat }}">{{ cat.replace('_', ' ').title() }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Title (optional)</label>
+                            <input type="text" name="title" class="form-control" 
+                                   placeholder="Brief summary of your feedback">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Description <span class="text-danger">*</span></label>
+                            <textarea name="description" class="form-control" rows="5" required
+                                      placeholder="Describe your suggestion in detail...
+
+For example:
+- What issue did you encounter?
+- What would you expect to happen instead?
+- How would this improvement help?"></textarea>
+                        </div>
+                        
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-paper-plane me-1"></i> Submit Feedback
+                            </button>
+                            <a href="{{ url_for('data_integrity.dashboard') }}" class="btn btn-outline-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="header-title">Tips for Good Feedback</h4>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Be specific about which check or feature
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Explain the current behavior
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Describe what you'd expect instead
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Include examples if possible
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check text-success me-2"></i>
+                            Mention affected clients/securities
+                        </li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h4 class="header-title">Example Feedback</h4>
+                </div>
+                <div class="card-body">
+                    <div class="bg-light p-2 rounded">
+                        <strong>Category:</strong> Check Logic<br>
+                        <strong>Related:</strong> CORPORATE_ACTION<br>
+                        <strong>Description:</strong><br>
+                        <small class="text-muted">
+                            "The corporate action check should verify if a transaction 
+                            with price=0 exists after the action date, which indicates 
+                            the bonus/split was applied manually. Currently it flags 
+                            even when we've already applied the action."
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

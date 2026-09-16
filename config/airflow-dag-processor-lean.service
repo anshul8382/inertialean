@@ -1,0 +1,24 @@
+[Unit]
+Description=Airflow DAG Processor - Inertia Lean VPS
+After=network.target
+
+[Service]
+Type=simple
+User=anshul
+Group=anshul
+WorkingDirectory=/tmp
+Environment=INERTIA_APP_DIR=/opt/Inertia2026v1
+Environment=AIRFLOW_HOME=/opt/Inertia2026v1/airflow
+Environment=AIRFLOW_CONFIG=/opt/Inertia2026v1/airflow/airflow.cfg
+Environment=AIRFLOW__CORE__EXECUTOR=SequentialExecutor
+Environment=AIRFLOW__CORE__DAGS_FOLDER=/opt/Inertia2026v1/airflow/dags
+Environment=AIRFLOW__LOGGING__BASE_LOG_FOLDER=/opt/Inertia2026v1/airflow/logs
+Environment=PATH=/opt/Inertia2026v1/airflow_venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/opt/Inertia2026v1/airflow_venv/bin/airflow dag-processor
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

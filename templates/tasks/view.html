@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Task: {{ task.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-clipboard-list"></i> {{ task.name }}</h1>
+        <div>
+            {% if task.status not in ['completed', 'cancelled'] and can_manage_tasks %}
+            <a href="{{ url_for('tasks.edit_task', task_id=task.id) }}" class="btn btn-primary">
+                <i class="fas fa-edit"></i> Edit
+            </a>
+            {% endif %}
+            <a href="{{ url_for('tasks.list_tasks') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Tasks
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Task Details</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6 class="font-weight-bold">Status</h6>
+                            <span class="badge {% if task.status == 'pending' %}bg-primary{% elif task.status == 'in_progress' %}bg-info{% elif task.status == 'snoozed' %}bg-secondary{% elif task.status == 'completed' %}bg-success{% else %}bg-dark{% endif %}">
+                                {{ task.status|replace('_', ' ')|title }}
+                            </span>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <h6 class="font-weight-bold">Priority</h6>
+                            <span class="badge {% if task.priority == 'high' %}bg-danger{% elif task.priority == 'medium' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                {{ task.priority|title }}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6 class="font-weight-bold">Deadline</h6>
+                            <p class="mb-0 {% if task.is_overdue and task.status not in ['completed', 'cancelled'] %}text-danger{% endif %}">
+                                {{ task.deadline.strftime('%Y-%m-%d %H:%M') }}
+                                {% if task.is_overdue and task.status not in ['completed', 'cancelled'] %}
+                                <span class="badge bg-danger">Overdue</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <h6 class="font-weight-bold">Assigned To</h6>
+                            <p class="mb-0">{{ task.assigned_user.username if task.assigned_user else 'Unassigned' }}</p>
+                        </div>
+                    </div>
+                    {% if task.client %}
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Related Client</h6>
+                        <p class="mb-0"><a href="{{ url_for('clients.client_details', client_id=task.client_id) }}">{{ task.client.name }}</a></p>
+                    </div>
+                    {% endif %}
+                    {% if recommendation_id %}
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Recommendation</h6>
+                        <p class="mb-0">
+                            <a href="{{ url_for('main.view_recommendation', id=recommendation_id) }}" class="btn btn-outline-primary btn-sm">
+                                <i class="fas fa-external-link-alt"></i> View recommendation #{{ recommendation_id }}
+                            </a>
+                        </p>
+                    </div>
+                    {% endif %}
+                    {% if task.notes %}
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Notes</h6>
+                        <p class="mb-0">{{ task.notes }}</p>
+                    </div>
+                    {% endif %}
+                    {% if task.status not in ['completed', 'cancelled'] %}
+                    <div class="mb-3 pt-3 border-top">
+                        <h6 class="font-weight-bold">Google Calendar</h6>
+                        {% if gcal_oauth_configured %}
+                            {% if calendar_connected_for_assignee %}
+                            <p class="small text-muted mb-2">The assignee has connected Google Calendar; the <strong>deadline</strong> syncs as a calendar event whose Google reminders are <strong>10 minutes, 1 hour, and 1 day before the due time</strong> (Google’s API applies reminders relative to that event’s start). If you set an Inertia <strong>reminder</strong> below, a second “Reminder · …” event is created at that time with Google popup and email at that moment.</p>
+                            {% elif task.assignee %}
+                            <p class="small text-muted mb-2">The assignee (<strong>{{ task.assignee.username }}</strong>) can connect Google Calendar under <a href="{{ url_for('settings.index') }}">Settings</a> so deadlines sync automatically.</p>
+                            {% else %}
+                            <p class="small text-muted mb-2">Assign this task to someone who has connected Google Calendar under Settings for automatic deadline sync.</p>
+                            {% endif %}
+                        {% else %}
+                            <p class="small text-muted mb-2">Automatic calendar sync is not configured (set <code>GOOGLE_CALENDAR_CLIENT_ID</code> and <code>GOOGLE_CALENDAR_CLIENT_SECRET</code> on the server).</p>
+                        {% endif %}
+                        {% if gcal_template_url %}
+                        <a href="{{ gcal_template_url }}" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener noreferrer">
+                            <i class="fab fa-google"></i> Add to Google Calendar (browser)
+                        </a>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3 pt-2">
+                        <h6 class="font-weight-bold">Google Tasks</h6>
+                        {% if gcal_oauth_configured %}
+                            {% if calendar_connected_for_assignee %}
+                            <p class="small text-muted mb-0">The assignee has connected Google under Settings; this task is also kept in their <strong>default Google Tasks</strong> list (title prefixed with “Inertia ·”) when saved, with due date and a link back here.</p>
+                            {% elif task.assignee %}
+                            <p class="small text-muted mb-0">The assignee (<strong>{{ task.assignee.username }}</strong>) can connect Google under <a href="{{ url_for('settings.index') }}">Settings</a> so tasks sync to Google Tasks automatically.</p>
+                            {% else %}
+                            <p class="small text-muted mb-0">Assign this task to someone who has connected Google under Settings for automatic Google Tasks sync.</p>
+                            {% endif %}
+                        {% else %}
+                            <p class="small text-muted mb-0">Automatic Google Tasks sync uses the same server configuration as Calendar (<code>GOOGLE_CALENDAR_CLIENT_ID</code> / <code>SECRET</code>).</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    <div class="row text-muted small">
+                        <div class="col-md-6">Created by {{ task.creator.username if task.creator else 'Unknown' }} on {{ task.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                        {% if task.completed_at %}
+                        <div class="col-md-6">Completed by {{ task.completed_by_user.username if task.completed_by_user else 'Unknown' }} on {{ task.completed_at.strftime('%Y-%m-%d %H:%M') }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            {% if task.status not in ['completed', 'cancelled'] %}
+            <!-- Snooze -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Snooze</h6>
+                </div>
+                <div class="card-body">
+                    {% if task.status == 'snoozed' %}
+                    <p class="mb-2"><span class="badge bg-secondary">Snoozed</span></p>
+                    <p class="small text-muted mb-2">Until {{ task.snoozed_until.strftime('%Y-%m-%d %H:%M') }}</p>
+                    {% if task.snooze_reason %}<p class="small mb-3">{{ task.snooze_reason }}</p>{% endif %}
+                    <form method="POST" action="{{ url_for('tasks.unsnooze_task', task_id=task.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-primary btn-sm">Unsnooze</button>
+                    </form>
+                    {% else %}
+                    <form method="POST" action="{{ url_for('tasks.snooze_task', task_id=task.id) }}">
+                        {{ snooze_form.hidden_tag() }}
+                        <div class="mb-3">
+                            {{ snooze_form.snoozed_until.label(class="form-label") }}
+                            {{ snooze_form.snoozed_until(class="form-control") }}
+                        </div>
+                        <div class="mb-3">
+                            {{ snooze_form.snooze_reason.label(class="form-label") }}
+                            {{ snooze_form.snooze_reason(class="form-control", rows=2) }}
+                        </div>
+                        {{ snooze_form.submit(class="btn btn-outline-secondary btn-sm") }}
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Reminder -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Reminder</h6>
+                </div>
+                <div class="card-body">
+                    {% if task.reminder_at %}
+                    <p class="mb-2">
+                        {% if task.reminder_sent %}
+                        <span class="badge bg-secondary">Sent</span>
+                        {% else %}
+                        <span class="badge bg-info">{{ task.reminder_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                        {% endif %}
+                    </p>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('tasks.set_reminder', task_id=task.id) }}">
+                        {{ reminder_form.hidden_tag() }}
+                        <div class="mb-3">
+                            {{ reminder_form.reminder_at.label(class="form-label") }}
+                            {{ reminder_form.reminder_at(class="form-control") }}
+                        </div>
+                        {{ reminder_form.submit(class="btn btn-outline-info btn-sm") }}
+                    </form>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Actions</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('tasks.complete_task', task_id=task.id) }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-success btn-sm"><i class="fas fa-check"></i> Mark Complete</button>
+                    </form>
+                    {% if can_manage_tasks %}
+                    <form method="POST" action="{{ url_for('tasks.cancel_task', task_id=task.id) }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fas fa-times"></i> Cancel</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}Proposal — {{ lead.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <h1 class="h3 mb-0">Proposal — {{ lead.name }}</h1>
+        <a href="{{ url_for('leads.view_lead', lead_id=lead.id) }}" class="btn btn-secondary btn-sm">Back to lead</a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Details &amp; write-up</h6>
+                </div>
+                <div class="card-body">
+                    {% if risk_display %}
+                    <div class="alert alert-info small py-2">
+                        <strong>Risk profile (auto-included in DOCX):</strong>
+                        {{ risk_display.summary_line }}
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning small py-2">
+                        No risk quiz on file yet. Generate after the client submits so the evaluated profile is included.
+                    </div>
+                    {% endif %}
+                    <form method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label class="form-label" for="title">Title</label>
+                            <input class="form-control" id="title" name="title"
+                                   value="{{ proposal.title if proposal else 'Investment Proposal' }}">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label" for="aum">Approx. AUM / corpus</label>
+                                <input class="form-control" id="aum" name="aum"
+                                       value="{{ (proposal.details_json or {}).get('aum', '') if proposal else '' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label" for="fee">Fee</label>
+                                <input class="form-control" id="fee" name="fee"
+                                       value="{{ (proposal.details_json or {}).get('fee', '') if proposal else '' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label" for="horizon">Horizon</label>
+                                <input class="form-control" id="horizon" name="horizon"
+                                       value="{{ (proposal.details_json or {}).get('horizon', '') if proposal else '' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label" for="objective">Objective</label>
+                                <input class="form-control" id="objective" name="objective"
+                                       value="{{ (proposal.details_json or {}).get('objective', '') if proposal else '' }}">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="writeup_text">Write-up (paste from Gem)</label>
+                            <textarea class="form-control" id="writeup_text" name="writeup_text" rows="14"
+                                      placeholder="Paste proposal narrative from Google Gem…">{{ proposal.writeup_text if proposal else '' }}</textarea>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button type="submit" name="action" value="save" class="btn btn-outline-primary">Save draft</button>
+                            <button type="submit" name="action" value="generate" class="btn btn-primary">Generate DOCX</button>
+                            {% if proposal and proposal.docx_path and proposal.status in ['generated', 'draft'] %}
+                            <button type="submit" name="action" value="submit_approval" class="btn btn-warning">Submit for approval</button>
+                            {% endif %}
+                            {% if proposal and proposal.status == 'pending_approval' and can_user_approve %}
+                            <button type="submit" name="action" value="approve" class="btn btn-success">Approve</button>
+                            {% endif %}
+                            {% if proposal and send_ok %}
+                            <button type="submit" name="action" value="send_email" class="btn btn-success">Email to client</button>
+                            {% endif %}
+                        </div>
+                        {% if proposal and send_block and proposal.status != 'sent' %}
+                        <p class="small text-muted mt-2 mb-0">{{ send_block }}</p>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+            {% if risk_display and risk_display.answer_rows %}
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Risk answers &amp; evaluation</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled small mb-2">
+                        {% for row in risk_display.answer_rows %}
+                        <li class="mb-1"><span class="text-muted">{{ row.label }}:</span> {{ row.value }}</li>
+                        {% endfor %}
+                    </ul>
+                    <p class="mb-0"><strong>{{ risk_display.summary_line }}</strong></p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="col-lg-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Gem handoff</h6>
+                </div>
+                <div class="card-body">
+                    <a href="{{ gem_url }}" target="_blank" rel="noopener" class="btn btn-outline-info btn-sm mb-3">Open Google Gem</a>
+                    <p class="small text-muted">Auto-built from lead notes, calls, meetings, risk quiz, and proposal fields. Copy into the Gem, then paste the write-up back here.</p>
+                    <textarea class="form-control form-control-sm" id="gemBrief" rows="16" readonly>{{ gem_brief }}</textarea>
+                    <button type="button" class="btn btn-sm btn-secondary mt-2" onclick="navigator.clipboard.writeText(document.getElementById('gemBrief').value)">Copy brief</button>
+                </div>
+            </div>
+            {% if proposal %}
+            <div class="card shadow mb-4">
+                <div class="card-body">
+                    <p class="mb-1"><strong>Status:</strong> {{ proposal.status }}</p>
+                    {% if (proposal.details_json or {}).get('approved_by') %}
+                    <p class="small text-muted mb-1">Approved by user #{{ (proposal.details_json or {}).get('approved_by') }}
+                        {% if (proposal.details_json or {}).get('approved_at') %}
+                        at {{ (proposal.details_json or {}).get('approved_at') }}
+                        {% endif %}
+                    </p>
+                    {% endif %}
+                    <p class="small text-muted">Client email uses MAIL_USERNAME (same as recommendations).</p>
+                    {% if proposal.docx_path %}
+                    <a class="btn btn-sm btn-primary" href="{{ url_for('leads.download_lead_proposal', lead_id=lead.id) }}">Download DOCX</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

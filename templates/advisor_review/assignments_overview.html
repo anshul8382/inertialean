@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}{% if sees_all_assignments %}Advisor–client assignments{% else %}My client assignments{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-2">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+      <h1 class="h3 mb-1">{% if sees_all_assignments %}Advisor–client assignments{% else %}My client assignments{% endif %}</h1>
+      <p class="text-muted mb-0 small">
+        {% if is_admin %}
+        Full roster — open Advisor Review for per-advisor performance details
+        {% elif can_manage_assignments %}
+        All advisor ↔ client assignments (no performance metrics)
+        {% else %}
+        Your assigned clients only — view only (no performance metrics)
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      {% if is_admin %}
+      <a href="{{ url_for('advisor_review.dashboard') }}" class="btn btn-outline-primary btn-sm">
+        <i class="fas fa-chart-bar"></i> Advisor Review (metrics)
+      </a>
+      {% endif %}
+      {% if can_manage_assignments %}
+      <a href="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients') }}" class="btn btn-primary btn-sm">
+        <i class="fas fa-user-tag"></i> Manage assignments
+      </a>
+      {% else %}
+      <span class="badge bg-light text-muted border align-self-center">View only</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if sees_all_assignments and overview.unassigned_clients %}
+  <div class="card border-0 shadow-sm mb-4 border-warning">
+    <div class="card-header bg-white fw-semibold text-warning-emphasis">
+      Unassigned clients
+      {% if can_manage_assignments %}
+      <a class="small fw-normal ms-2" href="{{ url_for('main.maintenance_client_advisor_assignments', tab='clients', unassigned=1) }}">Assign now</a>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      <ul class="mb-0 list-unstyled d-flex flex-wrap gap-2">
+        {% for c in overview.unassigned_clients %}
+        <li>
+          {% if can_manage_assignments %}
+          <a class="badge bg-warning text-dark text-decoration-none" href="{{ url_for('clients.client_details', client_id=c.id) }}">{{ c.name }}</a>
+          {% else %}
+          <span class="badge bg-warning text-dark">{{ c.name }}</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="row g-3">
+    {% for g in overview.groups %}
+    <div class="col-md-6 col-xl-4">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-header bg-white">
+          <span class="fw-semibold">{% if sees_all_assignments %}{{ g.advisor_name }}{% else %}{{ g.advisor_name }} (you){% endif %}</span>
+        </div>
+        <div class="card-body py-2">
+          {% if g.clients %}
+          <ul class="list-unstyled mb-0 small">
+            {% for c in g.clients %}
+            <li class="py-1 border-bottom border-light">
+              {% if can_manage_assignments or (not sees_all_assignments) %}
+              <a href="{{ url_for('clients.client_details', client_id=c.id) }}">{{ c.name }}</a>
+              {% else %}
+              {{ c.name }}
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <p class="text-muted small mb-0">No active clients</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body text-muted">No advisor assignments yet.</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

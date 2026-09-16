@@ -1,0 +1,7 @@
+# Security Audit Agent — suppression list
+# One check_id per line. Lines starting with '#' are comments.
+# A finding is suppressed only if its check_id matches an entry exactly.
+# Use sparingly and add a comment explaining WHY the risk is accepted.
+#
+# Example:
+# SEC-EXT-005   # CSRF exempt on auth_api_bp: JWT-only blueprint, no session cookies in scope

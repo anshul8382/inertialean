@@ -1,0 +1,400 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Edit Security Model</h1>
+        <div>
+            <a href="{{ url_for('main.models') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Models
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Edit Security Model Details</h6>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="mb-3">
+                    <label for="name" class="form-label">Name</label>
+                    <input type="text" class="form-control" id="name" name="name" value="{{ model.name }}" required>
+                </div>
+
+                <div class="mb-3">
+                    <label for="description" class="form-label">Description</label>
+                    <textarea class="form-control" id="description" name="description" rows="3">{{ model.description }}</textarea>
+                </div>
+
+                <div class="mb-3">
+                    <label for="asset_class_id" class="form-label">Asset Class</label>
+                    <select class="form-control" id="asset_class_id" name="asset_class_id" required>
+                        {% for asset_class in asset_classes %}
+                        <option value="{{ asset_class.id }}" {% if asset_class.id == model.asset_class_id %}selected{% endif %}>
+                            {{ asset_class.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+
+
+                <h5 class="mt-4 mb-3">
+                    Security Allocations 
+                    <span class="badge bg-primary" id="allocations-count">{{ allocations|length }}</span>
+                </h5>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> 
+                    <strong>Instructions:</strong> Select stocks from the dropdown and set allocation percentages. Total must equal 100%. 
+                    You can also set minimum and maximum allocation constraints.
+                </div>
+                
+                <div id="security-allocations">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="allocations-table">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Stock</th>
+                                    <th>Allocation %</th>
+                                    <th>Min %</th>
+                                    <th>Max %</th>
+                                    <th>Current Price</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="allocations-tbody">
+                                <!-- Existing allocations will be loaded here -->
+                                {% for allocation in allocations %}
+                                <tr class="allocation-row">
+                                    <td>
+                                        <select class="form-control security-select" name="security_id[]" required>
+                                            <option value="">Select Stock</option>
+                                            {% for security in securities %}
+                                            <option value="{{ security.id }}" 
+                                                    data-price="{{ security.current_price or 0 }}"
+                                                    data-symbol="{{ security.symbol }}"
+                                                    data-name="{{ security.name }}"
+                                                    {% if security.id == allocation[0] %}selected{% endif %}>
+                                                {{ security.symbol }} - {{ security.name }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="number" class="form-control allocation-input" 
+                                               name="allocation_percentage[]" step="0.01" min="0" max="100"
+                                               value="{{ allocation[1] }}" onchange="updateTotalAllocation()">
+                                    </td>
+                                    <td>
+                                        <input type="number" class="form-control" 
+                                               name="min_allocation[]" step="0.01" min="0" max="100"
+                                               value="{{ allocation[2] or '' }}">
+                                    </td>
+                                    <td>
+                                        <input type="number" class="form-control" 
+                                               name="max_allocation[]" step="0.01" min="0" max="100"
+                                               value="{{ allocation[3] or '' }}">
+                                    </td>
+                                    <td class="price-cell">
+                                        {% set security = securities|selectattr('id', 'equalto', allocation[0])|first %}
+                                        {% if security and security.current_price %}
+                                            ₹{{ "%.2f"|format(security.current_price) }}
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-success" onclick="addRow()">
+                            <i class="fas fa-plus"></i> Add Stock
+                        </button>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <strong>Total Allocation: <span id="total-allocation">0</span>%</strong>
+                        <br><small>Target: 100% | Remaining: <span id="remaining-allocation">100</span>%</small>
+                        <br><button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="autoDistribute()">
+                            <i class="fas fa-magic"></i> Auto-Distribute Remaining
+                        </button>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <a href="{{ url_for('main.models') }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize total allocation display
+    updateTotalAllocation();
+    
+    // Add event listeners for dynamic content
+    setupEventListeners();
+    
+    function setupEventListeners() {
+        // Add validation for total allocation
+        const allocationInputs = document.querySelectorAll('.allocation-input');
+        allocationInputs.forEach(input => {
+            input.addEventListener('change', updateTotalAllocation);
+        });
+        
+        // Add event listeners for security selects
+        const securitySelects = document.querySelectorAll('.security-select');
+        securitySelects.forEach(select => {
+            select.addEventListener('change', updatePriceCell);
+        });
+    }
+
+    function updateTotalAllocation() {
+        const allocationInputs = document.querySelectorAll('.allocation-input');
+        let total = 0;
+        allocationInputs.forEach(input => {
+            total += parseFloat(input.value || 0);
+        });
+        
+        document.getElementById('total-allocation').textContent = total.toFixed(2);
+        document.getElementById('remaining-allocation').textContent = (100 - total).toFixed(2);
+        
+        // Update color based on total
+        const totalElement = document.getElementById('total-allocation');
+        if (Math.abs(total - 100) < 0.01) {
+            totalElement.style.color = 'green';
+        } else if (total > 100) {
+            totalElement.style.color = 'red';
+        } else {
+            totalElement.style.color = 'orange';
+        }
+    }
+
+    function updatePriceCell(event) {
+        const select = event.target;
+        const row = select.closest('tr');
+        const priceCell = row.querySelector('.price-cell');
+        const selectedOption = select.options[select.selectedIndex];
+        
+        if (selectedOption.value) {
+            const price = selectedOption.getAttribute('data-price');
+            if (price && price !== '0') {
+                priceCell.innerHTML = '₹' + parseFloat(price).toFixed(2);
+            } else {
+                priceCell.innerHTML = '<span class="text-muted">N/A</span>';
+            }
+            
+            // Check for duplicate selections
+            checkForDuplicates(select);
+        } else {
+            priceCell.innerHTML = '<span class="text-muted">N/A</span>';
+        }
+    }
+    
+    function checkForDuplicates(changedSelect) {
+        const selectedValue = changedSelect.value;
+        const allSelects = document.querySelectorAll('.security-select');
+        let duplicateCount = 0;
+        
+        allSelects.forEach(select => {
+            if (select.value === selectedValue && select.value !== '') {
+                duplicateCount++;
+            }
+        });
+        
+        // If there are duplicates, highlight them
+        allSelects.forEach(select => {
+            if (select.value === selectedValue && select.value !== '') {
+                if (duplicateCount > 1) {
+                    select.style.borderColor = 'red';
+                    select.style.backgroundColor = '#ffe6e6';
+                } else {
+                    select.style.borderColor = '';
+                    select.style.backgroundColor = '';
+                }
+            }
+        });
+        
+        // Show warning if duplicates found
+        const warningDiv = document.getElementById('duplicate-warning');
+        if (duplicateCount > 1) {
+            if (!warningDiv) {
+                const warning = document.createElement('div');
+                warning.id = 'duplicate-warning';
+                warning.className = 'alert alert-danger mt-2';
+                warning.innerHTML = '<i class="fas fa-exclamation-triangle"></i> <strong>Warning:</strong> You have selected the same stock multiple times. Please remove duplicates.';
+                document.getElementById('security-allocations').insertBefore(warning, document.querySelector('.alert.alert-warning'));
+            }
+        } else {
+            if (warningDiv) {
+                warningDiv.remove();
+            }
+        }
+    }
+
+    function validateTotalAllocation() {
+        const allocationInputs = document.querySelectorAll('.allocation-input');
+        let total = 0;
+        allocationInputs.forEach(input => {
+            total += parseFloat(input.value || 0);
+        });
+        
+        if (Math.abs(total - 100) > 0.01) {
+            alert('Total allocation must equal 100%. Current total: ' + total.toFixed(2) + '%');
+            return false;
+        }
+        return true;
+    }
+
+    // Validate form before submission
+    document.querySelector('form').addEventListener('submit', function(e) {
+        if (!validateTotalAllocation()) {
+            e.preventDefault();
+            return;
+        }
+        
+        // Check for duplicate stock selections
+        const selectedStocks = [];
+        const securitySelects = document.querySelectorAll('.security-select');
+        let hasDuplicates = false;
+        
+        securitySelects.forEach(select => {
+            if (select.value && select.value !== '') {
+                if (selectedStocks.includes(select.value)) {
+                    hasDuplicates = true;
+                } else {
+                    selectedStocks.push(select.value);
+                }
+            }
+        });
+        
+        if (hasDuplicates) {
+            alert('Please remove duplicate stock selections before saving.');
+            e.preventDefault();
+            return;
+        }
+        
+        // Check if at least one stock is selected
+        if (selectedStocks.length === 0) {
+            alert('Please select at least one stock for the model.');
+            e.preventDefault();
+            return;
+        }
+    });
+    
+    // Auto-distribute remaining allocation
+    window.autoDistribute = function() {
+        const allocationInputs = document.querySelectorAll('.allocation-input');
+        let total = 0;
+        let filledInputs = 0;
+        
+        allocationInputs.forEach(input => {
+            const value = parseFloat(input.value || 0);
+            total += value;
+            if (value > 0) filledInputs++;
+        });
+        
+        const remaining = 100 - total;
+        if (remaining > 0 && filledInputs > 0) {
+            const perInput = remaining / filledInputs;
+            allocationInputs.forEach(input => {
+                const value = parseFloat(input.value || 0);
+                if (value > 0) {
+                    input.value = (value + perInput).toFixed(2);
+                }
+            });
+            updateTotalAllocation();
+        }
+    };
+    
+    // Add new row
+    window.addRow = function() {
+        const tbody = document.getElementById('allocations-tbody');
+        const newRow = document.createElement('tr');
+        newRow.className = 'allocation-row';
+        
+        // Get the securities data from the first existing select (if any)
+        const firstSelect = document.querySelector('.security-select');
+        let securitiesOptions = '';
+        if (firstSelect) {
+            securitiesOptions = firstSelect.innerHTML;
+        } else {
+            // Fallback if no existing selects
+            securitiesOptions = '<option value="">Select Stock</option>';
+        }
+        
+        newRow.innerHTML = `
+            <td>
+                <select class="form-control security-select" name="security_id[]" required>
+                    ${securitiesOptions}
+                </select>
+            </td>
+            <td>
+                <input type="number" class="form-control allocation-input" 
+                       name="allocation_percentage[]" step="0.01" min="0" max="100"
+                       value="0" onchange="updateTotalAllocation()">
+            </td>
+            <td>
+                <input type="number" class="form-control" 
+                       name="min_allocation[]" step="0.01" min="0" max="100"
+                       value="">
+            </td>
+            <td>
+                <input type="number" class="form-control" 
+                       name="max_allocation[]" step="0.01" min="0" max="100"
+                       value="">
+            </td>
+            <td class="price-cell">
+                <span class="text-muted">N/A</span>
+            </td>
+            <td>
+                <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        
+        tbody.appendChild(newRow);
+        
+        // Add event listeners to the new row
+        const newSelect = newRow.querySelector('.security-select');
+        const newInput = newRow.querySelector('.allocation-input');
+        
+        newSelect.addEventListener('change', updatePriceCell);
+        newInput.addEventListener('change', updateTotalAllocation);
+        
+        updateAllocationsCount();
+    };
+    
+    // Remove row
+    window.removeRow = function(button) {
+        const row = button.closest('tr');
+        row.remove();
+        updateTotalAllocation();
+        updateAllocationsCount();
+    };
+    
+    function updateAllocationsCount() {
+        const rows = document.querySelectorAll('.allocation-row');
+        const countElement = document.getElementById('allocations-count');
+        if (countElement) {
+            countElement.textContent = rows.length;
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,1567 @@
+{% extends "base.html" %}
+
+{% block title %}Practice Analytics{% endblock %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Practice analytics' %}
+  {% set mobile_back_url = url_for('main.dashboard') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <div class="im-metric-grid mb-3">
+    <div class="im-metric-tile"><span class="im-metric-tile__label">Clients</span><span class="im-metric-tile__value">{{ total_clients }}</span></div>
+    <div class="im-metric-tile"><span class="im-metric-tile__label">AUM</span><span class="im-metric-tile__value">₹{{ "{:,.0f}".format(total_current_value) if total_current_value else 0 }}</span></div>
+  </div>
+  {% if total_clients > 0 and user_is_admin %}
+  <a href="{{ url_for('main.download_practice_analytics') }}" class="im-settings-link"><i class="fas fa-download"></i><span>Download masked data (Excel)</span><i class="fas fa-chevron-right text-muted"></i></a>
+  {% endif %}
+  <p class="text-muted small mt-2">Charts and detailed breakdowns below — scroll on phone or use desktop for full analytics.</p>
+</div>
+<div class="im-desktop-only container-fluid">
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-chart-pie"></i> Practice Analytics Dashboard</h1>
+        <div class="d-flex align-items-center gap-3">
+            <div class="text-muted">
+                <i class="fas fa-users"></i> Active clients: <strong>{{ total_clients }}</strong>
+            </div>
+            {% if total_clients > 0 %}
+            <button class="btn btn-success btn-sm" onclick="downloadAllCharts()" title="Download all charts as images">
+                <i class="fas fa-images"></i> Download All Charts
+            </button>
+            {% endif %}
+            {% if user_is_admin %}
+            <a href="{{ url_for('main.download_practice_analytics') }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-download"></i> Download masked data (Excel)
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    
+    {% if total_clients > 0 %}
+    <!-- Key Metrics Row -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Current Value
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                ₹{{ "{:,.0f}".format(total_current_value) if total_current_value else 0 }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-rupee-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Total Invested
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                ₹{{ "{:,.0f}".format(total_invested_all) if total_invested_all else 0 }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-piggy-bank fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Wealth Generated
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold {% if total_wealth_generated >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                ₹{{ "{:,.0f}".format(total_wealth_generated) if total_wealth_generated else 0 }}
+                            </div>
+                            <small class="text-muted">Current Value - Total Invested</small>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-line fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Return %
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold {% if total_wealth_generated >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {% if total_invested_all > 0 %}
+                                    {{ "{:.2f}".format((total_wealth_generated / total_invested_all) * 100) }}%
+                                {% else %}
+                                    0.00%
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">Wealth Generated / Total Invested</small>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-percentage fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if total_clients == 0 %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i> No clients found. Add clients to see analytics.
+    </div>
+    {% else %}
+
+    <!-- Growth: Last 12 Months -->
+    <div class="row mb-2">
+        <div class="col-12">
+            <h5 class="text-gray-700"><i class="fas fa-chart-area"></i> Growth — Last 12 Months</h5>
+            <p class="text-muted small mb-0">
+                New clients use first cashflow date in the rolling 12 months. AUA panel sums current portfolio value (holdings) for those clients. Monthly investment chart shows Dec 2025 onwards; Dec 2027 endpoint uses last 6-month avg run rate (dotted bars: projected AUM and gap).
+            </p>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-xl-4 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-user-plus"></i> New Clients Added
+                    </h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="downloadChart('newClientsChart', 'New_Clients_Last_12_Months')" title="Download as image">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+                <div class="card-body d-flex flex-column" style="position: relative;">
+                    <div style="position: relative; height: 240px; flex-shrink: 0;">
+                        <canvas id="newClientsChart"></canvas>
+                    </div>
+                    <div class="row no-gutters mt-3 pt-3 border-top">
+                        <div class="col-6 border-right">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total (12 mo)</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ new_clients_12m_count }}</div>
+                        </div>
+                        <div class="col-6 pl-3">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Avg / month</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ "{:.1f}".format(new_clients_avg_per_month) }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-rupee-sign"></i> AUA Added by New Clients
+                    </h6>
+                    <small class="text-muted">First cashflow in last 12 months</small>
+                </div>
+                <div class="card-body d-flex flex-column justify-content-center">
+                    <div class="mb-4">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Total current AUA</div>
+                        <div class="h4 mb-0 font-weight-bold text-gray-800">
+                            ₹{{ "{:,.0f}".format(new_clients_12m_aua_total) if new_clients_12m_aua_total else 0 }}
+                        </div>
+                    </div>
+                    <div class="row no-gutters">
+                        <div class="col-6 border-right">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Clients</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ new_clients_12m_count }}</div>
+                        </div>
+                        <div class="col-6 pl-3">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Avg AUA</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                ₹{{ "{:,.0f}".format(new_clients_12m_aua_avg) if new_clients_12m_aua_avg else 0 }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4 col-lg-12 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-calendar-alt"></i> Monthly Investment (Completed)
+                    </h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="downloadChart('monthlyInvestmentChart', 'Monthly_Investment_Last_12_Months')" title="Download as image">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+                <div class="card-body d-flex flex-column" style="position: relative;">
+                    <div style="position: relative; height: 280px; flex-shrink: 0;">
+                        <canvas id="monthlyInvestmentChart"></canvas>
+                    </div>
+                    <div class="row no-gutters mt-3 pt-3 border-top">
+                        <div class="col-6 border-right">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Avg / month</div>
+                            <div class="text-muted text-xs mb-1">{{ monthly_investment_period_label|default('Dec 2025 onwards') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                ₹{{ "{:,.0f}".format(monthly_investment_12m_avg) if monthly_investment_12m_avg else 0 }}
+                            </div>
+                        </div>
+                        <div class="col-6 pl-3">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Median / month</div>
+                            <div class="text-muted text-xs mb-1">{{ monthly_investment_period_label|default('Dec 2025 onwards') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                ₹{{ "{:,.0f}".format(monthly_investment_12m_median) if monthly_investment_12m_median else 0 }}
+                            </div>
+                        </div>
+                    </div>
+                    {% set proj = monthly_investment_projection %}
+                    {% if proj %}
+                    <div class="row no-gutters mt-3 pt-3 border-top">
+                        <div class="col-12 mb-2">
+                            <div class="text-xs font-weight-bold text-secondary text-uppercase">
+                                Path to ₹100 Cr — {{ proj.target_label }}
+                            </div>
+                            <div class="text-muted text-xs">
+                                Current AUA (₹{{ "{:,.0f}".format(proj.current_aua) }}) + {{ proj.projection_run_rate_label|default('Last 6 months') }} avg monthly investment; no market return.
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3 border-right mb-2 mb-md-0">
+                            <div class="text-xs text-muted">Projected AUA</div>
+                            <div class="font-weight-bold text-gray-800">₹{{ "{:,.0f}".format(proj.projected_aua) }}</div>
+                        </div>
+                        <div class="col-6 col-md-3 border-right mb-2 mb-md-0 pl-md-3">
+                            <div class="text-xs text-muted">Target</div>
+                            <div class="font-weight-bold text-gray-800">₹{{ "{:,.0f}".format(proj.target_inr) }}</div>
+                        </div>
+                        <div class="col-6 col-md-3 border-right pl-md-3">
+                            <div class="text-xs text-muted">Gap (total)</div>
+                            <div class="font-weight-bold {% if proj.gap_total > 0 %}text-danger{% else %}text-success{% endif %}">
+                                {% if proj.gap_total > 0 %}
+                                ₹{{ "{:,.0f}".format(proj.gap_total) }} short
+                                {% else %}
+                                ₹{{ "{:,.0f}".format(-proj.gap_total) }} ahead
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3 pl-md-3">
+                            <div class="text-xs text-muted">Gap (monthly)</div>
+                            <div class="font-weight-bold {% if proj.gap_monthly > 0 %}text-danger{% else %}text-success{% endif %}">
+                                {% if proj.gap_monthly > 0 %}
+                                +₹{{ "{:,.0f}".format(proj.gap_monthly) }} / mo needed
+                                {% else %}
+                                On track
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Row 1: Age, Industry, Designation -->
+    <div class="row">
+        <!-- Age Group Distribution -->
+        <div class="col-xl-4 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-birthday-cake"></i> Client Distribution by Age Group
+                    </h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="downloadChart('ageChart', 'Age_Group_Distribution')" title="Download as image">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="ageChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Industry Distribution -->
+        <div class="col-xl-4 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-industry"></i> Client Distribution by Industry
+                    </h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="downloadChart('industryChart', 'Industry_Distribution')" title="Download as image">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="industryChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Designation Distribution (Pie Chart) -->
+        <div class="col-xl-4 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-briefcase"></i> Client Distribution by Designation
+                    </h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="downloadChart('designationChart', 'Designation_Distribution')" title="Download as image">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="designationChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Designation Word Cloud -->
+        <div class="col-xl-4 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-cloud"></i> Designation Word Cloud
+                    </h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="downloadWordCloud('designationWordCloud', 'Designation_Word_Cloud')" title="Download as image">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px; overflow-x: auto; overflow-y: visible;">
+                    <div id="designationWordCloud" style="width: 150%; height: 100%; overflow: visible; white-space: normal; word-wrap: break-word;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 2: Engagement Type, Asset Class -->
+    <div class="row">
+        <!-- Type of Engagement -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-handshake"></i> Type of Engagement Distribution
+                    </h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="downloadChart('engagementChart', 'Engagement_Distribution')" title="Download as image">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="engagementChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Asset Class Distribution -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-chart-bar"></i> Distribution by Asset Class
+                    </h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="downloadChart('assetClassChart', 'Asset_Class_Distribution')" title="Download as image">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="assetClassChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Row 3: Client Aging, Acquired vs Built -->
+    <div class="row">
+        <!-- Client Aging Metrics -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-clock"></i> Client Aging Metrics (First Cashflow to Today)
+                    </h6>
+                    <small class="text-muted d-block mt-1">
+                        Uses first cashflow when on file; otherwise first transaction, date of joining, or client/lead date.
+                    </small>
+                    {% if aging_date_stats.no_cashflow > 0 %}
+                    <small class="text-warning d-block">
+                        {{ aging_date_stats.no_cashflow }} client(s) have no cashflow rows
+                        ({% if aging_date_stats.aging_unknown > 0 %}{{ aging_date_stats.aging_unknown }} still Unknown{% else %}fallback dates used{% endif %}).
+                    </small>
+                    {% endif %}
+                    <button class="btn btn-sm btn-outline-primary mt-1" onclick="downloadChart('agingChart', 'Client_Aging_Metrics')" title="Download as image">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="agingChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Acquired vs Built Portfolios -->
+        <div class="col-xl-6 col-lg-6 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-sitemap"></i> Acquired vs Built Portfolios
+                    </h6>
+                    <button class="btn btn-sm btn-outline-primary" onclick="downloadChart('inheritedChart', 'Acquired_vs_Built_Portfolios')" title="Download as image">
+                        <i class="fas fa-download"></i>
+                    </button>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="inheritedChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+{% if total_clients > 0 %}
+<!-- Store chart data in JSON script tags to avoid escaping issues -->
+<script type="application/json" id="age-distribution-data">{{ age_distribution|tojson_safe }}</script>
+<script type="application/json" id="industry-distribution-data">{{ industry_distribution|tojson_safe }}</script>
+<script type="application/json" id="designation-distribution-data">{{ designation_distribution|tojson_safe }}</script>
+<script type="application/json" id="engagement-distribution-data">{{ engagement_distribution|tojson_safe }}</script>
+{% if asset_class_distribution %}
+<script type="application/json" id="asset-class-distribution-data">{{ asset_class_distribution|tojson_safe }}</script>
+{% else %}
+<script type="application/json" id="asset-class-distribution-data">{}</script>
+{% endif %}
+<script type="application/json" id="aging-metrics-data">{{ aging_metrics|tojson_safe }}</script>
+<script type="application/json" id="inherited-vs-built-data">{{ inherited_vs_built|tojson_safe }}</script>
+<script type="application/json" id="new-clients-by-month-data">{{ new_clients_by_month|tojson_safe }}</script>
+<script type="application/json" id="monthly-investment-by-month-data">{{ monthly_investment_by_month|tojson_safe }}</script>
+<script type="application/json" id="monthly-investment-chart-data">{{ monthly_investment_chart|tojson_safe }}</script>
+
+{% endif %}
+
+<script>
+// Color palette for charts
+const chartColors = [
+    '#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b',
+    '#858796', '#5a5c69', '#2c3e50', '#3498db', '#9b59b6',
+    '#e67e22', '#16a085', '#c0392b', '#8e44ad', '#f39c12'
+];
+
+// Helper function to safely parse JSON from script tag
+function getDataFromScript(id) {
+    const script = document.getElementById(id);
+    if (!script) {
+        console.warn('Script tag not found:', id);
+        return null;
+    }
+    try {
+        const content = script.textContent.trim();
+        console.log('Raw content from', id, ':', content);
+        if (!content || content === '{}' || content === 'null') {
+            console.warn('Script tag is empty or null:', id, 'Content:', content);
+            return null;
+        }
+        const parsed = JSON.parse(content);
+        console.log('Parsed data from', id, ':', parsed);
+        console.log('Parsed data type:', typeof parsed);
+        console.log('Parsed data keys:', parsed ? Object.keys(parsed) : 'null');
+        console.log('Parsed data length:', parsed ? Object.keys(parsed).length : 0);
+        return parsed;
+    } catch (e) {
+        console.error('Error parsing JSON from', id, ':', e);
+        console.error('Content was:', script.textContent);
+        console.error('Content length:', script.textContent ? script.textContent.length : 0);
+        return null;
+    }
+}
+
+// Helper function to create pie chart
+function createPieChart(canvasId, data, title) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        console.error('Canvas element not found:', canvasId);
+        return null;
+    }
+    
+    const ctx = canvas.getContext('2d');
+    const labels = Object.keys(data);
+    const rawValues = Object.values(data);
+    
+    console.log('Creating pie chart:', canvasId, 'with data:', data);
+    console.log('Labels:', labels, 'Raw Values:', rawValues);
+    
+    // Ensure we have valid data
+    if (!labels || labels.length === 0 || !rawValues || rawValues.length === 0) {
+        console.error('Invalid data for chart:', canvasId, data);
+        showNoDataMessage(canvasId, 'No data available');
+        return null;
+    }
+    
+    // Calculate total to normalize to percentages
+    const total = rawValues.reduce((sum, val) => sum + parseFloat(val || 0), 0);
+    console.log('Total:', total);
+    
+    if (total === 0) {
+        console.error('Total is zero, cannot create chart');
+        showNoDataMessage(canvasId, 'No data available');
+        return null;
+    }
+    
+    // Normalize values to percentages (Chart.js will handle the visual representation)
+    // We keep raw values for display but Chart.js automatically calculates percentages
+    const values = rawValues.map(v => parseFloat(v || 0));
+    
+    // Destroy existing chart if it exists
+    if (window[canvasId + 'Chart']) {
+        window[canvasId + 'Chart'].destroy();
+    }
+    
+    try {
+        const chart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: chartColors.slice(0, labels.length),
+                    borderColor: '#fff',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            padding: 15,
+                            font: {
+                                size: 12
+                            },
+                            generateLabels: function(chart) {
+                                const data = chart.data;
+                                if (data.labels.length && data.datasets.length) {
+                                    const dataset = data.datasets[0];
+                                    const total = dataset.data.reduce((a, b) => a + b, 0);
+                                    return data.labels.map((label, i) => {
+                                        const value = dataset.data[i];
+                                        const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                        return {
+                                            text: label + ' (' + percentage + '%)',
+                                            fillStyle: dataset.backgroundColor[i],
+                                            hidden: false,
+                                            index: i
+                                        };
+                                    });
+                                }
+                                return [];
+                            }
+                        }
+                    },
+                    title: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return label + ': ' + value + ' (' + percentage + '%)';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Store chart reference
+        window[canvasId + 'Chart'] = chart;
+        console.log('Chart created successfully:', canvasId);
+        console.log('Values sum:', values.reduce((a, b) => a + b, 0));
+        console.log('Percentages:', values.map(v => ((v / total) * 100).toFixed(1) + '%'));
+        return chart;
+    } catch (error) {
+        console.error('Error creating chart:', canvasId, error);
+        showNoDataMessage(canvasId, 'Error rendering chart');
+        return null;
+    }
+}
+
+// Helper function to create bar chart
+function createBarChart(canvasId, data, title) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        console.error('Canvas element not found:', canvasId);
+        return null;
+    }
+    
+    const ctx = canvas.getContext('2d');
+    const labels = Object.keys(data);
+    const values = Object.values(data);
+    
+    console.log('Creating bar chart:', canvasId, 'with data:', data);
+    console.log('Labels:', labels, 'Values:', values);
+    
+    // Ensure we have valid data
+    if (!labels || labels.length === 0 || !values || values.length === 0) {
+        console.error('Invalid data for chart:', canvasId, data);
+        showNoDataMessage(canvasId, 'No data available');
+        return null;
+    }
+    
+    // Destroy existing chart if it exists
+    if (window[canvasId + 'Chart']) {
+        window[canvasId + 'Chart'].destroy();
+    }
+    
+    try {
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Percentage (%)',
+                    data: values,
+                    backgroundColor: chartColors[0],
+                    borderColor: chartColors[0],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Store chart reference
+        window[canvasId + 'Chart'] = chart;
+        console.log('Chart created successfully:', canvasId);
+        return chart;
+    } catch (error) {
+        console.error('Error creating chart:', canvasId, error);
+        showNoDataMessage(canvasId, 'Error rendering chart');
+        return null;
+    }
+}
+
+// Bar chart for month-wise counts or currency (last 12 months)
+function createMonthlyTrendChart(canvasId, data, options) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        console.error('Canvas element not found:', canvasId);
+        return null;
+    }
+
+    const opts = options || {};
+    const format = opts.format || 'count';
+    const datasetLabel = opts.datasetLabel || 'Value';
+
+    const ctx = canvas.getContext('2d');
+    const labels = Object.keys(data);
+    const values = Object.values(data).map(v => parseFloat(v) || 0);
+
+    if (!labels.length) {
+        showNoDataMessage(canvasId, 'No data available');
+        return null;
+    }
+
+    if (window[canvasId + 'Chart']) {
+        window[canvasId + 'Chart'].destroy();
+    }
+
+    function formatValue(val) {
+        if (format === 'currency') {
+            if (val >= 10000000) return '₹' + (val / 10000000).toFixed(1) + 'Cr';
+            if (val >= 100000) return '₹' + (val / 100000).toFixed(1) + 'L';
+            return '₹' + Math.round(val).toLocaleString('en-IN');
+        }
+        return String(Math.round(val));
+    }
+
+    try {
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: datasetLabel,
+                    data: values,
+                    backgroundColor: chartColors[0],
+                    borderColor: chartColors[0],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45,
+                            font: { size: 10 }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return formatValue(value);
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return datasetLabel + ': ' + formatValue(context.parsed.y);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        window[canvasId + 'Chart'] = chart;
+        return chart;
+    } catch (error) {
+        console.error('Error creating monthly trend chart:', canvasId, error);
+        showNoDataMessage(canvasId, 'Error loading chart');
+        return null;
+    }
+}
+
+function createMonthlyInvestmentChart(canvasId, chartData, options) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        console.error('Canvas element not found:', canvasId);
+        return null;
+    }
+
+    const opts = options || {};
+    const completedLabel = opts.completedLabel || 'Completed investment';
+    const projectedAumLabel = opts.projectedAumLabel || 'Projected AUM';
+    const gapLabel = opts.gapLabel || 'Gap to target';
+
+    const ctx = canvas.getContext('2d');
+    const labels = (chartData && chartData.labels) || [];
+    const completed = (chartData && chartData.completed) || [];
+    const projectedAum = (chartData && chartData.projected_aum) || [];
+    const gap = (chartData && chartData.gap) || [];
+    const futureIndex = chartData && chartData.future_index;
+
+    if (!labels.length) {
+        showNoDataMessage(canvasId, 'No monthly investment data');
+        return null;
+    }
+
+    if (window[canvasId + 'Chart']) {
+        window[canvasId + 'Chart'].destroy();
+    }
+
+    const darkBlue = '#1e3a8a';
+    const lightBlue = 'rgba(96, 165, 250, 0.65)';
+
+    function formatValue(val, compact) {
+        if (val == null || isNaN(val)) return '';
+        if (compact && val >= 10000000) return '₹' + (val / 10000000).toFixed(1) + 'Cr';
+        if (compact && val >= 100000) return '₹' + (val / 100000).toFixed(1) + 'L';
+        if (val >= 10000000) return '₹' + (val / 10000000).toFixed(2) + ' Cr';
+        if (val >= 100000) return '₹' + (val / 100000).toFixed(1) + ' L';
+        return '₹' + Math.round(val).toLocaleString('en-IN');
+    }
+
+    try {
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: completedLabel,
+                        data: completed,
+                        backgroundColor: chartColors[0],
+                        borderColor: chartColors[0],
+                        borderWidth: 1,
+                        yAxisID: 'y',
+                        order: 1
+                    },
+                    {
+                        label: projectedAumLabel,
+                        data: projectedAum,
+                        backgroundColor: darkBlue,
+                        borderColor: darkBlue,
+                        borderWidth: 2,
+                        borderDash: [6, 4],
+                        yAxisID: 'y1',
+                        order: 2,
+                        barPercentage: 0.55,
+                        categoryPercentage: 0.8
+                    },
+                    {
+                        label: gapLabel,
+                        data: gap,
+                        backgroundColor: lightBlue,
+                        borderColor: '#60a5fa',
+                        borderWidth: 2,
+                        borderDash: [6, 4],
+                        yAxisID: 'y1',
+                        order: 3,
+                        barPercentage: 0.55,
+                        categoryPercentage: 0.8
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45,
+                            font: { size: 9 }
+                        }
+                    },
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        beginAtZero: true,
+                        title: { display: true, text: 'Monthly investment', font: { size: 10 } },
+                        ticks: {
+                            callback: function(value) {
+                                return formatValue(value, true);
+                            }
+                        }
+                    },
+                    y1: {
+                        type: 'linear',
+                        position: 'right',
+                        beginAtZero: true,
+                        grid: { drawOnChartArea: false },
+                        title: { display: true, text: 'AUM (Dec 2027)', font: { size: 10 } },
+                        ticks: {
+                            callback: function(value) {
+                                return formatValue(value, true);
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: { boxWidth: 12, font: { size: 10 } }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                if (context.parsed.y == null) return null;
+                                return context.dataset.label + ': ' + formatValue(context.parsed.y, false);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        window[canvasId + 'Chart'] = chart;
+        return chart;
+    } catch (error) {
+        console.error('Error creating monthly investment chart:', canvasId, error);
+        showNoDataMessage(canvasId, 'Error rendering chart');
+        return null;
+    }
+}
+
+// Helper function to show "no data" message
+function showNoDataMessage(canvasId, message) {
+    const canvas = document.getElementById(canvasId);
+    if (canvas) {
+        // Set canvas size
+        const container = canvas.parentElement;
+        if (container) {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight || 300;
+        }
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#999';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+    }
+}
+
+// Helper function to create word cloud
+function createWordCloud(containerId, data) {
+    const container = document.getElementById(containerId);
+    if (!container) {
+        console.error('Word cloud container not found:', containerId);
+        return;
+    }
+    
+    // Clear container
+    container.innerHTML = '';
+    
+    // Calculate total for sizing
+    const total = Object.values(data).reduce((sum, val) => sum + parseFloat(val || 0), 0);
+    if (total === 0) {
+        container.innerHTML = '<div style="text-align: center; padding-top: 120px; color: #999;">No data available</div>';
+        return;
+    }
+    
+    // Generate word cloud HTML with varying font sizes based on frequency
+    const words = Object.entries(data)
+        .map(([word, count]) => ({
+            word: word,
+            count: parseFloat(count || 0),
+            percentage: (parseFloat(count || 0) / total * 100)
+        }))
+        .sort((a, b) => b.count - a.count); // Sort by count descending
+    
+    // Calculate font sizes (min 14px, max 42px based on percentage)
+    const maxPercentage = Math.max(...words.map(w => w.percentage));
+    const minPercentage = Math.min(...words.map(w => w.percentage));
+    
+    words.forEach((item, index) => {
+        // Font size based on percentage (14px to 42px)
+        const fontSize = 14 + (item.percentage / maxPercentage) * 28;
+        // Color based on index (use chart colors)
+        const colors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796', '#5a5c69', '#f39c12', '#9b59b6'];
+        const color = colors[index % colors.length];
+        // Opacity based on frequency
+        const opacity = 0.7 + (item.percentage / maxPercentage) * 0.3;
+        
+        const span = document.createElement('span');
+        span.style.cssText = `
+            display: inline-block;
+            margin: 8px 10px;
+            font-size: ${fontSize}px;
+            font-weight: ${item.percentage > maxPercentage * 0.4 ? 'bold' : 'normal'};
+            color: ${color};
+            opacity: ${opacity};
+            cursor: default;
+            white-space: nowrap;
+            overflow: visible;
+            text-overflow: clip;
+            word-break: keep-all;
+            line-height: 1.4;
+            transition: transform 0.2s;
+        `;
+        span.textContent = item.word;
+        span.title = `${item.word}: ${item.count} client(s) (${item.percentage.toFixed(1)}%)`;
+        
+        // Add hover effect
+        span.addEventListener('mouseenter', function() {
+            this.style.transform = 'scale(1.1)';
+        });
+        span.addEventListener('mouseleave', function() {
+            this.style.transform = 'scale(1)';
+        });
+        
+        container.appendChild(span);
+    });
+    
+    // Center the content
+    container.style.cssText = `
+        width: 150%;
+        height: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        align-content: flex-start;
+        justify-content: center;
+        align-items: flex-start;
+        text-align: center;
+        overflow-y: auto;
+        overflow-x: visible;
+        padding: 15px;
+        box-sizing: border-box;
+    `;
+    
+    console.log('Word cloud created successfully:', containerId, 'with', words.length, 'words');
+}
+
+// Function to download word cloud as image
+function downloadWordCloud(containerId, filename) {
+    const container = document.getElementById(containerId);
+    if (!container) {
+        console.error('Word cloud container not found:', containerId);
+        alert('Word cloud not found. Please ensure it is loaded.');
+        return;
+    }
+    
+    // Check if html2canvas is available
+    if (typeof html2canvas === 'undefined') {
+        // Load html2canvas library dynamically
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        script.onload = function() {
+            downloadWordCloudImage(container, filename);
+        };
+        script.onerror = function() {
+            alert('Failed to load image conversion library. Please try again.');
+        };
+        document.head.appendChild(script);
+    } else {
+        downloadWordCloudImage(container, filename);
+    }
+}
+
+function downloadWordCloudImage(container, filename) {
+    // Store original content
+    const originalContent = container.innerHTML;
+    
+    // Check if container has actual content (not empty or loading message)
+    if (!originalContent || originalContent.trim() === '' || originalContent.includes('Generating image') || originalContent.includes('No designation data')) {
+        alert('Word cloud is not ready. Please wait for it to load completely.');
+        return;
+    }
+    
+    // Show loading message in a separate element (not in the container)
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'wordcloud-download-loading';
+    loadingDiv.style.cssText = 'position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border: 2px solid #007bff; border-radius: 5px; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
+    loadingDiv.innerHTML = '<div style="text-align: center; color: #666;"><i class="fas fa-spinner fa-spin"></i><br>Generating image...</div>';
+    document.body.appendChild(loadingDiv);
+    
+    // Wait a bit to ensure word cloud is fully rendered, then capture
+    setTimeout(function() {
+        // Remove loading message BEFORE capturing to ensure it's not in the image
+        const loadingEl = document.getElementById('wordcloud-download-loading');
+        if (loadingEl) {
+            loadingEl.remove();
+        }
+        
+        // Small delay to ensure overlay is removed from DOM
+        setTimeout(function() {
+            try {
+                // Check if html2canvas is actually available
+                if (typeof html2canvas === 'undefined') {
+                    throw new Error('html2canvas library is not loaded. Please refresh the page and try again.');
+                }
+                
+                // Store original scroll position and styles
+                const originalScrollTop = container.scrollTop;
+                const originalScrollLeft = container.scrollLeft;
+                const originalOverflow = container.style.overflow;
+                const originalOverflowX = container.style.overflowX;
+                const originalOverflowY = container.style.overflowY;
+                const originalHeight = container.style.height;
+                const originalWidth = container.style.width;
+                
+                // Get parent card-body to handle overflow and get dimensions
+                const parentCardBody = container.parentElement;
+                const originalParentOverflowX = parentCardBody ? parentCardBody.style.overflowX : '';
+                const originalParentOverflowY = parentCardBody ? parentCardBody.style.overflowY : '';
+                
+                // Get card-body dimensions to maintain web format aspect ratio
+                const cardBodyHeight = parentCardBody ? (parentCardBody.offsetHeight || 300) : 300;
+                const cardBodyWidth = parentCardBody ? (parentCardBody.offsetWidth || 400) : 400;
+                
+                // Store original container dimensions
+                const originalContainerWidth = container.style.width || container.offsetWidth || container.scrollWidth;
+                const originalContainerHeight = container.style.height || container.offsetHeight || container.scrollHeight;
+                
+                // Temporarily make container and parent show all content (no scroll)
+                container.style.overflow = 'visible';
+                container.style.overflowX = 'visible';
+                container.style.overflowY = 'visible';
+                // Keep the width at 150% as per web format, but allow height to expand to show all content
+                container.style.width = '150%';
+                container.style.height = 'auto'; // Allow height to expand to show all words
+                
+                if (parentCardBody) {
+                    parentCardBody.style.overflowX = 'visible';
+                    parentCardBody.style.overflowY = 'visible';
+                }
+                
+                // Scroll to top-left to ensure we start from beginning
+                container.scrollTop = 0;
+                container.scrollLeft = 0;
+                if (parentCardBody) {
+                    parentCardBody.scrollTop = 0;
+                    parentCardBody.scrollLeft = 0;
+                }
+                
+                // Wait for layout to recalculate with expanded width and height
+                setTimeout(function() {
+                    // Get full container dimensions - capture ALL content including words that extend beyond
+                    // Use scrollWidth and scrollHeight to get the actual content dimensions
+                    const actualContentWidth = container.scrollWidth || container.offsetWidth || Math.round(cardBodyWidth * 1.5);
+                    const actualContentHeight = container.scrollHeight || container.offsetHeight || cardBodyHeight;
+                    
+                    // Ensure we capture the full width (150% of card-body) and full height (all words)
+                    const containerWidth = Math.max(actualContentWidth, Math.round(cardBodyWidth * 1.5));
+                    const finalHeight = actualContentHeight; // Use actual content height to show all words
+                    
+                    console.log('Capturing word cloud:', {
+                        scrollWidth: container.scrollWidth,
+                        scrollHeight: container.scrollHeight,
+                        offsetWidth: container.offsetWidth,
+                        offsetHeight: container.offsetHeight,
+                        actualContentWidth: actualContentWidth,
+                        actualContentHeight: actualContentHeight,
+                        containerWidth: containerWidth,
+                        finalHeight: finalHeight
+                    });
+                    
+                    // Wait a moment for layout to adjust
+                    setTimeout(function() {
+    // Use html2canvas to convert container to image
+                        // Capture full scrollable area including 150% width
+                        html2canvas(container, {
+        backgroundColor: '#ffffff',
+        scale: 2, // Higher quality
+        logging: false,
+                            useCORS: true,
+                            allowTaint: false,
+                            width: containerWidth,
+                            height: finalHeight,
+                            scrollX: 0,
+                            scrollY: 0,
+                            windowWidth: containerWidth,
+                            windowHeight: finalHeight,
+                            onclone: function(clonedDoc) {
+                                // Ensure cloned container also has all content visible
+                                const clonedContainer = clonedDoc.getElementById(container.id);
+                                if (clonedContainer) {
+                                    clonedContainer.style.overflow = 'visible';
+                                    clonedContainer.style.overflowX = 'visible';
+                                    clonedContainer.style.overflowY = 'visible';
+                                    clonedContainer.style.width = containerWidth + 'px';
+                                    clonedContainer.style.height = finalHeight + 'px';
+                                }
+                            },
+                            x: 0,
+                            y: 0
+    }).then(function(canvas) {
+                            // Restore original styles and scroll position
+                            container.style.overflow = originalOverflow;
+                            container.style.overflowX = originalOverflowX;
+                            container.style.overflowY = originalOverflowY;
+                            container.style.height = originalHeight;
+                            container.style.width = originalWidth;
+                            container.scrollTop = originalScrollTop;
+                            container.scrollLeft = originalScrollLeft;
+                            
+                            if (parentCardBody) {
+                                parentCardBody.style.overflowX = originalParentOverflowX;
+                                parentCardBody.style.overflowY = originalParentOverflowY;
+                                parentCardBody.scrollTop = 0;
+                                parentCardBody.scrollLeft = 0;
+                            }
+        
+        // Convert canvas to blob and download
+        canvas.toBlob(function(blob) {
+            if (!blob) {
+                                    alert('Failed to generate image blob. Please try again.');
+                return;
+            }
+            
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename + '_' + new Date().toISOString().split('T')[0] + '.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }, 'image/png', 1.0);
+    }).catch(function(error) {
+                            // Restore original styles and scroll position on error
+                            container.style.overflow = originalOverflow;
+                            container.style.overflowX = originalOverflowX;
+                            container.style.overflowY = originalOverflowY;
+                            container.style.height = originalHeight;
+                            container.style.width = originalWidth;
+                            container.scrollTop = originalScrollTop;
+                            container.scrollLeft = originalScrollLeft;
+                            
+                            if (parentCardBody) {
+                                parentCardBody.style.overflowX = originalParentOverflowX;
+                                parentCardBody.style.overflowY = originalParentOverflowY;
+                            }
+                            
+        console.error('Error generating word cloud image:', error);
+                            const errorMsg = error && error.message ? error.message : (error && error.toString ? error.toString() : 'Unknown error occurred');
+                            alert('Error generating image: ' + errorMsg);
+                        });
+                    }, 100); // End of setTimeout - Wait for layout adjustment
+                }, 100); // End of setTimeout - Wait for layout to recalculate
+            } catch (error) {
+                console.error('Error in downloadWordCloudImage:', error);
+                const errorMsg = error && error.message ? error.message : (error && error.toString ? error.toString() : 'Unknown error occurred');
+                alert('Error: ' + errorMsg);
+            }
+        }, 100); // Small delay to ensure overlay is removed from DOM
+    }, 300); // Small delay to ensure rendering is complete
+}
+
+// Function to download chart as image
+function downloadChart(canvasId, filename) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+        console.error('Canvas not found:', canvasId);
+        alert('Chart not found. Please ensure the chart is loaded.');
+        return;
+    }
+    
+    // Check if chart exists in window object
+    const chart = window[canvasId + 'Chart'];
+    if (!chart) {
+        console.error('Chart instance not found:', canvasId);
+        alert('Chart not initialized. Please wait for the chart to load.');
+        return;
+    }
+    
+    try {
+        // Get the chart's canvas element (Chart.js wraps the original canvas)
+        const chartCanvas = chart.canvas;
+        
+        // Convert canvas to blob
+        chartCanvas.toBlob(function(blob) {
+            if (!blob) {
+                alert('Failed to generate image. Please try again.');
+                return;
+            }
+            
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename + '_' + new Date().toISOString().split('T')[0] + '.png';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }, 'image/png', 1.0);
+    } catch (error) {
+        console.error('Error downloading chart:', error);
+        alert('Error downloading chart: ' + error.message);
+    }
+}
+
+// Function to download all charts as images
+function downloadAllCharts() {
+    const charts = [
+        { id: 'ageChart', name: 'Age_Group_Distribution' },
+        { id: 'industryChart', name: 'Industry_Distribution' },
+        { id: 'designationChart', name: 'Designation_Distribution' },
+        { id: 'engagementChart', name: 'Engagement_Distribution' },
+        { id: 'assetClassChart', name: 'Asset_Class_Distribution' },
+        { id: 'agingChart', name: 'Client_Aging_Metrics' },
+        { id: 'inheritedChart', name: 'Acquired_vs_Built_Portfolios' },
+        { id: 'newClientsChart', name: 'New_Clients_Last_12_Months' },
+        { id: 'monthlyInvestmentChart', name: 'Monthly_Investment_Completed_Last_12_Months' }
+    ];
+    
+    let downloaded = 0;
+    let failed = 0;
+    
+    charts.forEach(function(chartInfo, index) {
+        setTimeout(function() {
+            const chart = window[chartInfo.id + 'Chart'];
+            if (chart) {
+                try {
+                    const chartCanvas = chart.canvas;
+                    chartCanvas.toBlob(function(blob) {
+                        if (blob) {
+                            const url = URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = chartInfo.name + '_' + new Date().toISOString().split('T')[0] + '.png';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            URL.revokeObjectURL(url);
+                            downloaded++;
+                        } else {
+                            failed++;
+                        }
+                        
+                        // Show completion message after all charts are processed
+                        if (downloaded + failed === charts.length) {
+                            if (failed === 0) {
+                                alert('All charts downloaded successfully!');
+                            } else {
+                                alert(`Downloaded ${downloaded} charts. ${failed} charts failed to download.`);
+                            }
+                        }
+                    }, 'image/png', 1.0);
+                } catch (error) {
+                    console.error('Error downloading chart:', chartInfo.id, error);
+                    failed++;
+                }
+            } else {
+                failed++;
+            }
+        }, index * 300); // Stagger downloads by 300ms to avoid browser blocking
+    });
+    
+    if (downloaded === 0 && failed === charts.length) {
+        alert('No charts available to download. Please ensure charts are loaded.');
+    }
+}
+
+// Initialize all charts - called when Chart.js loads
+function initializePracticeAnalyticsCharts() {
+    // Double-check Chart.js is loaded
+    if (typeof Chart === 'undefined') {
+        console.error('Chart.js is not available');
+        // Retry after a short delay
+        setTimeout(function() {
+            if (typeof Chart !== 'undefined') {
+                initializePracticeAnalyticsCharts();
+            } else {
+                console.error('Chart.js failed to load after retry');
+            }
+        }, 500);
+        return;
+    }
+    
+    console.log('Chart.js loaded, version:', Chart.version || 'unknown');
+    
+    // Check if we have any data to display
+    const totalClients = {{ total_clients|default(0) }};
+    if (totalClients === 0) {
+        console.log('No clients data available, skipping chart initialization');
+        return;
+    }
+    
+    // Verify script tags exist
+    const scriptTags = [
+        'age-distribution-data',
+        'industry-distribution-data',
+        'designation-distribution-data',
+        'engagement-distribution-data',
+        'aging-metrics-data',
+        'inherited-vs-built-data',
+        'new-clients-by-month-data',
+        'monthly-investment-by-month-data'
+    ];
+    
+    scriptTags.forEach(function(id) {
+        const script = document.getElementById(id);
+        if (!script) {
+            console.warn('Script tag not found in DOM:', id);
+        } else {
+            console.log('Script tag found:', id, 'Content length:', script.textContent ? script.textContent.length : 0);
+        }
+    });
+    
+    try {
+        // Age Group Distribution
+        const ageData = getDataFromScript('age-distribution-data');
+        console.log('Age data:', ageData);
+        if (ageData && typeof ageData === 'object' && Object.keys(ageData).length > 0) {
+            createPieChart('ageChart', ageData, 'Age Group Distribution');
+        } else {
+            console.warn('Age data is empty or invalid:', ageData);
+            showNoDataMessage('ageChart', 'No age data available');
+        }
+        
+        // Industry Distribution
+        const industryData = getDataFromScript('industry-distribution-data');
+        console.log('Industry data:', industryData);
+        if (industryData && typeof industryData === 'object' && Object.keys(industryData).length > 0) {
+            createPieChart('industryChart', industryData, 'Industry Distribution');
+        } else {
+            console.warn('Industry data is empty or invalid:', industryData);
+            showNoDataMessage('industryChart', 'No industry data available');
+        }
+        
+        // Designation Distribution (Pie Chart and Word Cloud)
+        const designationData = getDataFromScript('designation-distribution-data');
+        console.log('Designation data:', designationData);
+        if (designationData && typeof designationData === 'object' && Object.keys(designationData).length > 0) {
+            // Create pie chart
+            createPieChart('designationChart', designationData, 'Designation Distribution');
+            // Create word cloud
+            createWordCloud('designationWordCloud', designationData);
+        } else {
+            console.warn('Designation data is empty or invalid:', designationData);
+            showNoDataMessage('designationChart', 'No designation data available');
+            document.getElementById('designationWordCloud').innerHTML = '<div style="text-align: center; padding-top: 100px; color: #999;">No designation data available</div>';
+        }
+        
+        // Engagement Type Distribution
+        const engagementData = getDataFromScript('engagement-distribution-data');
+        console.log('Engagement data:', engagementData);
+        if (engagementData && typeof engagementData === 'object' && Object.keys(engagementData).length > 0) {
+            createPieChart('engagementChart', engagementData, 'Engagement Type Distribution');
+        } else {
+            console.warn('Engagement data is empty or invalid:', engagementData);
+            showNoDataMessage('engagementChart', 'No engagement data available');
+        }
+        
+        // Asset Class Distribution
+        const assetClassData = getDataFromScript('asset-class-distribution-data');
+        console.log('Asset class data:', assetClassData);
+        if (assetClassData && Object.keys(assetClassData).length > 0) {
+            createPieChart('assetClassChart', assetClassData, 'Asset Class Distribution');
+        } else {
+            showNoDataMessage('assetClassChart', 'No asset class data available');
+        }
+        
+        // Client Aging Metrics
+        const agingData = getDataFromScript('aging-metrics-data');
+        console.log('Aging data:', agingData);
+        if (agingData && typeof agingData === 'object' && Object.keys(agingData).length > 0) {
+            createBarChart('agingChart', agingData, 'Client Aging Metrics');
+        } else {
+            console.warn('Aging data is empty or invalid:', agingData);
+            showNoDataMessage('agingChart', 'No aging data available');
+        }
+        
+        // Acquired vs Built Portfolios
+        const inheritedData = getDataFromScript('inherited-vs-built-data');
+        console.log('Acquired vs Built data:', inheritedData);
+        if (inheritedData && typeof inheritedData === 'object' && Object.keys(inheritedData).length > 0) {
+            createPieChart('inheritedChart', inheritedData, 'Acquired vs Built Portfolios');
+        } else {
+            console.warn('Acquired vs Built data is empty or invalid:', inheritedData);
+            showNoDataMessage('inheritedChart', 'No portfolio data available');
+        }
+
+        const newClientsData = getDataFromScript('new-clients-by-month-data');
+        if (newClientsData && Object.keys(newClientsData).length > 0) {
+            createMonthlyTrendChart('newClientsChart', newClientsData, {
+                format: 'count',
+                datasetLabel: 'New clients'
+            });
+        } else {
+            showNoDataMessage('newClientsChart', 'No new client data');
+        }
+
+        const monthlyInvChart = getDataFromScript('monthly-investment-chart-data');
+        if (monthlyInvChart && monthlyInvChart.labels && monthlyInvChart.labels.length > 0) {
+            createMonthlyInvestmentChart('monthlyInvestmentChart', monthlyInvChart, {
+                completedLabel: 'Completed investment'
+            });
+        } else {
+            const monthlyInvData = getDataFromScript('monthly-investment-by-month-data');
+            if (monthlyInvData && Object.keys(monthlyInvData).length > 0) {
+                createMonthlyTrendChart('monthlyInvestmentChart', monthlyInvData, {
+                    format: 'currency',
+                    datasetLabel: 'Completed investment'
+                });
+            } else {
+                showNoDataMessage('monthlyInvestmentChart', 'No monthly investment data');
+            }
+        }
+        
+        console.log('All charts initialized successfully');
+        
+        // Debug: Log raw data after charts are initialized (using safe method)
+        try {
+            const ageData = getDataFromScript('age-distribution-data');
+            const industryData = getDataFromScript('industry-distribution-data');
+            const designationData = getDataFromScript('designation-distribution-data');
+            const engagementData = getDataFromScript('engagement-distribution-data');
+            const agingData = getDataFromScript('aging-metrics-data');
+            const inheritedData = getDataFromScript('inherited-vs-built-data');
+            
+            console.log('Age distribution raw:', ageData);
+            console.log('Industry distribution raw:', industryData);
+            console.log('Designation distribution raw:', designationData);
+            console.log('Engagement distribution raw:', engagementData);
+            console.log('Aging metrics raw:', agingData);
+            console.log('Acquired vs Built raw:', inheritedData);
+        } catch (e) {
+            console.warn('Error logging raw data:', e);
+        }
+    } catch (error) {
+        console.error('Error initializing charts:', error);
+        console.error('Error details:', error.stack);
+    }
+}
+
+// Fallback: If Chart.js is already loaded (e.g., from cache), initialize immediately
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+        // Wait a bit for Chart.js to load if it hasn't already
+        setTimeout(function() {
+            if (typeof Chart !== 'undefined' && typeof initializePracticeAnalyticsCharts === 'function') {
+                initializePracticeAnalyticsCharts();
+            }
+        }, 100);
+    });
+} else {
+    // DOM already loaded, check if Chart.js is available
+    setTimeout(function() {
+        if (typeof Chart !== 'undefined' && typeof initializePracticeAnalyticsCharts === 'function') {
+            initializePracticeAnalyticsCharts();
+        }
+    }, 100);
+}
+</script>
+
+<!-- Chart.js CDN - Load after function definitions -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// Initialize charts after Chart.js loads
+(function() {
+    function initCharts() {
+        if (typeof Chart !== 'undefined' && typeof initializePracticeAnalyticsCharts === 'function') {
+            initializePracticeAnalyticsCharts();
+        } else if (typeof Chart === 'undefined') {
+            // Chart.js not loaded yet, wait a bit
+            setTimeout(initCharts, 100);
+        }
+    }
+    
+    // Try to initialize immediately if Chart.js is already loaded
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        initCharts();
+    } else {
+        window.addEventListener('load', initCharts);
+    }
+})();
+</script>
+
+{% endblock %}
+

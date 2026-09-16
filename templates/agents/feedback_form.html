@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Agent Feedback{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="page-title-box">
+        <div class="page-title-right">
+          <ol class="breadcrumb m-0">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('agents_dashboard.dashboard') }}">Agents</a></li>
+            <li class="breadcrumb-item active">Feedback</li>
+          </ol>
+        </div>
+        <h4 class="page-title"><i class="fas fa-comment-dots me-2"></i>Feedback — {{ agent_display }}</h4>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header">
+          <h4 class="header-title mb-0">Agent-specific feedback</h4>
+          <small class="text-muted">This feedback is saved for <strong>{{ agent_name }}</strong> only.</small>
+        </div>
+        <div class="card-body">
+          <form method="POST" action="{{ url_for('agents_dashboard.agent_feedback', agent_name=agent_name) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="next" value="{{ next_url }}">
+
+            <div class="mb-3">
+              <label class="form-label">Category</label>
+              <select class="form-select" name="category" required>
+                <option value="check_logic">Check Logic / Rules</option>
+                <option value="context_understanding">Context / Notes understanding</option>
+                <option value="false_positives">False positives</option>
+                <option value="missing_check">Missing check</option>
+                <option value="thresholds">Thresholds / tolerances</option>
+                <option value="ui_ux">UI/UX</option>
+                <option value="performance">Performance</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Title (optional)</label>
+              <input class="form-control" name="title" placeholder="Short summary">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">Details <span class="text-danger">*</span></label>
+              <textarea class="form-control" name="description" rows="6" required
+                        placeholder="What happened? Why is it wrong/right? What should the agent do instead?&#10;&#10;If possible include: client name/id, workflow id, dates, and the note text that should have changed the decision."></textarea>
+            </div>
+
+            <div class="d-flex gap-2">
+              <button class="btn btn-primary" type="submit">
+                <i class="fas fa-paper-plane me-1"></i> Submit feedback
+              </button>
+              <a class="btn btn-outline-secondary" href="{{ next_url }}">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header">
+          <h4 class="header-title mb-0">Tips</h4>
+        </div>
+        <div class="card-body">
+          <ul class="mb-0">
+            <li>Reference the specific check (e.g., funds_not_received).</li>
+            <li>Paste relevant client/workflow notes that should affect the decision.</li>
+            <li>Say whether this is a one-time exception or a pattern.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

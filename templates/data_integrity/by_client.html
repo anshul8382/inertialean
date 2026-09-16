@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}Data / price issues by client{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div>
+      <h2 class="mb-1">Data / price issues by client</h2>
+      <p class="text-muted mb-0 small">
+        Grouped G* integrity + P1 price findings. Close within {{ close_within_days }} days.
+        {% if source_meta and source_meta.label %}
+        Source: {{ source_meta.label }}.
+        {% else %}
+        Source: Client Health nightly pack when available · resolved issues filtered live.
+        {% endif %}
+      </p>
+    </div>
+    <div class="action-bar">
+      <form method="post" action="{{ url_for('data_integrity.refresh_book') }}" class="d-inline"
+            onsubmit="return confirm('Refresh client checks for your accessible clients? This re-runs checks, heals cleared issues, and updates packs.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ url_for('data_integrity.data_price_by_client') }}">
+        <button type="submit" class="btn btn-primary btn-sm" title="Unified integrity refresh for your book">
+          <i class="fas fa-sync-alt me-1"></i> Refresh client checks
+        </button>
+      </form>
+      <a href="{{ url_for('data_integrity.dashboard') }}" class="btn btn-outline-secondary btn-sm">Data integrity home</a>
+      <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary btn-sm">Dashboard</a>
+    </div>
+  </div>
+
+  <div class="card card-app">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>Clients with open data/price items</span>
+      <span class="badge bg-secondary">{{ rows|length }} client(s)</span>
+    </div>
+    <div class="card-body p-0">
+      {% if rows %}
+      <div class="table-responsive">
+        <table class="table table-app table-hover table-striped mb-0">
+          <thead>
+            <tr>
+              <th scope="col">Client</th>
+              <th scope="col" class="text-num">Issues</th>
+              <th scope="col" class="text-num">Overdue (≥{{ close_within_days }}d)</th>
+              <th scope="col" class="text-num">Oldest age (days)</th>
+              <th scope="col">Signals</th>
+              <th scope="col">Samples</th>
+              <th scope="col">Open</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr class="{% if r.overdue_count %}table-warning{% endif %}">
+              <td>{{ r.client_name }} <span class="text-muted small">#{{ r.client_id }}</span></td>
+              <td class="text-num">{{ r.issue_count }}</td>
+              <td class="text-num">{{ r.overdue_count }}</td>
+              <td class="text-num">{{ r.oldest_age_days }}</td>
+              <td><code class="small">{{ r.signals|join(', ') }}</code></td>
+              <td class="small text-muted">{{ r.titles|join(' · ') }}</td>
+              <td>
+                <a class="btn btn-sm btn-outline-primary"
+                   href="{{ url_for('data_integrity.client_issues', client_id=r.client_id) }}">Issues</a>
+                <a class="btn btn-sm btn-outline-secondary"
+                   href="{{ url_for('clients.client_details', client_id=r.client_id) }}">Client</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="p-4 text-center text-muted">
+        No open data/price issues for your clients.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

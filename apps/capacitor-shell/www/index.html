@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#2563eb" />
+    <title>INERTIA</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(160deg, #2563eb 0%, #1e40af 100%);
+        color: #fff;
+        padding: 24px;
+        text-align: center;
+      }
+      img {
+        width: 96px;
+        height: 96px;
+        border-radius: 20px;
+        margin-bottom: 24px;
+        background: #fff;
+        padding: 8px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.75rem;
+      }
+      p {
+        margin: 0;
+        opacity: 0.9;
+        max-width: 320px;
+        line-height: 1.5;
+      }
+      .hint {
+        margin-top: 32px;
+        font-size: 0.85rem;
+        opacity: 0.75;
+      }
+    </style>
+  </head>
+  <body>
+    <img src="icon.png" alt="" onerror="this.style.display='none'" />
+    <h1>INERTIA</h1>
+    <p>Connecting to server…</p>
+    <p class="hint">
+      If this screen stays visible, set <code>CAP_SERVER_URL</code> in
+      <code>apps/capacitor-shell/.env</code> and run <code>npm run sync</code>.
+    </p>
+  </body>
+</html>

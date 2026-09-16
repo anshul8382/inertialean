@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}New Meeting{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">New Meeting</h2>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="mb-3">
+                            <label for="title" class="form-label">Title</label>
+                            <input type="text" class="form-control" id="title" name="title" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="meeting_date" class="form-label">Date and Time</label>
+                                    <input type="datetime-local" class="form-control" id="meeting_date" name="meeting_date" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="duration" class="form-label">Duration (minutes)</label>
+                                    <input type="number" class="form-control" id="duration" name="duration" min="15" step="15" value="60" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="status" class="form-label">Status</label>
+                            <select class="form-select" id="status" name="status">
+                                <option value="scheduled">Scheduled</option>
+                                <option value="completed">Completed</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="participant_ids" class="form-label">Team participants</label>
+                            <select class="form-select" id="participant_ids" name="participant_ids" multiple size="8" aria-describedby="participantHelp">
+                                {% for u in team_users %}
+                                <option value="{{ u.id }}" {% if u.id in selected_participant_ids %}selected{% endif %}>{{ u.username }}{% if u.email %} — {{ u.email }}{% endif %}</option>
+                                {% endfor %}
+                            </select>
+                            <div id="participantHelp" class="form-text">Hold Ctrl (Windows) or ⌘ (Mac) to select multiple. Selected users see meeting details here and receive a Google Calendar invite when calendar sync is enabled.</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Meeting With</label>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="meeting_type" id="meetingWithLead" value="lead" {% if selected_lead %}checked{% endif %}>
+                                        <label class="form-check-label" for="meetingWithLead">
+                                            Lead
+                                        </label>
+                                    </div>
+                                    <select class="form-select mt-2" id="lead_id" name="lead_id" {% if not selected_lead %}disabled{% endif %}>
+                                        <option value="">Select Lead</option>
+                                        {% for lead in leads %}
+                                        <option value="{{ lead.id }}" {% if selected_lead and selected_lead.id == lead.id %}selected{% endif %}>{{ lead.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="meeting_type" id="meetingWithClient" value="client" {% if selected_client or not selected_lead %}checked{% endif %}>
+                                        <label class="form-check-label" for="meetingWithClient">
+                                            Client
+                                        </label>
+                                    </div>
+                                    <select class="form-select mt-2" id="client_id" name="client_id" {% if selected_lead and not selected_client %}disabled{% endif %}>
+                                        <option value="">Select Client</option>
+                                        {% for client in clients %}
+                                        <option value="{{ client.id }}" {% if selected_client and selected_client.id == client.id %}selected{% endif %}>{{ client.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            {% if selected_lead %}
+                            <a href="{{ url_for('leads.view_lead', lead_id=selected_lead.id) }}" class="btn btn-secondary">Cancel</a>
+                            {% elif selected_client %}
+                            <a href="{{ url_for('clients.client_details', client_id=selected_client.id) }}" class="btn btn-secondary">Cancel</a>
+                            {% else %}
+                            <a href="{{ url_for('meetings.list_meetings') }}" class="btn btn-secondary">Cancel</a>
+                            {% endif %}
+                            <button type="submit" class="btn btn-primary">Create Meeting</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const leadRadio = document.getElementById('meetingWithLead');
+        const clientRadio = document.getElementById('meetingWithClient');
+        const leadSelect = document.getElementById('lead_id');
+        const clientSelect = document.getElementById('client_id');
+        
+        // Initialize based on selected_client or selected_lead
+        {% if selected_client %}
+        clientRadio.checked = true;
+        clientSelect.disabled = false;
+        leadSelect.disabled = true;
+        {% elif selected_lead %}
+        leadRadio.checked = true;
+        leadSelect.disabled = false;
+        clientSelect.disabled = true;
+        {% endif %}
+        
+        leadRadio.addEventListener('change', function() {
+            if (this.checked) {
+                leadSelect.disabled = false;
+                clientSelect.disabled = true;
+                clientSelect.value = '';
+            }
+        });
+        
+        clientRadio.addEventListener('change', function() {
+            if (this.checked) {
+                clientSelect.disabled = false;
+                leadSelect.disabled = true;
+                leadSelect.value = '';
+            }
+        });
+    });
+</script>
+{% endblock %} 

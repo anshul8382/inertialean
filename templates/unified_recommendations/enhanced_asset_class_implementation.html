@@ -1,0 +1,1867 @@
+{% extends "base.html" %}
+
+{% block title %}Enhanced {{ asset_class }} Implementation - ML Insights{% endblock %}
+
+{% block head %}
+<script>
+    // Try multiple methods to get CSRF token
+    window.csrfToken = '{{ csrf_token_value }}';
+    
+    // TEMPORARY TEST - hardcoded value to test template changes
+    if (!window.csrfToken || window.csrfToken === '') {
+        window.csrfToken = 'TEST_TOKEN_12345';
+        console.log('DEBUG: Using hardcoded test token');
+    }
+    
+    // Fallback methods
+    if (!window.csrfToken || window.csrfToken === '') {
+        // Try template function as fallback
+        window.csrfToken = '{{ csrf_token() }}';
+    }
+    
+    if (!window.csrfToken || window.csrfToken === '') {
+        // Try to get from meta tag
+        const metaToken = document.querySelector('meta[name=csrf-token]');
+        if (metaToken) {
+            window.csrfToken = metaToken.getAttribute('content');
+        }
+    }
+    
+    if (!window.csrfToken || window.csrfToken === '') {
+        // Try to get from hidden input
+        const hiddenToken = document.querySelector('input[name=csrf_token]');
+        if (hiddenToken) {
+            window.csrfToken = hiddenToken.value;
+        }
+    }
+    
+    // Try to get from Flask session (last resort)
+    if (!window.csrfToken || window.csrfToken === '') {
+        // Make a request to get CSRF token
+        fetch('/unified-recommendations/get-csrf-token')
+            .then(response => response.json())
+            .then(data => {
+                if (data.csrf_token) {
+                    window.csrfToken = data.csrf_token;
+                    console.log('DEBUG: CSRF Token obtained from API:', window.csrfToken);
+                }
+            })
+            .catch(error => {
+                console.log('DEBUG: Failed to get CSRF token from API:', error);
+            });
+    }
+    
+    console.log('DEBUG: CSRF Token set on page load:', window.csrfToken ? 'YES' : 'NO');
+    console.log('DEBUG: CSRF Token value:', window.csrfToken);
+    console.log('DEBUG: CSRF Token length:', window.csrfToken ? window.csrfToken.length : 0);
+    
+    // Test if template changes are applied
+    console.log('DEBUG: Template updated - CSRF token debugging active');
+    if (!window.csrfToken || window.csrfToken === '') {
+        alert('CSRF Token is missing! This will cause API calls to fail.');
+    }
+</script>
+{% endblock %}
+
+{% block content %}
+{% from 'partials/mobile/macros.html' import rec_mobile_open, rec_mobile_close %}
+{{ rec_mobile_open(asset_class ~ ' (enhanced)', url_for('unified_recommendations.review_recommendations', client_id=client.id, session_id=session.get('current_recommendation_session_id')), 'ML-assisted security implementation.') }}
+{% if ml_insights_enabled %}<p class="im-badge im-badge--success mb-2">ML insights active</p>{% endif %}
+<a href="{{ url_for('unified_recommendations.security_distribution', client_id=client.id, session_id=session_id) }}" class="im-settings-link"><i class="fas fa-list"></i><span>Security distribution</span><i class="fas fa-chevron-right text-muted"></i></a>
+<a href="{{ url_for('unified_recommendations.preview_email', client_id=client.id, session_id=session_id) }}" class="im-settings-link"><i class="fas fa-envelope"></i><span>Email preview</span><i class="fas fa-chevron-right text-muted"></i></a>
+<a href=".im-desktop-only" class="im-settings-link im-scroll-to-desktop"><i class="fas fa-table"></i><span>Edit security table below</span><i class="fas fa-chevron-down text-muted"></i></a>
+{{ rec_mobile_close() }}
+<div class="im-desktop-only container-fluid rec-workflow-mobile">
+    <!-- Hidden CSRF token for JavaScript access -->
+    <input type="hidden" name="csrf_token" value="{{ csrf_token_value }}">
+    
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>
+                    <i class="fas fa-brain text-primary"></i>
+                    Enhanced {{ asset_class }} Implementation
+                    {% if ml_insights_enabled %}
+                        <span class="badge badge-success ml-2">ML Insights Active</span>
+                    {% endif %}
+                </h2>
+                <div>
+                    <a href="{{ url_for('unified_recommendations.review_recommendations', client_id=client.id, session_id=session.get('current_recommendation_session_id')) }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Review
+                    </a>
+                </div>
+            </div>
+
+            <!-- Client Info -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-user"></i> Client Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong>Client:</strong> {{ client.name }}<br>
+                            <strong>ID:</strong> {{ client.id }}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Asset Class:</strong> {{ asset_class }}<br>
+                            <strong>Recommendation Type:</strong> 
+                            {% if asset_recommendation.required_change < 0 %}
+                                <span class="badge badge-danger">SELL</span>
+                            {% else %}
+                                <span class="badge badge-success">BUY</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ML Insights Summary -->
+            {% if ml_insights_enabled and behavior_summary %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-line text-primary"></i> User Behavior Insights</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-primary">{{ behavior_summary.total_recommendations or 0 }}</h4>
+                                <small class="text-muted">Total Recommendations</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-success">{{ behavior_summary.follow_rate or 0 }}%</h4>
+                                <small class="text-muted">Follow Rate</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-info">{{ behavior_summary.avg_confidence or 0 }}%</h4>
+                                <small class="text-muted">Avg ML Confidence</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-warning">{{ behavior_summary.followed_count or 0 }}</h4>
+                                <small class="text-muted">Followed</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {% if behavior_summary.top_avoided_stocks %}
+                    <div class="mt-3">
+                        <h6><i class="fas fa-exclamation-triangle text-warning"></i> Most Avoided Stocks:</h6>
+                        {% for stock in behavior_summary.top_avoided_stocks[:3] %}
+                            <span class="badge badge-warning mr-1">{{ stock.symbol }} ({{ stock.avoid_count }}x)</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Asset Allocation Summary -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie"></i> {{ asset_class }} Allocation Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-info">₹{{ "{:,.1f}".format(asset_recommendation.current_value|float) }}</h4>
+                                <small class="text-muted">Current Value</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-primary">₹{{ "{:,.1f}".format(asset_recommendation.target_value|float) }}</h4>
+                                <small class="text-muted">Target Value</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="{% if asset_recommendation.required_change < 0 %}text-danger{% else %}text-success{% endif %}">
+                                    ₹{{ "{:,.1f}".format(asset_recommendation.required_change|float) }}
+                                </h4>
+                                <small class="text-muted">Required Change</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h4 class="text-secondary">{{ "{:.1f}".format(asset_recommendation.current_weight|float) }}% → {{ "{:.1f}".format(asset_recommendation.target_weight|float) }}%</h4>
+                                <small class="text-muted">Weight Change</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Enhanced Security Recommendations with ML Insights -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list"></i> 
+                        {% if is_viewing_saved %}
+                            Saved Security Recommendations
+                            <span class="badge badge-success ml-2">Saved</span>
+                        {% else %}
+                            Enhanced Security Recommendations
+                            {% if ml_insights_enabled %}
+                                <span class="badge badge-primary ml-2">ML-Powered</span>
+                            {% endif %}
+                        {% endif %}
+                    </h5>
+                    <div id="ml-confidence-display" class="d-none">
+                        <span class="badge badge-info" id="confidence-badge">
+                            <i class="fas fa-brain"></i> ML Confidence: <span id="confidence-value">0%</span>
+                        </span>
+                        <small class="text-muted ml-2" id="model-status">Training</small>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-success btn-sm mr-2" onclick="previewAndSendEmail()" title="Preview and send email to client">
+                            <i class="fas fa-envelope"></i> Preview & Send Email
+                        </button>
+                        {% if not is_viewing_saved %}
+                            <button type="button" class="btn btn-info btn-sm mr-2" onclick="loadSavedRecommendations()">
+                                <i class="fas fa-folder-open"></i> Load Saved
+                            </button>
+                            
+                            <!-- REMOVED: Save button - Auto-save is now implemented -->
+                            <button type="button" class="btn btn-primary btn-sm" onclick="recordRecommendations()">
+                                <i class="fas fa-database"></i> Record to Database
+                            </button>
+                        {% else %}
+                            <div>
+                                <span class="text-muted mr-3">
+                                    <i class="fas fa-check-circle"></i> Recommendations are saved
+                                </span>
+                                <button type="button" class="btn btn-primary btn-sm" onclick="recordRecommendations()">
+                                    <i class="fas fa-database"></i> Record to Database
+                                </button>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if asset_securities %}
+                        <!-- Asset Class Summary -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Asset Class Summary</h6>
+                                        <p class="mb-1"><strong>Required Change:</strong> 
+                                            <span class="{% if asset_recommendation.required_change < 0 %}text-danger{% else %}text-success{% endif %}">
+                                                ₹{{ "{:,.0f}".format(asset_recommendation.required_change|float) }}
+                                            </span>
+                                        </p>
+                                        <p class="mb-1"><strong>Current Value:</strong> ₹{{ "{:,.0f}".format(asset_recommendation.current_value|float) }}</p>
+                                        <p class="mb-0"><strong>Target Value:</strong> ₹{{ "{:,.0f}".format(asset_recommendation.target_value|float) }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="card-title">Allocation Progress</h6>
+                                        <p class="mb-1"><strong>Total Allocated:</strong> 
+                                            <span id="total-allocated" class="text-primary">₹0</span>
+                                        </p>
+                                        <p class="mb-1"><strong>Remaining:</strong> 
+                                            <span id="remaining-amount" class="{% if asset_recommendation.required_change < 0 %}text-danger{% else %}text-success{% endif %}">
+                                                ₹{{ "{:,.0f}".format(asset_recommendation.required_change|float) }}
+                                            </span>
+                                        </p>
+                                        <p class="mb-0"><strong>Progress:</strong> 
+                                            <span id="progress-percentage">0%</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Bulk Actions -->
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-outline-primary" id="selectAllBtn">
+                                        <i class="fas fa-check-square"></i> Select All
+                                    </button>
+                                    <button type="button" class="btn btn-outline-secondary" id="deselectAllBtn">
+                                        <i class="fas fa-square"></i> Deselect All
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger" id="bulkDeleteBtn" disabled>
+                                        <i class="fas fa-trash"></i> Delete Selected (<span id="selectedCount">0</span>)
+                                    </button>
+                                </div>
+                                <div class="btn-group ml-2" role="group">
+                                    <button type="button" class="btn btn-success" id="addNewSecurityBtn">
+                                        <i class="fas fa-plus"></i> Add New Security
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="securityTable">
+                                <thead class="thead-light">
+                                    <tr>
+                                        <th>
+                                            <input type="checkbox" id="selectAllCheckbox" title="Select All">
+                                        </th>
+                                        <th>Symbol</th>
+                                        <th>Action</th>
+                                        <th>Price</th>
+                                        <th>Amount</th>
+                                        <th>Current Qty</th>
+                                        <th>New Qty</th>
+                                        <th>Qty Change <small class="text-muted">(Editable)</small></th>
+                                        <th>Current Weight</th>
+                                        <th>Target Weight</th>
+                                        <th>Future Weight</th>
+                                        <th>ML Insights</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for security in asset_securities %}
+                                    <tr class="recommendation-{{ security.ml_insights.color if security.ml_insights else 'default' }}" 
+                                        data-security-id="{{ security.security_id }}"
+                                        data-recommendation-id="{{ security.recommendation_id }}">
+                                        <td>
+                                            <input type="checkbox" class="row-checkbox" data-security-id="{{ security.security_id }}" data-recommendation-id="{{ security.recommendation_id }}">
+                                        </td>
+                                        <td>
+                                            <strong>{{ security.symbol }}</strong>
+                                            {% if security.ml_insights and security.ml_insights.history %}
+                                                <br><small class="text-muted">{{ security.ml_insights.history }}</small>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if security.action == 'SELL' %}
+                                                <span class="badge badge-danger" style="background-color: #dc3545 !important; color: white !important; font-weight: bold;">SELL</span>
+                                            {% elif security.action == 'BUY' %}
+                                                <span class="badge badge-success" style="background-color: #28a745 !important; color: white !important; font-weight: bold;">BUY</span>
+                                            {% else %}
+                                                <span class="badge badge-secondary" style="background-color: #6c757d !important; color: white !important; font-weight: bold;">{{ security.action }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            ₹{{ "{:,.2f}".format(security.current_price|default(0)|float) }}
+                                        </td>
+                                        <td class="{% if security.amount < 0 %}text-danger{% else %}text-success{% endif %}">
+                                            <span class="amount-display">₹{{ "{:,.1f}".format(security.amount|float) }}</span>
+                                        </td>
+                                        <td class="current-quantity-cell">{{ security.current_quantity or 0 }}</td>
+                                        <td class="new-quantity-cell">
+                                            <span class="new-quantity-display">{{ security.new_quantity or 0 }}</span>
+                                        </td>
+                                        <td>
+                                            <input type="number" class="form-control form-control-sm quantity-change-input" 
+                                                   value="{{ (security.new_quantity|default(0) - security.current_quantity|default(0)) }}" 
+                                                   data-security-id="{{ security.security_id }}" 
+                                                   step="1" 
+                                                   title="Edit quantity change">
+                                        </td>
+                                        <td>{{ "{:.1f}".format(((security.current_quantity|default(0)|float * security.current_price|default(0)|float) / asset_recommendation.current_value|float * 100) if asset_recommendation.current_value|float > 0 else 0) }}%</td>
+                                        <td>{{ "{:.1f}".format(security.target_weight|default(0)|float) }}%</td>
+                                        <td class="future-weight-cell">
+                                            <span class="future-weight-display">{{ "{:.1f}".format(((security.new_quantity|default(0)|float * security.current_price|default(0)|float) / asset_recommendation.target_value|float * 100) if asset_recommendation.target_value|float > 0 else 0) }}%</span>
+                                        </td>
+                                        <td>
+                                            {% if security.ml_insights %}
+                                                <div class="ml-insights">
+                                                    <span class="badge badge-{{ 'success' if security.ml_insights.confidence >= 70 else 'warning' if security.ml_insights.confidence >= 50 else 'danger' }}">
+                                                        {{ security.ml_insights.confidence }}%
+                                                    </span>
+                                                    <br><small class="text-muted">{{ security.ml_insights.prediction }}</small>
+                                                </div>
+                                            {% else %}
+                                                <span class="text-muted">No ML data</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-outline-danger" 
+                                                    onclick="deleteRecommendation({{ security.security_id }})"
+                                                    title="Delete this recommendation">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="table-info">
+                                        <th colspan="3">Total</th>
+                                        <th id="totalAmount">₹0.00</th>
+                                        <th colspan="7"></th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-info-circle fa-3x text-muted mb-3"></i>
+                            <h5 class="text-muted">No security recommendations found</h5>
+                            <p class="text-muted">There are no securities to recommend for this asset class.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ML Insights Legend -->
+{% if ml_insights_enabled %}
+<div class="modal fade" id="mlInsightsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-brain"></i> ML Insights Legend</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <h6>Color Coding:</h6>
+                <ul class="list-unstyled">
+                    <li><span class="badge badge-success">Green</span> - High confidence (70%+) user will follow</li>
+                    <li><span class="badge badge-warning">Yellow</span> - Medium confidence (50-69%)</li>
+                    <li><span class="badge badge-danger">Red</span> - Low confidence (<50%) user will follow</li>
+                </ul>
+                <h6>Confidence Scores:</h6>
+                <p>Based on historical user behavior patterns, market conditions, and security characteristics.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+</div>
+
+<script>
+// Ensure jQuery is loaded before running any code
+(function() {
+    function init() {
+        if (typeof $ !== 'undefined') {
+            console.log('jQuery is available, version:', $.fn.jquery);
+            initializePage();
+            
+            // Initialize ML confidence monitoring
+            initializeMLConfidenceMonitoring();
+        } else {
+            console.log('jQuery not available, retrying...');
+            setTimeout(init, 100);
+        }
+    }
+    
+    // Start initialization
+    init();
+})();
+
+function initializePage() {
+    try {
+        $(document).ready(function() {
+            
+            // Initialize event listeners
+            setupEventListeners();
+            
+            // Initialize totals on page load
+            updateTotals();
+            
+            // Wait a bit for the table to be fully rendered
+            setTimeout(function() {
+                updateTotals();
+                
+                // Start monitoring for changes (only if not viewing saved recommendations)
+                {% if not is_viewing_saved %}
+                monitorForChanges();
+                {% endif %}
+            }, 100);
+            
+            // Check if all asset classes are already saved on page load
+            checkAllAssetClassesSaved();
+            
+            // Add ML insights button if enabled
+            {% if ml_insights_enabled %}
+            $('.card-header h5').append(' <button type="button" class="btn btn-sm btn-outline-primary ml-2" data-toggle="modal" data-target="#mlInsightsModal"><i class="fas fa-question-circle"></i></button>');
+            {% endif %}
+            
+        });
+    } catch (error) {
+        console.error('Error in initializePage:', error);
+    }
+}
+
+function setupEventListeners() {
+    try {
+        // Check if recommendations are already saved
+        if ($('#securityTable').data('saved')) {
+            return; // Don't monitor if already saved
+        }
+    
+    // Add event listeners for dynamic calculations (quantity change input)
+    $('#securityTable tbody').on('input change keyup', '.quantity-change-input', function() {
+        const row = $(this).closest('tr');
+        const securityId = row.data('security-id');
+        
+        // Track quantity modification for ML training
+        trackQuantityModification(securityId, row);
+        
+        // Update calculations when quantity change changes
+        updateRowCalculationsFromQuantityChange(row, securityId);
+        updateTotals();
+        
+        // Auto-save changes immediately
+        autoSaveRecommendation(securityId, row);
+    });
+    
+    // Add New Security button
+    $('#addNewSecurityBtn').on('click', function() {
+        addNewSecurity();
+    });
+    
+    // Bulk selection functionality
+    $('#selectAllCheckbox').on('change', function() {
+        const isChecked = $(this).prop('checked');
+        $('.row-checkbox').prop('checked', isChecked);
+        updateBulkDeleteButton();
+    });
+    
+    $('.row-checkbox').on('change', function() {
+        updateBulkDeleteButton();
+        updateSelectAllCheckbox();
+    });
+    
+    // Bulk action buttons
+    $('#selectAllBtn').on('click', function() {
+        $('.row-checkbox').prop('checked', true);
+        $('#selectAllCheckbox').prop('checked', true);
+        updateBulkDeleteButton();
+    });
+    
+    $('#deselectAllBtn').on('click', function() {
+        $('.row-checkbox').prop('checked', false);
+        $('#selectAllCheckbox').prop('checked', false);
+        updateBulkDeleteButton();
+    });
+    
+    $('#bulkDeleteBtn').on('click', function() {
+        const selectedRows = $('.row-checkbox:checked');
+        const count = selectedRows.length;
+        
+        if (count === 0) {
+            alert('Please select at least one recommendation to delete.');
+            return;
+        }
+        
+        if (confirm(`Are you sure you want to delete ${count} recommendation(s)?`)) {
+            selectedRows.each(function() {
+                const securityId = $(this).data('security-id');
+                deleteRecommendation(securityId);
+            });
+        }
+    });
+    
+    // Add event listeners to detect other changes
+    $('#securityTable tbody').on('input change', 'input, select, textarea', function() {
+        enableSaveButton();
+    });
+    
+    // Monitor for row additions/removals
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'childList') {
+                // Check if rows were added or removed
+                if (mutation.addedNodes.length > 0 || mutation.removedNodes.length > 0) {
+                    enableSaveButton();
+                }
+            }
+        });
+    });
+    
+    // Start observing the table body for changes
+    const tableBody = document.querySelector('#securityTable tbody');
+    if (tableBody) {
+        observer.observe(tableBody, { childList: true, subtree: true });
+    }
+    } catch (error) {
+        console.error('Error in setupEventListeners:', error);
+    }
+}
+
+// Update totals
+function updateTotals() {
+    let totalAmount = 0;
+    let rowCount = 0;
+    
+    console.log('DEBUG: Updating totals...');
+    
+    $('#securityTable tbody tr').each(function() {
+        rowCount++;
+        const row = $(this);
+        
+        // Try multiple ways to find the amount (now 4th column after adding Price column)
+        let amountText = row.find('td:nth-child(4)').text();
+        if (!amountText || amountText.trim() === '') {
+            // Try finding by class or other selectors
+            amountText = row.find('td').filter(function() {
+                return $(this).text().includes('₹');
+            }).first().text();
+        }
+        
+        console.log(`DEBUG: Row ${rowCount}, Amount text: "${amountText}"`);
+        
+        if (amountText) {
+            const amount = parseFloat(amountText.replace('₹', '').replace(/,/g, '')) || 0;
+            totalAmount += amount;
+            console.log(`DEBUG: Parsed amount: ${amount}, Running total: ${totalAmount}`);
+        }
+    });
+    
+    console.log(`DEBUG: Final total: ${totalAmount}, Rows processed: ${rowCount}`);
+    
+    $('#totalAmount').text('₹' + totalAmount.toLocaleString('en-IN', {minimumFractionDigits: 1}));
+    
+    // Calculate and display seek amount (difference between total and required change)
+    const requiredChange = {{ asset_recommendation.required_change }};
+    const seekAmount = requiredChange - totalAmount;
+    $('#seekAmount').text('₹' + seekAmount.toLocaleString('en-IN', {minimumFractionDigits: 1}));
+    
+    console.log(`DEBUG: Required change: ${requiredChange}, Seek amount: ${seekAmount}`);
+}
+
+// Monitor for changes and re-enable save button if needed
+function monitorForChanges() {
+}
+
+// Update row calculations when quantity changes
+function updateRowCalculations(row, securityId) {
+    try {
+        const quantityInput = row.find('.quantity-input');
+        const priceCell = row.find('td:nth-child(3)');
+        const currentPrice = parseFloat(priceCell.text().replace('₹', '').replace(/,/g, '')) || 0;
+        const currentQuantity = parseInt(row.find('.current-quantity-cell').text()) || 0;
+        
+        // Get new quantity value
+        const newQuantity = parseInt(quantityInput.val()) || 0;
+        
+        // Calculate quantity change
+        const quantityChange = newQuantity - currentQuantity;
+        
+        // Calculate amount = quantity change × price (with sign)
+        const amount = quantityChange * currentPrice;
+        
+        // Update amount display
+        const amountDisplay = row.find('.amount-display');
+        if (amountDisplay.length > 0) {
+            amountDisplay.text('₹' + amount.toLocaleString('en-IN', {maximumFractionDigits: 1}));
+        }
+        
+        // Update amount cell color based on sign (positive = buy, negative = sell)
+        const amountCell = amountDisplay.closest('td');
+        amountCell.removeClass('text-danger text-success');
+        if (amount < 0) {
+            amountCell.addClass('text-danger'); // Negative amount (sell)
+        } else if (amount > 0) {
+            amountCell.addClass('text-success'); // Positive amount (buy)
+        }
+        
+        // Update quantity change badge dynamically (using already calculated quantityChange)
+        const changeBadge = row.find('.quantity-change-cell .badge');
+        if (changeBadge.length > 0) {
+            const changeText = quantityChange > 0 ? '+' + quantityChange : quantityChange;
+            console.log('DEBUG: Updating quantity change:', changeText);
+            changeBadge.text(changeText);
+            changeBadge.removeClass('bg-success bg-danger bg-secondary');
+            if (quantityChange > 0) {
+                changeBadge.addClass('bg-success');
+            } else if (quantityChange < 0) {
+                changeBadge.addClass('bg-danger');
+            } else {
+                changeBadge.addClass('bg-secondary');
+            }
+        } else {
+            console.log('DEBUG: Change badge not found');
+        }
+        
+        // Calculate future weight = (new quantity * price) / total asset class value after changes
+        const currentValue = currentQuantity * currentPrice; // Current value of this security
+        const newValue = newQuantity * currentPrice; // New value of this security after changes
+        
+        // Get asset class values from the template variables
+        const currentAssetValue = {{ asset_recommendation.current_value|float }}; // Current value of this asset class
+        const targetAssetValue = {{ asset_recommendation.target_value|float }}; // Target value of this asset class
+        const requiredChange = {{ asset_recommendation.required_change|float }}; // Required change for this asset class
+        
+        // Future weight = new value of this security / target asset class value
+        // This represents what percentage of the asset class this security will be
+        const futureWeight = targetAssetValue > 0 ? (newValue / targetAssetValue) * 100 : 0;
+        console.log('DEBUG: Future weight calculation - New Value:', newValue, 'Target Asset Value:', targetAssetValue, 'Weight:', futureWeight.toFixed(1) + '%');
+        
+        const futureWeightDisplay = row.find('.future-weight-display');
+        if (futureWeightDisplay.length > 0) {
+            futureWeightDisplay.text(futureWeight.toFixed(1) + '%');
+        } else {
+            console.log('DEBUG: Future weight display not found');
+        }
+        
+    } catch (error) {
+        console.error('DEBUG: Error in updateRowCalculations:', error);
+    }
+}
+
+// Update totals and progress
+function updateTotals() {
+    let totalAllocated = 0;
+    
+    $('#securityTable tbody tr').each(function() {
+        const row = $(this);
+        const amountText = row.find('.amount-display').text();
+        const amount = parseFloat(amountText.replace('₹', '').replace(/,/g, '')) || 0;
+        totalAllocated += amount;
+    });
+    
+    const requiredChange = {{ asset_recommendation.required_change|float }};
+    const remaining = requiredChange - totalAllocated;
+    const progress = requiredChange !== 0 ? Math.abs((totalAllocated / requiredChange) * 100) : 0;
+    
+    // Update display
+    $('#total-allocated').text('₹' + totalAllocated.toLocaleString('en-IN', {maximumFractionDigits: 0}));
+    $('#remaining-amount').text('₹' + remaining.toLocaleString('en-IN', {maximumFractionDigits: 0}));
+    $('#progress-percentage').text(progress.toFixed(1) + '%');
+    
+    // Update table footer
+    $('#totalAmount').text('₹' + totalAllocated.toLocaleString('en-IN', {maximumFractionDigits: 0}));
+    
+    // Update remaining amount color
+    const remainingElement = $('#remaining-amount');
+    remainingElement.removeClass('text-success text-danger');
+    if (remaining > 0) {
+        remainingElement.addClass('text-success');
+    } else if (remaining < 0) {
+        remainingElement.addClass('text-danger');
+    }
+}
+
+// (Removed) testCalculations helper – no longer needed
+
+// Track quantity modifications for ML training
+function trackQuantityModification(securityId, row) {
+    try {
+        const quantityChangeInput = row.find('.quantity-change-input');
+        const newQuantity = parseInt(quantityChangeInput.val()) || 0;
+        
+        // Get original values from data attributes
+        const originalQuantity = parseInt(quantityChangeInput.data('original-quantity')) || 0;
+        const originalAmount = parseFloat(quantityChangeInput.data('original-amount')) || 0;
+        
+        // Calculate new amount
+        const currentPrice = originalAmount / Math.max(originalQuantity, 1);
+        const newAmount = newQuantity * currentPrice;
+        
+        // Only track if there's a meaningful change
+        if (Math.abs(newQuantity - originalQuantity) > 0) {
+            const context = {
+                session_id: sessionStorage.getItem('session_id') || 'unknown',
+                time_spent: Date.now() - (window.pageLoadTime || Date.now()),
+                reason: 'user_preference',
+                modification_type: 'quantity_change'
+            };
+            
+            fetch('/unified-recommendations/track-modification', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': window.csrfToken
+                },
+                body: JSON.stringify({
+                    client_id: currentClientId,
+                    recommendation_id: getRecommendationId(securityId),
+                    modification_type: 'quantity_change',
+                    original_quantity: originalQuantity,
+                    new_quantity: newQuantity,
+                    original_amount: originalAmount,
+                    new_amount: newAmount,
+                    context: context
+                })
+            }).catch(error => {
+                console.log('DEBUG: Modification tracking failed:', error);
+            });
+        }
+    } catch (error) {
+        console.log('DEBUG: Error tracking quantity modification:', error);
+    }
+}
+
+// Track security additions for ML training
+function trackSecurityAddition(symbol, action, quantity, amount) {
+    try {
+        const context = {
+            session_id: sessionStorage.getItem('session_id') || 'unknown',
+            time_spent: Date.now() - (window.pageLoadTime || Date.now()),
+            reason: 'user_preference'
+        };
+        
+        fetch('/unified-recommendations/track-modification', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': window.csrfToken
+            },
+            body: JSON.stringify({
+                client_id: currentClientId,
+                modification_type: 'security_addition',
+                asset_class: currentAssetClass,
+                added_security: {
+                    symbol: symbol,
+                    action: action,
+                    quantity: quantity,
+                    amount: amount
+                },
+                context: context
+            })
+        }).catch(error => {
+            console.log('DEBUG: Security addition tracking failed:', error);
+        });
+    } catch (error) {
+        console.log('DEBUG: Error tracking security addition:', error);
+    }
+}
+
+// Track security deletions for ML training
+function trackSecurityDeletion(securityId, deletedSecurity) {
+    try {
+        const context = {
+            session_id: sessionStorage.getItem('session_id') || 'unknown',
+            time_spent: Date.now() - (window.pageLoadTime || Date.now()),
+            reason: 'user_preference'
+        };
+        
+        fetch('/unified-recommendations/track-modification', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': window.csrfToken
+            },
+            body: JSON.stringify({
+                client_id: currentClientId,
+                recommendation_id: getRecommendationId(securityId),
+                modification_type: 'security_deletion',
+                deleted_security: deletedSecurity,
+                context: context
+            })
+        }).catch(error => {
+            console.log('DEBUG: Security deletion tracking failed:', error);
+        });
+    } catch (error) {
+        console.log('DEBUG: Error tracking security deletion:', error);
+    }
+}
+
+// Delete a recommendation row
+async function deleteRecommendation(securityId) {
+        const row = $(`tr[data-security-id="${securityId}"]`);
+    
+    // Get the recommendation ID for the delete operation
+    const recommendationId = row.attr('data-recommendation-id');
+    
+    // Debug: Show what keys are available in the row
+    console.log('DEBUG: 🔍 ROW DATA DEBUG:');
+    console.log('DEBUG:   - Row element:', row[0]);
+    console.log('DEBUG:   - Row data-security-id:', row.attr('data-security-id'));
+    console.log('DEBUG:   - Row data-recommendation-id:', recommendationId);
+    console.log('DEBUG:   - All row data attributes:', row[0] ? row[0].dataset : 'No row found');
+    
+    // Auto-save deletion to database (skip for new recommendations)
+    if (!securityId.toString().startsWith('NEW_') && recommendationId) {
+        console.log('DEBUG: Attempting to delete recommendation ID:', recommendationId);
+        console.log('DEBUG: 🔑 FRONTEND DELETE KEY: recommendationId =', recommendationId, '(type:', typeof recommendationId, ')');
+        console.log('DEBUG: 🔑 FRONTEND DELETE KEY: recommendationId value =', JSON.stringify(recommendationId));
+        
+        // Get fresh CSRF token if not available
+        let csrfToken = window.csrfToken;
+        if (!csrfToken || csrfToken === '') {
+            console.log('DEBUG: CSRF Token missing, fetching fresh token...');
+            try {
+                const response = await fetch('/unified-recommendations/get-csrf-token');
+                const data = await response.json();
+                csrfToken = data.csrf_token;
+                window.csrfToken = csrfToken;
+                console.log('DEBUG: Fresh CSRF token obtained:', csrfToken ? 'YES' : 'NO');
+            } catch (error) {
+                console.error('DEBUG: Failed to get CSRF token:', error);
+                alert('Failed to get security token. Please refresh the page.');
+                return;
+            }
+        }
+        
+        console.log('DEBUG: CSRF Token available:', csrfToken ? 'YES' : 'NO');
+        console.log('DEBUG: CSRF Token value:', csrfToken);
+        console.log('DEBUG: About to DELETE recommendation ID:', recommendationId);
+        console.log('DEBUG: DELETE URL:', '/unified-recommendations/api/security-recommendation/' + recommendationId);
+        
+                fetch('/unified-recommendations/api/security-recommendation/' + recommendationId, {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => {
+                    console.log('DEBUG: DELETE response status:', response.status);
+                    console.log('DEBUG: DELETE response headers:', response.headers);
+                    
+                    if (response.headers.get('content-type')?.includes('application/json')) {
+                        return response.json();
+                    } else {
+                        return response.text().then(text => {
+                            console.log('DEBUG: Non-JSON response:', text);
+                            throw new Error(`Server returned ${response.status}: ${text.substring(0, 100)}`);
+                        });
+                    }
+                })
+        .then(data => {
+            if (data.success) {
+                console.log(`Auto-deleted recommendation ${recommendationId}`);
+            } else {
+                console.error('Auto-delete failed:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Auto-delete error:', error);
+        });
+    }
+    
+    // Track security deletion for ML training
+    const deletedSecurity = {
+        symbol: row.find('td:nth-child(2)').text().trim(),
+        action: row.find('td:nth-child(3)').text().trim(),
+        quantity: parseInt(row.find('.quantity-change-input').val()) || 0,
+        amount: parseFloat(row.find('.amount-display').text().replace('₹', '').replace(/,/g, '')) || 0
+    };
+    trackSecurityDeletion(securityId, deletedSecurity);
+    
+        row.fadeOut(300, function() {
+            $(this).remove();
+            updateTotals();
+        });
+}
+
+// Auto-save functionality (replaces save button)
+function enableSaveButton() {
+    // Mark table as having unsaved changes (for tracking purposes)
+        $('#securityTable').data('saved', false);
+    console.log('DEBUG: Changes detected - auto-save will handle persistence');
+}
+
+// Add new security recommendation
+function addNewSecurity() {
+    // Prompt user for security symbol
+    const symbol = prompt('Enter security symbol (e.g., INFY, RELIANCE):');
+    if (!symbol || symbol.trim() === '') {
+        return;
+    }
+    
+    // Prompt for action
+    const action = prompt('Enter action (BUY/SELL):', 'BUY').toUpperCase();
+    if (!['BUY', 'SELL'].includes(action)) {
+        alert('Invalid action. Please enter BUY or SELL.');
+        return;
+    }
+    
+    // Prompt for quantity change
+    const quantityChange = parseInt(prompt('Enter quantity change:', '0'));
+    if (isNaN(quantityChange)) {
+        alert('Invalid quantity. Please enter a number.');
+        return;
+    }
+    
+    // Prompt for price
+    const price = parseFloat(prompt('Enter current price:', '0'));
+    if (isNaN(price) || price <= 0) {
+        alert('Invalid price. Please enter a positive number.');
+        return;
+    }
+    
+    // Calculate amount
+    const amount = quantityChange * price;
+    
+    // Create new row
+    const newRow = $(`
+        <tr data-security-id="NEW_${Date.now()}" class="user-added">
+            <td><input type="checkbox" class="row-checkbox" data-security-id="NEW_${Date.now()}"></td>
+            <td><strong>${symbol.toUpperCase()}</strong> <span class="badge badge-info">User Added</span></td>
+            <td><span class="badge ${action === 'SELL' ? 'badge-danger' : 'badge-success'}">${action}</span></td>
+            <td>₹${price.toFixed(2)}</td>
+            <td class="${amount < 0 ? 'text-danger' : 'text-success'}"><span class="amount-display">₹${amount.toLocaleString('en-IN', {minimumFractionDigits: 1})}</span></td>
+            <td class="current-quantity-cell">0</td>
+            <td class="new-quantity-cell"><span class="new-quantity-display">${quantityChange}</span></td>
+            <td><input type="number" class="form-control form-control-sm quantity-change-input" value="${quantityChange}" data-security-id="NEW_${Date.now()}" step="1" title="Edit quantity change"></td>
+            <td>0.0%</td>
+            <td>0.0%</td>
+            <td class="future-weight-cell"><span class="future-weight-display">0.0%</span></td>
+            <td><span class="text-muted">User Added</span></td>
+            <td>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteRecommendation('NEW_${Date.now()}')" title="Delete this recommendation">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `);
+    
+    // Add to table
+    $('#securityTable tbody').append(newRow);
+    
+    // Update totals
+    updateTotals();
+    
+    // Track security addition for ML training
+    trackSecurityAddition(symbol, action, quantityChange, amount);
+    
+    // Auto-save new recommendation to database
+    autoSaveNewRecommendation(symbol, action, quantityChange, price);
+    
+    // Show success message
+    alert(`Added new security: ${symbol} (${action} ${quantityChange} shares)`);
+    
+    console.log(`Added new security: ${symbol}, Action: ${action}, Qty: ${quantityChange}, Price: ${price}, Amount: ${amount}`);
+}
+
+// Auto-save new recommendation to database
+function autoSaveNewRecommendation(symbol, action, quantityChange, price) {
+    // Get current asset class and client ID from the page
+    const assetClass = '{{ asset_class }}';
+    const clientId = {{ client.id }};
+    
+    // Find security ID by symbol (this would need to be implemented)
+    // For now, we'll use a placeholder approach
+    fetch('/unified-recommendations/api/security-recommendation/add', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+        },
+        body: JSON.stringify({
+            client_id: clientId,
+            asset_class: assetClass,
+            security_id: 1, // Placeholder - would need to lookup by symbol
+            action: action,
+            quantity: quantityChange,
+            notes: `User-added security: ${symbol} at ₹${price}`
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            console.log(`Auto-saved new recommendation: ${symbol}`);
+            // Update the row with the actual recommendation ID
+            const newRow = $(`tr[data-security-id="NEW_${Date.now()}"]`);
+            newRow.attr('data-security-id', data.recommendation_id);
+            newRow.find('.row-checkbox').attr('data-security-id', data.recommendation_id);
+        } else {
+            console.error('Auto-save new recommendation failed:', data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Auto-save new recommendation error:', error);
+    });
+}
+
+// Auto-save recommendation changes to database
+function autoSaveRecommendation(securityId, row) {
+    // Skip auto-save for new recommendations that haven't been saved yet
+    if (securityId.toString().startsWith('NEW_')) {
+        return;
+    }
+    
+    try {
+        const cells = row.find('td');
+        const quantityChangeInput = cells.find('.quantity-change-input');
+        const quantityChange = parseInt(quantityChangeInput.val()) || 0;
+        
+        // Get current quantity from the current quantity cell
+        const currentQuantityCell = row.find('.current-quantity-cell');
+        const currentQuantity = parseInt(currentQuantityCell.text()) || 0;
+        
+        // Calculate new quantity
+        const newQuantity = currentQuantity + quantityChange;
+        
+        // Determine action based on new quantity vs current quantity
+        // If new quantity > current quantity: BUY
+        // If new quantity < current quantity: SELL
+        // If new quantity == current quantity: preserve original action or set to HOLD only if quantityChange is 0
+        let action;
+        if (quantityChange > 0) {
+            action = 'BUY';
+        } else if (quantityChange < 0) {
+            action = 'SELL';
+        } else {
+            // If quantityChange is 0, preserve the original action from the badge
+            const actionBadge = row.find('td:nth-child(3) .badge'); // Action is in 3rd column
+            const currentAction = actionBadge.text().trim();
+            if (currentAction === 'BUY' || currentAction === 'SELL') {
+                action = currentAction; // Preserve original action
+            } else {
+                action = 'HOLD'; // Only set to HOLD if no action was set
+            }
+        }
+        
+        // Prepare update data
+        const updateData = {
+            updates: [{
+                recommendation_id: securityId,
+                changes: {
+                    quantity: quantityChange,
+                    action: action,
+                    is_user_modified: true
+                }
+            }]
+        };
+        
+        // Send auto-save request
+        console.log('DEBUG: Auto-save - CSRF Token available:', window.csrfToken ? 'YES' : 'NO');
+        console.log('DEBUG: Auto-save - CSRF Token value:', window.csrfToken);
+        
+        fetch('/unified-recommendations/api/security-recommendation/bulk-update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': window.csrfToken
+            },
+            body: JSON.stringify(updateData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log(`Auto-saved recommendation ${securityId}: ${action} ${quantityChange}`);
+                // Show subtle success indicator
+                row.find('.quantity-change-input').addClass('border-success');
+                setTimeout(() => {
+                    row.find('.quantity-change-input').removeClass('border-success');
+                }, 1000);
+            } else {
+                console.error('Auto-save failed:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Auto-save error:', error);
+        });
+        
+    } catch (error) {
+        console.error('Error in auto-save:', error);
+    }
+}
+
+// Save recommendations to session
+function saveRecommendations() {
+    const recommendations = [];
+    
+    // Collect all current recommendations from the table (only remaining rows)
+    $('#securityTable tbody tr').each(function() {
+        const row = $(this);
+        const securityId = row.data('security-id');
+        const symbol = row.find('td:first-child strong').text();
+        const action = row.find('td:nth-child(2) .badge').text();
+        
+        // Get values from inputs and displays
+        const amountText = row.find('.amount-display').text();
+        const amount = parseFloat(amountText.replace('₹', '').replace(/,/g, '')) || 0;
+        const currentQty = parseInt(row.find('.current-quantity-cell').text()) || 0;
+        const qtyChange = parseInt(row.find('.quantity-change-input').val()) || 0;
+        const newQty = currentQty + qtyChange;
+        const futureWeight = parseFloat(row.find('.future-weight-display').text().replace('%', '')) || 0;
+        
+        recommendations.push({
+            security_id: securityId,
+            symbol: symbol,
+            action: action,
+            amount: amount,
+            current_quantity: currentQty,
+            new_quantity: newQty,
+            quantity_change: qtyChange,
+            future_weight: futureWeight,
+            current_price: 0.0
+        });
+    });
+    
+    // Send to server to save in session
+    fetch('{{ url_for("unified_recommendations.save_recommendations") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            asset_class: '{{ asset_class }}',
+            recommendations: recommendations,
+            client_id: {{ client.id }}
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Disable the save button and show saved state
+            const saveButton = $('button[onclick="saveRecommendations()"]');
+            saveButton.prop('disabled', true);
+            saveButton.html('<i class="fas fa-check"></i> Saved');
+            saveButton.removeClass('btn-success').addClass('btn-secondary');
+            
+            // Mark recommendations as saved
+            $('#securityTable').data('saved', true);
+            
+            // Show success message
+            const alert = $(`
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="fas fa-check-circle"></i> Recommendations saved successfully!
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span>&times;</span>
+                    </button>
+                </div>
+            `);
+            $('.container-fluid .row').first().after(alert);
+            
+            // Check if all asset classes are saved and show Preview & Send Email button
+            checkAllAssetClassesSaved();
+            
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => {
+                alert.alert('close');
+            }, 3000);
+        } else {
+            alert('Error saving recommendations: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error saving recommendations. Please try again.');
+    });
+}
+
+// Load saved recommendations from session
+function loadSavedRecommendations() {
+    fetch('{{ url_for("unified_recommendations.load_saved_recommendations") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            asset_class: '{{ asset_class }}',
+            client_id: {{ client.id }}
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.recommendations && data.recommendations.length > 0) {
+            // Clear current table
+            $('#securityTable tbody').empty();
+            
+            // Add saved recommendations to table
+            data.recommendations.forEach(rec => {
+                // Determine action based on amount (since rec.action might contain symbol)
+                const actualAction = rec.amount < 0 ? 'SELL' : 'BUY';
+                const actionClass = actualAction === 'SELL' ? 'badge-danger' : 'badge-success';
+                const amountClass = rec.amount < 0 ? 'text-danger' : 'text-success';
+                const qtyChangeClass = rec.quantity_change < 0 ? 'text-danger' : 'text-success';
+                
+                const row = $(`
+                    <tr data-security-id="${rec.security_id}">
+                        <td><input type="checkbox" class="row-checkbox" data-security-id="${rec.security_id}"></td>
+                        <td><strong>${rec.symbol}</strong></td>
+                        <td><span class="badge ${actionClass}">${actualAction}</span></td>
+                        <td>₹0.00</td>
+                        <td class="${amountClass}"><span class="amount-display">₹${rec.amount.toLocaleString('en-IN', {minimumFractionDigits: 1})}</span></td>
+                        <td class="current-quantity-cell">${rec.current_quantity || 0}</td>
+                        <td class="new-quantity-cell"><span class="new-quantity-display">${rec.new_quantity || 0}</span></td>
+                        <td><input type="number" class="form-control form-control-sm quantity-change-input" value="${rec.quantity_change || 0}" data-security-id="${rec.security_id}" step="1" title="Edit quantity change"></td>
+                        <td>${(rec.current_weight || 0).toFixed(1)}%</td>
+                        <td>${(rec.target_weight || 0).toFixed(1)}%</td>
+                        <td class="future-weight-cell"><span class="future-weight-display">${(rec.future_weight || 0).toFixed(1)}%</span></td>
+                        <td><span class="text-muted">No ML data</span></td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button type="button" class="btn btn-sm btn-outline-success" 
+                                        onclick="recordFeedback(${rec.security_id}, '${actualAction}', true, ${rec.amount})"
+                                        title="I followed this recommendation">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" 
+                                        onclick="recordFeedback(${rec.security_id}, '${actualAction}', false, ${rec.amount})"
+                                        title="I rejected this recommendation">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `);
+                $('#securityTable tbody').append(row);
+            });
+            
+            // Update totals after a short delay to ensure DOM is updated
+            setTimeout(function() {
+                updateTotals();
+                
+                // Re-enable save button since user is now editing loaded recommendations
+                enableSaveButton();
+                
+                // Start monitoring for changes
+                monitorForChanges();
+            }, 50);
+            
+            // Show success message
+            const alert = $(`
+                <div class="alert alert-info alert-dismissible fade show" role="alert">
+                    <i class="fas fa-info-circle"></i> Loaded ${data.recommendations.length} saved recommendations!
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span>&times;</span>
+                    </button>
+                </div>
+            `);
+            $('.container-fluid .row').first().after(alert);
+            
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => {
+                alert.alert('close');
+            }, 3000);
+        } else {
+            alert('No saved recommendations found for this asset class.');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading saved recommendations. Please try again.');
+    });
+}
+
+// Check if all asset classes are saved and show Preview & Send Email button
+function checkAllAssetClassesSaved() {
+    fetch('{{ url_for("unified_recommendations.check_all_saved") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            client_id: {{ client.id }}
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.all_saved && data.saved_asset_classes.length > 0) {
+            showSendToClientButton(data.saved_asset_classes);
+        }
+    })
+    .catch(error => {
+        console.error('Error checking saved status:', error);
+    });
+}
+
+// Show Preview & Send Email button
+function showSendToClientButton(savedAssetClasses) {
+    // Remove existing Preview & Send Email button if any
+    $('#sendToClientButton').remove();
+    
+    // Create and add the Preview & Send Email button
+    const sendButton = $(`
+        <div id="sendToClientButton" class="mt-4">
+            <div class="card border-success">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-envelope"></i> Ready to Preview & Send Email
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-3">
+                        <i class="fas fa-check-circle text-success"></i> 
+                        All recommendations have been saved for: <strong>${savedAssetClasses.join(', ')}</strong>
+                    </p>
+                    <p class="text-muted mb-3">
+                        Click below to preview the email and send the complete portfolio plan to the client.
+                    </p>
+                    <button type="button" class="btn btn-success btn-lg" onclick="previewAndSendEmail()">
+                        <i class="fas fa-envelope"></i> Preview & Send Email
+                    </button>
+                </div>
+            </div>
+        </div>
+    `);
+    
+    // Insert after the main card
+    $('.card').last().after(sendButton);
+}
+
+// Preview and send email function (always available)
+function previewAndSendEmail() {
+    // Get session_id from URL parameters first, then from session storage or pending_data
+    const urlParams = new URLSearchParams(window.location.search);
+    let sessionId = urlParams.get('session_id');
+    
+    // If not in URL, try to get from session storage or pending_data
+    if (!sessionId) {
+        const pendingData = {{ pending_data|tojson_safe if pending_data else '{}' }};
+        sessionId = pendingData.edit_session_id || sessionStorage.getItem('session_id');
+    }
+    
+    // Build preview URL with session_id if available
+    let previewUrl = '{{ url_for("unified_recommendations.preview_email", client_id=client.id) }}';
+    if (sessionId) {
+        previewUrl += (previewUrl.includes('?') ? '&' : '?') + 'session_id=' + sessionId;
+    }
+    
+    // Redirect to email preview page
+    window.location.href = previewUrl;
+}
+
+// Record recommendations to database
+function recordRecommendations() {
+    
+    // Collect current recommendations from the table
+    const recommendations = [];
+    const table = document.getElementById('securityTable');
+    const rows = table.querySelectorAll('tbody tr');
+    
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 8) return; // We now have more columns with checkbox
+        const securityIdStr = row.getAttribute('data-security-id');
+        const securityId = parseInt(securityIdStr, 10);
+        if (!securityId || Number.isNaN(securityId)) return; // Skip invalid rows
+
+        const symbol = cells[1].textContent.trim(); // Symbol is now column 1
+        const action = cells[2].textContent.trim(); // Action is now column 2
+        // Price is column 3
+        const priceText = (cells[3].textContent || '').replace(/₹|,/g, '');
+        const currentPrice = parseFloat(priceText) || 0;
+        // Amount is column 4 (from span.amount-display)
+        const amountSpan = cells[4].querySelector('.amount-display');
+        const amountText = amountSpan ? amountSpan.textContent : cells[4].textContent;
+        const amount = parseFloat((amountText || '').replace(/₹|,/g, '')) || 0;
+        // Current qty col 5
+        const currentQty = parseInt(cells[5].textContent) || 0;
+        // Qty change col 7 (input)
+        const qtyChangeInput = cells[7].querySelector('input');
+        const quantityChange = qtyChangeInput ? (parseInt(qtyChangeInput.value) || 0) : 0;
+        // Calculate new quantity
+        const newQty = currentQty + quantityChange;
+
+        recommendations.push({
+            security_id: securityId,
+            symbol: symbol,
+            action: action,
+            amount: amount,
+            quantity: quantityChange, // signed
+            current_quantity: currentQty,
+            new_quantity: newQty,
+            current_price: currentPrice
+        });
+    });
+    
+    console.log('DEBUG: Sending recommendations to record:', recommendations);
+    console.log('DEBUG: Number of recommendations:', recommendations.length);
+    console.log('DEBUG: Client ID:', {{ client.id }});
+    console.log('DEBUG: Asset Class:', '{{ asset_class }}');
+    recommendations.forEach((rec, index) => {
+        console.log(`DEBUG: Recommendation ${index}:`, {
+            security_id: rec.security_id,
+            symbol: rec.symbol,
+            action: rec.action,
+            amount: rec.amount,
+            quantity: rec.quantity,
+            current_quantity: rec.current_quantity,
+            new_quantity: rec.new_quantity,
+            current_price: rec.current_price
+        });
+    });
+    
+    fetch('{{ url_for("unified_recommendations.record_recommendations") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            client_id: {{ client.id }},
+            asset_class: '{{ asset_class }}',
+            recommendations: recommendations
+        })
+    })
+    .then(response => {
+        console.log('DEBUG: Record recommendations response status:', response.status);
+        return response.json();
+    })
+    .then(data => {
+        console.log('DEBUG: Record recommendations response data:', data);
+        if (data.success) {
+            // Show success message
+            const alert = $(`
+                <div class="alert alert-success alert-dismissible fade show" role="alert">
+                    <i class="fas fa-check-circle"></i> 
+                    <strong>Success!</strong> Recommendations have been recorded to the database.
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span>&times;</span>
+                    </button>
+                </div>
+            `);
+            $('.container-fluid .row').first().after(alert);
+            
+            // Update the Record to Database button
+            const recordBtn = document.querySelector('button[onclick="recordRecommendations()"]');
+            if (recordBtn) {
+                recordBtn.disabled = true;
+                recordBtn.innerHTML = '<i class="fas fa-check"></i> Recorded';
+                recordBtn.className = 'btn btn-success btn-sm';
+            }
+            
+            // Check if all asset classes are now recorded and show Preview & Send Email button
+            checkAllAssetClassesRecorded();
+            
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => {
+                alert.alert('close');
+            }, 3000);
+        } else {
+            alert('Error recording recommendations: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error recording recommendations. Please try again.');
+    });
+}
+
+// Check if all asset classes are recorded and show Preview & Send Email button
+function checkAllAssetClassesRecorded() {
+    fetch('{{ url_for("unified_recommendations.check_all_recorded") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            client_id: {{ client.id }}
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.all_recorded && data.recorded_asset_classes.length > 0) {
+            showSendToClientButton(data.recorded_asset_classes);
+        }
+    })
+    .catch(error => {
+        console.error('Error checking recorded status:', error);
+    });
+}
+
+// Record user feedback
+function recordFeedback(securityId, action, userDecision, amount) {
+    const data = {
+        client_id: {{ client.id }},
+        security_id: securityId,
+        recommendation_type: action,
+        user_decision: userDecision,
+        amount: amount,
+        reason: 'User feedback from enhanced interface'
+    };
+    
+    // Get CSRF token - try both methods
+    let csrfToken = window.csrfToken;
+    console.log('CSRF token from template:', csrfToken);
+    
+    // Fallback to meta tag if template token is empty
+    if (!csrfToken || csrfToken === '') {
+        const csrfTokenElement = document.querySelector('meta[name=csrf-token]');
+        console.log('CSRF token element:', csrfTokenElement);
+        if (csrfTokenElement) {
+            csrfToken = csrfTokenElement.getAttribute('content');
+            console.log('CSRF token from meta tag:', csrfToken);
+        } else {
+            console.error('CSRF token not found in template or meta tag!');
+            alert('CSRF token not found. Please refresh the page.');
+            return;
+        }
+    }
+    
+    fetch('{{ url_for("unified_recommendations.record_user_feedback") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show feedback
+            const message = userDecision ? 'Thank you for following the recommendation!' : 'Thank you for your feedback!';
+            const alertClass = userDecision ? 'alert-success' : 'alert-info';
+            
+            const alert = $(`
+                <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="close" data-dismiss="alert">
+                        <span>&times;</span>
+                    </button>
+                </div>
+            `);
+            
+            // Insert alert after the header and before the main content
+            $('.container-fluid .row').first().after(alert);
+            
+            // If user rejected the recommendation (clicked red X), remove the row from the table
+            if (!userDecision) {
+                const row = document.querySelector(`tr[data-security-id="${securityId}"]`);
+                if (row) {
+                    row.remove();
+                    updateTotals(); // Update totals after removing the row
+                    
+                    // Re-enable save button since user made a change
+                    enableSaveButton();
+                }
+            }
+            
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => alert.alert('close'), 3000);
+        } else {
+            alert('Error recording feedback: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error recording feedback');
+    });
+}
+
+// Update row calculations when quantity change is modified (new approach)
+function updateRowCalculationsFromQuantityChange(row, securityId) {
+    try {
+        const quantityChangeInput = row.find('.quantity-change-input');
+        const priceCell = row.find('td:nth-child(4)'); // Price is now 4th column
+        const currentPrice = parseFloat(priceCell.text().replace('₹', '').replace(/,/g, '')) || 0;
+        const currentQuantity = parseInt(row.find('.current-quantity-cell').text()) || 0;
+        
+        // Get quantity change value
+        const quantityChange = parseInt(quantityChangeInput.val()) || 0;
+        
+        // Calculate new quantity
+        const newQuantity = currentQuantity + quantityChange;
+        
+        // Update new quantity display
+        const newQuantityDisplay = row.find('.new-quantity-display');
+        if (newQuantityDisplay.length > 0) {
+            newQuantityDisplay.text(newQuantity);
+        }
+        
+        // Calculate amount = quantity change × price (with sign)
+        const amount = quantityChange * currentPrice;
+        
+        // Update amount display
+        const amountDisplay = row.find('.amount-display');
+        if (amountDisplay.length > 0) {
+            amountDisplay.text('₹' + amount.toLocaleString('en-IN', {maximumFractionDigits: 1}));
+        }
+        
+        // Update amount cell color based on sign
+        const amountCell = amountDisplay.closest('td');
+        amountCell.removeClass('text-danger text-success');
+        if (amount < 0) {
+            amountCell.addClass('text-danger'); // Negative amount (sell)
+        } else if (amount > 0) {
+            amountCell.addClass('text-success'); // Positive amount (buy)
+        }
+        
+        // Update action badge based on quantity change
+        // Only change action if quantityChange is non-zero
+        // If quantityChange is 0, preserve the existing action
+        const actionCell = row.find('td:nth-child(3)'); // Action is now 3rd column
+        const actionBadge = actionCell.find('.badge');
+        if (actionBadge.length > 0) {
+            if (quantityChange > 0) {
+                actionBadge.removeClass('badge-danger badge-secondary').addClass('badge-success').text('BUY');
+            } else if (quantityChange < 0) {
+                actionBadge.removeClass('badge-success badge-secondary').addClass('badge-danger').text('SELL');
+            } else {
+                // If quantityChange is 0, preserve the existing action (don't change to HOLD)
+                // Only set to HOLD if there's no existing action
+                const currentAction = actionBadge.text().trim();
+                if (!currentAction || currentAction === 'HOLD') {
+                    actionBadge.removeClass('badge-success badge-danger').addClass('badge-secondary').text('HOLD');
+                }
+                // Otherwise, keep the existing action (BUY or SELL)
+            }
+        }
+        
+        // Update future weight
+        updateFutureWeight(row, newQuantity, currentPrice);
+        
+        console.log(`Updated calculations for ${securityId}: qty_change=${quantityChange}, new_qty=${newQuantity}, amount=${amount}`);
+        
+    } catch (error) {
+        console.error('Error updating row calculations:', error);
+    }
+}
+
+// Update future weight calculation
+function updateFutureWeight(row, newQuantity, currentPrice) {
+    try {
+        // Calculate future weight = (new quantity * price) / total asset class value after changes
+        const currentQuantity = parseInt(row.find('.current-quantity-cell').text()) || 0;
+        const currentValue = currentQuantity * currentPrice; // Current value of this security
+        const newValue = newQuantity * currentPrice; // New value of this security after changes
+        
+        // Get asset class values from the template variables
+        const currentAssetValue = {{ asset_recommendation.current_value|float }}; // Current value of this asset class
+        const requiredChange = {{ asset_recommendation.required_change|float }}; // Amount to be allocated/sold
+        const targetAssetValue = currentAssetValue + requiredChange; // Target value of this asset class after changes
+        
+        // Future weight = new value of this security / target asset class value
+        // This represents what percentage of the asset class this security will be
+        const futureWeight = targetAssetValue > 0 ? (newValue / targetAssetValue) * 100 : 0;
+        console.log('DEBUG: Future weight calculation - New Value:', newValue, 'Target Asset Value:', targetAssetValue, 'Weight:', futureWeight.toFixed(1) + '%');
+        
+        const futureWeightDisplay = row.find('.future-weight-display');
+        if (futureWeightDisplay.length > 0) {
+            futureWeightDisplay.text(futureWeight.toFixed(1) + '%');
+        } else {
+            console.log('DEBUG: Future weight display not found');
+        }
+    } catch (error) {
+        console.error('Error updating future weight:', error);
+    }
+}
+
+// Update bulk delete button state
+function updateBulkDeleteButton() {
+    const selectedCount = $('.row-checkbox:checked').length;
+    const bulkDeleteBtn = $('#bulkDeleteBtn');
+    const selectedCountSpan = $('#selectedCount');
+    
+    selectedCountSpan.text(selectedCount);
+    
+    if (selectedCount > 0) {
+        bulkDeleteBtn.prop('disabled', false);
+    } else {
+        bulkDeleteBtn.prop('disabled', true);
+    }
+}
+
+// Update select all checkbox state
+function updateSelectAllCheckbox() {
+    const totalCheckboxes = $('.row-checkbox').length;
+    const checkedCheckboxes = $('.row-checkbox:checked').length;
+    const selectAllCheckbox = $('#selectAllCheckbox');
+    
+    if (checkedCheckboxes === 0) {
+        selectAllCheckbox.prop('indeterminate', false).prop('checked', false);
+    } else if (checkedCheckboxes === totalCheckboxes) {
+        selectAllCheckbox.prop('indeterminate', false).prop('checked', true);
+    } else {
+        selectAllCheckbox.prop('indeterminate', true);
+    }
+}
+
+// This initialization is now handled in the initializePage() function above
+
+// Helper function to get recommendation ID from security ID
+function getRecommendationId(securityId) {
+    const row = $(`tr[data-security-id="${securityId}"]`);
+    return row.attr('data-recommendation-id');
+}
+
+// Initialize ML confidence monitoring
+function initializeMLConfidenceMonitoring() {
+    try {
+        // Show confidence display
+        $('#ml-confidence-display').removeClass('d-none');
+        
+        // Get current recommendations for prediction
+        const recommendations = collectRecommendationData();
+        
+        if (recommendations.length > 0) {
+            // Get behavioral predictions
+            fetch('/unified-recommendations/get-behavioral-predictions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': window.csrfToken
+                },
+                body: JSON.stringify({
+                    client_id: currentClientId,
+                    recommendations: recommendations
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateConfidenceDisplay(data.overall_confidence, data.model_status);
+                }
+            })
+            .catch(error => {
+                console.log('DEBUG: ML confidence monitoring failed:', error);
+                updateConfidenceDisplay(0, 'training');
+            });
+        } else {
+            updateConfidenceDisplay(0, 'training');
+        }
+    } catch (error) {
+        console.log('DEBUG: Error initializing ML confidence monitoring:', error);
+    }
+}
+
+// Update confidence display
+function updateConfidenceDisplay(confidence, status) {
+    try {
+        $('#confidence-value').text(confidence + '%');
+        $('#model-status').text(status);
+        
+        // Update badge color based on confidence level
+        const badge = $('#confidence-badge');
+        badge.removeClass('badge-info badge-warning badge-success badge-danger');
+        
+        if (confidence >= 80) {
+            badge.addClass('badge-success');
+            $('#model-status').text('Ready for Filtering');
+        } else if (confidence >= 70) {
+            badge.addClass('badge-warning');
+            $('#model-status').text('Monitoring');
+        } else if (confidence >= 50) {
+            badge.addClass('badge-info');
+            $('#model-status').text('Training');
+        } else {
+            badge.addClass('badge-danger');
+            $('#model-status').text('Low Confidence');
+        }
+        
+        console.log(`DEBUG: ML Confidence updated - ${confidence}% (${status})`);
+    } catch (error) {
+        console.log('DEBUG: Error updating confidence display:', error);
+    }
+}
+</script>
+
+<style>
+.recommendation-green {
+    background-color: rgba(40, 167, 69, 0.1) !important;
+}
+
+.recommendation-yellow {
+    background-color: rgba(255, 193, 7, 0.1) !important;
+}
+
+.recommendation-red {
+    background-color: rgba(220, 53, 69, 0.1) !important;
+}
+
+.ml-insights {
+    text-align: center;
+}
+
+.table tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.1) !important;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,299 @@
+/**
+ * Site-wide mobile UI — touch targets, stacked headers/actions, card tables, DataTables.
+ * Loaded globally via base.html; active at ≤991.98px and in Capacitor shell.
+ */
+
+@media (max-width: 991.98px) {
+  /* Nested containers inside main (many templates use .container inside container-fluid main) */
+  body.modern-app main.container-fluid > .container,
+  body.modern-app main.container-fluid > .container-fluid {
+    max-width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Touch targets (WCAG 2.5.5) */
+  body.modern-app .btn,
+  body.modern-app .form-control,
+  body.modern-app .form-select,
+  body.modern-app .page-link,
+  body.modern-app .nav-link,
+  body.modern-app input[type="checkbox"],
+  body.modern-app input[type="radio"] {
+    min-height: 44px;
+  }
+
+  body.modern-app .btn-sm {
+    min-height: 36px;
+  }
+
+  body.modern-app .btn-group .btn,
+  body.modern-app .btn-toolbar .btn {
+    min-height: 44px;
+  }
+
+  /* Dashboard / metric typography */
+  body.modern-app .display-4 {
+    font-size: 1.75rem;
+  }
+
+  body.modern-app .display-3 {
+    font-size: 2rem;
+  }
+
+  /* Page headers — title stacks above actions */
+  body.modern-app .d-flex.justify-content-between > h3,
+  body.modern-app .d-flex.justify-content-between > h4,
+  body.modern-app .d-flex.justify-content-between > h5,
+  body.modern-app .d-flex.justify-content-between > .h3,
+  body.modern-app .d-flex.justify-content-between > .h4,
+  body.modern-app .d-flex.justify-content-between > .h5,
+  body.modern-app .d-sm-flex.justify-content-between > h1,
+  body.modern-app .d-sm-flex.justify-content-between > h3,
+  body.modern-app .d-sm-flex.justify-content-between > .h3 {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  body.modern-app .d-flex.justify-content-between > div:last-child:not(:only-child),
+  body.modern-app .d-sm-flex.justify-content-between > div:last-child:not(:only-child) {
+    flex: 1 1 100%;
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  body.modern-app .d-flex.justify-content-between > div:last-child .btn,
+  body.modern-app .d-sm-flex.justify-content-between > div:last-child .btn {
+    flex: 1 1 auto;
+    min-width: calc(50% - 0.25rem);
+  }
+
+  /* Stacked action rows (auto-tagged by mobile-layout.js or opt-in class) */
+  body.modern-app .mobile-action-stack,
+  body.modern-app .rec-mobile-action-bar-inline {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.5rem !important;
+    width: 100%;
+  }
+
+  body.modern-app .mobile-action-stack .btn,
+  body.modern-app .mobile-action-stack a.btn,
+  body.modern-app .rec-mobile-action-bar-inline .btn,
+  body.modern-app .rec-mobile-action-bar-inline a.btn {
+    width: 100% !important;
+    margin: 0 !important;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  /* CSS-only fallback for centered multi-button rows */
+  body.modern-app .text-center:has(> .btn + .btn),
+  body.modern-app .text-center:has(> a.btn + a.btn),
+  body.modern-app .text-center:has(> .btn + a.btn) {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  body.modern-app .text-center:has(> .btn + .btn) > .btn,
+  body.modern-app .text-center:has(> a.btn + a.btn) > .btn,
+  body.modern-app .text-center:has(> a.btn + a.btn) > a.btn {
+    width: 100%;
+    margin: 0 !important;
+  }
+
+  /* Card headers with floated controls */
+  body.modern-app .card-header .float-end,
+  body.modern-app .card-header .btn.float-end {
+    float: none !important;
+    display: block;
+    width: 100%;
+    margin-top: 0.5rem;
+    margin-left: 0 !important;
+  }
+
+  /* Kill inline min-width on table cells (period analysis, security distribution) */
+  body.modern-app table th[style*="min-width"],
+  body.modern-app table td[style*="min-width"],
+  body.modern-app table th[style*="max-width"],
+  body.modern-app table td[style*="max-width"] {
+    min-width: 0 !important;
+    max-width: none !important;
+    width: auto !important;
+  }
+
+  /* Form stacks — full width columns */
+  body.modern-app .row > [class*="col-md-"],
+  body.modern-app .row > [class*="col-lg-"],
+  body.modern-app .row > [class*="col-xl-"] {
+    margin-bottom: 0.5rem;
+  }
+
+  body.modern-app .offset-md-1,
+  body.modern-app .offset-md-2,
+  body.modern-app .offset-md-3,
+  body.modern-app .offset-md-4 {
+    margin-left: 0;
+  }
+
+  /* Select2 / autocomplete widgets */
+  body.modern-app .select2-container,
+  body.modern-app .select2-container .select2-selection {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* DataTables controls */
+  body.modern-app .dataTables_wrapper > .row {
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  body.modern-app .dataTables_wrapper .dataTables_length,
+  body.modern-app .dataTables_wrapper .dataTables_filter,
+  body.modern-app .dataTables_wrapper .dataTables_info,
+  body.modern-app .dataTables_wrapper .dataTables_paginate {
+    text-align: left !important;
+    width: 100%;
+    float: none !important;
+  }
+
+  body.modern-app .dataTables_wrapper .dataTables_filter input,
+  body.modern-app .dataTables_wrapper .dataTables_length select {
+    width: 100% !important;
+    max-width: 100%;
+    min-height: 44px;
+    margin-left: 0 !important;
+  }
+
+  body.modern-app .dataTables_wrapper .dt-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  body.modern-app .dataTables_wrapper .dt-buttons .btn {
+    flex: 1 1 auto;
+    min-width: calc(50% - 0.25rem);
+  }
+
+  /* Card-style tables (labels from mobile-layout.js) — site-wide */
+  body.modern-app .mobile-card-table,
+  body.modern-app .rec-card-table {
+    border: none;
+  }
+
+  body.modern-app .mobile-card-table thead,
+  body.modern-app .rec-card-table thead {
+    display: none;
+  }
+
+  body.modern-app .mobile-card-table tbody tr,
+  body.modern-app .rec-card-table tbody tr {
+    display: block;
+    margin-bottom: 0.85rem;
+    padding: 0.65rem;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  }
+
+  body.modern-app .mobile-card-table tbody td,
+  body.modern-app .rec-card-table tbody td {
+    display: grid;
+    grid-template-columns: minmax(42%, 1fr) minmax(50%, 1.4fr);
+    gap: 0.35rem 0.5rem;
+    align-items: center;
+    border: none;
+    padding: 0.35rem 0;
+    text-align: right;
+    word-break: break-word;
+  }
+
+  body.modern-app .mobile-card-table tbody td::before,
+  body.modern-app .rec-card-table tbody td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: 0.72rem;
+    color: #64748b;
+    text-align: left;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+  }
+
+  body.modern-app .mobile-card-table tbody td[data-label=""]::before,
+  body.modern-app .mobile-card-table tbody td:not([data-label])::before,
+  body.modern-app .rec-card-table tbody td[data-label=""]::before,
+  body.modern-app .rec-card-table tbody td:not([data-label])::before {
+    content: none;
+  }
+
+  body.modern-app .mobile-card-table tbody td.mobile-td-check,
+  body.modern-app .rec-card-table tbody td.rec-td-check {
+    grid-template-columns: auto 1fr;
+    text-align: left;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px dashed #e2e8f0;
+    margin-bottom: 0.25rem;
+  }
+
+  body.modern-app .mobile-card-table tbody td.mobile-td-check::before,
+  body.modern-app .rec-card-table tbody td.rec-td-check::before {
+    content: none;
+  }
+
+  body.modern-app .mobile-card-table tfoot tr,
+  body.modern-app .rec-card-table tfoot tr {
+    display: block;
+    padding: 0.75rem;
+    background: #e7f1ff;
+    border-radius: 0.5rem;
+    font-weight: 600;
+  }
+
+  body.modern-app .mobile-card-table tfoot td,
+  body.modern-app .rec-card-table tfoot td {
+    display: inline;
+    border: none;
+    padding: 0 0.35rem;
+  }
+
+  body.modern-app .mobile-card-table tfoot td::before,
+  body.modern-app .rec-card-table tfoot td::before {
+    content: none;
+  }
+
+  body.modern-app .mobile-card-table-host.table-responsive,
+  body.modern-app .mobile-card-table-host.inertia-auto-wrap,
+  body.modern-app .rec-card-table-host.table-responsive,
+  body.modern-app .rec-card-table-host.inertia-auto-wrap {
+    overflow-x: visible !important;
+  }
+
+  /* Editable table inputs on phone */
+  body.modern-app .mobile-card-table input.form-control,
+  body.modern-app .rec-card-table input.form-control,
+  body.modern-app .section1-input,
+  body.modern-app .allocation-amount-input {
+    min-height: 44px !important;
+    font-size: 1rem !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+}
+
+@media (min-width: 992px) {
+  body.modern-app .d-flex.justify-content-between > div:last-child .btn,
+  body.modern-app .d-sm-flex.justify-content-between > div:last-child .btn {
+    min-width: unset;
+  }
+}

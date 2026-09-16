@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Claims Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Claims Management</h1>
+        <a href="{{ url_for('attendance.admin_attendance_management') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Attendance
+        </a>
+    </div>
+
+    <!-- Pending Claims Section -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-warning">Pending Claims ({{ pending_claims|length }})</h6>
+        </div>
+        <div class="card-body">
+            {% if pending_claims %}
+            <div class="table-responsive">
+                <table class="table table-bordered" id="pendingClaimsTable">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Description</th>
+                            <th>Submitted</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for claim in pending_claims %}
+                        <tr>
+                            <td>
+                                <strong>{{ claim.user.username }}</strong><br>
+                                <small class="text-muted">{{ claim.user.email }}</small>
+                            </td>
+                            <td>{{ claim.claim_date.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                <strong class="text-primary">₹{{ "%.2f"|format(claim.amount) }}</strong>
+                            </td>
+                            <td>{{ claim.description|truncate(50) }}</td>
+                            <td>{{ claim.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <button type="button" class="btn btn-sm btn-success" 
+                                            data-bs-toggle="modal" data-bs-target="#processClaimModal{{ claim.id }}">
+                                        <i class="fas fa-check"></i> Process
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                <h5 class="text-gray-600">No pending claims</h5>
+                <p class="text-gray-500">All claims have been processed.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- All Claims Section -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">All Claims (Recent 50)</h6>
+        </div>
+        <div class="card-body">
+            {% if all_claims %}
+            <div class="table-responsive">
+                <table class="table table-bordered" id="allClaimsTable">
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                            <th>Processed By</th>
+                            <th>Processed Date</th>
+                            <th>Admin Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for claim in all_claims %}
+                        <tr>
+                            <td>
+                                <strong>{{ claim.user.username }}</strong><br>
+                                <small class="text-muted">{{ claim.user.email }}</small>
+                            </td>
+                            <td>{{ claim.claim_date.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                <strong class="text-primary">₹{{ "%.2f"|format(claim.amount) }}</strong>
+                            </td>
+                            <td>{{ claim.description|truncate(50) }}</td>
+                            <td>
+                                {% if claim.status == 'pending' %}
+                                    <span class="badge badge-warning">Pending</span>
+                                {% elif claim.status == 'approved' %}
+                                    <span class="badge badge-success">Approved</span>
+                                {% else %}
+                                    <span class="badge badge-danger">Rejected</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if claim.processor %}
+                                    {{ claim.processor.username }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if claim.processed_at %}
+                                    {{ claim.processed_at.strftime('%Y-%m-%d %H:%M') }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ claim.admin_notes or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-receipt fa-3x text-gray-300 mb-3"></i>
+                <h5 class="text-gray-600">No claims found</h5>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Process Claim Modals -->
+{% for claim in pending_claims %}
+<div class="modal fade" id="processClaimModal{{ claim.id }}" tabindex="-1" aria-labelledby="processClaimModalLabel{{ claim.id }}" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="processClaimModalLabel{{ claim.id }}">Process Claim</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('attendance.admin_process_claim', claim_id=claim.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <h6>Claim Details</h6>
+                        <p><strong>User:</strong> {{ claim.user.username }}</p>
+                        <p><strong>Amount:</strong> ₹{{ "%.2f"|format(claim.amount) }}</p>
+                        <p><strong>Date:</strong> {{ claim.claim_date.strftime('%Y-%m-%d') }}</p>
+                        <p><strong>Description:</strong> {{ claim.description }}</p>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label class="form-label">Action <span class="text-danger">*</span></label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="action" id="approve{{ claim.id }}" value="approve" required>
+                            <label class="form-check-label text-success" for="approve{{ claim.id }}">
+                                <i class="fas fa-check"></i> Approve
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="action" id="reject{{ claim.id }}" value="reject" required>
+                            <label class="form-check-label text-danger" for="reject{{ claim.id }}">
+                                <i class="fas fa-times"></i> Reject
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group mb-3">
+                        <label for="admin_notes{{ claim.id }}" class="form-label">Admin Notes</label>
+                        <textarea class="form-control" id="admin_notes{{ claim.id }}" name="admin_notes" rows="3" 
+                                  placeholder="Add notes about the decision..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Process Claim
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    $('#pendingClaimsTable, #allClaimsTable').DataTable({
+        "order": [[4, "desc"]], // Sort by submitted date
+        "pageLength": 25,
+        "responsive": true
+    });
+});
+</script>
+{% endblock %}

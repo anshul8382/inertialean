@@ -1,0 +1,520 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import rec_mobile_open, rec_mobile_close, rec_desktop_open, rec_desktop_close %}
+
+{% block title %}Review Recommendations - {{ client.name }}{% endblock %}
+
+{% block content %}
+{% set alloc_totals = namespace(current_value=0, target_value=0, current_weight=0, target_weight=0, allocation=0) %}
+{% for rec in pending_data.asset_recommendations|default([]) %}
+{% set alloc_totals.current_value = alloc_totals.current_value + (rec.current_value|default(0.0)|float) %}
+{% if rec.in_model|default(true) %}
+{% set alloc_totals.target_value = alloc_totals.target_value + (rec.target_value|default(0.0)|float) %}
+{% set alloc_totals.target_weight = alloc_totals.target_weight + (rec.target_weight|default(0.0)|float) %}
+{% endif %}
+{% set alloc_totals.current_weight = alloc_totals.current_weight + (rec.current_weight|default(0.0)|float) %}
+{% set alloc_totals.allocation = alloc_totals.allocation + (rec.required_change|default(0.0)|float) %}
+{% endfor %}
+{{ rec_mobile_open('Asset allocation — ' ~ client.name, url_for('unified_recommendations.unified_recommendations'), 'Review targets, then implement each asset class or send email.') }}
+{% include 'partials/mobile/rec_review_mobile.html' %}
+{{ rec_mobile_close() }}
+{{ rec_desktop_open() }}
+    {% if pending_data.get('is_edit_mode', False) %}
+    <!-- EDIT MODE INDICATOR -->
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <h4 class="alert-heading"><i class="fas fa-edit"></i> <strong>EDIT MODE</strong></h4>
+        <p class="mb-0">You are currently <strong>editing existing recommendations</strong> for {{ client.name }}. 
+        Changes will update the saved recommendations in the database.</p>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-stretch align-items-md-center mb-4 rec-page-header gap-2">
+        <h1>Review Recommendations for {{ client.name }}</h1>
+        <div>
+            <a href="{{ url_for('unified_recommendations.unified_recommendations') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Planning Synopsis -->
+    {% if client.planning_synopsis %}
+    <div class="alert alert-info mb-4">
+        <h5 class="alert-heading"><i class="fas fa-lightbulb"></i> Planning Synopsis</h5>
+        <p class="mb-0">{{ client.planning_synopsis|nl2br }}</p>
+    </div>
+    {% endif %}
+
+    {% include 'partials/asset_class_mismatch_warning.html' %}
+
+    <!-- Investment Amount Summary -->
+    <div class="row mb-4">
+        <div class="col-12 col-md-4 offset-md-4">
+            <div class="card">
+                <div class="card-body text-center">
+                    <h5 class="card-title">Investment Amount</h5>
+                    <h3 class="text-success">
+                        ₹{{ "%.2f"|format(pending_data.investment_amount|default(0.0)|float) }}
+                    </h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Asset Allocation Review -->
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Asset Allocation Recommendations</h5>
+            <small class="text-muted">
+                Review and edit the recommended asset allocation changes. 
+                <strong>Allocation amounts are editable</strong> - you can modify the recommended amounts before implementing or saving.
+                Click "Implement" to generate security-level recommendations.
+            </small>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered rec-card-table">
+                    <thead>
+                        <tr>
+                                <th>Include</th>
+                                <th>Asset Class</th>
+                            <th>Current Value</th>
+                            <th>Target Value</th>
+                            <th>Current Weight</th>
+                            <th>Target Weight</th>
+                            <th>Allocation Amount <small class="text-muted">(Editable)</small></th>
+                            <th>Action</th>
+                                <th>Edit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rec in pending_data.asset_recommendations|default([]) %}
+                        <tr class="asset-allocation-data-row"
+                            data-current-value="{{ rec.current_value|default(0.0)|float }}"
+                            data-target-value="{{ rec.target_value|default(0.0)|float }}"
+                            data-current-weight="{{ rec.current_weight|default(0.0)|float }}"
+                            data-target-weight="{{ rec.target_weight|default(0.0)|float }}"
+                            data-in-model="{{ '1' if rec.in_model|default(true) else '0' }}">
+                            <td>
+                                <input type="checkbox" class="form-check-input asset-class-select" data-asset-class="{{ rec.asset_class|e }}" checked aria-label="Include {{ rec.asset_class }}">
+                            </td>
+                            <td>
+                                <strong>{{ rec.asset_class }}</strong>
+                                {% if not rec.in_model|default(true) %}
+                                <br><small class="text-muted">Outside model (0% target)</small>
+                                {% elif (rec.target_weight|default(0.0)|float) == 0 and (rec.current_value|default(0.0)|float) > 0 %}
+                                <br><small class="text-muted">0% model target</small>
+                                {% endif %}
+                            </td>
+                            <td>₹{{ "%.2f"|format(rec.current_value|default(0.0)|float) }}</td>
+                            <td>₹{{ "%.2f"|format(rec.target_value|default(0.0)|float) }}</td>
+                            <td>{{ "%.2f"|format(rec.current_weight|default(0.0)|float) }}%</td>
+                            <td>{{ "%.2f"|format(rec.target_weight|default(0.0)|float) }}%</td>
+                            <td>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text">₹</span>
+                                    <input type="number" 
+                                           class="form-control allocation-amount-input" 
+                                           data-asset-class="{{ rec.asset_class|e }}"
+                                           value="{{ "%.2f"|format(rec.required_change|default(0.0)|float) }}"
+                                           step="0.01"
+                                           title="Click to edit allocation amount"
+                                           style="{% if (rec.required_change|default(0)) > 0 %}color: green;{% elif (rec.required_change|default(0)) < 0 %}color: red;{% endif %}"
+                                           onfocus="this.select()"
+                                           onclick="this.select()">
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge {% if rec.action == 'BUY' %}bg-success{% elif rec.action == 'SELL' %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {{ rec.action|default('HOLD') }}
+                                </span>
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-secondary edit-btn" 
+                                        data-asset-class="{{ rec.asset_class|e }}" 
+                                        data-amount="{{ rec.required_change|default(0.0)|float }}">
+                                    <i class="fas fa-edit"></i> Edit
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr id="asset-allocation-totals-row">
+                            <td></td>
+                            <td><strong>Total</strong></td>
+                            <td id="total-current-value"><strong>₹{{ "%.2f"|format(alloc_totals.current_value) }}</strong></td>
+                            <td id="total-target-value"><strong>₹{{ "%.2f"|format(alloc_totals.target_value) }}</strong></td>
+                            <td id="total-current-weight"><strong>{{ "%.2f"|format(alloc_totals.current_weight) }}%</strong></td>
+                            <td id="total-target-weight"><strong>{{ "%.2f"|format(alloc_totals.target_weight) }}%</strong></td>
+                            <td id="total-allocation-amount">
+                                <strong class="{% if alloc_totals.allocation > 0 %}text-success{% elif alloc_totals.allocation < 0 %}text-danger{% endif %}">
+                                    ₹{{ "%.2f"|format(alloc_totals.allocation) }}
+                                </strong>
+                            </td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <div class="mt-3 p-3 border rounded bg-light">
+                <label class="form-label mb-1" for="add-asset-class-select">Add asset class to this session</label>
+                <div class="d-flex flex-column flex-md-row gap-2 align-items-stretch align-items-md-end">
+                    <div class="flex-grow-1">
+                        <select id="add-asset-class-select" class="form-select" {% if not available_asset_classes %}disabled{% endif %}>
+                            <option value="">{{ 'Select a class…' if available_asset_classes else 'No more classes to add' }}</option>
+                            {% for ac in available_asset_classes|default([]) %}
+                            <option value="{{ ac.name|e }}">{{ ac.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label visually-hidden" for="add-asset-class-amount">Amount</label>
+                        <input type="number" id="add-asset-class-amount" class="form-control" step="0.01" value="0" placeholder="Amount ₹">
+                    </div>
+                    <button type="button" class="btn btn-outline-primary" id="add-asset-class-btn" {% if not available_asset_classes %}disabled{% endif %}>
+                        <i class="fas fa-plus"></i> Add class
+                    </button>
+                </div>
+                <small class="text-muted">Adds to this recommendation only. Does not change the client’s allocation model.</small>
+            </div>
+            <div class="mt-3 rec-mobile-action-bar-inline">
+                <button type="button" class="btn btn-primary btn-lg" id="implement-all-btn">
+                    <i class="fas fa-cogs"></i> Continue to securities
+                </button>
+                <button type="button" class="btn btn-info btn-lg" id="preview-email-btn" 
+                        onclick="previewEmail()" 
+                        title="Preview and send email to client">
+                    <i class="fas fa-envelope"></i> Preview & Send Email
+                </button>
+                <a href="{{ url_for('unified_recommendations.unified_recommendations') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Generate
+                </a>
+                <p class="text-muted mt-2">
+                    <small><strong>Continue to securities:</strong> Open all checked asset classes in one window so amounts can be balanced together.</small>
+                    <br>
+                    <small><strong>Preview & Send Email:</strong> Preview the email with recommendations and send it to the client.</small>
+                </p>
+            </div>
+        </div>
+    </div>
+{{ rec_desktop_close() }}
+
+<!-- Hidden data for JavaScript -->
+<div id="page-data" 
+     data-client-id="{{ pending_data.client_id|default(0) }}"
+     data-session-id="{{ session_id|default(0) }}"
+     data-asset-recommendations="{{ pending_data.asset_recommendations|tojson|forceescape }}"
+     data-continue-url="{{ url_for('unified_recommendations.continue_to_securities') }}"
+     data-add-class-url="{{ url_for('unified_recommendations.add_asset_class_to_session') }}"
+     data-csrf="{{ csrf_token() }}"
+     style="display: none;">
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    updateTotalsRow();
+
+    // Handle allocation amount input changes
+    document.addEventListener('input', function(e) {
+        if (e.target.classList.contains('allocation-amount-input')) {
+            const input = e.target;
+            const assetClass = input.getAttribute('data-asset-class');
+            const newAmount = parseFloat(input.value) || 0;
+            
+            // Update color based on positive/negative amount
+            if (newAmount > 0) {
+                input.style.color = 'green';
+            } else if (newAmount < 0) {
+                input.style.color = 'red';
+            } else {
+                input.style.color = '';
+            }
+            
+            // Update the data-amount attribute on the edit button
+            const row = input.closest('tr');
+            const editBtn = row.querySelector('.edit-btn');
+            if (editBtn) {
+                editBtn.setAttribute('data-amount', newAmount);
+            }
+            
+            updateTotalsRow();
+            // Update the page data
+            updatePageData();
+        }
+    });
+    
+    // Handle edit button clicks — open combined editor with this class selected
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.edit-btn')) {
+            const button = e.target.closest('.edit-btn');
+            const assetClass = button.getAttribute('data-asset-class');
+            continueToSecurities([assetClass]);
+        }
+    });
+    
+    const implementAllBtn = document.getElementById('implement-all-btn');
+    if (implementAllBtn) {
+        implementAllBtn.addEventListener('click', function() {
+            continueToSecurities();
+        });
+    }
+
+    const addClassBtn = document.getElementById('add-asset-class-btn');
+    if (addClassBtn) {
+        addClassBtn.addEventListener('click', addAssetClassToSession);
+    }
+    
+    // REMOVED: Save to Database functionality - Asset allocations are session-only
+});
+
+// Preview and send email function
+function previewEmail() {
+    const pageData = document.getElementById('page-data');
+    if (!pageData) {
+        console.error('page-data element not found');
+        alert('Page data not found. Please refresh the page.');
+        return;
+    }
+    const clientId = pageData.getAttribute('data-client-id');
+    if (!clientId || clientId === '0') {
+        alert('Client ID not found. Please regenerate recommendations.');
+        return;
+    }
+    
+    // Check if recommendations have been recorded
+    fetch('{{ url_for("unified_recommendations.check_all_recorded") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+            client_id: parseInt(clientId),
+            session_id: {{ session_id|tojson_safe }}
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        const sessionId = {{ session_id|default('null') }};
+        const previewUrl = '{{ url_for("unified_recommendations.preview_email") }}?client_id=' + clientId + 
+                          (sessionId ? '&session_id=' + sessionId : '');
+        
+        if (data.all_recorded) {
+            // Redirect to preview page
+            window.location.href = previewUrl;
+        } else {
+            // Show message that recommendations need to be recorded first
+            const message = `Please record recommendations for all asset classes first.\n\n` +
+                          `Recorded: ${data.recorded_asset_classes.join(', ') || 'None'}\n` +
+                          `Expected: ${data.expected_asset_classes.join(', ')}\n\n` +
+                          `Would you like to proceed to preview anyway?`;
+            
+            if (confirm(message)) {
+                window.location.href = previewUrl;
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error checking recorded status:', error);
+        const sessionId = {{ session_id|default('null') }};
+        const previewUrl = '{{ url_for("unified_recommendations.preview_email") }}?client_id=' + clientId + 
+                          (sessionId ? '&session_id=' + sessionId : '');
+        // Still allow preview even if check fails
+        if (confirm('Unable to verify recommendation status. Proceed to preview anyway?')) {
+            window.location.href = previewUrl;
+        }
+    });
+}
+
+// Function to update page data with current allocation amounts
+function updatePageData() {
+    const pageData = document.getElementById('page-data');
+    if (!pageData) {
+        console.error('page-data element not found');
+        return;
+    }
+    const assetRecommendations = JSON.parse(pageData.getAttribute('data-asset-recommendations') || '[]');
+    
+    // Update the asset recommendations with current input values
+    const allocationInputs = document.querySelectorAll('.allocation-amount-input');
+    allocationInputs.forEach(input => {
+        const assetClass = input.getAttribute('data-asset-class');
+        const newAmount = parseFloat(input.value) || 0;
+        
+        // Find and update the corresponding recommendation
+        const recommendation = assetRecommendations.find(rec => rec.asset_class === assetClass);
+        if (recommendation) {
+            recommendation.required_change = newAmount;
+            
+            // Update action based on amount
+            if (newAmount > 0) {
+                recommendation.action = 'BUY';
+            } else if (newAmount < 0) {
+                recommendation.action = 'SELL';
+            } else {
+                recommendation.action = 'HOLD';
+            }
+        }
+    });
+    
+    // Update the hidden data attribute
+    pageData.setAttribute('data-asset-recommendations', JSON.stringify(assetRecommendations));
+}
+
+function formatRupee(amount) {
+    const n = Number(amount) || 0;
+    return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function updateTotalsRow() {
+    let currentValue = 0;
+    let targetValue = 0;
+    let currentWeight = 0;
+    let targetWeight = 0;
+    let allocation = 0;
+
+    document.querySelectorAll('.asset-allocation-data-row').forEach(function(row) {
+        currentValue += parseFloat(row.dataset.currentValue) || 0;
+        currentWeight += parseFloat(row.dataset.currentWeight) || 0;
+        const inModel = row.dataset.inModel !== '0';
+        if (inModel) {
+            targetValue += parseFloat(row.dataset.targetValue) || 0;
+            targetWeight += parseFloat(row.dataset.targetWeight) || 0;
+        }
+        const input = row.querySelector('.allocation-amount-input');
+        allocation += parseFloat(input ? input.value : 0) || 0;
+    });
+
+    const cvEl = document.getElementById('total-current-value');
+    const tvEl = document.getElementById('total-target-value');
+    const cwEl = document.getElementById('total-current-weight');
+    const twEl = document.getElementById('total-target-weight');
+    const allocEl = document.getElementById('total-allocation-amount');
+    if (!cvEl) return;
+
+    cvEl.innerHTML = '<strong>' + formatRupee(currentValue) + '</strong>';
+    tvEl.innerHTML = '<strong>' + formatRupee(targetValue) + '</strong>';
+    cwEl.innerHTML = '<strong>' + currentWeight.toFixed(2) + '%</strong>';
+    twEl.innerHTML = '<strong>' + targetWeight.toFixed(2) + '%</strong>';
+
+    const allocClass = allocation > 0 ? 'text-success' : (allocation < 0 ? 'text-danger' : '');
+    allocEl.innerHTML = '<strong class="' + allocClass + '">' + formatRupee(allocation) + '</strong>';
+}
+
+function collectAllocations() {
+    updatePageData();
+    const pageData = document.getElementById('page-data');
+    const assetRecommendations = JSON.parse(pageData.getAttribute('data-asset-recommendations') || '[]');
+    return assetRecommendations.map(function (rec) {
+        return { asset_class: rec.asset_class, amount: rec.required_change };
+    });
+}
+
+function selectedAssetClasses(forceOne) {
+    if (forceOne && forceOne.length) {
+        return forceOne;
+    }
+    const desktop = Array.from(document.querySelectorAll('.asset-allocation-data-row .asset-class-select:checked'))
+        .map(function (el) { return el.getAttribute('data-asset-class'); })
+        .filter(Boolean);
+    if (desktop.length) {
+        return Array.from(new Set(desktop));
+    }
+    const mobile = Array.from(document.querySelectorAll('.im-list-card .asset-class-select:checked'))
+        .map(function (el) { return el.getAttribute('data-asset-class'); })
+        .filter(Boolean);
+    if (mobile.length) {
+        return Array.from(new Set(mobile));
+    }
+    return collectAllocations().map(function (r) { return r.asset_class; }).filter(Boolean);
+}
+
+function continueToSecurities(forceClasses) {
+    const pageData = document.getElementById('page-data');
+    if (!pageData) {
+        alert('Page data not found. Please refresh the page.');
+        return;
+    }
+    const classes = selectedAssetClasses(forceClasses);
+    if (!classes.length) {
+        alert('Select at least one asset class.');
+        return;
+    }
+    const url = pageData.getAttribute('data-continue-url');
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': pageData.getAttribute('data-csrf')
+        },
+        body: JSON.stringify({
+            client_id: parseInt(pageData.getAttribute('data-client-id'), 10),
+            session_id: parseInt(pageData.getAttribute('data-session-id'), 10),
+            asset_classes: classes,
+            allocations: collectAllocations()
+        })
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+        if (data.success && data.redirect_url) {
+            window.location.href = data.redirect_url;
+        } else {
+            alert(data.error || 'Could not open the securities editor.');
+        }
+    })
+    .catch(function (err) {
+        console.error(err);
+        alert('Could not open the securities editor.');
+    });
+}
+
+function addAssetClassToSession() {
+    const pageData = document.getElementById('page-data');
+    const select = document.getElementById('add-asset-class-select');
+    const amountInput = document.getElementById('add-asset-class-amount');
+    const name = (select && select.value) || '';
+    if (!name) {
+        alert('Choose an asset class to add.');
+        return;
+    }
+    fetch(pageData.getAttribute('data-add-class-url'), {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': pageData.getAttribute('data-csrf')
+        },
+        body: JSON.stringify({
+            client_id: parseInt(pageData.getAttribute('data-client-id'), 10),
+            session_id: parseInt(pageData.getAttribute('data-session-id'), 10),
+            asset_class: name,
+            amount: parseFloat(amountInput && amountInput.value) || 0
+        })
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert(data.error || 'Could not add asset class.');
+        }
+    })
+    .catch(function (err) {
+        console.error(err);
+        alert('Could not add asset class.');
+    });
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-' + type + ' alert-dismissible fade show';
+    alertDiv.innerHTML = message + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+    
+    const container = document.querySelector('.container');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 5000);
+}
+</script>
+{% endblock %}

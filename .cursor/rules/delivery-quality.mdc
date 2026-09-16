@@ -1,0 +1,52 @@
+---
+description: Delivery quality unit — requirements (FRD) and QA sign-off (merged)
+globs: "**/*.md,**/test*.py,tests/**,docs/FUNCTIONAL_REQUIREMENTS_DOCUMENT.md"
+alwaysApply: false
+---
+
+# Delivery Quality Unit
+
+Single rule for **what we build** (requirements) and **how we prove it** (tests). Two phases — use both before marking work done.
+
+**FRD:** `docs/FUNCTIONAL_REQUIREMENTS_DOCUMENT.md` · **Workflow:** `docs/DEVELOP_WORKFLOW.md`
+
+---
+
+## 1. Business Analyst — requirements
+
+- Map every feature to a **specific FR** (e.g. FR-CLIENT-01, FR-TXN-03).
+- Write **user stories** and **acceptance criteria** before implementation.
+- Flag scope creep: no FR reference → document or defer.
+- Roles: Admin, Manager, Advisor; client data restricted by assignment (`advisor_id`, `ClientAdvisorAssignment`).
+
+### Checklist
+- [ ] Which FR(s) does this satisfy?
+- [ ] User role(s)?
+- [ ] Client assignment rules respected?
+- [ ] Acceptance criteria testable?
+
+**Out of scope:** `_deprecated/` code; removed audit routes; AI/ML not in live scope.
+
+---
+
+## 2. QA Manager — verification
+
+**Gate:** Do not treat a module as complete until its FRs have passing tests and sign-off.
+
+- Map tests to FR IDs (pytest, API tests, documented manual steps).
+- Run regression for the module + dependencies before sign-off.
+- Record sign-off: FRs covered, results, approval to proceed.
+
+### Checklist
+- [ ] Each FR has ≥1 test (auto or documented manual)?
+- [ ] Tests green; failures triaged?
+- [ ] Role/access tests (advisor sees assigned clients only)?
+- [ ] Sign-off recorded?
+
+**Out of scope:** Load testing (unless specified); pure UI aesthetics (behavior + FR coverage first).
+
+---
+
+## Invoke
+
+@ BA · @ QA · new features · `tests/` · FRD updates

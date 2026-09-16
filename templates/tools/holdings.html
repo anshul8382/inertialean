@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Holdings Report{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<style>
+    .holdings-card { margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+    .holdings-card .card-header {
+        background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+        color: white;
+        font-weight: 600;
+    }
+    .filter-form .form-control { max-width: 320px; }
+    .qty-short { color: #e74c3c; }
+    .qty-long { color: #27ae60; }
+    .table-responsive { overflow-x: auto; }
+</style>
+{% endblock %}
+
+{% block content %}
+{% from 'partials/mobile/macros.html' import maint_child_open, maint_desktop_open, maint_desktop_close %}
+{{ maint_child_open('Holdings report', url_for('main.maintenance_trade_data'), 'Filter holdings by client and security.') }}
+{{ maint_desktop_open('container-fluid mt-4') }}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-chart-pie"></i> Holdings Report
+        </h1>
+        <span class="badge bg-secondary">{{ rows|length }} position(s)</span>
+    </div>
+
+    <div class="card holdings-card">
+        <div class="card-header py-3">
+            <i class="fas fa-filter"></i> Filters
+        </div>
+        <div class="card-body">
+            <form method="get" action="{{ url_for('main.holdings_report') }}" class="filter-form row g-3 align-items-end">
+                <div class="col-auto">
+                    <label for="client_name" class="form-label">Client name</label>
+                    <input type="text" class="form-control" id="client_name" name="client_name"
+                           value="{{ client_name_filter }}" placeholder="Partial match">
+                </div>
+                <div class="col-auto">
+                    <label for="security_name" class="form-label">Security name / symbol</label>
+                    <input type="text" class="form-control" id="security_name" name="security_name"
+                           value="{{ security_name_filter }}" placeholder="Partial match">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Apply
+                    </button>
+                    <a href="{{ url_for('main.holdings_report') }}" class="btn btn-outline-secondary">Clear</a>
+                </div>
+            </form>
+            <p class="text-muted small mt-2 mb-0">
+                <strong>Short term</strong> = quantity from positions bought in the last 1 year; <strong>Long term</strong> = remainder (FIFO).
+            </p>
+        </div>
+    </div>
+
+    <div class="card holdings-card">
+        <div class="card-header py-3">
+            <i class="fas fa-list"></i> Holdings
+        </div>
+        <div class="card-body">
+            {% if rows %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" id="holdingsTable" width="100%">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Client</th>
+                            <th>Security</th>
+                            <th>Symbol</th>
+                            <th class="text-end">Total Qty</th>
+                            <th class="text-end">Short term (≤1 yr)</th>
+                            <th class="text-end">Long term (&gt;1 yr)</th>
+                            <th class="text-end">Avg price</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in rows %}
+                        <tr>
+                            <td>{{ r.client_name }}</td>
+                            <td>{{ r.security_name }}</td>
+                            <td><code>{{ r.security_symbol }}</code></td>
+                            <td class="text-end">{{ "%.4g"|format(r.total_quantity) }}</td>
+                            <td class="text-end qty-short">{{ "%.4g"|format(r.short_term_quantity) }}</td>
+                            <td class="text-end qty-long">{{ "%.4g"|format(r.long_term_quantity) }}</td>
+                            <td class="text-end">{{ "%.2f"|format(r.average_price) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No holdings match the filters. Try clearing the filters or broadening the search.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script>
+(function() {
+    if (document.getElementById('holdingsTable') && document.querySelector('#holdingsTable tbody tr')) {
+        $('#holdingsTable').DataTable({
+            order: [[0, 'asc'], [1, 'asc']],
+            pageLength: 50,
+            lengthMenu: [[25, 50, 100, 200, -1], [25, 50, 100, 200, 'All']]
+        });
+    }
+})();
+</script>
+{% endblock %}

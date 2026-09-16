@@ -1,0 +1,46 @@
+{# Reusable Word-file replace control. Expects `template`. #}
+<div id="replace-word-file" class="card mt-3">
+    <div class="card-header">
+        <h5 class="card-title mb-0">Replace Word file</h5>
+    </div>
+    <div class="card-body">
+        <p class="mb-2">
+            Agreements use a <strong>Word document stored on this server</strong>, not a Google Drive link.
+            Current file:
+            <code>{{ template.template_file_path.split('/')[-1] }}</code>
+        </p>
+        <div class="d-flex flex-column flex-md-row gap-2 mb-3">
+            <a class="btn btn-outline-secondary"
+               href="{{ url_for('agreements.download_template_file', template_id=template.id) }}">
+                <i class="fas fa-download"></i> Download current Word file
+            </a>
+            {% if show_open_template_link|default(true) %}
+            <a class="btn btn-outline-secondary"
+               href="{{ url_for('agreements.view_template', template_id=template.id) }}">
+                <i class="fas fa-file-contract"></i> Open template
+            </a>
+            {% endif %}
+        </div>
+        <form method="POST"
+              action="{{ url_for('agreements.replace_template_file', template_id=template.id) }}"
+              enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="next" value="{{ request.path }}">
+            <label class="form-label" for="replace-template-file-{{ template.id }}">Upload updated .docx</label>
+            <div class="d-flex flex-column flex-md-row gap-2">
+                <input class="form-control"
+                       type="file"
+                       id="replace-template-file-{{ template.id }}"
+                       name="template_file"
+                       accept=".doc,.docx"
+                       required>
+                <button type="submit" class="btn btn-primary">Upload and replace</button>
+            </div>
+            <p class="form-text mb-0 mt-2">
+                Word templates only (.docx). Do <strong>not</strong> upload a PDF here —
+                use <strong>Upload agreement PDF</strong> in Actions (or Update Agreement Details).
+                Existing agreement PDFs stay as they are until you regenerate them with Edit Variables.
+            </p>
+        </form>
+    </div>
+</div>

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Maintenance — Record existing agreement{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="fas fa-file-upload"></i> Record existing agreement</h1>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('main.maintenance_billing') }}" class="btn btn-outline-primary">
+        <i class="fas fa-file-invoice-dollar"></i> Billing hub
+      </a>
+      <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Dashboard
+      </a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header">
+      <strong>Select client</strong>
+    </div>
+    <div class="card-body">
+      <form method="POST" class="row g-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="col-md-8">
+          <label for="client_id" class="form-label">Client</label>
+          <select class="form-select" id="client_id" name="client_id" required>
+            <option value="" selected disabled>Select a client…</option>
+            {% for c in clients %}
+              <option value="{{ c.id }}">{{ c.name }}</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Next step lets you upload/record the signed agreement for this client.</div>
+        </div>
+
+        <div class="col-12">
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-arrow-right"></i> Continue
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

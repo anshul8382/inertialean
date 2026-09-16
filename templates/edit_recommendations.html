@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body">
+        <h2 class="card-title mb-0">Edit Recommendation</h2>
+        <hr>
+
+        <form method="POST">
+            <div class="mb-3">
+                <label for="client_id" class="form-label">Client</label>
+                <select class="form-select" id="client_id" name="client_id" required>
+                    {% for client in clients %}
+                    <option value="{{ client.id }}" {{ 'selected' if client.id == recommendation.client_id else '' }}>
+                        {{ client.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="security_id" class="form-label">Security</label>
+                <select class="form-select" id="security_id" name="security_id" required>
+                    {% for security in securities %}
+                    <option value="{{ security.id }}" {{ 'selected' if security.id == recommendation.security_id else '' }}>
+                        {{ security.symbol }} - {{ security.company_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="action" class="form-label">Action</label>
+                <select class="form-select" id="action" name="action" required>
+                    <option value="BUY" {{ 'selected' if recommendation.action == 'BUY' else '' }}>Buy</option>
+                    <option value="SELL" {{ 'selected' if recommendation.action == 'SELL' else '' }}>Sell</option>
+                    <option value="HOLD" {{ 'selected' if recommendation.action == 'HOLD' else '' }}>Hold</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="quantity" class="form-label">Quantity</label>
+                <input type="number" class="form-control" id="quantity" name="quantity" 
+                       value="{{ recommendation.quantity }}" min="1" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="price" class="form-label">Target Price</label>
+                <input type="number" class="form-control" id="price" name="price" 
+                       value="{{ recommendation.price }}" step="0.01" min="0" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="status" class="form-label">Status</label>
+                <select class="form-select" id="status" name="status" required>
+                    <option value="Pending" {{ 'selected' if recommendation.status == 'Pending' else '' }}>Pending</option>
+                    <option value="Completed" {{ 'selected' if recommendation.status == 'Completed' else '' }}>Completed</option>
+                    <option value="Cancelled" {{ 'selected' if recommendation.status == 'Cancelled' else '' }}>Cancelled</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="notes" class="form-label">Notes</label>
+                <textarea class="form-control" id="notes" name="notes" rows="3">{{ recommendation.notes }}</textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Update Recommendation</button>
+            <a href="{{ url_for('recommendations') }}" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+</div>
+{% endblock %}

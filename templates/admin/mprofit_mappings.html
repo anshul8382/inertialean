@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+
+{% block page_title %}MProfit Symbol Mappings{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-map-marked-alt"></i> MProfit Symbol Mappings</h2>
+                <a href="{{ url_for('main.mprofit_trade_upload') }}" class="btn btn-outline-primary">
+                    <i class="fas fa-upload"></i> Upload MProfit File
+                </a>
+            </div>
+            
+            <!-- Search and Filters -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="GET" action="{{ url_for('main.admin_mprofit_mappings') }}" class="row g-3">
+                        <div class="col-md-8">
+                            <input type="text" class="form-control" name="q" value="{{ search_query }}" 
+                                   placeholder="Search by company name, normalized name, or NSE symbol...">
+                        </div>
+                        <div class="col-md-4">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-search"></i> Search
+                            </button>
+                        </div>
+                    </form>
+                    {% if search_query %}
+                    <div class="mt-2">
+                        <a href="{{ url_for('main.admin_mprofit_mappings') }}" class="text-muted small">
+                            <i class="fas fa-times"></i> Clear search
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Mappings Table -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">All Mappings ({{ pagination.total }} total)</h5>
+                    <div class="text-muted small">
+                        Showing {{ (pagination.page - 1) * pagination.per_page + 1 }} - 
+                        {{ pagination.page * pagination.per_page if pagination.page * pagination.per_page < pagination.total else pagination.total }} 
+                        of {{ pagination.total }}
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    {% if mappings %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Raw Name (MProfit)</th>
+                                    <th>Normalized Name</th>
+                                    <th>NSE Symbol</th>
+                                    <th>Security Name</th>
+                                    <th>Type</th>
+                                    <th>Last Used</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for mapping in mappings %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ mapping.raw_name }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted small">{{ mapping.normalized_name }}</span>
+                                    </td>
+                                    <td>
+                                        {% if mapping.nse_symbol %}
+                                            <span class="badge bg-primary">{{ mapping.nse_symbol }}</span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if mapping.security_obj %}
+                                            {{ mapping.security_obj.name }}
+                                        {% else %}
+                                            <span class="text-muted">Not resolved</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if mapping.is_manual %}
+                                            <span class="badge bg-success">Manual</span>
+                                        {% else %}
+                                            <span class="badge bg-info">Auto</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if mapping.last_used_at %}
+                                            <span class="small">{{ mapping.last_used_at.strftime('%Y-%m-%d %H:%M') }}</span>
+                                        {% else %}
+                                            <span class="text-muted">Never</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="small">{{ mapping.created_at.strftime('%Y-%m-%d') }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button type="button" class="btn btn-outline-primary" 
+                                                    onclick="editMapping({{ mapping.id }}, '{{ mapping.raw_name|e }}', '{{ mapping.nse_symbol|e if mapping.nse_symbol else '' }}', {{ mapping.security_id if mapping.security_id else 'null' }})"
+                                                    title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            {% if mapping.security_id %}
+                                            <button type="button" class="btn btn-outline-warning" 
+                                                    onclick="clearMapping({{ mapping.id }}, '{{ mapping.raw_name|e }}')"
+                                                    title="Clear mapping">
+                                                <i class="fas fa-eraser"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No mappings found{% if search_query %} matching "{{ search_query }}"{% endif %}.</p>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Pagination -->
+                {% if pagination.pages > 1 %}
+                <div class="card-footer">
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination pagination-sm mb-0 justify-content-center">
+                            {% if pagination.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('main.admin_mprofit_mappings', page=pagination.prev_num, q=search_query) }}">
+                                    <i class="fas fa-chevron-left"></i> Previous
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link"><i class="fas fa-chevron-left"></i> Previous</span>
+                            </li>
+                            {% endif %}
+                            
+                            {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                                {% if page_num %}
+                                    {% if page_num == pagination.page %}
+                                    <li class="page-item active">
+                                        <span class="page-link">{{ page_num }}</span>
+                                    </li>
+                                    {% else %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="{{ url_for('main.admin_mprofit_mappings', page=page_num, q=search_query) }}">{{ page_num }}</a>
+                                    </li>
+                                    {% endif %}
+                                {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">…</span>
+                                    </li>
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {% if pagination.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('main.admin_mprofit_mappings', page=pagination.next_num, q=search_query) }}">
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">Next <i class="fas fa-chevron-right"></i></span>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Mapping Modal -->
+<div class="modal fade" id="editMappingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Mapping</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editMappingForm">
+                    <input type="hidden" id="editMappingId">
+                    <div class="mb-3">
+                        <label class="form-label">Raw Name (MProfit)</label>
+                        <input type="text" class="form-control" id="editRawName" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">NSE Symbol</label>
+                        <input type="text" class="form-control" id="editNseSymbol" placeholder="Enter NSE symbol (e.g., TCS, RELIANCE)">
+                        <small class="text-muted">Enter the NSE symbol. The system will look it up and update the mapping.</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveMapping()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+function editMapping(id, rawName, nseSymbol, securityId) {
+    document.getElementById('editMappingId').value = id;
+    document.getElementById('editRawName').value = rawName;
+    document.getElementById('editNseSymbol').value = nseSymbol || '';
+    const modal = new bootstrap.Modal(document.getElementById('editMappingModal'));
+    modal.show();
+}
+
+function saveMapping() {
+    const mappingId = document.getElementById('editMappingId').value;
+    const nseSymbol = document.getElementById('editNseSymbol').value.trim().toUpperCase();
+    
+    if (!nseSymbol) {
+        alert('Please enter an NSE symbol');
+        return;
+    }
+    
+    fetch(`/api/v1/clients/mprofit-symbols/${mappingId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ nse_symbol: nseSymbol })
+    })
+    .then(resp => resp.json())
+    .then(result => {
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + (result.message || 'Failed to update mapping'));
+        }
+    })
+    .catch(err => {
+        console.error('Error:', err);
+        alert('Error updating mapping: ' + err.message);
+    });
+}
+
+function clearMapping(id, rawName) {
+    if (!confirm(`Are you sure you want to clear the mapping for "${rawName}"? This will remove the NSE symbol association.`)) {
+        return;
+    }
+    
+    fetch(`/api/v1/clients/mprofit-symbols/${id}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken
+        },
+        credentials: 'same-origin'
+    })
+    .then(resp => resp.json())
+    .then(result => {
+        if (result.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + (result.message || 'Failed to clear mapping'));
+        }
+    })
+    .catch(err => {
+        console.error('Error:', err);
+        alert('Error clearing mapping: ' + err.message);
+    });
+}
+</script>
+{% endblock %}
+

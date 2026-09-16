@@ -1,0 +1,91 @@
+# Inertia2026-lean — deps to run the app (no Ollama package; AI SDKs optional)
+#
+#   cd /Users/anshulkhare/Downloads/Inertia2026-lean
+#   python3 -m venv venv && source venv/bin/activate
+#   pip install -r requirements.txt
+#
+# Removed vs full tree: sed (unused), importlib_metadata/zipp/tomli pins clutter,
+# duplicate pins. Ollama is HTTP-only via requests when OLLAMA_ENABLED=true.
+
+alembic==1.16.1
+APScheduler==3.10.4
+bcrypt==4.1.2
+beautifulsoup4==4.13.4
+blinker==1.9.0
+cachetools==5.5.2
+certifi==2025.4.26
+charset-normalizer==3.4.2
+click==8.1.7
+colorama==0.4.6
+dateutils==0.6.12
+Flask==3.1.3
+Flask-Login==0.6.3
+Flask-Mail==0.10.0
+Flask-Migrate==4.1.0
+Flask-Session==0.8.0
+Flask-SQLAlchemy==3.1.1
+Flask-WTF==1.2.2
+email_validator>=2.0.0
+frozendict==2.4.6
+google-auth==2.40.2
+google-auth-oauthlib==1.2.2
+greenlet==3.2.2
+gspread==6.2.1
+gunicorn==23.0.0
+html5lib==1.1
+httplib2==0.22.0
+idna==3.15
+itsdangerous==2.2.0
+Jinja2==3.1.6
+lxml==6.1.0
+Mako==1.3.12
+MarkupSafe==2.1.5
+multitasking==0.0.11
+nsepy==0.8
+nsetools==2.0.1
+numpy==1.26.4
+oauth2client==4.1.3
+oauthlib==3.2.2
+packaging==25.0
+pandas==2.2.1
+peewee==3.18.1
+pyasn1==0.6.3
+pyasn1_modules==0.4.2
+PyMySQL==1.1.1
+# Required by PyMySQL for MySQL 8 caching_sha2_password (local + VPS)
+cryptography>=42.0.0
+mysql-connector-python>=8.0.0
+PyJWT>=2.8.0
+pyparsing==3.2.3
+python-dateutil==2.9.0.post0
+pydantic>=2.0.0
+python-dotenv>=1.2.1
+pytz==2025.2
+requests>=2.32.5,<3
+requests-oauthlib==2.0.0
+httpx>=0.27.0
+rsa==4.9.1
+scipy==1.13.1
+six==1.17.0
+soupsieve==2.7
+SQLAlchemy==2.0.41
+typing_extensions==4.13.2
+tzdata==2025.2
+tzlocal==5.3.1
+urllib3>=2.6.3,<3
+webencodings==0.5.1
+Werkzeug==3.1.6
+WTForms==3.2.1
+openpyxl==3.1.2
+xlrd==2.0.1
+reportlab==4.0.4
+python-docx==1.1.0
+PyPDF2==3.0.1
+weasyprint>=66.0
+pyotp>=2.9.0
+qrcode[pil]>=8.0
+Pillow>=11.3.0
+appdirs==1.4.4
+
+# Optional AI (ENABLE_AI_SERVICES=true). Hybrid report imports anthropic lazily.
+# pip install "anthropic>=0.25.0"   # only if you turn AI on

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Account Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="alert alert-primary d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4">
+        <div>
+            <strong><i class="fas fa-chart-pie me-1"></i> Statement analysis</strong>
+            <span class="d-block small text-dark">Charts and tables: credits/debits by classification head, month-wise expenses, time-range toggles.</span>
+        </div>
+        <a href="{{ url_for('account_management.analysis') }}" class="btn btn-success text-nowrap">
+            <i class="fas fa-arrow-right"></i> Open analysis
+        </a>
+    </div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-university"></i> Account Management</h1>
+        <div class="d-flex flex-wrap align-items-center gap-2 justify-content-end">
+            <form method="post" action="{{ url_for('account_management.auto_classify_unclassified') }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-primary" {% if (unclassified_txn_count or 0) == 0 %}disabled title="No unclassified transactions"{% endif %}>
+                    <i class="fas fa-magic"></i> Auto-classify all
+                    {% if (unclassified_txn_count or 0) > 0 %}
+                    <span class="badge bg-secondary ms-1">{{ unclassified_txn_count }}</span>
+                    {% endif %}
+                </button>
+            </form>
+            <a href="{{ url_for('account_management.analysis') }}" class="btn btn-outline-success">
+                <i class="fas fa-chart-pie"></i> Analysis by head
+            </a>
+            <a href="{{ url_for('account_management.heads_list') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-list"></i> Credit/Debit Heads
+            </a>
+            <a href="{{ url_for('account_management.upload') }}" class="btn btn-primary">
+                <i class="fas fa-upload"></i> Upload Bank Statement
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-file-invoice-dollar"></i> Recent Statements</h5>
+                    <a href="{{ url_for('account_management.upload') }}" class="btn btn-sm btn-light">Upload</a>
+                </div>
+                <div class="card-body">
+                    {% if statements %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Account / Date</th>
+                                    <th>Transactions</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for s in statements %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ s.account_name or 'Unnamed' }}</strong><br>
+                                        <small class="text-muted">{{ s.upload_date.strftime('%d %b %Y') if s.upload_date else '' }}</small>
+                                    </td>
+                                    <td>{{ s.transactions.count() }}</td>
+                                    <td>
+                                        <a href="{{ url_for('account_management.classify', statement_id=s.id) }}" class="btn btn-sm btn-primary">Classify</a>
+                                        <a href="{{ url_for('account_management.statement_detail', statement_id=s.id) }}" class="btn btn-sm btn-outline-secondary">View</a>
+                                        <form method="post" action="{{ url_for('account_management.statement_delete', statement_id=s.id) }}" class="d-inline" onsubmit="return confirm('Delete this statement and all its transactions?');">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No bank statements uploaded yet.</p>
+                    <a href="{{ url_for('account_management.upload') }}" class="btn btn-primary mt-2">Upload first statement</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-tags"></i> Credit & Debit Heads</h5>
+                    <a href="{{ url_for('account_management.head_add') }}" class="btn btn-sm btn-primary">Add Head</a>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-success"><i class="fas fa-arrow-down"></i> Credit Heads</h6>
+                            <ul class="list-unstyled">
+                                {% for h in credit_heads %}
+                                <li><span class="badge bg-success me-1">{{ h.name }}</span></li>
+                                {% else %}
+                                <li class="text-muted">None defined</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-danger"><i class="fas fa-arrow-up"></i> Debit Heads</h6>
+                            <ul class="list-unstyled">
+                                {% for h in debit_heads %}
+                                <li><span class="badge bg-danger me-1">{{ h.name }}</span></li>
+                                {% else %}
+                                <li class="text-muted">None defined</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                    <a href="{{ url_for('account_management.heads_list') }}" class="btn btn-outline-secondary btn-sm mt-2">Manage all heads</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card border-success">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-download"></i> Download transactions &amp; classifications</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        CSV includes statement metadata, amounts, and credit/debit head (classification) per row.
+                        Indian FY = April–March.
+                        <a href="{{ url_for('account_management.analysis') }}">View credit/debit breakdown by head</a> for the same periods.
+                    </p>
+                    {% set period_picker_endpoint = 'account_management.export_download' %}
+                    {% set period_picker_form_action = url_for('account_management.export_download') %}
+                    {% set period_picker_active = '' %}
+                    {% set period_picker_is_custom = false %}
+                    {% set period_picker_date_from = export_default_from %}
+                    {% set period_picker_date_to = export_default_to %}
+                    {% set period_picker_variant = 'success' %}
+                    {% set period_picker_show_label = false %}
+                    {% include 'account_management/_period_range_picker.html' %}
+                    <p class="small text-muted mt-3 mb-0">
+                        <i class="fas fa-info-circle"></i> Preset buttons download CSV immediately. Use <strong>Analysis</strong> to explore the same ranges with charts.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

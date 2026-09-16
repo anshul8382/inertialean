@@ -1,0 +1,479 @@
+{% extends "base.html" %}
+
+{% block title %}Review Schedules{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<style>
+    .summary-card {
+        transition: transform 0.2s;
+    }
+    .summary-card:hover {
+        transform: translateY(-2px);
+    }
+    a.summary-card-link {
+        text-decoration: none;
+        color: inherit;
+        display: block;
+        height: 100%;
+    }
+    a.summary-card-link .card {
+        height: 100%;
+    }
+    a.summary-card-link.active-bucket .card {
+        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.55);
+    }
+    .status-badge {
+        font-size: 0.8rem;
+    }
+    .overdue {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    .due-soon {
+        color: #fd7e14;
+        font-weight: bold;
+    }
+    .due-today {
+        color: #ffc107;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% macro review_date_label(workflow) %}
+<strong>{{ workflow.review_date.strftime('%Y-%m-%d') }}</strong>
+{% if workflow.status == 'closed' %}
+<br><small class="text-dark">Closed</small>
+{% elif workflow.review_date < today %}
+<br><small class="overdue">Overdue</small>
+{% elif workflow.review_date == today %}
+<br><small class="due-today">Due Today</small>
+{% elif workflow.review_date <= today + timedelta(days=7) %}
+<br><small class="due-soon">Due Soon</small>
+{% elif workflow.review_date <= upcoming_end %}
+<br><small class="text-info">Next {{ upcoming_days }}d</small>
+{% endif %}
+{% endmacro %}
+
+{% macro workflow_status_badge(workflow) %}
+<span class="badge status-badge {% if workflow.status == 'closed' %}bg-success{% elif workflow.status == 'meeting' %}bg-warning{% elif workflow.status == 'sent' %}bg-info{% else %}bg-secondary{% endif %} text-white">
+    {{ workflow.status|title }}
+</span>
+{% endmacro %}
+
+{% macro workflow_actions(workflow) %}
+<div class="btn-group mobile-action-stack" role="group">
+    <a href="{{ url_for('clients.update_review_workflow', workflow_id=workflow.id) }}"
+       class="btn btn-primary btn-sm" title="Update Workflow">
+        <i class="fas fa-edit"></i> Update
+    </a>
+    <a href="{{ url_for('clients.client_review_schedule', client_id=workflow.client_id) }}"
+       class="btn btn-outline-secondary btn-sm" title="Client schedule">
+        <i class="fas fa-calendar"></i> Schedule
+    </a>
+    {% if workflow.status != 'closed' %}
+    <form method="POST" action="{{ url_for('clients.close_review_workflow', workflow_id=workflow.id) }}"
+          class="d-inline" onsubmit="return confirm('Are you sure you want to close this review?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button type="submit" class="btn btn-success btn-sm" title="Close Review">
+            <i class="fas fa-check"></i> Close
+        </button>
+    </form>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Reviews' %}
+  {% include 'partials/mobile/app_header.html' %}
+
+  <div class="im-metric-grid mb-3">
+    <a class="im-metric-tile text-decoration-none" href="{{ url_for('clients.list_review_schedules', bucket='due') }}">
+      <span class="im-metric-tile__label">Due</span>
+      <span class="im-metric-tile__value">{{ due_workflows|length }}</span>
+    </a>
+    <a class="im-metric-tile text-decoration-none" href="{{ url_for('clients.list_review_schedules', bucket='upcoming') }}">
+      <span class="im-metric-tile__label">Next {{ upcoming_days }}d</span>
+      <span class="im-metric-tile__value">{{ upcoming_workflows|length }}</span>
+    </a>
+    <a class="im-metric-tile text-decoration-none" href="{{ url_for('clients.list_review_schedules', bucket='open') }}">
+      <span class="im-metric-tile__label">Open</span>
+      <span class="im-metric-tile__value">{{ open_workflows|length }}</span>
+    </a>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 mb-3">
+    <a href="{{ url_for('clients.list_review_schedules') }}" class="btn btn-sm {% if bucket == 'board' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Board</a>
+    <a href="{{ url_for('clients.list_review_schedules', bucket='due') }}" class="btn btn-sm {% if bucket == 'due' %}btn-warning{% else %}btn-outline-secondary{% endif %}">Due</a>
+    <a href="{{ url_for('clients.list_review_schedules', bucket='upcoming') }}" class="btn btn-sm {% if bucket == 'upcoming' %}btn-info{% else %}btn-outline-secondary{% endif %}">Next {{ upcoming_days }}d</a>
+    <a href="{{ url_for('clients.list_review_schedules', bucket='open') }}" class="btn btn-sm {% if bucket == 'open' %}btn-success{% else %}btn-outline-secondary{% endif %}">Open</a>
+  </div>
+
+  {% if bucket in ('due', 'upcoming', 'open', 'all') %}
+  <p class="small text-muted mb-2">{{ board_title }} · through {{ upcoming_end.strftime('%d %b %Y') if bucket == 'upcoming' else today.strftime('%d %b %Y') }}</p>
+  <div class="im-list-stack">
+    {% for workflow in board_workflows %}
+    <a href="{{ url_for('clients.update_review_workflow', workflow_id=workflow.id) }}" class="im-list-card">
+      <div class="im-list-card__header">
+        <h2 class="im-list-card__title">{{ workflow.client.name }}</h2>
+        <span class="im-badge im-badge--{% if workflow.status == 'closed' %}muted{% elif workflow.review_date < today %}danger{% else %}success{% endif %}">{{ workflow.status|title }}</span>
+      </div>
+      <p class="im-list-card__meta">
+        {{ workflow.review_date.strftime('%d %b %Y') }}
+        {% if workflow.review_date < today and workflow.status != 'closed' %} · Overdue
+        {% elif workflow.review_date == today %} · Due today
+        {% elif workflow.review_date <= upcoming_end and workflow.status != 'closed' %} · Upcoming
+        {% endif %}
+        {% if workflow.assigned_user %} · {{ workflow.assigned_user.username }}{% endif %}
+      </p>
+    </a>
+    {% else %}
+    <div class="im-empty-state"><p class="text-muted mb-0">No reviews in this view.</p></div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="small text-muted mb-2">Active schedules</p>
+  <div class="im-list-stack">
+    {% for schedule in schedules %}
+    <a href="{{ url_for('clients.client_review_schedule', client_id=schedule.client.id) }}" class="im-list-card">
+      <div class="im-list-card__header">
+        <h2 class="im-list-card__title">{{ schedule.client.name }}</h2>
+        <span class="im-badge im-badge--{% if schedule.is_active %}success{% else %}muted{% endif %}">{{ 'Active' if schedule.is_active else 'Inactive' }}</span>
+      </div>
+      <p class="im-list-card__meta">{{ 'Half yearly' if schedule.frequency == 'half_yearly' else 'Yearly' }} · from {{ schedule.first_review_date.strftime('%d %b %Y') }}</p>
+    </a>
+    {% else %}
+    <div class="im-empty-state"><p class="text-muted mb-0">No active review schedules.</p></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="im-desktop-only im-collapsed-on-mobile container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h1 class="mb-1"><i class="fas fa-calendar-check"></i> Reviews</h1>
+                    <p class="text-muted mb-0 small">Open, due, and next {{ upcoming_days }} days (through {{ upcoming_end.strftime('%d %b %Y') }})</p>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="{{ url_for('clients.list_review_schedules', bucket='all') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-list"></i> All workflows
+                    </a>
+                    <a href="{{ url_for('workflows.list_workflows') }}" class="btn btn-info">
+                        <i class="fas fa-project-diagram"></i> Monthly workflows
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4 g-3">
+        <div class="col-md-3">
+            <a href="{{ url_for('clients.list_review_schedules', bucket='due') }}" class="summary-card-link {% if bucket == 'due' %}active-bucket{% endif %}">
+                <div class="card summary-card bg-warning text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title">{{ due_workflows|length }}</h4>
+                                <p class="card-text mb-0">Due reviews</p>
+                                <small class="opacity-75">Overdue + today</small>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-exclamation-triangle fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="{{ url_for('clients.list_review_schedules', bucket='upcoming') }}" class="summary-card-link {% if bucket == 'upcoming' %}active-bucket{% endif %}">
+                <div class="card summary-card bg-info text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title">{{ upcoming_workflows|length }}</h4>
+                                <p class="card-text mb-0">Upcoming ({{ upcoming_days }}d)</p>
+                                <small class="opacity-75">Through {{ upcoming_end.strftime('%d %b') }}</small>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-clock fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="{{ url_for('clients.list_review_schedules', bucket='open') }}" class="summary-card-link {% if bucket == 'open' %}active-bucket{% endif %}">
+                <div class="card summary-card bg-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title">{{ open_workflows|length }}</h4>
+                                <p class="card-text mb-0">Open reviews</p>
+                                <small class="opacity-75">Not closed</small>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-folder-open fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-3">
+            <a href="{{ url_for('clients.list_review_schedules') }}" class="summary-card-link {% if bucket == 'board' %}active-bucket{% endif %}">
+                <div class="card summary-card bg-primary text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h4 class="card-title">{{ schedules|length }}</h4>
+                                <p class="card-text mb-0">Active schedules</p>
+                                <small class="opacity-75">Board home</small>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="fas fa-calendar-alt fa-2x"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    {% if bucket in ('due', 'upcoming', 'open', 'all') %}
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-tasks"></i> {{ board_title }}
+            </h6>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <input type="text" id="boardSearch" class="form-control form-control-sm" placeholder="Search…" style="width: 220px;">
+                <a href="{{ url_for('clients.list_review_schedules') }}" class="btn btn-sm btn-outline-secondary">Back to board</a>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if board_workflows %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle" id="boardTable" width="100%" cellspacing="0" data-mobile-table="scroll">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Client</th>
+                            <th>Review date</th>
+                            <th>Status</th>
+                            <th>Assigned to</th>
+                            <th>Meeting</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for workflow in board_workflows %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('clients.client_details', client_id=workflow.client.id) }}" class="text-decoration-none">
+                                    <strong>{{ workflow.client.name }}</strong>
+                                </a>
+                            </td>
+                            <td>{{ review_date_label(workflow) }}</td>
+                            <td>{{ workflow_status_badge(workflow) }}</td>
+                            <td>{{ workflow.assigned_user.username if workflow.assigned_user else '—' }}</td>
+                            <td>
+                                {% if workflow.meeting_date %}
+                                    {{ workflow.meeting_date.strftime('%Y-%m-%d %H:%M') }}
+                                {% else %}
+                                    <span class="text-muted">Not scheduled</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if workflow.notes %}
+                                    <span title="{{ workflow.notes }}">{{ workflow.notes|truncate(50) }}</span>
+                                {% else %}
+                                    <span class="text-muted">No notes</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ workflow_actions(workflow) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info mb-0">
+                <i class="fas fa-info-circle"></i> No reviews in this view.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-calendar"></i> Active Review Schedules
+            </h6>
+        </div>
+        <div class="card-body">
+            {% if schedules %}
+            <div class="table-responsive">
+                <table class="table table-bordered" id="schedulesTable" width="100%" cellspacing="0" data-mobile-table="scroll">
+                    <thead>
+                        <tr>
+                            <th>Client</th>
+                            <th>First Review Date</th>
+                            <th>Frequency</th>
+                            <th>Next Review</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for schedule in schedules %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('clients.client_details', client_id=schedule.client.id) }}" class="text-decoration-none">
+                                    <strong>{{ schedule.client.name }}</strong>
+                                </a>
+                            </td>
+                            <td>{{ schedule.first_review_date.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                <span class="badge {% if schedule.frequency == 'half_yearly' %}bg-info{% else %}bg-primary{% endif %}">
+                                    {{ 'Half Yearly' if schedule.frequency == 'half_yearly' else 'Yearly' }}
+                                </span>
+                            </td>
+                            <td>
+                                {% set next_workflow = schedule.workflows|selectattr('status', 'ne', 'closed')|first %}
+                                {% if next_workflow %}
+                                    {{ next_workflow.review_date.strftime('%Y-%m-%d') }}
+                                    {% if next_workflow.review_date < today %}
+                                        <br><small class="overdue">Overdue</small>
+                                    {% elif next_workflow.review_date == today %}
+                                        <br><small class="due-today">Due Today</small>
+                                    {% elif next_workflow.review_date <= today + timedelta(days=7) %}
+                                        <br><small class="due-soon">Due Soon</small>
+                                    {% elif next_workflow.review_date <= upcoming_end %}
+                                        <br><small class="text-info">Next {{ upcoming_days }}d</small>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">No upcoming reviews</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge {% if schedule.is_active %}bg-success{% else %}bg-secondary{% endif %} text-white">
+                                    {{ 'Active' if schedule.is_active else 'Inactive' }}
+                                </span>
+                            </td>
+                            <td>{{ schedule.created_at.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <a href="{{ url_for('clients.client_review_schedule', client_id=schedule.client.id) }}"
+                                       class="btn btn-primary btn-sm" title="Manage Reviews">
+                                        <i class="fas fa-cog"></i> Manage
+                                    </a>
+                                    <a href="{{ url_for('clients.client_details', client_id=schedule.client.id) }}"
+                                       class="btn btn-info btn-sm" title="View Client">
+                                        <i class="fas fa-user"></i> Client
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> No active review schedules found.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-folder-open"></i> Open reviews (preview)
+            </h6>
+            <a href="{{ url_for('clients.list_review_schedules', bucket='open') }}" class="btn btn-sm btn-outline-primary">View all open</a>
+        </div>
+        <div class="card-body">
+            {% if open_workflows %}
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0" data-mobile-table="scroll">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Client</th>
+                            <th>Review date</th>
+                            <th>Status</th>
+                            <th>Assigned</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for workflow in open_workflows[:15] %}
+                        <tr>
+                            <td>{{ workflow.client.name }}</td>
+                            <td>{{ review_date_label(workflow) }}</td>
+                            <td>{{ workflow_status_badge(workflow) }}</td>
+                            <td>{{ workflow.assigned_user.username if workflow.assigned_user else '—' }}</td>
+                            <td>
+                                <a href="{{ url_for('clients.update_review_workflow', workflow_id=workflow.id) }}" class="btn btn-sm btn-outline-primary">Update</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if open_workflows|length > 15 %}
+            <p class="small text-muted mt-2 mb-0">Showing first 15 of {{ open_workflows|length }}. <a href="{{ url_for('clients.list_review_schedules', bucket='open') }}">See all</a>.</p>
+            {% endif %}
+            {% else %}
+            <div class="text-muted">No open reviews.</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script>
+$(document).ready(function() {
+    if ($('#schedulesTable').length) {
+        $('#schedulesTable').DataTable({
+            "order": [[1, "asc"]],
+            "pageLength": 25,
+            "searching": true,
+            "dom": 'lrtip',
+            "language": {
+                "lengthMenu": "Show _MENU_ schedules per page",
+                "info": "Showing _START_ to _END_ of _TOTAL_ schedules"
+            }
+        });
+    }
+    if ($('#boardTable').length) {
+        var boardTable = $('#boardTable').DataTable({
+            "order": [[1, "asc"]],
+            "pageLength": 25,
+            "searching": false,
+            "dom": 'lrtip',
+            "language": {
+                "lengthMenu": "Show _MENU_ reviews per page",
+                "info": "Showing _START_ to _END_ of _TOTAL_ reviews"
+            }
+        });
+        $('#boardSearch').on('keyup', function() {
+            boardTable.search(this.value).draw();
+        });
+    }
+});
+</script>
+{% endblock %}

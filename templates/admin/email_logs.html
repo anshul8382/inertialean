@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+
+{% block page_title %}Email Logs{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="fas fa-envelope"></i> Email Logs</h2>
+                <div class="text-muted small">
+                    Total: {{ pagination.total }} emails
+                </div>
+            </div>
+            
+            <!-- Search and Filters -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <form method="GET" action="{{ url_for('main.admin_email_logs') }}" class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small text-muted">Search</label>
+                            <input type="text" class="form-control" name="q" value="{{ search_query }}" 
+                                   placeholder="Search recipient, subject, or message...">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted">Email Type</label>
+                            <select class="form-select" name="type">
+                                <option value="">All Types</option>
+                                {% for email_type in email_types %}
+                                <option value="{{ email_type }}" {% if email_type_filter == email_type %}selected{% endif %}>
+                                    {{ email_type|title }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted">Status</label>
+                            <select class="form-select" name="status">
+                                <option value="">All Statuses</option>
+                                {% for status in statuses %}
+                                <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>
+                                    {{ status|title }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted">From Date</label>
+                            <input type="date" class="form-control" name="date_from" value="{{ date_from }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted">To Date</label>
+                            <input type="date" class="form-control" name="date_to" value="{{ date_to }}">
+                        </div>
+                        <div class="col-md-12">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-search"></i> Apply Filters
+                            </button>
+                            <a href="{{ url_for('main.admin_email_logs') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Clear
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Email Logs Table -->
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Email History</h5>
+                    <div class="text-muted small">
+                        Showing {{ (pagination.page - 1) * pagination.per_page + 1 }} - 
+                        {{ pagination.page * pagination.per_page if pagination.page * pagination.per_page < pagination.total else pagination.total }} 
+                        of {{ pagination.total }}
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    {% if email_logs %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date & Time</th>
+                                    <th>Recipient</th>
+                                    <th>Subject</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Client</th>
+                                    <th>Sent By</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in email_logs %}
+                                <tr>
+                                    <td>
+                                        <span class="small">
+                                            {{ log.sent_at.strftime('%Y-%m-%d') if log.sent_at else 'N/A' }}<br>
+                                            <span class="text-muted">{{ log.sent_at.strftime('%H:%M:%S') if log.sent_at else '' }}</span>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="mailto:{{ log.recipient_email }}" class="text-decoration-none">
+                                            {{ log.recipient_email }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="text-truncate d-inline-block" style="max-width: 300px;" title="{{ log.subject }}">
+                                            {{ log.subject }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ log.email_type|title }}</span>
+                                    </td>
+                                    <td>
+                                        {% if log.status == 'sent' %}
+                                            <span class="badge bg-success">Sent</span>
+                                        {% elif log.status == 'failed' %}
+                                            <span class="badge bg-danger">Failed</span>
+                                        {% elif log.status == 'pending' %}
+                                            <span class="badge bg-warning">Pending</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ log.status|title }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if log.client %}
+                                            <a href="{{ url_for('clients.client_details', client_id=log.client_id) }}" class="text-decoration-none">
+                                                {{ log.client.name }}
+                                            </a>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if log.sent_by_user %}
+                                            {{ log.sent_by_user.name }}
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-info" 
+                                                data-bs-toggle="modal" 
+                                                data-bs-target="#emailModal{{ log.id }}">
+                                            <i class="fas fa-eye"></i> View
+                                        </button>
+                                    </td>
+                                </tr>
+                                
+                                <!-- Email Detail Modal -->
+                                <div class="modal fade" id="emailModal{{ log.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog modal-lg">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Email Details</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <div class="row mb-3">
+                                                    <div class="col-md-6">
+                                                        <strong>Recipient:</strong><br>
+                                                        <a href="mailto:{{ log.recipient_email }}">{{ log.recipient_email }}</a>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <strong>Sent At:</strong><br>
+                                                        {{ log.sent_at.strftime('%Y-%m-%d %H:%M:%S') if log.sent_at else 'N/A' }}
+                                                    </div>
+                                                </div>
+                                                <div class="row mb-3">
+                                                    <div class="col-md-6">
+                                                        <strong>Subject:</strong><br>
+                                                        {{ log.subject }}
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <strong>Status:</strong><br>
+                                                        {% if log.status == 'sent' %}
+                                                            <span class="badge bg-success">Sent</span>
+                                                        {% elif log.status == 'failed' %}
+                                                            <span class="badge bg-danger">Failed</span>
+                                                        {% else %}
+                                                            <span class="badge bg-secondary">{{ log.status|title }}</span>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                                <div class="row mb-3">
+                                                    <div class="col-md-6">
+                                                        <strong>Type:</strong><br>
+                                                        <span class="badge bg-info">{{ log.email_type|title }}</span>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <strong>Client:</strong><br>
+                                                        {% if log.client %}
+                                                            <a href="{{ url_for('clients.client_details', client_id=log.client_id) }}">
+                                                                {{ log.client.name }}
+                                                            </a>
+                                                        {% else %}
+                                                            <span class="text-muted">N/A</span>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                                {% if log.sent_by_user %}
+                                                <div class="row mb-3">
+                                                    <div class="col-md-6">
+                                                        <strong>Sent By:</strong><br>
+                                                        {{ log.sent_by_user.name }}
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+                                                {% if log.error_message %}
+                                                <div class="alert alert-danger">
+                                                    <strong>Error:</strong><br>
+                                                    {{ log.error_message }}
+                                                </div>
+                                                {% endif %}
+                                                {% if log.custom_message %}
+                                                <div class="mb-3">
+                                                    <strong>Custom Message:</strong><br>
+                                                    <div class="border p-2 bg-light rounded" style="white-space: pre-wrap;">
+                                                        {{ log.custom_message }}
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+                                                {% if log.email_html %}
+                                                <div class="mb-3">
+                                                    <strong>Email Content:</strong><br>
+                                                    <div class="border p-3 bg-light rounded" style="max-height: 400px; overflow-y: auto;">
+                                                        <iframe srcdoc="{{ log.email_html|e }}" 
+                                                                style="width: 100%; height: 350px; border: none;"></iframe>
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- Pagination -->
+                    {% if pagination.pages > 1 %}
+                    <div class="card-footer">
+                        <nav aria-label="Email logs pagination">
+                            <ul class="pagination mb-0 justify-content-center">
+                                {% if pagination.has_prev %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('main.admin_email_logs', page=pagination.prev_num, q=search_query, type=email_type_filter, status=status_filter, date_from=date_from, date_to=date_to) }}">
+                                        Previous
+                                    </a>
+                                </li>
+                                {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">Previous</span>
+                                </li>
+                                {% endif %}
+                                
+                                {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                                    {% if page_num %}
+                                        {% if page_num == pagination.page %}
+                                        <li class="page-item active">
+                                            <span class="page-link">{{ page_num }}</span>
+                                        </li>
+                                        {% else %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="{{ url_for('main.admin_email_logs', page=page_num, q=search_query, type=email_type_filter, status=status_filter, date_from=date_from, date_to=date_to) }}">
+                                                {{ page_num }}
+                                            </a>
+                                        </li>
+                                        {% endif %}
+                                    {% else %}
+                                    <li class="page-item disabled">
+                                        <span class="page-link">…</span>
+                                    </li>
+                                    {% endif %}
+                                {% endfor %}
+                                
+                                {% if pagination.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="{{ url_for('main.admin_email_logs', page=pagination.next_num, q=search_query, type=email_type_filter, status=status_filter, date_from=date_from, date_to=date_to) }}">
+                                        Next
+                                    </a>
+                                </li>
+                                {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">Next</span>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <div class="card-body text-center py-5">
+                        <p class="text-muted">No email logs found.</p>
+                        {% if search_query or email_type_filter or status_filter or date_from or date_to %}
+                        <a href="{{ url_for('main.admin_email_logs') }}" class="btn btn-outline-primary">
+                            Clear Filters
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

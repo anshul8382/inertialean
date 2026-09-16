@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Quick Add Security</h2>
+        <a href="{{ url_for('main.transactions') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Transactions
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="alert alert-info">
+                <h5><i class="fas fa-info-circle"></i> Missing Security</h5>
+                <p class="mb-0">A security in your transaction file was not found in the system. Please add it below to continue with your transaction upload.</p>
+            </div>
+
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="symbol" class="form-label">Security Symbol *</label>
+                            <input type="text" class="form-control" id="symbol" name="symbol" 
+                                   value="{{ symbol }}" required placeholder="e.g., EBBETF0430">
+                            <div class="form-text">Enter the exact symbol as it appears in your transaction file</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Security Name *</label>
+                            <input type="text" class="form-control" id="name" name="name" 
+                                   value="{{ name }}" required placeholder="e.g., Edelweiss Bharat Bond ETF - April 2030">
+                            <div class="form-text">Enter a descriptive name for the security</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="asset_class_id" class="form-label">Asset Class *</label>
+                            <select class="form-select" id="asset_class_id" name="asset_class_id" required>
+                                <option value="">Select Asset Class</option>
+                                {% for asset_class in asset_classes %}
+                                <option value="{{ asset_class.id }}">{{ asset_class.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Choose the appropriate asset class for this security</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="security_type" class="form-label">Security Type</label>
+                            <select class="form-select" id="security_type" name="security_type">
+                                <option value="STOCK">Stock</option>
+                                <option value="ETF">ETF</option>
+                                <option value="MUTUAL_FUND">Mutual Fund</option>
+                                <option value="BOND">Bond</option>
+                                <option value="OTHER">Other</option>
+                            </select>
+                            <div class="form-text">Select the type of security</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Security
+                    </button>
+                    <a href="{{ url_for('main.add_transaction') }}" class="btn btn-outline-secondary ms-2">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Asset Class Guide</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Common Asset Classes:</h6>
+                    <ul class="list-unstyled">
+                        <li><strong>Equity:</strong> Stocks, ETFs tracking equity indices</li>
+                        <li><strong>Debt/Fixed Income:</strong> Bonds, debt ETFs, fixed deposits</li>
+                        <li><strong>Commodity:</strong> Gold, silver, commodity ETFs</li>
+                        <li><strong>Real Estate:</strong> REITs, real estate funds</li>
+                        <li><strong>International:</strong> Foreign stocks, international funds</li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6>Security Type Guide:</h6>
+                    <ul class="list-unstyled">
+                        <li><strong>Stock:</strong> Individual company shares</li>
+                        <li><strong>ETF:</strong> Exchange Traded Funds</li>
+                        <li><strong>Mutual Fund:</strong> Mutual fund units</li>
+                        <li><strong>Bond:</strong> Government or corporate bonds</li>
+                        <li><strong>Other:</strong> Any other security type</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-select ETF if symbol contains ETF
+    const symbolInput = document.getElementById('symbol');
+    const securityTypeSelect = document.getElementById('security_type');
+    
+    symbolInput.addEventListener('input', function() {
+        const symbol = this.value.toUpperCase();
+        if (symbol.includes('ETF')) {
+            securityTypeSelect.value = 'ETF';
+        } else if (symbol.includes('BOND') || symbol.includes('GILT')) {
+            securityTypeSelect.value = 'BOND';
+        }
+    });
+    
+    // Auto-select asset class based on symbol patterns
+    symbolInput.addEventListener('blur', function() {
+        const symbol = this.value.toUpperCase();
+        const assetClassSelect = document.getElementById('asset_class_id');
+        
+        // Try to auto-select asset class based on symbol patterns
+        const assetClasses = Array.from(assetClassSelect.options);
+        for (let option of assetClasses) {
+            if (option.value && option.text) {
+                const assetClassName = option.text.toLowerCase();
+                if (symbol.includes('BOND') || symbol.includes('GILT') || symbol.includes('DEBT')) {
+                    if (assetClassName.includes('debt') || assetClassName.includes('bond') || assetClassName.includes('fixed')) {
+                        assetClassSelect.value = option.value;
+                        break;
+                    }
+                } else if (symbol.includes('GOLD') || symbol.includes('SILVER')) {
+                    if (assetClassName.includes('commodity')) {
+                        assetClassSelect.value = option.value;
+                        break;
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

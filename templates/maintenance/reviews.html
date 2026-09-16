@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link %}
+
+{% block title %}Maintenance — Reviews{% endblock %}
+
+{% block content %}
+{{ maint_hub_open('Reviews', 'Review analysis tools.', url_for('main.maintenance_recommendations')) }}
+  {% if config.get('NAV_ENHANCED_REVIEW_ENABLED') %}
+  {{ maint_link('fa-history', 'Period analysis V2', url_for('enhanced_review.period_analysis_v2')) }}
+  {{ maint_link('fa-envelope-open-text', 'Performance email', url_for('enhanced_review.performance_analysis_email')) }}
+  {% else %}
+  <div class="im-empty-state px-1"><p class="small text-muted mb-0">No extra review tools enabled. Use <a href="{{ url_for('main.maintenance_recommendations') }}">Recommendations</a> for unified recs.</p></div>
+  {% endif %}
+  {{ maint_link('fa-calculator', 'Portfolio modelling', url_for('main.maintenance_portfolio_modelling')) }}
+{{ maint_hub_close() }}
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h1 class="h3 mb-0"><i class="fas fa-clipboard-list text-primary"></i> Reviews</h1>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ url_for('main.maintenance_recommendations') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-calendar-check"></i> Recommendations
+            </a>
+            <a href="{{ url_for('main.maintenance_portfolio_modelling') }}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-calculator"></i> Portfolio modelling
+            </a>
+        </div>
+    </div>
+    <p class="text-muted mb-4">Review analysis tools. Unified recommendation lists and generation live under Maintenance → Recommendations.</p>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="row g-3">
+                {% if config.get('NAV_ENHANCED_REVIEW_ENABLED') %}
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('enhanced_review.period_analysis_v2') }}">
+                        <i class="fas fa-history d-block mb-2 fa-lg"></i> Period analysis V2
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('enhanced_review.performance_analysis_email') }}">
+                        <i class="fas fa-envelope-open-text d-block mb-2 fa-lg"></i> Performance email
+                    </a>
+                </div>
+                {% else %}
+                <div class="col-12">
+                    <p class="text-muted mb-0">No additional review tools are enabled. Use <a href="{{ url_for('main.maintenance_recommendations') }}">Maintenance → Recommendations</a> for unified recommendations.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{{ maint_desktop_close() }}
+{% endblock %}

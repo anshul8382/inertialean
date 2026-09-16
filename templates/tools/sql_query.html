@@ -1,0 +1,709 @@
+{% extends "base.html" %}
+
+{% block title %}SQL Assistant{% endblock %}
+
+{% block extra_css %}
+<style>
+    .query-container {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        padding: 30px;
+        margin-bottom: 20px;
+    }
+    
+    .query-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+        margin: -30px -30px 30px -30px;
+    }
+    
+    .query-textarea {
+        font-family: 'Courier New', monospace;
+        font-size: 14px;
+        line-height: 1.5;
+        min-height: 200px;
+        resize: vertical;
+    }
+    
+    .results-container {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        padding: 30px;
+        margin-top: 20px;
+    }
+    
+    .results-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .results-table {
+        overflow-x: auto;
+    }
+    
+    .results-table table {
+        font-size: 0.9rem;
+    }
+    
+    .results-table th {
+        background-color: #f8f9fa;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        white-space: nowrap;
+    }
+    
+    .query-info {
+        background-color: #f8f9fa;
+        border-left: 4px solid #667eea;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+    }
+    
+    .query-info h6 {
+        color: #667eea;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    
+    .example-queries {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 15px;
+        margin-top: 20px;
+    }
+    
+    .example-queries h6 {
+        color: #495057;
+        font-weight: 600;
+        margin-bottom: 15px;
+    }
+    
+    .example-query {
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 10px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .example-query:hover {
+        border-color: #667eea;
+        background-color: #f0f3ff;
+    }
+    
+    .example-query code {
+        font-size: 0.85rem;
+        color: #495057;
+    }
+    
+    .security-warning {
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        border-left: 4px solid #ffc107;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+    }
+    
+    .security-warning h6 {
+        color: #856404;
+        font-weight: 600;
+        margin-bottom: 10px;
+    }
+    
+    .error-box {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        border-left: 4px solid #dc3545;
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 5px;
+        color: #721c24;
+    }
+    
+    .stats-badge {
+        display: inline-block;
+        padding: 5px 12px;
+        background-color: #667eea;
+        color: white;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        margin-left: 10px;
+    }
+    
+    .schema-browser {
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        padding: 20px;
+        margin-bottom: 20px;
+        max-height: 600px;
+        overflow-y: auto;
+    }
+    
+    .schema-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .schema-search {
+        margin-bottom: 15px;
+    }
+    
+    .table-item {
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        background: #f8f9fa;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .table-item:hover {
+        border-color: #667eea;
+        background: #f0f3ff;
+    }
+    
+    .table-header {
+        padding: 12px;
+        font-weight: 600;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: #495057;
+    }
+    
+    .table-header i {
+        transition: transform 0.2s ease;
+    }
+    
+    .table-item.expanded .table-header i {
+        transform: rotate(90deg);
+    }
+    
+    .table-columns {
+        display: none;
+        padding: 10px;
+        background: white;
+        border-top: 1px solid #dee2e6;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .table-item.expanded .table-columns {
+        display: block;
+    }
+    
+    .column-item {
+        padding: 8px;
+        border-bottom: 1px solid #f0f0f0;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+    }
+    
+    .column-item:last-child {
+        border-bottom: none;
+    }
+    
+    .column-name {
+        font-weight: 600;
+        color: #667eea;
+        margin-right: 10px;
+        cursor: pointer;
+    }
+    
+    .column-name:hover {
+        text-decoration: underline;
+    }
+    
+    .column-type {
+        color: #6c757d;
+        font-size: 0.85rem;
+    }
+    
+    .column-badge {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.75rem;
+        margin-left: 5px;
+    }
+    
+    .badge-pk {
+        background-color: #ffc107;
+        color: #000;
+    }
+    
+    .badge-fk {
+        background-color: #17a2b8;
+        color: white;
+    }
+    
+    .badge-nullable {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .badge-indexed {
+        background-color: #28a745;
+        color: white;
+    }
+    
+    .schema-loading {
+        text-align: center;
+        padding: 20px;
+        color: #6c757d;
+    }
+    
+    .schema-error {
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        border-radius: 5px;
+        padding: 15px;
+        color: #721c24;
+    }
+    
+    .toggle-schema-btn {
+        margin-bottom: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <!-- Table Schema Browser -->
+            <div class="schema-browser" id="schemaBrowser" style="display: none;">
+                <div class="schema-header">
+                    <h5><i class="fas fa-table"></i> Database Tables</h5>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleSchemaBrowser()">
+                        <i class="fas fa-times"></i> Hide
+                    </button>
+                </div>
+                <div class="schema-search">
+                    <input type="text" class="form-control" id="schemaSearch" placeholder="Search tables..." onkeyup="filterTables()">
+                </div>
+                <div id="schemaContent">
+                    <div class="schema-loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading table structures...
+                    </div>
+                </div>
+            </div>
+            
+            <button type="button" class="btn btn-info toggle-schema-btn" onclick="toggleSchemaBrowser()" id="showSchemaBtn">
+                <i class="fas fa-database"></i> Show Table Structures
+            </button>
+            <p class="mb-2">
+                <span class="text-muted small">Admin / SQL query</span>
+            </p>
+            <div class="query-container">
+                <div class="query-header">
+                    <h3><i class="fas fa-database"></i> SQL Assistant</h3>
+                    <p class="mb-0">AI draft + read-only SELECT queries (admin)</p>
+                </div>
+                
+                <div class="security-warning">
+                    <h6><i class="fas fa-shield-alt"></i> Security Notice</h6>
+                    <p class="mb-0">Only SELECT queries are allowed. Data modification operations (INSERT, UPDATE, DELETE, DROP, etc.) are blocked for security reasons.</p>
+                </div>
+                
+                <div class="query-info">
+                    <h6><i class="fas fa-info-circle"></i> Important Notes</h6>
+                    <ul class="mb-0" style="margin-left: 20px;">
+                        <li><strong>Net Investment:</strong> Calculated from <code>cashflow</code> table (negative amounts = investments, positive = withdrawals)</li>
+                        <li><strong>Current Value:</strong> Calculated from <code>holding</code> table (quantity × security.current_price)</li>
+                        <li><strong>% Return:</strong> Calculated as ((Current Value - Net Investment) / Net Investment) × 100</li>
+                        <li><strong>XIRR:</strong> Cannot be calculated in SQL - requires iterative calculation. Use the API endpoint <code>/api/v1/&lt;client_id&gt;/performance/xirr</code> or check <code>portfolio_snapshot</code> table for stored XIRR values.</li>
+                    </ul>
+                </div>
+                
+                <div class="card border-info mb-3">
+                    <div class="card-header bg-info bg-opacity-10 py-2">
+                        <strong><i class="fas fa-robot"></i> AI query draft</strong>
+                        <span class="text-muted small fw-normal"> — local Ollama only; review before Run</span>
+                    </div>
+                    <div class="card-body">
+                        <label for="aiSqlRequest" class="form-label">Describe what you need (English)</label>
+                        <textarea id="aiSqlRequest" class="form-control mb-2" rows="2" placeholder="e.g. List active clients with advisor name and count of open ops tasks, limit 50"></textarea>
+                        <button type="button" class="btn btn-outline-info btn-sm" id="aiSqlSuggestBtn">
+                            <i class="fas fa-magic"></i> Generate SQL draft
+                        </button>
+                        <p id="aiSqlError" class="text-danger small mt-2 mb-0 d-none"></p>
+                        <p id="aiSqlWarn" class="text-warning small mt-2 mb-0 d-none"></p>
+                    </div>
+                </div>
+
+                <form method="POST" action="{{ url_for('main.sql_query') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="query" class="form-label">
+                            <strong>SQL Query</strong>
+                        </label>
+                        <textarea 
+                            class="form-control query-textarea" 
+                            id="query" 
+                            name="query" 
+                            rows="10" 
+                            placeholder="Enter your SELECT query here...&#10;&#10;Example:&#10;SELECT c.name AS client_name,&#10;       COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0) AS net_investment,&#10;       COALESCE(SUM(h.quantity * s.current_price), 0) AS current_value,&#10;       CASE WHEN COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0) > 0&#10;            THEN ((COALESCE(SUM(h.quantity * s.current_price), 0) - (COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0))) / (COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0))) * 100&#10;            ELSE 0 END AS return_percent&#10;FROM client c&#10;LEFT JOIN cashflow cf ON c.id = cf.client_id&#10;LEFT JOIN holding h ON c.id = h.client_id&#10;LEFT JOIN security s ON h.security_id = s.id&#10;GROUP BY c.id, c.name&#10;HAVING net_investment > 0 OR current_value > 0&#10;ORDER BY current_value DESC"
+                            required>{{ query }}</textarea>
+                        <div class="form-text">
+                            <i class="fas fa-info-circle"></i> 
+                            Only SELECT and WITH (CTE) queries are permitted. Queries are executed in read-only mode.
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-play"></i> Execute Query
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('query').value = ''">
+                            <i class="fas fa-eraser"></i> Clear
+                        </button>
+                    </div>
+                </form>
+                
+                <div class="example-queries">
+                    <h6><i class="fas fa-lightbulb"></i> Example Queries</h6>
+                    <div class="example-query" onclick="loadExample('SELECT c.id AS client_id, c.name AS client_name, COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0) AS net_investment, COALESCE(SUM(h.quantity * s.current_price), 0) AS current_value, CASE WHEN COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0) > 0 THEN ((COALESCE(SUM(h.quantity * s.current_price), 0) - (COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0))) / (COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0))) * 100 ELSE 0 END AS return_percent, (COALESCE(SUM(h.quantity * s.current_price), 0) - COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0)) AS absolute_return FROM client c LEFT JOIN cashflow cf ON c.id = cf.client_id LEFT JOIN holding h ON c.id = h.client_id LEFT JOIN security s ON h.security_id = s.id WHERE s.current_price IS NOT NULL GROUP BY c.id, c.name HAVING net_investment > 0 OR current_value > 0 ORDER BY current_value DESC')">
+                        <code>📊 Client Performance: Net Investment (cashflow), Current Value (holdings), % Return, Absolute Return</code>
+                    </div>
+                    <div class="example-query" onclick="loadExample('SELECT c.id AS client_id, c.name AS client_name, COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0) AS net_investment, COALESCE(SUM(h.quantity * s.current_price), 0) AS current_value, CASE WHEN COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0) > 0 THEN ((COALESCE(SUM(h.quantity * s.current_price), 0) - (COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0))) / (COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0))) * 100 ELSE 0 END AS return_percent, (COALESCE(SUM(h.quantity * s.current_price), 0) - COALESCE(SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) - SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END), 0)) AS absolute_return, (SELECT xirr FROM portfolio_snapshot WHERE client_id = c.id ORDER BY date DESC LIMIT 1) AS xirr FROM client c LEFT JOIN cashflow cf ON c.id = cf.client_id LEFT JOIN holding h ON c.id = h.client_id LEFT JOIN security s ON h.security_id = s.id WHERE s.current_price IS NOT NULL GROUP BY c.id, c.name HAVING net_investment > 0 OR current_value > 0 ORDER BY return_percent DESC')">
+                        <code>📈 Client Performance with XIRR (from portfolio_snapshot table, sorted by % Return)</code>
+                    </div>
+                    <div class="example-query" onclick="loadExample('SELECT c.name AS client_name, COUNT(h.id) AS holdings_count FROM client c LEFT JOIN holding h ON c.id = h.client_id GROUP BY c.id, c.name ORDER BY holdings_count DESC LIMIT 10')">
+                        <code>Get top 10 clients by number of holdings</code>
+                    </div>
+                    <div class="example-query" onclick="loadExample('SELECT s.symbol, s.name, s.current_price, COUNT(h.id) AS holding_count FROM security s LEFT JOIN holding h ON s.id = h.security_id WHERE s.current_price IS NOT NULL GROUP BY s.id, s.symbol, s.name, s.current_price ORDER BY holding_count DESC LIMIT 20')">
+                        <code>Get most held securities</code>
+                    </div>
+                    <div class="example-query" onclick="loadExample('SELECT c.name AS client_name, COUNT(cf.id) AS cashflow_count, MIN(cf.date) AS first_cashflow, MAX(cf.date) AS last_cashflow, SUM(CASE WHEN cf.amount < 0 THEN ABS(cf.amount) ELSE 0 END) AS total_invested, SUM(CASE WHEN cf.amount > 0 THEN cf.amount ELSE 0 END) AS total_withdrawn FROM client c LEFT JOIN cashflow cf ON c.id = cf.client_id GROUP BY c.id, c.name HAVING cashflow_count > 0 ORDER BY total_invested DESC')">
+                        <code>Cashflow Summary: Total Invested vs Withdrawn</code>
+                    </div>
+                </div>
+
+                {% if query_history %}
+                <div class="example-queries" style="margin-top: 15px;">
+                    <h6><i class="fas fa-history"></i> Saved Query History (auto)</h6>
+                    <div class="schema-search">
+                        <input type="text" class="form-control" id="queryHistorySearch" placeholder="Search saved queries..." onkeyup="filterSavedQueries()">
+                    </div>
+                    <div id="queryHistoryList">
+                        {% for item in query_history %}
+                        <div class="example-query saved-query-item"
+                             data-query='{{ item.query_text|tojson }}'
+                             data-search="{{ (item.query_text or '')|lower|e }}"
+                             onclick="loadSavedQuery(this)">
+                            <code>
+                                🧾 {{ (item.query_text or '')|replace('\n',' ')|truncate(110, True, '...') }}
+                            </code>
+                            <div class="text-muted" style="font-size: 0.8rem; margin-top: 6px;">
+                                Last: {{ item.last_executed_at.strftime('%Y-%m-%d %H:%M') if item.last_executed_at else 'N/A' }}
+                                • Runs: {{ item.execute_count or 0 }}
+                                • {{ 'OK' if item.last_success else 'Error' }}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div class="form-text">
+                        Click any saved query to load it into the editor.
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            
+            {% if error %}
+            <div class="error-box">
+                <h6><i class="fas fa-exclamation-triangle"></i> Query Error</h6>
+                <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word;">{{ error }}</pre>
+            </div>
+            {% endif %}
+            
+            {% if results is not none %}
+            <div class="results-container">
+                <div class="results-header">
+                    <h5><i class="fas fa-table"></i> Query Results</h5>
+                    <div>
+                        {% if execution_time %}
+                        <span class="stats-badge">
+                            <i class="fas fa-clock"></i> {{ execution_time }}ms
+                        </span>
+                        {% endif %}
+                        <span class="stats-badge">
+                            <i class="fas fa-list"></i> {{ row_count }} row(s)
+                        </span>
+                    </div>
+                </div>
+                
+                {% if results %}
+                <div class="results-table">
+                    <table class="table table-striped table-hover table-bordered">
+                        <thead>
+                            <tr>
+                                {% for column in results[0].keys() %}
+                                <th>{{ column }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in results %}
+                            <tr>
+                                {% for value in row.values() %}
+                                <td>
+                                    {% if value is none %}
+                                        <span class="text-muted">NULL</span>
+                                    {% elif value is string and value|length > 100 %}
+                                        <span title="{{ value }}">{{ value[:100] }}...</span>
+                                    {% else %}
+                                        {{ value }}
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> Query executed successfully but returned no rows.
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+let schemaData = null;
+
+function loadExample(query) {
+    document.getElementById('query').value = query;
+    document.getElementById('query').focus();
+}
+
+function loadSavedQuery(el) {
+    try {
+        const raw = el.getAttribute('data-query');
+        const q = JSON.parse(raw);
+        loadExample(q);
+    } catch (e) {
+        console.error('Failed to load saved query', e);
+    }
+}
+
+function filterSavedQueries() {
+    const input = document.getElementById('queryHistorySearch');
+    if (!input) return;
+    const term = (input.value || '').toLowerCase();
+    const items = document.querySelectorAll('.saved-query-item');
+    items.forEach(it => {
+        const hay = (it.getAttribute('data-search') || '');
+        it.style.display = hay.includes(term) ? '' : 'none';
+    });
+}
+
+function toggleSchemaBrowser() {
+    const browser = document.getElementById('schemaBrowser');
+    const btn = document.getElementById('showSchemaBtn');
+    
+    if (browser.style.display === 'none') {
+        browser.style.display = 'block';
+        btn.style.display = 'none';
+        if (!schemaData) {
+            loadSchema();
+        }
+    } else {
+        browser.style.display = 'none';
+        btn.style.display = 'block';
+    }
+}
+
+function loadSchema() {
+    const content = document.getElementById('schemaContent');
+    content.innerHTML = '<div class="schema-loading"><i class="fas fa-spinner fa-spin"></i> Loading table structures...</div>';
+    
+    fetch('/tools/sql-query/schema', {
+        method: 'GET',
+        credentials: 'same-origin',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+    })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => {
+                    throw new Error(`HTTP ${response.status}: ${text || response.statusText}`);
+                });
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                schemaData = data.tables;
+                renderSchema(data.tables);
+            } else {
+                content.innerHTML = `<div class="schema-error"><i class="fas fa-exclamation-triangle"></i> Error: ${data.error || 'Failed to load schema'}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Schema load error:', error);
+            content.innerHTML = `<div class="schema-error"><i class="fas fa-exclamation-triangle"></i> Error loading schema: ${error.message}</div>`;
+        });
+}
+
+function renderSchema(tables) {
+    const content = document.getElementById('schemaContent');
+    let html = '';
+    
+    for (const [tableName, tableInfo] of Object.entries(tables)) {
+        html += `
+            <div class="table-item" data-table-name="${tableName.toLowerCase()}">
+                <div class="table-header" onclick="toggleTable('${tableName}')">
+                    <span><i class="fas fa-chevron-right"></i> ${tableName}</span>
+                    <span class="text-muted" style="font-size: 0.85rem;">${tableInfo.column_count} columns</span>
+                </div>
+                <div class="table-columns" id="table-${tableName}">
+                    ${tableInfo.columns.map(col => renderColumn(col)).join('')}
+                </div>
+            </div>
+        `;
+    }
+    
+    content.innerHTML = html || '<div class="alert alert-info">No tables found</div>';
+}
+
+function renderColumn(col) {
+    let badges = '';
+    if (col.primary_key) {
+        badges += '<span class="column-badge badge-pk">PK</span>';
+    }
+    if (col.foreign_key) {
+        const refTable = col.foreign_key.references_table || '';
+        const refCol = col.foreign_key.references_column || '';
+        badges += `<span class="column-badge badge-fk" title="References ${refTable}.${refCol}">FK</span>`;
+    }
+    if (col.nullable) {
+        badges += '<span class="column-badge badge-nullable">NULL</span>';
+    }
+    if (col.indexed) {
+        badges += '<span class="column-badge badge-indexed">IDX</span>';
+    }
+    
+    // Escape column name for use in onclick attribute
+    const escapedColName = col.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const escapedColType = (col.type || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    
+    let fkInfo = '';
+    if (col.foreign_key) {
+        const refTable = col.foreign_key.references_table || '';
+        const refCol = col.foreign_key.references_column || '';
+        fkInfo = `<div style="font-size: 0.8rem; color: #6c757d; margin-top: 4px;">→ ${refTable}.${refCol}</div>`;
+    }
+    
+    return `
+        <div class="column-item">
+            <span class="column-name" onclick="insertColumn('${escapedColName}')">${col.name}</span>
+            <span class="column-type">${escapedColType}</span>
+            ${badges}
+            ${fkInfo}
+        </div>
+    `;
+}
+
+function toggleTable(tableName) {
+    const tableItem = document.querySelector(`.table-item[data-table-name="${tableName.toLowerCase()}"]`);
+    if (tableItem) {
+        tableItem.classList.toggle('expanded');
+    }
+}
+
+function insertColumn(columnName) {
+    const textarea = document.getElementById('query');
+    const cursorPos = textarea.selectionStart;
+    const textBefore = textarea.value.substring(0, cursorPos);
+    const textAfter = textarea.value.substring(cursorPos);
+    
+    textarea.value = textBefore + columnName + textAfter;
+    textarea.focus();
+    textarea.setSelectionRange(cursorPos + columnName.length, cursorPos + columnName.length);
+}
+
+function filterTables() {
+    const searchTerm = document.getElementById('schemaSearch').value.toLowerCase();
+    const tableItems = document.querySelectorAll('.table-item');
+    
+    tableItems.forEach(item => {
+        const tableName = item.getAttribute('data-table-name');
+        if (tableName.includes(searchTerm)) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+// Auto-load schema on page load (optional - can be removed if you want manual load)
+// loadSchema();
+
+(function () {
+    const btn = document.getElementById('aiSqlSuggestBtn');
+    if (!btn) return;
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    btn.addEventListener('click', async function () {
+        const req = document.getElementById('aiSqlRequest');
+        const errEl = document.getElementById('aiSqlError');
+        const warnEl = document.getElementById('aiSqlWarn');
+        const q = (req?.value || '').trim();
+        const showErr = (m) => { if (errEl) { errEl.textContent = m; errEl.classList.toggle('d-none', !m); } };
+        const showWarn = (m) => { if (warnEl) { warnEl.textContent = m; warnEl.classList.toggle('d-none', !m); } };
+        showErr(''); showWarn('');
+        if (!q) { showErr('Describe the query first.'); return; }
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating…';
+        try {
+            const r = await fetch('{{ url_for("assistant.sql_ai_suggest") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify({ request: q }),
+            });
+            const data = await r.json();
+            if (!data.success) {
+                showErr(data.error || 'Generation failed');
+                if (data.sql_draft && document.getElementById('query')) {
+                    document.getElementById('query').value = data.sql_draft;
+                }
+                return;
+            }
+            document.getElementById('query').value = data.sql;
+            showWarn(data.warning || 'Review before executing.');
+        } catch (e) {
+            showErr('Network error.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-magic"></i> Generate SQL draft';
+        }
+    });
+})();
+</script>
+{% endblock %}
+

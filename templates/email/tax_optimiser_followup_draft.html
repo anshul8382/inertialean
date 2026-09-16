@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<body style="font-family: Arial, sans-serif; max-width: 720px;">
+  <h3 style="color: #1a472a;">Tax optimiser — buy-back follow-up (draft)</h3>
+  <p class="text-muted" style="font-size: 12px;">Generated {{ generated_at }} — illustrative; not tax advice.</p>
+  <p>Price snapshot at recommendation time is summarised below. Refresh job updates <code>draft_html_refreshed</code> on the batch row.</p>
+  <h4>Snapshot prices</h4>
+  <table cellpadding="6" cellspacing="0" border="1" style="border-collapse: collapse; font-size: 13px;">
+    <tr style="background: #f0f7f4;"><th>Security</th><th align="right">Price</th><th>As of</th></tr>
+    {% for k, v in price_snapshot.items() %}
+    <tr>
+      <td>{{ v.symbol or v.security_id or k }}</td>
+      <td align="right">₹{{ "%.2f"|format(v.price|float) }}</td>
+      <td>{{ v.as_of or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <h4>Approved items</h4>
+  <ul>
+    {% for it in approved_items %}
+    <li><strong>{{ it.client_name }}</strong> — {{ it.suggestion_type }}
+      {% if it.payload and it.payload.strategy_label %}({{ it.payload.strategy_label }}){% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</body>
+</html>

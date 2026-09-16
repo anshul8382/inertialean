@@ -1,0 +1,523 @@
+{% extends "base.html" %}
+
+{% block title %}View Agreement{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4 class="card-title">Agreement Details</h4>
+                        <p class="card-text mb-0">
+                            {% if template %}
+                                Template:
+                                <a href="{{ url_for('agreements.view_template', template_id=template.id) }}">
+                                    <strong>{{ template.name }}</strong>
+                                </a> |
+                            {% else %}
+                                <span class="badge bg-info">Existing Agreement (Recorded)</span> | 
+                            {% endif %}
+                            Lead: <strong>{{ agreement.lead.name }}</strong>
+                        </p>
+                    </div>
+                    <div>
+                        <span class="badge bg-{{ 'success' if agreement.status == 'completed' else 'warning' if agreement.status == 'sent' else 'info' if agreement.status == 'generated' else 'secondary' }}">
+                            {{ agreement.status|title }}
+                        </span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <!-- Agreement Configuration -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Agreement Configuration</h5>
+                                </div>
+                                <div class="card-body">
+                                    {% set agreement_config = agreement.agreement_data|from_json if agreement.agreement_data else {} %}
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                <label class="form-label fw-bold">Advisory Model</label>
+                                                <div class="form-control-plaintext">
+                                                    {% if agreement_config.get('advisory_model') == 'aua' %}
+                                                        Assets under Advice (AUA) mode
+                                                    {% elif agreement_config.get('advisory_model') == 'fixed_fee' %}
+                                                        Fixed Fee mode
+                                                    {% else %}
+                                                        Not specified
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-group">
+                                                <label class="form-label fw-bold">Asset Types</label>
+                                                <div class="form-control-plaintext">
+                                                    {% if agreement_config.get('asset_types') %}
+                                                        {% set asset_type_ids = agreement_config.get('asset_types', []) %}
+                                                        {% set asset_classes = [] %}
+                                                        {% for var in agreement.variables %}
+                                                            {% if var.variable_type == 'asset_type' %}
+                                                                {% set _ = asset_classes.append(var.variable_value) %}
+                                                            {% endif %}
+                                                        {% endfor %}
+                                                        {% if asset_classes %}
+                                                            {{ asset_classes|join(', ') }}
+                                                        {% else %}
+                                                            No asset types selected
+                                                        {% endif %}
+                                                    {% else %}
+                                                        No asset types selected
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    {% if agreement_config.get('billing_structure_type') %}
+                                    <div class="form-group mt-3">
+                                        <label class="form-label fw-bold">Billing structure</label>
+                                        <div class="form-control-plaintext text-capitalize">
+                                            {{ agreement_config.get('billing_structure_type')|replace('_', ' ') }}
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    {% set fee_schedule_var = namespace(text='') %}
+                                    {% for var in agreement.variables %}
+                                      {% if var.variable_name == 'billing_fee_schedule' and var.variable_value %}
+                                        {% set fee_schedule_var.text = var.variable_value %}
+                                      {% endif %}
+                                    {% endfor %}
+                                    {% if fee_schedule_var.text %}
+                                    <div class="form-group mt-3">
+                                        <label class="form-label fw-bold">Fee schedule (agreement text)</label>
+                                        <pre class="form-control-plaintext small mb-0" style="white-space: pre-wrap;">{{ fee_schedule_var.text }}</pre>
+                                    </div>
+                                    {% endif %}
+                                    <div class="form-group mt-3">
+                                        <label class="form-label fw-bold">Special Note</label>
+                                        <div class="form-control-plaintext">
+                                            {{ agreement_config.get('special_note', 'No special note provided') }}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Agreement Variables -->
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h5>Template Variables</h5>
+                                </div>
+                                <div class="card-body">
+                                    {% if agreement_data %}
+                                        <div class="row">
+                                            {% for var_name, var_value in agreement_data.items() %}
+                                            {% if var_name not in ['asset_types', 'advisory_model', 'special_note', 'notes', 'billing_structure_type', 'billing_exceptions', 'tiered_ac_ids', 'uniform_rate_pct', 'default_rate_pct', 'other_rate_pct', 'equity_preset'] %}
+                                            <div class="col-md-6 mb-3">
+                                                <div class="form-group">
+                                                    <label class="form-label fw-bold">{{ var_name|replace('_', ' ')|title }}</label>
+                                                    <div class="form-control-plaintext">{{ var_value or 'Not filled' }}</div>
+                                                </div>
+                                            </div>
+                                            {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        <div class="alert alert-info">
+                                            <i class="fas fa-info-circle"></i>
+                                            No template variables found in this agreement.
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <!-- Agreement Notes -->
+                            {% if agreement.notes or agreement_config.get('notes') %}
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h5>Notes</h5>
+                                </div>
+                                <div class="card-body">
+                                    <p>{{ agreement.notes or agreement_config.get('notes', '') }}</p>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="col-md-4">
+                            <!-- Agreement Actions -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">Actions</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="d-grid gap-2">
+                                        {% if pdf_downloadable %}
+                                            <a href="{{ url_for('agreements.download_agreement', agreement_id=agreement.id) }}" 
+                                               class="btn btn-primary">
+                                                <i class="fas fa-download"></i> Download PDF
+                                            </a>
+                                        {% elif agreement.generated_pdf_path %}
+                                            <button class="btn btn-secondary" disabled title="PDF path is recorded but the file is missing on the server">
+                                                <i class="fas fa-file-pdf"></i> PDF File Missing
+                                            </button>
+                                        {% else %}
+                                            <button class="btn btn-secondary" disabled>
+                                                <i class="fas fa-file-pdf"></i> PDF Not Generated
+                                            </button>
+                                        {% endif %}
+
+                                        {% if docx_downloadable and not pdf_downloadable %}
+                                            <form method="POST"
+                                                  action="{{ url_for('agreements.convert_agreement_docx_pdf', agreement_id=agreement.id) }}"
+                                                  class="d-grid">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <button type="submit" class="btn btn-outline-primary">
+                                                    <i class="fas fa-file-pdf"></i> Create PDF from Word
+                                                </button>
+                                            </form>
+                                        {% endif %}
+
+                                        {% if not pdf_downloadable %}
+                                            <form method="POST"
+                                                  action="{{ url_for('agreements.upload_agreement_pdf', agreement_id=agreement.id) }}"
+                                                  enctype="multipart/form-data"
+                                                  class="border rounded p-2">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <label class="form-label small mb-1" for="agreement-pdf-upload">
+                                                    Upload agreement PDF
+                                                </label>
+                                                <input class="form-control form-control-sm mb-2"
+                                                       type="file"
+                                                       id="agreement-pdf-upload"
+                                                       name="agreement_pdf"
+                                                       accept=".pdf,application/pdf"
+                                                       required>
+                                                <button type="submit" class="btn btn-primary btn-sm w-100">
+                                                    <i class="fas fa-upload"></i> Save PDF
+                                                </button>
+                                                <p class="form-text small mb-0 mt-1">
+                                                    Export DOCX → PDF on your computer, then upload here (not under Replace Word).
+                                                </p>
+                                            </form>
+                                        {% endif %}
+                                        
+                                        <a href="{{ url_for('agreements.download_agreement_docx', agreement_id=agreement.id) }}" 
+                                           class="btn btn-success">
+                                            <i class="fas fa-file-word"></i> Download DOCX
+                                        </a>
+                                        
+                                        <a href="{{ url_for('agreements.update_agreement_details', agreement_id=agreement.id) }}" 
+                                           class="btn btn-warning">
+                                            <i class="fas fa-pencil-alt"></i> Update Agreement Details
+                                        </a>
+                                        
+                                        <a href="{{ url_for('agreements.fill_agreement_variables', agreement_id=agreement.id) }}" 
+                                           class="btn btn-info">
+                                            <i class="fas fa-edit"></i> Edit Variables
+                                        </a>
+                                        
+                                        <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#statusModal">
+                                            <i class="fas fa-flag"></i> Update Status
+                                        </button>
+                                        
+                                        {% if not agreement.generated_pdf_path %}
+                                            <button class="btn btn-outline-primary" onclick="findPdfFile()">
+                                                <i class="fas fa-search"></i> Find PDF File
+                                            </button>
+                                            
+                                            <button class="btn btn-outline-secondary" onclick="testPdfGeneration()">
+                                                <i class="fas fa-cog"></i> Test PDF Generation
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Leegality e-sign -->
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h5 class="card-title mb-0">E-sign (Leegality)</h5>
+                                </div>
+                                <div class="card-body">
+                                    {% set lg = leegality_meta or {} %}
+                                    {% if not leegality_configured %}
+                                        <p class="text-muted small mb-0">
+                                            Configure <code>LEEGALITY_*</code> in <code>.env</code> to enable sending.
+                                        </p>
+                                    {% else %}
+                                        {% set sc = signing_contact or {} %}
+                                        <div class="mb-3">
+                                            <label class="form-label small mb-1">Signing name (from agreement)</label>
+                                            <input type="text" class="form-control form-control-sm" disabled
+                                                   value="{{ sc.get('name') or '—' }}">
+                                            <div class="form-text">Uses agreement <code>client</code> / PAN name.</div>
+                                        </div>
+                                            <p class="small text-muted mb-2">
+                                                Email and mobile are copied from the lead — change only if the
+                                                Aadhaar-linked contact is different. Values are saved on the agreement.
+                                                Send order: <strong>Anshul first</strong>, then client (matches workflow
+                                                Invitee 1 + Invitee 2.1).
+                                            </p>
+                                        {% if lg.get('document_id') or lg.get('client_sign_url') %}
+                                            <dl class="row small mb-3">
+                                                <dt class="col-5">Document ID</dt>
+                                                <dd class="col-7 text-break">{{ lg.get('document_id') or '—' }}</dd>
+                                                <dt class="col-5">Status</dt>
+                                                <dd class="col-7">{{ lg.get('document_status') or lg.get('status') or '—' }}</dd>
+                                                {% if lg.get('sent_at') %}
+                                                <dt class="col-5">Sent</dt>
+                                                <dd class="col-7">{{ lg.get('sent_at') }}</dd>
+                                                {% endif %}
+                                            </dl>
+                                            {% if lg.get('invitees') %}
+                                            <p class="small mb-1"><strong>Invitees</strong></p>
+                                            <ul class="small mb-3 ps-3">
+                                                {% for inv in lg.get('invitees') %}
+                                                <li class="mb-1">
+                                                    {{ inv.get('name') or '—' }}
+                                                    {% if inv.get('email') %} · {{ inv.get('email') }}{% endif %}
+                                                    {% if inv.get('active') is sameas false %}
+                                                        <span class="text-muted">(waiting for earlier signer)</span>
+                                                    {% endif %}
+                                                    {% if inv.get('sign_url') %}
+                                                        <a href="{{ inv.get('sign_url') }}" target="_blank" rel="noopener">open link</a>
+                                                    {% endif %}
+                                                </li>
+                                                {% endfor %}
+                                            </ul>
+                                            {% endif %}
+                                            {% if lg.get('client_sign_url') %}
+                                                <a href="{{ lg.get('client_sign_url') }}" target="_blank" rel="noopener"
+                                                   class="btn btn-outline-primary btn-sm w-100 mb-2">
+                                                    <i class="fas fa-external-link-alt"></i> Open client sign link
+                                                </a>
+                                            {% endif %}
+                                            {% if lg.get('document_id') %}
+                                            <form method="POST"
+                                                  action="{{ url_for('agreements.refresh_agreement_leegality', agreement_id=agreement.id) }}"
+                                                  class="mb-2">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <input type="hidden" name="document_id" value="{{ lg.get('document_id') }}"/>
+                                                <button type="submit" class="btn btn-outline-secondary w-100">
+                                                    <i class="fas fa-sync"></i> Refresh status
+                                                </button>
+                                            </form>
+                                            {% else %}
+                                            <p class="small text-warning">
+                                                Sign link is saved but Document ID is missing — paste it from
+                                                Leegality or use Re-send.
+                                            </p>
+                                            <form method="POST"
+                                                  action="{{ url_for('agreements.refresh_agreement_leegality', agreement_id=agreement.id) }}"
+                                                  class="mb-2">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <input type="text" name="document_id" class="form-control form-control-sm mb-2"
+                                                       placeholder="Leegality document ID" required>
+                                                <button type="submit" class="btn btn-outline-secondary w-100">
+                                                    <i class="fas fa-sync"></i> Attach ID &amp; refresh
+                                                </button>
+                                            </form>
+                                            {% endif %}
+                                            <form method="POST"
+                                                  action="{{ url_for('agreements.send_agreement_leegality', agreement_id=agreement.id) }}"
+                                                  onsubmit="return confirm('Clear the current Leegality document and send again?');">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <input type="hidden" name="force" value="1"/>
+                                                <div class="mb-2">
+                                                    <label class="form-label small mb-1">
+                                                        Aadhaar email
+                                                        {% if sc.get('email_from_lead') %}
+                                                        <span class="text-muted">(from lead)</span>
+                                                        {% endif %}
+                                                    </label>
+                                                    <input type="email" name="client_email" class="form-control form-control-sm"
+                                                           value="{{ sc.get('email') or '' }}" required>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small mb-1">
+                                                        Aadhaar mobile
+                                                        {% if sc.get('mobile_from_lead') %}
+                                                        <span class="text-muted">(from lead)</span>
+                                                        {% endif %}
+                                                    </label>
+                                                    <input type="text" name="client_mobile" class="form-control form-control-sm"
+                                                           value="{{ sc.get('mobile') or '' }}"
+                                                           pattern="[0-9]{10}" maxlength="15"
+                                                           placeholder="10-digit mobile" required>
+                                                </div>
+                                                <button type="submit" class="btn btn-outline-danger w-100"
+                                                        {% if not pdf_downloadable %}disabled{% endif %}>
+                                                    <i class="fas fa-redo"></i> Re-send to Leegality
+                                                </button>
+                                            </form>
+                                        {% else %}
+                                            <p class="small text-muted">
+                                                Workflow: <strong>Anshul</strong> (1st) then
+                                                <strong>client</strong> (2nd, Aadhaar). Confirm email/mobile
+                                                below (prefilled from lead). Edit if Aadhaar uses a different number.
+                                            </p>
+                                            <form method="POST"
+                                                  action="{{ url_for('agreements.send_agreement_leegality', agreement_id=agreement.id) }}"
+                                                  onsubmit="return confirm('Send this PDF to Leegality for e-sign?');">
+                                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                                <div class="mb-2">
+                                                    <label class="form-label small mb-1">
+                                                        Aadhaar email
+                                                        {% if sc.get('email_from_lead') %}
+                                                        <span class="text-muted">(from lead)</span>
+                                                        {% endif %}
+                                                    </label>
+                                                    <input type="email" name="client_email" class="form-control form-control-sm"
+                                                           value="{{ sc.get('email') or '' }}" required>
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small mb-1">
+                                                        Aadhaar mobile
+                                                        {% if sc.get('mobile_from_lead') %}
+                                                        <span class="text-muted">(from lead)</span>
+                                                        {% endif %}
+                                                    </label>
+                                                    <input type="text" name="client_mobile" class="form-control form-control-sm"
+                                                           value="{{ sc.get('mobile') or '' }}"
+                                                           pattern="[0-9]{10}" maxlength="15"
+                                                           placeholder="10-digit mobile" required>
+                                                </div>
+                                                <button type="submit" class="btn btn-primary w-100"
+                                                        {% if not pdf_downloadable %}disabled title="Generate PDF first"{% endif %}>
+                                                    <i class="fas fa-file-signature"></i> Send to Leegality
+                                                </button>
+                                            </form>
+                                            {% if not pdf_downloadable %}
+                                                <p class="small text-warning mb-0 mt-2">Generate or upload a PDF first.</p>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if template %}
+                            {% include 'agreements/_replace_word_file.html' %}
+                            {% endif %}
+
+                            <!-- Agreement Info -->
+                            <div class="card mt-3">
+                                <div class="card-header">
+                                    <h5>Agreement Info</h5>
+                                </div>
+                                <div class="card-body">
+                                    <table class="table table-sm">
+                                        <tr>
+                                            <td><strong>Created:</strong></td>
+                                            <td>{{ agreement.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                        </tr>
+                                        {% if agreement.sent_date %}
+                                        <tr>
+                                            <td><strong>Sent:</strong></td>
+                                            <td>{{ agreement.sent_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                                        </tr>
+                                        {% endif %}
+                                        {% if agreement.signed_date %}
+                                        <tr>
+                                            <td><strong>Signed:</strong></td>
+                                            <td>{{ agreement.signed_date.strftime('%Y-%m-%d %H:%M') }}</td>
+                                        </tr>
+                                        {% endif %}
+                                        <tr>
+                                            <td><strong>Created by:</strong></td>
+                                            <td>{{ agreement.creator.name }}</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Status Update Modal -->
+<div class="modal fade" id="statusModal" tabindex="-1" aria-labelledby="statusModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="statusModalLabel">Update Agreement Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('agreements.update_agreement_status', agreement_id=agreement.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Status</label>
+                        <select name="status" class="form-control">
+                            <option value="draft" {{ 'selected' if agreement.status == 'draft' }}>Draft</option>
+                            <option value="generated" {{ 'selected' if agreement.status == 'generated' }}>Generated</option>
+                            <option value="sent" {{ 'selected' if agreement.status == 'sent' }}>Sent</option>
+                            <option value="signed" {{ 'selected' if agreement.status == 'signed' }}>Signed</option>
+                            <option value="completed" {{ 'selected' if agreement.status == 'completed' }}>Completed</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Status</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function findPdfFile() {
+    fetch('{{ url_for("agreements.fix_pdf_path", agreement_id=agreement.id) }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token() }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('PDF file found and linked!');
+            location.reload();
+        } else {
+            alert('PDF file not found: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error finding PDF file');
+    });
+}
+
+function testPdfGeneration() {
+    fetch('{{ url_for("agreements.test_pdf_simple") }}')
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Network response was not ok');
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            alert('PDF generation test successful! All dependencies are working.');
+        } else {
+            alert('PDF generation test failed: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error testing PDF generation. Check console for details.');
+    });
+}
+</script>
+
+{% endblock %}

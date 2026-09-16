@@ -1,0 +1,125 @@
+{% extends "base_clean.html" %}
+
+{% block title %}Invoice {{ invoice.invoice_number }}{% endblock %}
+
+{% block content %}
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;">
+  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px;">
+    <div>
+      <h2 style="margin:0 0 4px 0;">Invoice</h2>
+      <div style="color:#334155; font-size:14px;">{{ invoice.invoice_number }}</div>
+    </div>
+    <div style="text-align:right; font-size:12px; color:#334155;">
+      <div><strong>Invoice date:</strong> {{ invoice.invoice_date.strftime('%Y-%m-%d') }}</div>
+      <div><strong>Due date:</strong> {{ invoice.due_date.strftime('%Y-%m-%d') }}</div>
+      <div><strong>Status:</strong> {{ invoice.status|title }}</div>
+    </div>
+  </div>
+
+  <hr style="margin:12px 0; border:none; border-top:1px solid #e2e8f0;">
+
+  <div style="display:flex; justify-content:space-between; gap:16px; font-size:12px;">
+    <div style="flex:1;">
+      <div style="color:#64748b; font-size:11px;">Billed to</div>
+      <div style="font-size:13px;"><strong>{{ invoice.client.name }}</strong></div>
+    </div>
+    <div style="flex:1; text-align:right;">
+      <div style="color:#64748b; font-size:11px;">Billing period</div>
+      <div style="font-size:13px;">
+        <strong>{{ invoice.billing_period_start.strftime('%Y-%m-%d') }} → {{ invoice.billing_period_end.strftime('%Y-%m-%d') }}</strong>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:14px;">
+    <h3 style="margin:0 0 6px 0; font-size:14px;">Line items</h3>
+    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; border-bottom:1px solid #cbd5e1; padding:6px 4px;">Asset class</th>
+          <th style="text-align:right; border-bottom:1px solid #cbd5e1; padding:6px 4px;">Portfolio value</th>
+          <th style="text-align:right; border-bottom:1px solid #cbd5e1; padding:6px 4px;">Rate</th>
+          <th style="text-align:right; border-bottom:1px solid #cbd5e1; padding:6px 4px;">Calculated fee</th>
+          <th style="text-align:right; border-bottom:1px solid #cbd5e1; padding:6px 4px;">Final fee</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in line_items %}
+        <tr>
+          <td style="border-bottom:1px solid #e2e8f0; padding:6px 4px;">{{ item.asset_class_name }}</td>
+          <td style="border-bottom:1px solid #e2e8f0; padding:6px 4px; text-align:right;">₹{{ "{:,.2f}".format(item.portfolio_value|float) }}</td>
+          <td style="border-bottom:1px solid #e2e8f0; padding:6px 4px; text-align:right;">{{ "{:.2f}".format(item.rate_percentage|float * 100) }}%</td>
+          <td style="border-bottom:1px solid #e2e8f0; padding:6px 4px; text-align:right;">₹{{ "{:,.2f}".format(item.calculated_fee|float) }}</td>
+          <td style="border-bottom:1px solid #e2e8f0; padding:6px 4px; text-align:right;">₹{{ "{:,.2f}".format(item.final_fee|float) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div style="display:flex; justify-content:flex-end; margin-top:12px;">
+    <table style="border-collapse:collapse; font-size:12px; min-width:280px;">
+      <tr>
+        <td style="padding:4px 6px; color:#64748b;">Net amount</td>
+        <td style="padding:4px 6px; text-align:right;">₹{{ "{:,.2f}".format(invoice.net_amount|float) }}</td>
+      </tr>
+      <tr>
+        <td style="padding:4px 6px; color:#64748b;">Tax ({{ "{:.2f}".format(invoice.tax_rate|float * 100) }}%)</td>
+        <td style="padding:4px 6px; text-align:right;">₹{{ "{:,.2f}".format(invoice.tax_amount|float) }}</td>
+      </tr>
+      <tr>
+        <td style="padding:6px; border-top:1px solid #cbd5e1;"><strong>Total</strong></td>
+        <td style="padding:6px; border-top:1px solid #cbd5e1; text-align:right;"><strong>₹{{ "{:,.2f}".format(invoice.total_amount|float) }}</strong></td>
+      </tr>
+    </table>
+  </div>
+
+  {% if snapshot %}
+  <div style="margin-top:18px;">
+    <h3 style="margin:0 0 6px 0; font-size:14px;">Portfolio valuation (as-of {{ snapshot.as_of }})</h3>
+    <div style="font-size:12px; color:#334155; margin-bottom:6px;">
+      <strong>Total value:</strong> ₹{{ "{:,.2f}".format(snapshot.total_value|float) }}
+    </div>
+    <table style="width:100%; border-collapse:collapse; font-size:11px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; border-bottom:1px solid #cbd5e1; padding:5px 4px;">Security</th>
+          <th style="text-align:left; border-bottom:1px solid #cbd5e1; padding:5px 4px;">Asset class</th>
+          <th style="text-align:right; border-bottom:1px solid #cbd5e1; padding:5px 4px;">Qty</th>
+          <th style="text-align:right; border-bottom:1px solid #cbd5e1; padding:5px 4px;">Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in (snapshot.holdings or []) %}
+        <tr>
+          <td style="border-bottom:1px solid #e2e8f0; padding:5px 4px;">
+            {{ h.symbol or h.security_symbol or h.name or '—' }}
+          </td>
+          <td style="border-bottom:1px solid #e2e8f0; padding:5px 4px;">
+            {{ h.asset_class or '—' }}
+          </td>
+          <td style="border-bottom:1px solid #e2e8f0; padding:5px 4px; text-align:right;">
+            {{ h.quantity or h.qty or '—' }}
+          </td>
+          <td style="border-bottom:1px solid #e2e8f0; padding:5px 4px; text-align:right;">
+            ₹{{ "{:,.2f}".format((h.current_value or h.value or 0)|float) }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div style="margin-top:6px; color:#64748b; font-size:10px;">
+      Snapshot is captured from the portfolio reconstruction module for audit and client reference.
+    </div>
+  </div>
+  {% endif %}
+
+  {% if invoice.notes %}
+  <div style="margin-top:14px; font-size:11px;">
+    <div style="color:#64748b; font-size:11px;"><strong>Notes</strong></div>
+    <div style="white-space:pre-wrap;">{{ invoice.notes }}</div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+

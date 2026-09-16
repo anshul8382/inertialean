@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}Clients — Billing terms{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+      <h1 class="mb-1"><i class="fas fa-list"></i> Clients — billing terms</h1>
+      <div class="text-muted small">
+        Clients scanned: <strong>{{ summary.clients_scanned }}</strong> ·
+        Missing / incomplete: <strong>{{ summary.missing_or_incomplete }}</strong>
+      </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-primary" href="{{ url_for('main.maintenance_billing') }}">
+        <i class="fas fa-file-invoice-dollar"></i> Billing hub
+      </a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('agreements.agreements_overview') }}">
+        <i class="fas fa-file-contract"></i> Agreements overview
+      </a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-header"><strong>Filters</strong></div>
+    <div class="card-body">
+      <form method="GET" class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label" for="q">Search client</label>
+          <input class="form-control" id="q" name="q" value="{{ q }}" placeholder="Type client name…" />
+        </div>
+        <div class="col-md-4">
+          <div class="form-check mt-4">
+            <input class="form-check-input" type="checkbox" id="missing_only" name="missing_only" {% if missing_only %}checked{% endif %} />
+            <label class="form-check-label" for="missing_only">Show missing/incomplete only</label>
+          </div>
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-filter"></i> Apply
+          </button>
+          <a class="btn btn-outline-secondary" href="{{ url_for('agreements.clients_billing_terms') }}">
+            <i class="fas fa-times"></i> Clear
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header">
+      <strong>Billing terms + cycle status</strong>
+      <p class="small text-muted mb-0 mt-1">
+        <strong>Period start month</strong> — calendar month when each billing year begins (e.g. January → Jan–Jun / Jul–Dec for half-yearly).
+        <strong>Billing cycle #</strong> — count of billing cycles since the schedule started (1 = first cycle not yet invoiced; increments after each invoice).
+        <strong>Rates</strong> — annual % on AUA per asset class; invoice engine prorates by frequency (half-yearly bills half the annual rate per period). Tiered = multiple AUA bands.
+      </p>
+    </div>
+    <div class="card-body">
+      {% if rows %}
+      <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle table-sm">
+          <thead class="table-light">
+            <tr>
+              <th>Client</th>
+              <th>Agreement</th>
+              <th>Model</th>
+              <th>Freq</th>
+              <th>Period starts</th>
+              <th>Valuation</th>
+              <th title="Billing cycles completed + 1 for the current open cycle">Cycle #</th>
+              <th>Start</th>
+              <th>Last billed</th>
+              <th>Next bill</th>
+              <th style="min-width: 220px;">Rates / fees</th>
+              <th>Issues</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            {% set has_hard = (r.flags|selectattr('severity', 'equalto', 'hard')|list|length) > 0 %}
+            <tr class="{% if has_hard %}table-danger{% endif %}">
+              <td><a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_name }}</a></td>
+              <td>
+                {% if r.agreement_id %}
+                  <a href="{{ url_for('agreements.view_agreement', agreement_id=r.agreement_id) }}">#{{ r.agreement_id }}</a>
+                  <span class="text-muted small d-block">{{ r.agreement_status or '' }}</span>
+                {% else %}
+                  <span class="text-muted">None</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if r.advisory_model == 'aua' %}AUA
+                {% elif r.advisory_model == 'fixed_fee' %}Fixed fee
+                {% else %}{{ r.advisory_model or '-' }}{% endif %}
+              </td>
+              <td>{{ (r.billing_frequency or 'yearly')|replace('_', ' ')|title }}</td>
+              <td>{{ r.period_start_month_display or '-' }}</td>
+              <td class="small">{{ r.valuation_date_display or '-' }}</td>
+              <td>
+                {% if r.billing_cycle_number is not none %}
+                  <span title="Cycle {{ r.billing_cycle_number }} since billing schedule start">{{ r.billing_cycle_number }}</span>
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+              <td>{% if r.billing_start_date %}{{ r.billing_start_date.strftime('%Y-%m-%d') }}{% else %}-{% endif %}</td>
+              <td>{% if r.last_billing_date %}{{ r.last_billing_date.strftime('%Y-%m-%d') }}{% else %}-{% endif %}</td>
+              <td>{% if r.next_billing_date %}{{ r.next_billing_date.strftime('%Y-%m-%d') }}{% else %}-{% endif %}</td>
+              <td class="small">
+                {% if r.billing_rates_by_asset %}
+                  {% for ac in r.billing_rates_by_asset %}
+                  <div class="mb-2">
+                    <strong>{{ ac.asset_class }}</strong>
+                    {% if ac.slabs|length > 1 %}<span class="badge bg-secondary">tiered</span>{% endif %}
+                    <ul class="mb-0 ps-3">
+                      {% for slab in ac.slabs %}
+                      <li>
+                        {% if slab.get('amount_inr') %}
+                          ₹{{ "{:,.0f}".format(slab.amount_inr|float) }}/yr
+                          {% if slab.get('escalation_pct') %} · esc {{ slab.escalation_pct }}%{% endif %}
+                        {% else %}
+                          {% if slab.max_amount is not none %}
+                            ₹{{ "{:,.0f}".format(slab.min_amount) }} – ₹{{ "{:,.0f}".format(slab.max_amount) }}
+                          {% elif slab.min_amount > 0 %}
+                            ₹{{ "{:,.0f}".format(slab.min_amount) }}+
+                          {% else %}
+                            All AUA
+                          {% endif %}
+                          @ <strong>{{ slab.rate_pct }}%</strong> p.a.
+                          {% if slab.min_fee and slab.min_fee > 0 %}
+                            · min fee ₹{{ "{:,.0f}".format(slab.min_fee) }}
+                          {% endif %}
+                          {% if slab.max_fee is not none %}
+                            · max fee ₹{{ "{:,.0f}".format(slab.max_fee) }}
+                          {% endif %}
+                        {% endif %}
+                      </li>
+                      {% endfor %}
+                    </ul>
+                  </div>
+                  {% endfor %}
+                {% elif r.advisory_model == 'fixed_fee' or r.fixed_annual_fee %}
+                  <span class="text-muted">Fixed fee — see agreement</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td style="min-width: 200px;">
+                {% if r.flags %}
+                  <ul class="mb-0 small">
+                    {% for f in r.flags %}
+                      <li><strong>{{ f.severity|upper }}</strong>: {{ f.message }}</li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <span class="text-muted">No issues</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="btn-group" role="group">
+                  {% if r.agreement_id %}
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('agreements.update_agreement_details', agreement_id=r.agreement_id) }}" title="Update terms">
+                      <i class="fas fa-edit"></i>
+                    </a>
+                  {% endif %}
+                  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.client_details', client_id=r.client_id) }}" title="Client">
+                    <i class="fas fa-user"></i>
+                  </a>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center text-muted py-4">No results.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

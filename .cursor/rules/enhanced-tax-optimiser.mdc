@@ -1,0 +1,14 @@
+---
+description: Enhanced Tax Optimiser implementation guardrails
+globs:
+  - "api/v1/enhanced_tax_optimiser.py"
+  - "services/enhanced_tax_optimiser_service.py"
+  - "services/tax_optimiser_interactive_service.py"
+  - "templates/tools/tax_optimiser_enhanced.html"
+alwaysApply: false
+---
+
+- Keep route handlers thin; business logic stays in services.
+- Preserve auth gates (`@login_required`, advisor/manager access).
+- Use requirement acceptance criteria in `docs/ENHANCED_TAX_OPTIMISER_REQUIREMENTS.md`.
+- Do not add dependencies on `_deprecated/` code.

@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title mb-0">Assign Model Portfolios</h2>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                {{ csrf_token() }}
+                <div class="mb-3">
+                    <label for="user_id" class="form-label">Select User</label>
+                    <select class="form-select" id="user_id" name="user_id" required>
+                        <option value="">Choose a user...</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="asset_model_id" class="form-label">Asset Allocation Model</label>
+                    <select class="form-select" id="asset_model_id" name="asset_model_id">
+                        <option value="">No Asset Model</option>
+                        {% for model in asset_models %}
+                        <option value="{{ model.id }}" {% if current_asset_model and current_asset_model.id == model.id %}selected{% endif %}>{{ model.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-3">
+                    <label for="stock_model_id" class="form-label">Stock Allocation Model</label>
+                    <select class="form-select" id="stock_model_id" name="stock_model_id">
+                        <option value="">No Stock Model</option>
+                        {% for model in stock_models %}
+                        <option value="{{ model.id }}" {% if current_stock_model and current_stock_model.id == model.id %}selected{% endif %}>{{ model.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <a href="{{ url_for('main.models') }}" class="btn btn-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">Assign Models</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

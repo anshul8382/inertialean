@@ -1,0 +1,580 @@
+{% extends "base.html" %}
+
+{% block title %}{% if category_filter == 'career' %}Career applications{% else %}Leads{% endif %}{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<style>
+.progress {
+    background-color: #e3e6f0;
+    border-radius: 0.35rem;
+}
+
+.progress-bar {
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.btn-group .btn {
+    margin-right: 2px;
+}
+
+.btn-group .btn:last-child {
+    margin-right: 0;
+}
+
+.temperature-control {
+    min-width: 80px;
+}
+
+.temperature-select {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 0.875rem;
+}
+
+.temperature-stars {
+    line-height: 1;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Career applications' if category_filter == 'career' else 'Leads' %}
+  {% include 'partials/mobile/app_header.html' %}
+  <div class="im-mobile-search">
+    <i class="fas fa-search"></i>
+    <input type="search" data-im-mobile-filter="imMobileLeadsList" placeholder="{% if category_filter == 'career' %}Search applications…{% else %}Search leads…{% endif %}">
+  </div>
+  <div class="btn-group w-100 mb-3 px-3" role="group" aria-label="Record type">
+    <a href="{{ url_for('leads.list_leads', category='sales') }}" class="btn {% if category_filter != 'career' %}btn-primary{% else %}btn-outline-primary{% endif %}">Sales leads</a>
+    <a href="{{ url_for('leads.list_leads', category='career') }}" class="btn {% if category_filter == 'career' %}btn-primary{% else %}btn-outline-primary{% endif %}">Career applications</a>
+  </div>
+  <div class="im-list-stack" id="imMobileLeadsList">
+    {% for lead in leads %}
+    <a href="{{ url_for('leads.view_lead', lead_id=lead.id) }}" class="im-list-card" data-im-search="{{ lead.name|lower }} {{ lead.phone|default('') }}">
+      <div class="im-list-card__header">
+        <h2 class="im-list-card__title">{{ lead.name }}</h2>
+        {% if lead.is_active %}<span class="im-badge im-badge--success">Active</span>{% else %}<span class="im-badge im-badge--muted">Inactive</span>{% endif %}
+      </div>
+      <p class="im-list-card__meta">{{ lead.phone|default('—') }} · {{ lead.user.username if lead.user else 'Unassigned' }}{% if category_filter == 'career' %} · Career application{% endif %}</p>
+    </a>
+    {% endfor %}
+  </div>
+  <a href="{{ url_for('leads.new_lead') }}" class="im-fab"><i class="fas fa-plus"></i></a>
+</div>
+<div class="im-desktop-only im-collapsed-on-mobile container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">{% if category_filter == 'career' %}Career applications{% else %}Leads{% endif %}</h1>
+        <div>
+            <a href="{{ url_for('workflows.list_workflows') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-list"></i> All workflows
+            </a>
+            <a href="{{ url_for('leads.new_lead') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Add Lead
+            </a>
+        </div>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Filters</h6>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('leads.list_leads') }}" class="row">
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="category">Record type</label>
+                        <select class="form-control" id="category" name="category">
+                            <option value="sales" {% if category_filter != 'career' %}selected{% endif %}>Sales leads</option>
+                            <option value="career" {% if category_filter == 'career' %}selected{% endif %}>Career applications</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="user_id">Assigned User</label>
+                        <select class="form-control" id="user_id" name="user_id">
+                            <option value="">All Users</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}" {% if user_filter == user.id|string %}selected{% endif %}>
+                                {{ user.username }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label for="show_inactive">Show Inactive Leads</label>
+                        <select class="form-control" id="show_inactive" name="show_inactive">
+                            <option value="false" {% if not show_inactive %}selected{% endif %}>Active Only</option>
+                            <option value="true" {% if show_inactive %}selected{% endif %}>All Leads</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label>&nbsp;</label>
+                        <div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-filter"></i> Apply Filters
+                            </button>
+                            <a href="{{ url_for('leads.list_leads') }}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Clear
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Workflow Overview Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Leads{% if category_filter == 'career' %} (applications){% endif %}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ leads|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-users fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Active Workflows</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ leads|selectattr('workflow')|list|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-project-diagram fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Overdue</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ leads|selectattr('workflow')|selectattr('workflow.get_stage_status', 'equalto', 'OVERDUE')|list|length }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Completed</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ leads|selectattr('status', 'equalto', 'onboarding_completed')|list|length }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{% if category_filter == 'career' %}Career applications{% else %}Lead Management{% endif %}</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="leadsTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Phone</th>
+                            <th>Referral By</th>
+                            <th>Assigned To</th>
+                            <th>Temperature</th>
+                            <th>Latest Note</th>
+                            <th>Workflow Stage</th>
+                            <th>Aging in Stage</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lead in leads %}
+                        <tr class="{{ 'table-secondary' if not lead.is_active else '' }}">
+                            <td class="text-dark">
+                                {{ lead.name }}
+                                {% if category_filter == 'career' %}
+                                    <span class="badge bg-info text-dark ml-1">Career</span>
+                                {% endif %}
+                                {% if not lead.is_active %}
+                                    <span class="badge badge-secondary ml-1">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-dark">{{ lead.phone }}</td>
+                            <td class="text-dark">{{ lead.referral_by|title if lead.referral_by else 'Not Set' }}</td>
+                            <td class="text-dark">
+                                {% if lead.user %}
+                                    {{ lead.user.username }}
+                                {% else %}
+                                    <span class="text-muted">Unassigned</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if lead.is_active and not lead.client_id %}
+                                    <div class="temperature-control">
+                                        <form method="POST" action="{{ url_for('leads.update_lead_temperature', lead_id=lead.id) }}" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <select name="temperature" class="form-control form-control-sm temperature-select" 
+                                                    onchange="this.form.submit()" style="width: 60px;">
+                                                {% for i in range(1, 6) %}
+                                                <option value="{{ i }}" {% if lead.temperature == i %}selected{% endif %}>
+                                                    {{ i }}
+                                                </option>
+                                                {% endfor %}
+                                            </select>
+                                        </form>
+                                        <div class="temperature-stars mt-1">
+                                            {% for i in range(1, 6) %}
+                                                <i class="fas fa-star {{ 'text-warning' if i <= lead.temperature else 'text-muted' }}" 
+                                                   style="font-size: 0.8em;"></i>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if lead.notes %}
+                                    <span class="text-dark" title="{{ lead.notes }}">
+                                        {{ lead.notes|truncate(50) }}
+                                        <br><small class="text-muted">{{ lead.updated_at.strftime('%Y-%m-%d') if lead.updated_at else lead.created_at.strftime('%Y-%m-%d') if lead.created_at else 'Unknown' }}</small>
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">No notes</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if lead.workflow %}
+                                    <div class="mb-2">
+                                        <span class="badge badge-{{ 'success' if lead.workflow.current_stage == 'COMPLETED' else 'warning' if lead.workflow.get_stage_status() == 'OVERDUE' else 'info' }} text-dark">
+                                            {{ lead.workflow.current_stage|replace('_', ' ') }}
+                                        </span>
+                                    </div>
+                                    {% set stages = ['REFERRAL', 'MEETING', 'RISK_PROFILE', 'PROPOSAL', 'ACCEPTANCE', 'AGREEMENT', 'AGREEMENT_SIGNING', 'KYC', 'INVOICE', 'PAYMENT', 'ONBOARDING', 'WELCOME_RECOMMENDATION'] %}
+                                    {% set current_index = stages.index(lead.workflow.current_stage) if lead.workflow.current_stage in stages else 0 %}
+                                    {% set progress = ((current_index + 1) / stages|length * 100)|round %}
+                                    <div class="progress" style="height: 15px;">
+                                        <div class="progress-bar bg-{{ 'success' if progress == 100 else 'warning' if progress > 50 else 'info' }}" 
+                                             role="progressbar" 
+                                             style="width: {{ progress }}%" 
+                                             aria-valuenow="{{ progress }}" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                            {{ progress }}%
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <span class="badge badge-secondary text-dark">No Workflow</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-dark">
+                                {% if lead.workflow %}
+                                    {% if lead.days_in_stage is defined and lead.days_in_stage is not none %}
+                                        {% set days_in_stage = lead.days_in_stage %}
+                                        {% if days_in_stage == 0 %}
+                                            <span class="text-success">Today</span>
+                                        {% elif days_in_stage == 1 %}
+                                            <span class="text-info">1 day</span>
+                                        {% elif days_in_stage < 7 %}
+                                            <span class="text-info">{{ days_in_stage }} days</span>
+                                        {% elif days_in_stage < 14 %}
+                                            <span class="text-warning">{{ days_in_stage }} days</span>
+                                        {% else %}
+                                            <span class="text-danger">{{ days_in_stage }} days</span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <a href="{{ url_for('leads.view_lead', lead_id=lead.id) }}" class="btn btn-info btn-sm view-lead-btn" title="View" data-lead-id="{{ lead.id }}">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('leads.edit_lead', lead_id=lead.id) }}" class="btn btn-primary btn-sm edit-lead-btn" title="Edit" data-lead-id="{{ lead.id }}">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-success btn-sm" title="Update Status"
+                                            data-status-url="{{ url_for('leads.update_lead_status', lead_id=lead.id) }}"
+                                            onclick="openWorkflowModal(this)">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-warning btn-sm" title="Create Follow-up Alert"
+                                            data-followup-url="{{ url_for('leads.create_followup_alert', lead_id=lead.id) }}"
+                                            onclick="openFollowupModal(this, {{ lead.id }}, {{ lead.name|tojson }})">
+                                        <i class="fas fa-bell"></i>
+                                    </button>
+                                    <form method="POST" action="{{ url_for('leads.toggle_lead_active', lead_id=lead.id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button type="submit" class="btn btn-{{ 'warning' if lead.is_active else 'success' }} btn-sm" 
+                                                title="{{ 'Deactivate' if lead.is_active else 'Activate' }}">
+                                            <i class="fas fa-{{ 'pause' if lead.is_active else 'play' }}"></i>
+                                        </button>
+                                    </form>
+                                    <button type="button" class="btn btn-danger btn-sm" title="Delete" 
+                                            data-bs-toggle="modal" data-bs-target="#deleteModal{{ lead.id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Modals -->
+{% for lead in leads %}
+<div class="modal fade" id="deleteModal{{ lead.id }}" tabindex="-1" role="dialog" aria-labelledby="deleteModalLabel{{ lead.id }}" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel{{ lead.id }}">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete the lead "{{ lead.name }}"?
+            </div>
+                            <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <form action="{{ url_for('leads.delete_lead', lead_id=lead.id) }}" method="POST" class="delete-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger delete-btn" data-lead-id="{{ lead.id }}">Delete</button>
+                    </form>
+                </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<!-- Quick Workflow Update Modal -->
+<div class="modal fade" id="quickWorkflowModal" tabindex="-1" role="dialog" aria-labelledby="quickWorkflowModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="quickWorkflowModalLabel">Update Lead Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="quickWorkflowForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="quick_status">Lead Status</label>
+                        <select class="form-control" id="quick_status" name="status" required>
+                            <option value="">Select Status</option>
+                            {% for value, label in lead_status_choices %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="quick_notes">Notes</label>
+                        <textarea class="form-control" id="quick_notes" name="notes" rows="3" placeholder="Add notes about this status change..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-success">Update Status</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Create Follow-up Alert Modal -->
+<div class="modal fade" id="createFollowupAlertModal" tabindex="-1" role="dialog" aria-labelledby="createFollowupAlertModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createFollowupAlertModalLabel">Create Follow-up Alert</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="createFollowupAlertForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="form-group mb-3">
+                        <label for="followup_lead_name">Lead Name</label>
+                        <input type="text" class="form-control" id="followup_lead_name" readonly>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="followup_date">Follow-up Date *</label>
+                        <input type="date" class="form-control" id="followup_date" name="followup_date" required>
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="followup_time">Follow-up Time (Optional)</label>
+                        <input type="time" class="form-control" id="followup_time" name="followup_time">
+                    </div>
+                    <div class="form-group mb-3">
+                        <label for="alert_notes">Notes (Optional)</label>
+                        <textarea class="form-control" id="alert_notes" name="alert_notes" rows="3" placeholder="Add any additional notes about this follow-up..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Create Alert</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script>
+function openWorkflowModal(btn) {
+    const form = document.getElementById('quickWorkflowForm');
+    form.action = btn.getAttribute('data-status-url');
+    const modal = new bootstrap.Modal(document.getElementById('quickWorkflowModal'));
+    modal.show();
+}
+
+function openFollowupModal(btn, leadId, leadName) {
+    document.getElementById('followup_lead_name').value = leadName;
+    const form = document.getElementById('createFollowupAlertForm');
+    form.action = btn.getAttribute('data-followup-url');
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('followup_date').min = today;
+    document.getElementById('followup_date').value = today;
+    const modal = new bootstrap.Modal(document.getElementById('createFollowupAlertModal'));
+    modal.show();
+}
+
+// Initialize DataTable
+$(document).ready(function() {
+    console.log('Document ready, checking for DataTable library...');
+    console.log('jQuery version:', $.fn.jquery);
+    console.log('DataTable available:', typeof $.fn.DataTable !== 'undefined');
+    
+    if (typeof $.fn.DataTable === 'undefined') {
+        console.error('DataTable library not loaded!');
+        return;
+    }
+    
+    console.log('Initializing DataTable...');
+    try {
+        const table = $('#leadsTable').DataTable({
+            "order": [[ 4, "desc" ]], // Sort by temperature descending (column 4)
+            "pageLength": 25,
+            "responsive": true,
+            "columnDefs": [
+                // Enable sorting on specified columns
+                { "orderable": true, "targets": [0, 2, 3, 4, 5, 6, 7] }, // Name, Referral By, Assigned To, Temperature, Latest Note, Workflow Stage, Aging in Stage
+                // Disable sorting on other columns
+                { "orderable": false, "targets": [1, 8] } // Phone, Actions
+            ]
+        });
+        
+        // Ensure links work properly in DataTable
+        $('#leadsTable').on('click', 'a[href*="edit"]', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            console.log('Edit link clicked:', $(this).attr('href'));
+            window.location.href = $(this).attr('href');
+        });
+        
+        $('#leadsTable').on('click', 'a[href*="view"]', function(e) {
+            e.stopPropagation();
+            e.preventDefault();
+            console.log('View link clicked:', $(this).attr('href'));
+            window.location.href = $(this).attr('href');
+        });
+        
+        // Debug: Log all link clicks in the table
+        $('#leadsTable').on('click', 'a', function(e) {
+            console.log('Link clicked:', $(this).attr('href'), 'Text:', $(this).text());
+        });
+        
+        // Specific handler for edit buttons
+        $(document).on('click', '.edit-lead-btn', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const leadId = $(this).data('lead-id');
+            const editUrl = `/leads/${leadId}/edit`;
+            console.log('Edit button clicked for lead:', leadId, 'URL:', editUrl);
+            window.location.href = editUrl;
+        });
+        
+        // Specific handler for view buttons
+        $(document).on('click', '.view-lead-btn', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const leadId = $(this).data('lead-id');
+            const viewUrl = `/leads/${leadId}`;
+            console.log('View button clicked for lead:', leadId, 'URL:', viewUrl);
+            window.location.href = viewUrl;
+        });
+        console.log('DataTable initialized successfully');
+        console.log('Table columns:', table.columns().count());
+        console.log('Table rows:', table.rows().count());
+        
+        // Debug form submission
+        $('#quickWorkflowForm').on('submit', function(e) {
+            console.log('Form submitted!');
+            console.log('Form action:', this.action);
+            console.log('Form data:', $(this).serialize());
+        });
+        
+        // Handle follow-up alert form submission
+        $('#createFollowupAlertForm').on('submit', function(e) {
+            console.log('Follow-up alert form submitted!');
+            console.log('Form action:', this.action);
+            console.log('Form data:', $(this).serialize());
+        });
+    } catch (error) {
+        console.error('Error initializing DataTable:', error);
+    }
+});
+</script>
+{% endblock %} 

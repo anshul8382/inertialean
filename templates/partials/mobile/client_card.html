@@ -1,0 +1,29 @@
+{# Mobile client list card #}
+<a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="im-list-card im-client-card" data-client-name="{{ client.name|lower }}">
+  <div class="im-list-card__header">
+    <div>
+      <h2 class="im-list-card__title">{{ client.name }}</h2>
+      {% if client.email %}
+      <p class="im-list-card__meta">{{ client.email|display_email }}</p>
+      {% endif %}
+    </div>
+    {% if client.is_active %}
+    <span class="im-badge im-badge--success">Active</span>
+    {% else %}
+    <span class="im-badge im-badge--muted">Inactive</span>
+    {% endif %}
+  </div>
+  <div class="im-list-card__row">
+    {% set status_data = client_statuses.get(client.id, {}) if client_statuses is defined else {} %}
+    {% if status_data %}
+      {% set status = status_data.get('status', 'unknown') %}
+      {% set badge = 'im-badge--success' if status == 'excellent' else 'im-badge--info' if status == 'good' else 'im-badge--warning' if status == 'warning' else 'im-badge--danger' if status == 'critical' else 'im-badge--muted' %}
+      <span class="im-badge {{ badge }}">{{ status|title }}</span>
+      {% set score = status_data.get('score', 0) %}
+      <span class="im-badge im-badge--muted">Score {{ score }}</span>
+    {% endif %}
+    {% if client.phone %}
+    <span class="im-list-card__meta"><i class="fas fa-phone fa-xs"></i> {{ client.phone|display_phone }}</span>
+    {% endif %}
+  </div>
+</a>

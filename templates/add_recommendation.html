@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <h2>Add Recommendation</h2>
+    <form method="POST">
+        {{ csrf_token() }}
+        <div class="mb-3">
+            <label for="stock_id" class="form-label">Stock</label>
+            <select class="form-select" id="stock_id" name="stock_id" required>
+                {% for stock in stocks %}
+                <option value="{{ stock.id }}">{{ stock.symbol }} - {{ stock.company_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="mb-3">
+            <label for="recommendation_type" class="form-label">Type</label>
+            <select class="form-select" id="recommendation_type" name="recommendation_type" required>
+                <option value="BUY">BUY</option>
+                <option value="SELL">SELL</option>
+                <option value="HOLD">HOLD</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label for="target_price" class="form-label">Target Price</label>
+            <input type="number" step="0.01" class="form-control" id="target_price" name="target_price" required>
+        </div>
+        <div class="mb-3">
+            <label for="stop_loss" class="form-label">Stop Loss</label>
+            <input type="number" step="0.01" class="form-control" id="stop_loss" name="stop_loss" required>
+        </div>
+        <div class="mb-3">
+            <label for="expiry_date" class="form-label">Expiry Date</label>
+            <input type="date" class="form-control" id="expiry_date" name="expiry_date" required>
+        </div>
+        <div class="mb-3">
+            <label for="notes" class="form-label">Notes</label>
+            <textarea class="form-control" id="notes" name="notes"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Add Recommendation</button>
+    </form>
+</div>
+{% endblock %} 

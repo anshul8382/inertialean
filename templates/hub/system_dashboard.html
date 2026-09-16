@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}System Intelligence{% endblock %}
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'System Hub' %}
+  {% set mobile_back_url = url_for('hub.dashboard') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <a href="{{ url_for('task_assignment_rules.list_rules') }}" class="im-settings-link"><i class="fas fa-tasks"></i><span>Task rules</span><i class="fas fa-chevron-right text-muted"></i></a>
+  <a href="{{ url_for('roles.list_roles') }}" class="im-settings-link"><i class="fas fa-user-shield"></i><span>Roles</span><i class="fas fa-chevron-right text-muted"></i></a>
+  <a href="{{ url_for('settings.cron_jobs') }}" class="im-settings-link"><i class="fas fa-clock"></i><span>Cron jobs</span><i class="fas fa-chevron-right text-muted"></i></a>
+</div>
+<div class="im-desktop-only im-collapsed-on-mobile container mt-4">
+  <div class="mb-4">
+    <a href="{{ url_for('hub.dashboard') }}" class="small text-muted text-decoration-none">← Intelligence Hub</a>
+    <h2 class="mt-1 mb-0"><i class="fas fa-microchip text-dark"></i> System Intelligence</h2>
+    <p class="text-muted mb-0">Governance and operating controls: assignment rules, roles, SLA, and scheduled jobs.</p>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2">
+    {% if config.get('NAV_TASK_ASSIGNMENT_RULES_ENABLED') %}
+    <a href="{{ url_for('task_assignment_rules.list_rules') }}" class="btn btn-dark">Task assignment rules</a>
+    {% endif %}
+    {% if config.get('NAV_ROLES_ENABLED') %}
+    <a href="{{ url_for('roles.list_roles') }}" class="btn btn-outline-dark">Roles &amp; permissions</a>
+    {% endif %}
+    <a href="{{ url_for('alerts.sla_configuration') }}" class="btn btn-outline-secondary">SLA configuration</a>
+    {% if config.get('NAV_AIRFLOW_ENABLED') %}
+    <a href="{{ url_for('airflow.dashboard') }}" class="btn btn-outline-info">Airflow dashboard</a>
+    {% endif %}
+    {% if current_user.is_manager or current_user.is_advisor or current_user.is_ops_manager %}
+    <a href="{{ url_for('rec_execution.sla_settings') }}" class="btn btn-outline-primary">Rec execution SLA settings</a>
+    {% endif %}
+    {% if current_user.is_admin or current_user.is_manager or current_user.is_ops_manager %}
+    <a href="{{ url_for('hub.price_accuracy_dashboard') }}" class="btn btn-outline-secondary">Price data accuracy</a>
+    {% endif %}
+  </div>
+</div>
+</div>
+{% endblock %}

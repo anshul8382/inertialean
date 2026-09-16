@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+
+{% block title %}WhatsApp Client Groups{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row mb-3">
+    <div class="col-12">
+      <div class="page-title-box d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+          <h4 class="page-title mb-1">WhatsApp client groups</h4>
+          <p class="text-muted mb-0 small">Monitor and reply in Meta WhatsApp groups linked to clients.</p>
+        </div>
+        <ol class="breadcrumb m-0">
+          <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+          <li class="breadcrumb-item"><a href="{{ url_for('main.whatsapp_dashboard') }}">WhatsApp</a></li>
+          <li class="breadcrumb-item active">Groups</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div id="groupsAlert" class="alert d-none" role="alert"></div>
+
+  <div class="row mb-3">
+    <div class="col-12 d-flex flex-wrap gap-2">
+      <button type="button" class="btn btn-primary" id="btnSyncGroups">
+        <i class="mdi mdi-cloud-sync"></i> Sync groups from Meta
+      </button>
+      <button type="button" class="btn btn-outline-primary" id="btnLoadSuggestions">
+        <i class="mdi mdi-link-variant"></i> Suggest client links
+      </button>
+      <button type="button" class="btn btn-outline-secondary" id="btnRefreshInbox">
+        <i class="mdi mdi-refresh"></i> Refresh inbox
+      </button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('main.whatsapp_dashboard') }}">Back to dashboard</a>
+    </div>
+  </div>
+
+  <div class="row" id="suggestionsPanel" style="display:none;">
+    <div class="col-12">
+      <div class="card card-app mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">Suggested client ↔ group links</h5>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="btnHideSuggestions">Hide</button>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-app table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Group</th>
+                  <th>Client</th>
+                  <th>Score</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="suggestionsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-4 mb-3">
+      <div class="card card-app h-100">
+        <div class="card-header">
+          <h5 class="mb-0">Groups</h5>
+        </div>
+        <div class="card-body p-0">
+          <div class="p-2 border-bottom">
+            <select class="form-select form-select-sm" id="filterMapped">
+              <option value="all">All groups</option>
+              <option value="mapped">Mapped to client</option>
+              <option value="unmapped">Unmapped only</option>
+            </select>
+          </div>
+          <div class="list-group list-group-flush" id="threadList" style="max-height: 70vh; overflow-y: auto;">
+            <div class="list-group-item text-muted text-center small">Loading…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-8 mb-3">
+      <div class="card card-app h-100">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <div>
+            <h5 class="mb-0" id="activeGroupTitle">Select a group</h5>
+            <small class="text-muted" id="activeGroupMeta"></small>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-primary d-none" id="btnMapClient">Link client</button>
+        </div>
+        <div class="card-body d-flex flex-column" style="min-height: 420px;">
+          <div id="messagePane" class="flex-grow-1 border rounded p-3 mb-3 bg-light" style="overflow-y: auto; max-height: 50vh;">
+            <p class="text-muted mb-0">Choose a group to view messages.</p>
+          </div>
+          <form id="sendGroupForm" class="d-none">
+            <div class="input-group">
+              <textarea class="form-control" id="replyMessage" rows="2" placeholder="Type a message to the group…" required></textarea>
+              <button class="btn btn-primary" type="submit" id="btnSendReply">Send</button>
+            </div>
+            <p class="small text-muted mt-1 mb-0">Outbound group messages use Meta Cloud API. Respect the 24-hour session and template rules where applicable.</p>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Map client modal -->
+<div class="modal fade" id="mapClientModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Link group to client</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="mapGroupId" />
+        <label class="form-label" for="mapClientId">Client ID</label>
+        <input type="number" class="form-control" id="mapClientId" placeholder="Enter client id" />
+        <p class="small text-muted mt-2 mb-0">Leave empty and save to unlink.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btnSaveMap">Save link</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let activeGroupId = null;
+let allGroups = [];
+
+function showAlert(type, html) {
+  const el = $('#groupsAlert');
+  el.removeClass('d-none alert-success alert-danger alert-warning alert-info');
+  const map = { success: 'alert-success', error: 'alert-danger', warning: 'alert-warning', info: 'alert-info' };
+  el.addClass(map[type] || 'alert-info').html(html);
+}
+
+function escapeHtml(s) {
+  return $('<div/>').text(s || '').html();
+}
+
+function loadMappings() {
+  const filter = $('#filterMapped').val();
+  let url = '/api/v1/whatsapp/meta-groups/mappings?';
+  if (filter === 'mapped') url += 'mapped_only=true';
+  if (filter === 'unmapped') url += 'unmapped_only=true';
+
+  return $.getJSON(url).done(function (res) {
+    if (!res.success) {
+      showAlert('error', res.error || 'Failed to load groups');
+      return;
+    }
+    if (!res.db_ready) {
+      showAlert(
+        'warning',
+        'Database tables not ready. On the server run: <code>python migrations/add_whatsapp_groups_tables.py</code>'
+      );
+    }
+    allGroups = res.groups || [];
+    renderThreadList();
+    loadInbox();
+  });
+}
+
+function loadInbox() {
+  return $.getJSON('/api/v1/whatsapp/meta-groups/inbox?limit=50').done(function (res) {
+    if (!res.success || !res.threads) return;
+    const byId = {};
+    res.threads.forEach(function (t) { byId[t.group_id] = t; });
+    allGroups.forEach(function (g) {
+      const t = byId[g.group_id];
+      if (t) {
+        g.last_message_preview = t.last_message_preview;
+        g.last_message_at = t.last_message_at;
+      }
+    });
+    renderThreadList();
+  });
+}
+
+function renderThreadList() {
+  const list = $('#threadList').empty();
+  if (!allGroups.length) {
+    list.append('<div class="list-group-item text-muted small text-center">No groups yet. Click “Sync groups from Meta”.</div>');
+    return;
+  }
+  allGroups.forEach(function (g) {
+    const title = escapeHtml(g.subject || g.group_id);
+    const client = g.client_name ? '<span class="badge bg-success-subtle text-success">' + escapeHtml(g.client_name) + '</span>' : '<span class="badge bg-secondary">Unmapped</span>';
+    const preview = g.last_message_preview ? '<div class="small text-muted text-truncate">' + escapeHtml(g.last_message_preview) + '</div>' : '';
+    const active = g.group_id === activeGroupId ? ' active' : '';
+    list.append(
+      '<button type="button" class="list-group-item list-group-item-action' + active + '" data-group-id="' + escapeHtml(g.group_id) + '">' +
+        '<div class="d-flex justify-content-between align-items-start gap-1">' +
+          '<strong class="text-truncate">' + title + '</strong>' + client +
+        '</div>' + preview +
+      '</button>'
+    );
+  });
+}
+
+function selectGroup(groupId) {
+  activeGroupId = groupId;
+  const g = allGroups.find(function (x) { return x.group_id === groupId; });
+  $('#activeGroupTitle').text(g ? (g.subject || groupId) : groupId);
+  $('#activeGroupMeta').text(
+    (g && g.client_name ? 'Client: ' + g.client_name + ' · ' : '') + 'ID: ' + groupId
+  );
+  $('#mapGroupId').val(groupId);
+  $('#mapClientId').val(g && g.client_id ? g.client_id : '');
+  $('#btnMapClient').removeClass('d-none');
+  $('#sendGroupForm').removeClass('d-none');
+  renderThreadList();
+  loadMessages(groupId);
+}
+
+function loadMessages(groupId) {
+  const pane = $('#messagePane').html('<p class="text-muted">Loading messages…</p>');
+  const encoded = encodeURIComponent(groupId).replace(/%2F/g, '/');
+  $.getJSON('/api/v1/whatsapp/meta-groups/' + encoded + '/messages?limit=80')
+    .done(function (res) {
+      if (!res.success) {
+        pane.html('<p class="text-danger">' + escapeHtml(res.error || 'Failed to load') + '</p>');
+        return;
+      }
+      if (!res.messages || !res.messages.length) {
+        pane.html('<p class="text-muted mb-0">No messages stored yet. Inbound traffic appears after Meta webhooks are configured.</p>');
+        return;
+      }
+      pane.empty();
+      res.messages.forEach(function (m) {
+        const align = m.direction === 'outbound' ? 'text-end' : '';
+        const badge = m.direction === 'outbound' ? 'bg-primary text-white' : 'bg-white border';
+        pane.append(
+          '<div class="mb-2 ' + align + '">' +
+            '<div class="d-inline-block p-2 rounded ' + badge + '" style="max-width:85%;">' +
+              '<div class="small">' + escapeHtml(m.content) + '</div>' +
+              '<div class="text-muted" style="font-size:0.7rem;">' + escapeHtml(m.created_at || '') +
+                (m.sender_wa_id ? ' · ' + escapeHtml(m.sender_wa_id) : '') + '</div>' +
+            '</div></div>'
+        );
+      });
+      pane.scrollTop(pane[0].scrollHeight);
+    })
+    .fail(function () {
+      pane.html('<p class="text-danger">Could not load messages.</p>');
+    });
+}
+
+function loadSuggestions() {
+  $.getJSON('/api/v1/whatsapp/meta-groups/suggest-matches')
+    .done(function (res) {
+      const body = $('#suggestionsBody').empty();
+      const list = res.suggestions || [];
+      if (!list.length) {
+        body.append('<tr><td colspan="4" class="text-muted text-center">No suggestions (sync groups first or names may not match).</td></tr>');
+      } else {
+        list.forEach(function (s) {
+          body.append(
+            '<tr><td>' + escapeHtml(s.group_subject || s.group_id) + '</td>' +
+            '<td>' + escapeHtml(s.client_name) + ' <small class="text-muted">#' + s.client_id + '</small></td>' +
+            '<td>' + s.score + '</td>' +
+            '<td><button type="button" class="btn btn-sm btn-primary btn-apply-suggestion" data-group-id="' + escapeHtml(s.group_id) + '" data-client-id="' + s.client_id + '">Link</button></td></tr>'
+          );
+        });
+      }
+      $('#suggestionsPanel').show();
+    });
+}
+
+$(document).ready(function () {
+  loadMappings();
+
+  $('#filterMapped').on('change', loadMappings);
+  $('#btnRefreshInbox').on('click', function () { loadMappings(); });
+
+  $('#threadList').on('click', 'button[data-group-id]', function () {
+    selectGroup($(this).data('group-id'));
+  });
+
+  $('#btnSyncGroups').on('click', function () {
+    const btn = $(this).prop('disabled', true);
+    $.ajax({
+      url: '/api/v1/whatsapp/meta-groups/sync',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({ limit: 500 }),
+    })
+      .done(function (res) {
+        if (res.success) {
+          showAlert('success', 'Synced <strong>' + (res.synced || 0) + '</strong> groups (' + (res.created || 0) + ' new).');
+          loadMappings();
+        } else {
+          showAlert('error', res.error || 'Sync failed');
+        }
+      })
+      .fail(function (xhr) {
+        showAlert('error', (xhr.responseJSON && xhr.responseJSON.error) || 'Sync failed');
+      })
+      .always(function () { btn.prop('disabled', false); });
+  });
+
+  $('#btnLoadSuggestions').on('click', loadSuggestions);
+  $('#btnHideSuggestions').on('click', function () { $('#suggestionsPanel').hide(); });
+
+  $(document).on('click', '.btn-apply-suggestion', function () {
+    const groupId = $(this).data('group-id');
+    const clientId = $(this).data('client-id');
+    $.ajax({
+      url: '/api/v1/whatsapp/meta-groups/map',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({ group_id: groupId, client_id: clientId }),
+    }).done(function (res) {
+      if (res.success) {
+        showAlert('success', 'Linked group to client.');
+        loadMappings();
+      } else {
+        showAlert('error', res.error || 'Link failed');
+      }
+    });
+  });
+
+  $('#btnMapClient').on('click', function () {
+    new bootstrap.Modal(document.getElementById('mapClientModal')).show();
+  });
+
+  $('#btnSaveMap').on('click', function () {
+    const groupId = $('#mapGroupId').val();
+    const raw = $('#mapClientId').val();
+    const clientId = raw === '' ? null : parseInt(raw, 10);
+    $.ajax({
+      url: '/api/v1/whatsapp/meta-groups/map',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({ group_id: groupId, client_id: clientId }),
+    }).done(function (res) {
+      if (res.success) {
+        bootstrap.Modal.getInstance(document.getElementById('mapClientModal')).hide();
+        showAlert('success', res.message || 'Saved.');
+        loadMappings();
+        if (activeGroupId) selectGroup(activeGroupId);
+      } else {
+        showAlert('error', res.error || 'Save failed');
+      }
+    });
+  });
+
+  $('#sendGroupForm').on('submit', function (e) {
+    e.preventDefault();
+    if (!activeGroupId) return;
+    const message = $('#replyMessage').val().trim();
+    if (!message) return;
+    const encoded = encodeURIComponent(activeGroupId).replace(/%2F/g, '/');
+    const btn = $('#btnSendReply').prop('disabled', true);
+    $.ajax({
+      url: '/api/v1/whatsapp/meta-groups/' + encoded + '/send',
+      method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({ message: message }),
+    })
+      .done(function (res) {
+        if (res.success) {
+          $('#replyMessage').val('');
+          loadMessages(activeGroupId);
+          loadInbox();
+        } else {
+          showAlert('error', res.error || 'Send failed');
+        }
+      })
+      .fail(function (xhr) {
+        showAlert('error', (xhr.responseJSON && xhr.responseJSON.error) || 'Send failed');
+      })
+      .always(function () { btn.prop('disabled', false); });
+  });
+
+  setInterval(function () {
+    if (activeGroupId) loadMessages(activeGroupId);
+    loadInbox();
+  }, 45000);
+});
+</script>
+{% endblock %}

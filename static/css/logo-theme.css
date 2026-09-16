@@ -1,0 +1,194 @@
+/* Logo Green Theme - Global Overrides */
+
+/* Override Bootstrap primary colors globally */
+.text-primary {
+    color: #155724 !important;
+}
+
+.bg-primary {
+    background-color: #d4edda !important;
+    color: #155724 !important;
+}
+
+.btn-primary {
+    background-color: #d4edda !important;
+    color: #155724 !important;
+    border-color: #c3e6cb !important;
+}
+
+.btn-primary:hover {
+    background-color: #c3e6cb !important;
+    color: #0d4a1a !important;
+    border-color: #a8d5a8 !important;
+}
+
+.btn-primary:focus {
+    background-color: #c3e6cb !important;
+    color: #0d4a1a !important;
+    border-color: #a8d5a8 !important;
+    box-shadow: 0 0 0 0.2rem rgba(21, 87, 36, 0.25) !important;
+}
+
+.btn-primary:active {
+    background-color: #c3e6cb !important;
+    color: #0d4a1a !important;
+    border-color: #a8d5a8 !important;
+}
+
+/* Card headers */
+.card-header h6 {
+    color: #155724 !important;
+}
+
+/* Table headers */
+.table thead th {
+    color: #155724 !important;
+}
+
+/* Links */
+a.text-primary {
+    color: #155724 !important;
+}
+
+a.text-primary:hover {
+    color: #0d4a1a !important;
+}
+
+/* Badges */
+.badge-primary {
+    background-color: #d4edda !important;
+    color: #155724 !important;
+}
+
+/* Progress bars */
+.progress-bar {
+    background-color: #d4edda !important;
+}
+
+/* Spinners */
+.spinner-border.text-primary {
+    color: #155724 !important;
+}
+
+/* Form controls */
+.form-control:focus {
+    border-color: #c3e6cb !important;
+    box-shadow: 0 0 0 0.2rem rgba(21, 87, 36, 0.25) !important;
+}
+
+/* Custom classes for specific elements */
+.logo-green-bg {
+    background-color: #d4edda !important;
+    color: #155724 !important;
+    border-color: #c3e6cb !important;
+}
+
+.logo-green-text {
+    color: #155724 !important;
+}
+
+.logo-green-btn {
+    background-color: #d4edda !important;
+    color: #155724 !important;
+    border-color: #c3e6cb !important;
+}
+
+.logo-green-btn:hover {
+    background-color: #c3e6cb !important;
+    color: #0d4a1a !important;
+    border-color: #a8d5a8 !important;
+}
+
+.logo-green-header {
+    color: #155724 !important;
+    font-weight: bold;
+}
+
+/* Override any remaining Bootstrap primary elements */
+[class*="text-primary"] {
+    color: #155724 !important;
+}
+
+[class*="bg-primary"] {
+    background-color: #d4edda !important;
+    color: #155724 !important;
+}
+
+/* Navbar Theme - Logo Green */
+.navbar {
+    background: linear-gradient(135deg, #d4edda, #c3e6cb) !important;
+    border-bottom: 2px solid #a8d5a8 !important;
+}
+
+.navbar-brand {
+    color: #155724 !important;
+}
+
+.navbar-brand:hover {
+    color: #0d4a1a !important;
+}
+
+.navbar-nav .nav-link {
+    color: #155724 !important;
+    font-weight: 500 !important;
+}
+
+.navbar-nav .nav-link:hover {
+    color: #0d4a1a !important;
+    background-color: rgba(21, 87, 36, 0.1) !important;
+    border-radius: 4px !important;
+}
+
+.navbar-nav .nav-link.active {
+    color: #0d4a1a !important;
+    background-color: rgba(21, 87, 36, 0.15) !important;
+    border-radius: 4px !important;
+    font-weight: 600 !important;
+}
+
+.navbar-nav .nav-link * {
+    color: inherit !important;
+}
+
+.navbar-nav .dropdown-toggle::after {
+    color: #155724 !important;
+}
+
+.navbar-toggler {
+    border-color: #155724 !important;
+}
+
+.navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%2821, 87, 36, 1%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e") !important;
+}
+
+/* Override any existing white text styles */
+.navbar-dark .navbar-brand,
+.navbar-dark .navbar-nav .nav-link,
+.navbar-dark .navbar-nav .nav-link:hover,
+.navbar-dark .navbar-nav .nav-link:focus,
+.navbar-dark .navbar-nav .nav-link.active {
+    color: #155724 !important;
+}
+
+.navbar-dark .navbar-nav .nav-link:hover {
+    color: #0d4a1a !important;
+}
+
+.navbar-dark .navbar-nav .nav-link.active {
+    color: #0d4a1a !important;
+}
+
+/* Ensure all h6 elements in card headers use the theme */
+.card-header h6.m-0.font-weight-bold {
+    color: #155724 !important;
+}
+
+/* Override any specific Bootstrap classes that might be missed */
+.text-primary.mb-1,
+.text-primary.mb-2,
+.text-primary.mb-3,
+.text-primary.mb-4,
+.text-primary.mb-5 {
+    color: #155724 !important;
+}

@@ -1,0 +1,76 @@
+# Cashflow ↔ Trade Integrity — Module Spec
+module:
+  name: cashflow_trade_integrity
+  domain: workflows_and_ops
+  fr_ref: FR-CASHFLOW-TRADE-01
+  roles: [advisor, manager, admin]
+  trigger: manual
+  interactive: true
+  local_only: true
+  signal_id: G8
+
+input:
+  fact_sources:
+    - api: cashflow_trade_mismatch_report
+      fields: [status, recorded_net, opening_trade_net, post_cutoff_trade_net, difference, materiality_threshold, suspects, checklist]
+    - api: diagnose_client_mismatch
+      fields: [suspect_days, suspect_cashflows, suspect_trades, checklist]
+  client_scoped: true
+
+guidelines:
+  pack: CASHFLOW_TRADE_INTEGRITY_GUIDELINES
+  pack_path: docs/assistant_modules/CASHFLOW_TRADE_INTEGRITY_GUIDELINES.md
+  deterministic_rules:
+    - "epoch split at 2000-01-01 opening book"
+    - "material if abs_diff > max(1% of |recorded_net|, 1000)"
+    - "matched requires lifetime net AND series (no large unclubbed day gaps)"
+    - "±3 day settlement pair then ±14 day clubbing; both need amount agreement"
+    - "INFLOW with +amount → investment (−); OUTFLOW with −amount keeps stored sign"
+    - "large series gaps after clubbing → mismatch_review (XIRR proxy; no live XIRR yet)"
+    - "suggest only — never mutate cashflows or trades"
+  tone: "one next step; cite fact_ids; no invented numbers"
+
+llm:
+  model: llama3.1:8b
+  max_tokens: 400
+  temperature: 0.1
+  local_only: true
+  role: interpretation_and_guide_only
+
+output:
+  type: text_to_ui
+  schema:
+    step_id: str
+    message: str
+    why: str
+    cited_fact_ids: [str]
+    primary_action:
+      type: open_url | rerun_diagnose | mark_step_complete | show_fact | clarify_module
+      label: str
+      url: str?
+    secondary_actions: []
+    asks_user: str?
+    done_when: str?
+  validation:
+    - action_type_allowlist
+    - fact_id_allowlist
+    - fail_closed_to_checklist
+  actions: []  # no mutations; Accept residual is audited status note only
+  approval: user_edits_externally
+  egress: local_only
+  audit: [guided_chat_turn, accept_residual]
+
+built:
+  - services/cashflow_trade_mismatch_report_service.py
+  - services/cashflow_trade_integrity_case_service.py
+  - services/guided_case_chat_service.py
+  - services/guided_chat_modules/cashflow_trade_integrity.py
+  - routes for case page + guided chat
+  - docs/assistant_modules/CASHFLOW_TRADE_INTEGRITY_GUIDELINES.md
+
+out_of_scope:
+  - system-triggered cashflow/trade edits
+  - Alert create for G8
+  - cloud LLM
+  - live XIRR materiality gate
+  - REM amount_mismatch / trade_execution_mismatch

@@ -1,0 +1,600 @@
+{% extends "base.html" %}
+
+{% block title %}Monthly Investment Details{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Monthly Investment Details</h1>
+        <div>
+            <a href="{{ url_for('main.list_monthly_investments') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Monthly Investments
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Investment Information</h5>
+                    <table class="table">
+                        <tr>
+                            <th>Client</th>
+                            <td>{{ investment.client.name if investment.client else 'Unknown Client' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Amount</th>
+                            <td>
+                                <form class="d-flex flex-wrap align-items-center gap-2"
+                                      method="POST"
+                                      action="{{ url_for('monthly_investments.update_monthly_investment_amount', id=investment.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <div class="input-group" style="max-width: 260px;">
+                                        <span class="input-group-text">₹</span>
+                                        <input type="number"
+                                               class="form-control"
+                                               name="planned_amount"
+                                               step="0.01"
+                                               min="-999999999"
+                                               value="{{ investment.planned_amount }}"
+                                               required>
+                                    </div>
+                                    <button type="submit" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-save"></i> Save
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Date</th>
+                            <td>
+                                {% if investment.investment_date %}
+                                    {{ investment.investment_date.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Status</th>
+                            <td>
+                                <span class="badge bg-{{ investment.status_color }}">
+                                    {{ investment.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Investment Notes</th>
+                            <td class="text-break" style="white-space: pre-wrap">{{ investment.notes or '—' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Monthly Schedule Notes</th>
+                            <td class="text-break" style="white-space: pre-wrap">
+                                {% if investment.workflow %}
+                                    {{ investment.workflow.schedule_notes or '—' }}
+                                {% elif investment.client and investment.client.monthly_investment_schedule and investment.client.monthly_investment_schedule.notes %}
+                                    {{ investment.client.monthly_investment_schedule.notes }}
+                                    <div class="text-muted small mt-1">From the client's active monthly schedule (no workflow yet).</div>
+                                {% else %}
+                                    <span class="text-muted">No schedule notes</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <div class="col-md-6">
+                    <h5>Actions</h5>
+                    <div class="d-grid gap-2">
+                        {% if investment.workflow %}
+                        {% if has_blueprint('rec_execution') %}
+                        <a href="{{ url_for('rec_execution.workflow_issues', id=investment.id) }}" class="btn btn-outline-primary">
+                            <i class="fas fa-exclamation-triangle"></i> Workflow Issues
+                        </a>
+                        {% endif %}
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#updateWorkflowModal">
+                            <i class="fas fa-sync"></i> Update Workflow
+                        </button>
+                        {% if investment.workflow and investment.workflow.id %}
+                        <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#cancelModal">
+                            <i class="fas fa-times"></i> Cancel Workflow
+                        </button>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-muted">No workflow available</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% set sched_edit = (investment.workflow.schedule_notes or '') if investment.workflow else ((investment.client.monthly_investment_schedule.notes or '') if investment.client and investment.client.monthly_investment_schedule else '') %}
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-sticky-note"></i> Edit notes</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('monthly_investments.monthly_investment_notes', id=investment.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="mb-3">
+                    <label class="form-label" for="investmentNotesField">Investment notes</label>
+                    <textarea class="form-control" id="investmentNotesField" name="investment_notes" rows="4" placeholder="Notes for this monthly investment">{{ investment.notes or '' }}</textarea>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="scheduleNotesField">Monthly schedule notes</label>
+                    <textarea class="form-control" id="scheduleNotesField" name="schedule_notes" rows="4" placeholder="Notes from the monthly schedule / workflow snapshot">{{ sched_edit }}</textarea>
+                    {% if not investment.workflow %}
+                    <div class="form-text">Saved to the client's active monthly investment schedule until a workflow exists.</div>
+                    {% endif %}
+                </div>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save notes</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Client Information Card -->
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="fas fa-user"></i> Client Information</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <table class="table">
+                        <tr>
+                            <th>Client Name</th>
+                            <td>{{ investment.client.name if investment.client else 'Unknown Client' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Current Monthly Investment Cycle Status</th>
+                            <td>
+                                <span class="badge {% if current_cycle_status == 'COMPLETED' or current_cycle_status == 'completed' %}bg-success{% elif current_cycle_status == 'FUNDS' %}bg-warning{% elif current_cycle_status == 'RECOS' %}bg-info{% elif current_cycle_status == 'NOTIFY' %}bg-primary{% elif current_cycle_status == 'EXEC' %}bg-info{% elif current_cycle_status == 'UPDATE' %}bg-secondary{% elif current_cycle_status == 'PENDING' or current_cycle_status == 'pending' %}bg-warning{% elif current_cycle_status == 'CANCELLED' or current_cycle_status == 'cancelled' %}bg-danger{% elif current_cycle_status == 'ACTIVE' or current_cycle_status == 'active' %}bg-info{% else %}bg-secondary{% endif %}">
+                                    {{ current_cycle_status }}
+                                </span>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="col-md-6">
+                    <table class="table">
+                        <tr>
+                            <th>Upcoming Monthly Investment Cycle Date</th>
+                            <td>
+                                {% if upcoming_cycle_date %}
+                                    <span class="text-primary">
+                                        <i class="fas fa-calendar-alt"></i> {{ upcoming_cycle_date.strftime('%Y-%m-%d') }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">Not scheduled</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Previous Workflow Cycle Preview -->
+{% if previous_workflow_data %}
+<div class="card shadow mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="fas fa-history"></i> Previous Workflow Cycle
+            {% if previous_workflow_data.investment_date %}
+                ({{ previous_workflow_data.investment_date.strftime('%B %Y') }})
+            {% endif %}
+        </h5>
+    </div>
+    <div class="card-body">
+        <p class="text-muted mb-3">Stage completion dates from the previous workflow cycle for this client:</p>
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered">
+                <thead class="table-light">
+                    <tr>
+                        <th>Stage</th>
+                        <th>Completion Date</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set stages = ['FUNDS', 'RECOS', 'NOTIFY', 'EXEC', 'UPDATE', 'COMPLETED'] %}
+                    {% for stage in stages %}
+                    <tr>
+                        <td><strong>{{ stage }}</strong></td>
+                        <td>
+                            {% if previous_workflow_data.stage_dates.get(stage) %}
+                                {{ previous_workflow_data.stage_dates[stage].strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if previous_workflow_data.stage_dates.get(stage) %}
+                                <span class="badge bg-success">Completed</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Not reached</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Workflow Actions -->
+{% if investment.workflow %}
+<div class="card">
+    <div class="card-header">
+        <h3 class="mb-0">Workflow Actions</h3>
+    </div>
+    <div class="card-body">
+        <div class="timeline">
+            {% for action in investment.workflow.actions|sort(attribute='action_date', reverse=true) %}
+            <div class="timeline-item">
+                <div class="timeline-marker"></div>
+                <div class="timeline-content">
+                    <h4 class="mb-1">{{ action.action_type|replace('_', ' ')|title }}</h4>
+                    <p class="text-muted mb-1">
+                        {% if action.action_date %}
+                            {{ action.action_date.strftime('%Y-%m-%d %H:%M') }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </p>
+                    {% if action.amount %}
+                    <p class="mb-1"><strong>Amount:</strong> ₹{{ "%.2f"|format(action.amount) }}</p>
+                    {% endif %}
+                    {% if action.notes %}
+                    <p class="mb-1"><strong>Notes:</strong> {{ action.notes }}</p>
+                    {% endif %}
+                    <p class="mb-0"><strong>By:</strong> {{ action.user.name if action.user else '—' }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Workflow Status -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h3 class="mb-0">Workflow Status</h3>
+    </div>
+    <div class="card-body">
+        <div class="workflow-stages">
+            {% set stages = ['FUNDS', 'RECOS', 'NOTIFY', 'EXEC', 'UPDATE', 'COMPLETED'] %}
+            {% set current_stage = investment.workflow.current_stage %}
+            {% if current_stage == 'ICR' or current_stage == 'INVESTMENT/CHANGES/REDEMPTION' %}
+                {% set current_stage = 'FUNDS' %}
+            {% endif %}
+            {% for stage in stages %}
+            <div class="workflow-stage {% if stage == current_stage %}active{% elif current_stage in stages and stages.index(stage) < stages.index(current_stage) %}completed{% endif %}">
+                <div class="stage-icon">
+                    <i class="fas {% if stage == current_stage %}fa-spinner fa-spin{% elif current_stage in stages and stages.index(stage) < stages.index(current_stage) %}fa-check{% else %}fa-circle{% endif %}"></i>
+                </div>
+                <div class="stage-label">{{ stage }}</div>
+            </div>
+            {% if not loop.last %}
+            <div class="workflow-line"></div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Next Action -->
+{% if investment.status != 'COMPLETED' and investment.status != 'CANCELLED' %}
+<div class="card">
+    <div class="card-header">
+        <h3 class="mb-0">Next Action</h3>
+    </div>
+    <div class="card-body">
+        {% if investment.workflow and investment.workflow.id %}
+        <form method="POST" action="{{ url_for('monthly_investments.update_workflow', id=investment.workflow.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            
+            <div class="mb-3">
+                <label class="form-label">Action Type</label>
+                <select name="action_type" class="form-select" required>
+                    {% if investment.workflow.current_stage == 'FUNDS' or investment.workflow.current_stage == 'INVESTMENT/CHANGES/REDEMPTION' or investment.workflow.current_stage == 'ICR' %}
+                    <option value="FUNDS_RECEIVED">Investment/Changes/Redemption Received</option>
+                    {% elif investment.workflow.current_stage == 'RECOS' %}
+                    <option value="RECOS_GENERATED">Recommendations Generated</option>
+                    {% elif investment.workflow.current_stage == 'NOTIFY' %}
+                    <option value="CLIENT_NOTIFIED">Client Notified</option>
+                    {% elif investment.workflow.current_stage == 'EXEC' %}
+                    <option value="EXECUTED">Executed</option>
+                    {% elif investment.workflow.current_stage == 'UPDATE' %}
+                    <option value="UPDATED">Updated</option>
+                    {% endif %}
+                    <option value="SKIP" style="color: #dc3545; font-weight: bold;">⚠️ Skip Workflow (Complete & Create Next Month)</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Amount <span id="amountRequired2" style="display: none; color: red;">*</span></label>
+                <input type="number" name="amount" id="amountField2" class="form-control" step="0.01" min="0" placeholder="Enter amount if applicable">
+                <div id="amountError2" class="invalid-feedback" style="display: none;">
+                    Amount is required for this action type.
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Notes</label>
+                <textarea name="notes" class="form-control" rows="3"></textarea>
+            </div>
+
+            <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary">Update Workflow</button>
+                <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#cancelModal">
+                    Cancel Workflow
+                </button>
+            </div>
+        </form>
+        {% else %}
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle"></i> No workflow available for this investment.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endif %}
+
+<!-- Cancel Modal -->
+<div class="modal fade" id="cancelModal" tabindex="-1" aria-labelledby="cancelModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        {% if investment.workflow and investment.workflow.id %}
+        <form method="POST" action="{{ url_for('monthly_investments.cancel_monthly_workflow', id=investment.workflow.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="cancelModalLabel">Cancel Workflow</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted">This will archive the workflow and mark the monthly investment as cancelled. This cannot be undone.</p>
+                    <div class="mb-3">
+                        <label class="form-label" for="cancellationReasonField">Reason for cancellation <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="cancellationReasonField" name="cancellation_reason" rows="4" required placeholder="Explain why this workflow is being cancelled"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-danger">Cancel Workflow</button>
+                </div>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Update Workflow Modal -->
+{% if investment.workflow %}
+<div class="modal fade" id="updateWorkflowModal" tabindex="-1" aria-labelledby="updateWorkflowModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="updateWorkflowModalLabel">Update Workflow</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            {% if investment.workflow and investment.workflow.id %}
+            <form method="POST" action="{{ url_for('monthly_investments.update_workflow', id=investment.workflow.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Action Type</label>
+                        <select name="action_type" class="form-select" required>
+                            {% if investment.workflow.current_stage == 'FUNDS' or investment.workflow.current_stage == 'INVESTMENT/CHANGES/REDEMPTION' or investment.workflow.current_stage == 'ICR' %}
+                            <option value="FUNDS_RECEIVED">Investment/Changes/Redemption Received</option>
+                            {% elif investment.workflow.current_stage == 'RECOS' %}
+                            <option value="RECOS_GENERATED">Recommendations Generated</option>
+                            {% elif investment.workflow.current_stage == 'NOTIFY' %}
+                            <option value="CLIENT_NOTIFIED">Client Notified</option>
+                            {% elif investment.workflow.current_stage == 'EXEC' %}
+                            <option value="EXECUTED">Executed</option>
+                            {% elif investment.workflow.current_stage == 'UPDATE' %}
+                            <option value="UPDATED">Updated</option>
+                            {% endif %}
+                            <option value="SKIP" style="color: #dc3545; font-weight: bold;">⚠️ Skip Workflow (Complete & Create Next Month)</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Amount <span id="amountRequired" style="display: none; color: red;">*</span></label>
+                        <input type="number" name="amount" id="amountField" class="form-control" step="0.01" min="0" placeholder="Enter amount if applicable">
+                        <div id="amountError" class="invalid-feedback" style="display: none;">
+                            Amount is required for this action type.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea name="notes" class="form-control" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Update Workflow</button>
+                </div>
+            </form>
+            {% else %}
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> No workflow available for this investment.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.timeline {
+    position: relative;
+    padding: 20px 0;
+}
+
+.timeline-item {
+    position: relative;
+    padding-left: 40px;
+    margin-bottom: 20px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #007bff;
+    border: 3px solid #fff;
+    box-shadow: 0 0 0 3px #007bff;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+.workflow-stages {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.workflow-stage {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stage-icon {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #e9ecef;
+}
+
+.workflow-stage.active .stage-icon {
+    background: #007bff;
+    color: white;
+}
+
+.workflow-stage.completed .stage-icon {
+    background: #28a745;
+    color: white;
+}
+
+.workflow-line {
+    width: 2px;
+    height: 20px;
+    background: #e9ecef;
+    margin-left: 15px;
+}
+
+.workflow-stage.completed .workflow-line {
+    background: #28a745;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Function to setup form validation
+    function setupFormValidation(actionTypeSelect, amountField, amountRequired, amountError, workflowForm) {
+        if (!actionTypeSelect || !amountField) return;
+        
+        // Function to check if amount is required for action type
+        function checkAmountRequired() {
+            const actionType = actionTypeSelect.value;
+            // Amount is optional for all actions - can be 0 or empty
+            const requiresAmount = false; // Changed: Amount is now optional
+            
+            // SKIP and UPDATED don't require amount
+            const skipAmount = ['SKIP', 'UPDATED', 'CLIENT_NOTIFIED'].includes(actionType);
+            
+            if (requiresAmount) {
+                amountRequired.style.display = 'inline';
+                amountField.setAttribute('required', 'required');
+                amountField.classList.add('is-invalid');
+                amountError.style.display = 'block';
+            } else {
+                amountRequired.style.display = 'none';
+                amountField.removeAttribute('required');
+                amountField.classList.remove('is-invalid');
+                amountError.style.display = 'none';
+            }
+            
+            // Disable amount field for SKIP
+            if (skipAmount) {
+                amountField.disabled = true;
+                amountField.value = '';
+            } else {
+                amountField.disabled = false;
+            }
+        }
+        
+        // Add event listener for action type change
+        actionTypeSelect.addEventListener('change', checkAmountRequired);
+        
+        // Add form validation
+        if (workflowForm) {
+            workflowForm.addEventListener('submit', function(e) {
+                const actionType = actionTypeSelect.value;
+                const amount = amountField.value.trim();
+                // Amount is now optional - can be 0 or empty
+                const requiresAmount = false;
+                
+                if (requiresAmount && (!amount || amount === '')) {
+                    e.preventDefault();
+                    amountField.classList.add('is-invalid');
+                    amountError.style.display = 'block';
+                    amountField.focus();
+                    return false;
+                }
+                
+                // If amount is empty, set it to null to avoid database error
+                if (amount === '') {
+                    amountField.value = '';
+                }
+            });
+        }
+        
+        // Initial check
+        checkAmountRequired();
+    }
+    
+    // Setup validation for both forms
+    const actionTypeSelect1 = document.querySelector('select[name="action_type"]');
+    const amountField1 = document.getElementById('amountField');
+    const amountRequired1 = document.getElementById('amountRequired');
+    const amountError1 = document.getElementById('amountError');
+    const workflowForm1 = document.querySelector('form[action*="update_workflow"]');
+    
+    const actionTypeSelect2 = document.querySelector('form:not([action*="update_workflow"]) select[name="action_type"]');
+    const amountField2 = document.getElementById('amountField2');
+    const amountRequired2 = document.getElementById('amountRequired2');
+    const amountError2 = document.getElementById('amountError2');
+    const workflowForm2 = document.querySelector('form:not([action*="update_workflow"])');
+    
+    setupFormValidation(actionTypeSelect1, amountField1, amountRequired1, amountError1, workflowForm1);
+    setupFormValidation(actionTypeSelect2, amountField2, amountRequired2, amountError2, workflowForm2);
+});
+</script>
+{% endblock %} 

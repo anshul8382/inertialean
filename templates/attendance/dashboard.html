@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0" style="color: #495057;">My Attendance</h1>
+        <div class="d-flex gap-2">
+            {% if current_user.is_admin %}
+            <a href="{{ url_for('attendance.admin_attendance_management') }}" class="btn btn-info">
+                <i class="fas fa-users-cog"></i> Admin Management
+            </a>
+            {% endif %}
+            <a href="{{ url_for('attendance.mark_attendance') }}" class="btn" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                <i class="fas fa-plus"></i> Mark Single Day
+            </a>
+            <a href="{{ url_for('attendance.mark_attendance_month') }}" class="btn" style="background-color: #4a7c59; border-color: #4a7c59; color: white;">
+                <i class="fas fa-calendar-alt"></i> Mark for Month
+            </a>
+            <a href="{{ url_for('attendance.user_claims') }}" class="btn" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                <i class="fas fa-receipt"></i> My Claims
+            </a>
+            {% if user_can_access_incentive_simulator() %}
+            <a href="{{ url_for('attendance.incentive_simulator') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-flask"></i> Incentive simulator
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Monthly Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #4a7c59;">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #4a7c59;">
+                                Total Days
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold" style="color: #495057;">{{ total_days }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar fa-2x" style="color: #6c757d;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #6bb06b;">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #6bb06b;">
+                                Full Days
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold" style="color: #495057;">{{ full_days }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x" style="color: #6c757d;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #ffc107;">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #ffc107;">
+                                Half Days
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold" style="color: #495057;">{{ half_days }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x" style="color: #6c757d;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #dc3545;">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #dc3545;">
+                                Leave Days
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold" style="color: #495057;">{{ leave_days }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-times-circle fa-2x" style="color: #6c757d;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Claims Alert -->
+    {% if pending_claims %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert" style="background-color: #4a7c59; border-color: #4a7c59; color: white;">
+                <h6 class="alert-heading" style="color: white;">
+                    <i class="fas fa-info-circle"></i> Pending Claims
+                </h6>
+                <p class="mb-0" style="color: white;">You have {{ pending_claims|length }} pending claim(s) waiting for approval.</p>
+                <a href="{{ url_for('attendance.user_claims') }}" class="btn btn-sm mt-2" style="background-color: #a8e6a8; border-color: #a8e6a8; color: white;">
+                    View Claims
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Attendance Records Table -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3" style="background-color: #4a7c59; color: white;">
+            <h6 class="m-0 font-weight-bold" style="color: white;">Attendance Records - {{ attendance_records[0].date.strftime('%B %Y') if attendance_records else 'No records' }}</h6>
+        </div>
+        <div class="card-body">
+            {% if attendance_records %}
+            <div class="table-responsive">
+                <table class="table table-bordered" id="attendanceTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in attendance_records %}
+                        <tr>
+                            <td>{{ record.date.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                {% if record.attendance_type == 'full_day' %}
+                                    <span class="badge badge-success">Full Day</span>
+                                {% elif record.attendance_type == 'half_day' %}
+                                    <span class="badge badge-warning">Half Day</span>
+                                {% else %}
+                                    <span class="badge badge-danger">Leave</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ record.notes or '-' }}</td>
+                            <td>
+                                <a href="{{ url_for('attendance.edit_attendance', attendance_id=record.id) }}" 
+                                   class="btn btn-sm" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                                    <i class="fas fa-edit"></i> Edit
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-calendar-times fa-3x mb-3" style="color: #6c757d;"></i>
+                <h5 style="color: #495057;">No attendance records found</h5>
+                <p style="color: #6c757d;">Start marking your attendance to track your work days.</p>
+                <a href="{{ url_for('attendance.mark_attendance') }}" class="btn" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                    <i class="fas fa-plus"></i> Mark First Attendance
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    $('#attendanceTable').DataTable({
+        "order": [[0, "desc"]],
+        "pageLength": 25,
+        "responsive": true
+    });
+});
+</script>
+{% endblock %}

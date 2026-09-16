@@ -1,0 +1,91 @@
+{# General collapsible guided chat — suggest only. Requires client_id, optional preselect_module. #}
+<details class="card mt-3" id="guided-case-chat">
+  <summary class="card-header" style="cursor:pointer;">Ask the assistant <span class="text-muted small">(collapsed — suggest only, you make edits)</span></summary>
+  <div class="card-body">
+    <div class="row g-2 mb-2">
+      <div class="col-md-4">
+        <label class="form-label small">Module</label>
+        <select class="form-select form-select-sm" id="guided-module">
+          <option value="auto">Auto (detect from message)</option>
+          {% for m in guided_modules or [] %}
+          <option value="{{ m.module_id }}" {% if preselect_module == m.module_id %}selected{% endif %}>{{ m.display_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-8">
+        <label class="form-label small">Your question</label>
+        <div class="input-group input-group-sm">
+          <input type="text" class="form-control" id="guided-message" placeholder="e.g. Why is opening book ignored? What should I check next?">
+          <button type="button" class="btn btn-primary" id="guided-send">Ask</button>
+        </div>
+      </div>
+    </div>
+    <div id="guided-reply" class="border rounded p-2 small bg-light" style="min-height:4rem;"></div>
+    <div id="guided-action" class="mt-2"></div>
+  </div>
+</details>
+<script>
+(function () {
+  const clientId = {{ client_id|int }};
+  const pageHint = {{ (preselect_module or '')|tojson }};
+  const csrf = {{ csrf_token()|tojson }};
+  const replyEl = document.getElementById('guided-reply');
+  const actionEl = document.getElementById('guided-action');
+  const sendBtn = document.getElementById('guided-send');
+  if (!sendBtn) return;
+
+  function renderTurn(turn) {
+    if (!turn) { replyEl.textContent = 'No response'; return; }
+    replyEl.textContent = turn.message || JSON.stringify(turn);
+    actionEl.innerHTML = '';
+    const act = turn.primary_action || {};
+    if (act.type === 'open_url' && act.url) {
+      const a = document.createElement('a');
+      a.href = act.url;
+      a.className = 'btn btn-sm btn-outline-primary';
+      a.textContent = act.label || 'Open';
+      actionEl.appendChild(a);
+    } else if (act.type === 'clarify_module' && act.modules) {
+      const p = document.createElement('p');
+      p.className = 'small mb-1';
+      p.textContent = 'Pick a module:';
+      actionEl.appendChild(p);
+      (act.modules || []).forEach(function (m) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'btn btn-sm btn-outline-secondary me-1 mb-1';
+        b.textContent = m.display_name;
+        b.onclick = function () {
+          document.getElementById('guided-module').value = m.module_id;
+        };
+        actionEl.appendChild(b);
+      });
+    }
+  }
+
+  sendBtn.addEventListener('click', async function () {
+    const message = (document.getElementById('guided-message').value || '').trim();
+    if (!message) return;
+    replyEl.textContent = 'Thinking…';
+    actionEl.innerHTML = '';
+    try {
+      const res = await fetch('/clients/' + clientId + '/guided-chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrf
+        },
+        body: JSON.stringify({
+          message: message,
+          module_id: document.getElementById('guided-module').value,
+          page_hint: pageHint
+        })
+      });
+      const data = await res.json();
+      renderTurn(data);
+    } catch (e) {
+      replyEl.textContent = 'Request failed. Try again.';
+    }
+  });
+})();
+</script>

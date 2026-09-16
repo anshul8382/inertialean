@@ -1,0 +1,2694 @@
+{% extends "base.html" %}
+{# If you still see date picker + "Load report" only, the server is not serving this file — redeploy + restart gunicorn. #}
+{% block title %}Tax Optimiser (Enhanced){% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h3 class="mb-3">Tax Optimiser (Enhanced)
+        <span class="badge bg-secondary ms-2 align-middle fw-normal" style="font-size:0.65rem;" title="Template build on server">{{ txo_enhanced_ui_build|default('unknown') }}</span>
+    </h3>
+
+    <ul class="nav nav-tabs" id="txoTabs" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#reportTab" type="button">Report</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#interactiveTab" type="button" id="interactiveTabBtn">Interactive review</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#rulesTab" type="button" id="rulesTabBtn">Tax rules</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#strategiesTab" type="button" id="strategiesTabBtn">Strategies</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#mappingTab" type="button" id="mappingTabBtn">Asset class mapping</button></li>
+    </ul>
+
+    <div class="tab-content border border-top-0 p-3">
+        <div class="tab-pane fade show active" id="reportTab">
+            <p class="text-muted small mb-2">
+                Choose the <strong>financial year</strong> (April–March). The scan includes every client with realised sells in that FY (FIFO capital gains). Optional name filter narrows the list.
+            </p>
+            <div id="reportFyNote" class="alert alert-warning py-1 px-2 small d-none mb-2" role="status"></div>
+            <div class="row g-2 align-items-end mb-3">
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Financial year</label>
+                    <select id="reportFy" class="form-select" title="Select financial year (April–March)" required>
+                        {% for o in fy_options|default([]) %}
+                        <option value="{{ o.fy_start_year }}">{{ o.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">Filter client name (optional)</label>
+                    <input id="reportClientName" class="form-control" type="text" placeholder="Contains…">
+                </div>
+                <div class="col-md-12 col-lg-auto">
+                    <div class="form-check mt-1">
+                        <input class="form-check-input" type="checkbox" id="reportRecommendedTradesOnly" checked>
+                        <label class="form-check-label small" for="reportRecommendedTradesOnly">Only clients with at least one modeled recommended trade (LTCG / loss harvest / STCG bundle)</label>
+                    </div>
+                </div>
+                <div class="col-md-auto">
+                    <button type="button" class="btn btn-primary" id="reportScanBtn" onclick="runFyScan()">Run FY scan</button>
+                </div>
+                <div class="col-md-auto">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#reportRawJson">Raw JSON</button>
+                </div>
+            </div>
+            <div id="reportError" class="alert alert-danger d-none" role="alert"></div>
+            <div id="reportSummary" class="d-none mb-3"></div>
+            <div id="reportTableWrap" class="d-none table-responsive" style="max-height:55vh; overflow:auto;">
+                <table class="table table-sm table-hover align-middle" id="reportTable">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th>Client</th>
+                            <th class="text-end">STCG ₹</th>
+                            <th class="text-end">LTCG ₹</th>
+                            <th class="text-end">Net ₹</th>
+                            <th class="text-end">LTCG headroom ₹</th>
+                            <th class="text-end">Est. max benefit ₹</th>
+                            <th>Flags</th>
+                            <th class="text-nowrap small">Review</th>
+                            <th style="width:1%" class="text-nowrap">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportTableBody"></tbody>
+                </table>
+            </div>
+            <p class="text-muted small mt-2 mb-0">
+                <strong>Details</strong> opens the sell-line breakdown on the row directly below (same table).
+                <strong>Steps</strong> switches to Interactive review for that client only (same FY as above).
+                <strong>Review</strong> shows whether you <strong>saved</strong> an interactive snapshot or <strong>sent</strong> the client email for this FY (per logged-in advisor).
+            </p>
+            <div class="collapse mt-2" id="reportRawJson">
+                <pre id="reportOut" class="small bg-light p-2 rounded mb-0" style="max-height:280px; overflow:auto;"></pre>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="interactiveTab">
+            <div id="interactiveWizardStep1" class="border rounded p-3 mb-3 bg-body-secondary">
+                <h6 class="mb-2">1 · Choose strategies</h6>
+                <p class="small text-muted mb-3">Select one or more. The queue runs <strong>LTCG exemption → STCG crystallisation</strong> per client. There is no separate “set-off” engine: <strong>capital gain set-off</strong> in the return is reflected when STCG crystallisation is allowed by FY short-term loss headroom. <strong>Defer / STCG timing</strong> hints attach to <strong>unified recommendation SELL</strong> rows (not this wizard). Use <strong>FIFO replay</strong> per security to validate matching before you approve.</p>
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <div class="card h-100 border-primary border-opacity-50">
+                            <div class="card-body py-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="txoStratBookLtcg" checked>
+                                    <label class="form-check-label fw-semibold" for="txoStratBookLtcg">Book LTCG (₹1.25L exemption headroom)</label>
+                                </div>
+                                <p class="small text-muted mb-0 mt-1">Use annual exemption; not a loss set-off strategy. Only surfaces when tax saved ≥ strategy <code>min_tax_saved_to_trade_cost_ratio</code> × trade cost (default 2×). Headroom updates as you approve each step.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="border-start border-3 border-secondary ps-3 py-1 mb-1 bg-light rounded-end">
+                            <div class="fw-semibold small">Capital gain set-off</div>
+                            <p class="small text-muted mb-0"><strong>STCG crystallisation</strong> runs only when the model shows FY short-term <strong>loss headroom</strong> so extra STCG tax is offset (marginal-tax gate)—i.e. set-off of gains against losses already in the picture.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 border-warning border-opacity-50">
+                            <div class="card-body py-2">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="txoStratBookStcg" checked>
+                                    <label class="form-check-label fw-semibold" for="txoStratBookStcg">Crystallise STCG gains (FY ST loss set-off)</label>
+                                </div>
+                                <p class="small text-muted mb-0 mt-1">Low priority: only when open STCG <strong>unrealised losses</strong> or FY net realised STCG &lt; 0—so crystallising gain does not add net STCG tax because <strong>set-off headroom</strong> absorbs it (<code>require_fy_stcg_loss_offset</code>). Confirm with CA.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap gap-2 mt-3 align-items-center">
+                    <button type="button" class="btn btn-primary" onclick="txoWizardContinue()">Continue to trade review</button>
+                    <span class="small text-muted">FY matches the <strong>Report</strong> tab dropdown.</span>
+                </div>
+            </div>
+
+            <div id="interactiveWizardStep2" class="d-none">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="txoInteractiveNewSession()">← Change strategy selection</button>
+            </div>
+            <div class="alert alert-info small mb-3" role="note">
+                <strong>What this is for:</strong> <strong>Interactive review</strong> walks the queue <strong>LTCG → STCG crystallisation</strong> (per client).
+                For <strong>Book LTCG</strong>, you often get <strong>one open lot at a time</strong>: <strong>Approve</strong> books that lot against remaining exemption headroom (headroom updates); <strong>Reject</strong> shows the next ranked security. <strong>Skip</strong> exits the whole LTCG block for that client.
+                For <strong>STCG crystallisation</strong>, <strong>Approve / Reject / Skip</strong> are in the cost–benefit card (same idea as Book LTCG) and again in the <strong>card footer</strong>. Global buttons above the queue still apply.
+                The engine shows <strong>calculations</strong>; you judge whether the benefit is worth the cost. <strong>Approve</strong> / <strong>Reject</strong> / <strong>Skip</strong> advance the queue when a step is finished.
+                <strong>Reset queue</strong> rebuilds from the same FY scope and strategy filters. <strong>Save</strong> persists; <strong>Preview email</strong> then <strong>Email</strong> sends the same HTML. <strong>Schedule follow-up</strong> creates <strong>/tasks</strong> with trade type, security and quantity for the date you pick.
+            </div>
+            <p id="interactiveSessionHint" class="small text-muted mb-2"></p>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <button type="button" class="btn btn-outline-warning" onclick="resetSession()" id="interactiveResetBtn" disabled title="Rebuild queue from last start parameters">Reset queue</button>
+                <button type="button" class="btn btn-outline-success" onclick="saveSession()">Save</button>
+                <button type="button" class="btn btn-outline-primary" onclick="previewSessionEmail()" id="interactivePreviewEmailBtn" disabled>Preview email</button>
+                <input id="emailRecipient" class="form-control" placeholder="Client email" style="max-width:260px;">
+                <button type="button" class="btn btn-outline-info" onclick="emailSession()" id="interactiveEmailBtn" disabled>Send email</button>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-end mb-2">
+                <div>
+                    <label class="form-label small mb-0" for="interactiveFollowupDate">Follow-up date (creates tasks)</label>
+                    <input type="date" class="form-control form-control-sm" id="interactiveFollowupDate" style="max-width:11rem;">
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-dark" onclick="scheduleTaxOptimiserFollowup()" id="interactiveFollowupBtn" disabled>Schedule follow-up tasks</button>
+            </div>
+            <div class="row g-2 mb-2 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label small mb-0">Decision note (optional, saved with Approve / Reject / Skip)</label>
+                    <input type="text" id="interactiveDecisionNote" class="form-control form-control-sm" placeholder="e.g. Client prefers to defer; confirm with CA…">
+                </div>
+                <div class="col-md-4" id="interactiveReversalWrap">
+                    <label class="form-label small mb-0">Buy-back leg (sell + model buy-back items only)</label>
+                    <select id="interactiveReversalAction" class="form-select form-select-sm">
+                        <option value="">— No change —</option>
+                        <option value="pending">Pending reminder</option>
+                        <option value="approve">Approved (include in follow-up batch)</option>
+                        <option value="reject">Rejected (no buy-back follow-up)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mb-2">
+                <button type="button" class="btn btn-sm btn-success txo-act-btn" onclick="act('approve')">Approve</button>
+                <button type="button" class="btn btn-sm btn-danger txo-act-btn" onclick="act('reject')">Reject</button>
+                <button type="button" class="btn btn-sm btn-secondary txo-act-btn" onclick="act('skip')">Skip</button>
+            </div>
+            <div id="interactiveBanner" class="mb-2"></div>
+            <div id="interactiveReadable" class="d-none">
+                <div class="row g-3">
+                    <div class="col-lg-4">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header py-2 small fw-semibold d-flex justify-content-between align-items-center">
+                                <span>Suggestion queue</span>
+                                <span id="interactiveProgress" class="badge bg-light text-dark border"></span>
+                            </div>
+                            <div class="card-body p-0" style="max-height:380px; overflow:auto;">
+                                <table class="table table-sm table-hover mb-0 align-middle">
+                                    <thead class="table-light sticky-top"><tr><th class="small">#</th><th class="small">Client</th><th class="small">Security / focus</th><th class="small">Type</th><th class="small">Status</th></tr></thead>
+                                    <tbody id="interactiveQueueBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-8">
+                        <div id="interactiveCurrentWrap" class="card shadow-sm border-primary">
+                            <div class="card-header py-2 bg-primary text-white small fw-semibold">Current suggestion</div>
+                            <div class="card-body" id="interactiveCurrentBody" style="max-height:min(70vh, 720px); overflow-y:auto;"></div>
+                            <div class="card-footer py-2 bg-light border-top d-none" id="interactiveCurrentStickyActions"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="interactiveEmpty" class="alert alert-secondary d-none mb-2"></div>
+            <button type="button" class="btn btn-link btn-sm px-0 mb-1" data-bs-toggle="collapse" data-bs-target="#interactiveRawCollapse" aria-expanded="false">Raw JSON (debug)</button>
+            <div class="collapse" id="interactiveRawCollapse">
+                <pre id="interactiveOut" class="small bg-light p-2 rounded mb-0" style="max-height:240px; overflow:auto;"></pre>
+            </div>
+            </div>{# /interactiveWizardStep2 #}
+        </div>
+
+        <div class="modal fade" id="txoEmailPreviewModal" tabindex="-1" aria-labelledby="txoEmailPreviewModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header py-2">
+                        <h5 class="modal-title fs-6" id="txoEmailPreviewModalLabel">Email preview (client-facing)</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-0 bg-light">
+                        <iframe id="txoEmailPreviewFrame" title="Email preview" class="w-100 border-0" style="min-height:420px; height:60vh;"></iframe>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="fifoReplayModal" tabindex="-1" aria-labelledby="fifoReplayModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header py-2">
+                        <h5 class="modal-title fs-6" id="fifoReplayModalLabel">FIFO — how sells match buy lots</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body small" id="fifoReplayModalBody">
+                        <p class="text-muted mb-0">Loading…</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="rulesTab">
+            <p class="text-muted small mb-2">
+                <strong>Global tax rules</strong> are stored as <strong>named rows</strong> in <code>tax_optimiser_tax_rule</code>.
+                Exactly one row is <strong>active</strong>; it drives STCG/LTCG defaults, §94(8) windows, carry-forward years, LTCG eligibility mode, and blended transaction cost for the tax optimiser and capital-gains logic.
+                Per–asset-class overrides stay on <strong>Asset class mapping</strong>.
+                Legacy <code>tax_optimiser_settings</code> is used only if the new table is missing (run migration first).
+            </p>
+            <div class="accordion mb-3" id="txoRuleCatalog">
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#txoRuleCatBody" aria-expanded="false">
+                            Full tax rule catalogue (reference — what the product covers)
+                        </button>
+                    </h2>
+                    <div id="txoRuleCatBody" class="accordion-collapse collapse" data-bs-parent="#txoRuleCatalog">
+                        <div class="accordion-body small">
+                            <p class="mb-2"><strong>A. Period &amp; scope</strong> — Indian FY (Apr–Mar); as-of through FY end; listed equity / REIT defaults (asset-class map for overrides).</p>
+                            <p class="mb-2"><strong>B. Holding &amp; character</strong> — STCG/LTCG rates and <strong>LTCG &gt; 12 calendar months from acquisition</strong> (or legacy min days) — <em>editable above</em>.</p>
+                            <p class="mb-2"><strong>C. Exemptions</strong> — Annual LTCG exemption limit — <em>editable above</em>.</p>
+                            <p class="mb-2"><strong>D. Set-off (narrative)</strong> — STCL vs STCG/LTCG; LTCL vs LTCG only — copy in legacy tool / CA confirmation.</p>
+                            <p class="mb-2"><strong>E. Carry-forward</strong> — STCL carry-forward horizon (years) — <em>editable above</em>; timely ITR filing (informational).</p>
+                            <p class="mb-2"><strong>F. §94(8)</strong> — Pre/post record windows — <em>editable above</em>; sell-line tiers on report.</p>
+                            <p class="mb-2"><strong>G. Cost basis</strong> — FIFO; SPLIT/BONUS in capital gains engine — not toggled here.</p>
+                            <p class="mb-2"><strong>H. Modelling</strong> — Blended <strong>transaction cost %</strong> — <em>editable above</em>; min net / ratio gates live under <strong>Strategies</strong>.</p>
+                            <p class="mb-0"><strong>I. Disclaimers</strong> — Not tax advice; confirm with CA — shown on outputs.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <p class="text-muted small mb-3">
+                Run <code>migrations/add_tax_optimiser_tax_rule_table.py</code> once. Older installs: <code>migrations/add_tax_optimiser_settings_table.py</code> and <code>migrations/add_tax_optimiser_v2_ltcg_and_cost.py</code>.
+            </p>
+            <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadTaxRulesTable()">Reload</button>
+                <button type="button" class="btn btn-sm btn-success" onclick="addTaxRuleRow()">Add rule</button>
+                <span id="taxRulesMeta" class="small text-muted"></span>
+            </div>
+            <div id="taxRulesError" class="alert alert-danger d-none small"></div>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Active</th>
+                            <th>Name</th>
+                            <th class="text-end">STCG</th>
+                            <th class="text-end">LTCG</th>
+                            <th class="text-end">Exempt ₹</th>
+                            <th>LTCG rule</th>
+                            <th class="text-end">Cost %</th>
+                            <th class="text-end">§94 −/+</th>
+                            <th class="text-end">STCL yrs</th>
+                            <th>Updated</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="taxRulesTableBody"></tbody>
+                </table>
+            </div>
+            <pre id="rulesOut" class="small bg-light p-2 rounded mt-3" style="max-height:220px; overflow:auto;"></pre>
+        </div>
+
+        <div class="modal fade" id="txoTaxRuleModal" tabindex="-1" aria-labelledby="txoTaxRuleModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header py-2">
+                        <h5 class="modal-title fs-6" id="txoTaxRuleModalLabel">Tax rule</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" id="txoRuleModalId" value="">
+                        <div class="row g-2">
+                            <div class="col-md-8">
+                                <label class="form-label small mb-0" for="txoRuleModalName">Name</label>
+                                <input id="txoRuleModalName" class="form-control form-control-sm" maxlength="128">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0" for="txoRuleModalSort">Sort order</label>
+                                <input id="txoRuleModalSort" class="form-control form-control-sm" type="number" step="1" value="0">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0" for="txoRuleModalStcg">Default STCG rate</label>
+                                <input id="txoRuleModalStcg" class="form-control form-control-sm" type="number" step="0.0001" min="0" max="1">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0" for="txoRuleModalLtcg">Default LTCG rate</label>
+                                <input id="txoRuleModalLtcg" class="form-control form-control-sm" type="number" step="0.0001" min="0" max="1">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0" for="txoRuleModalExempt">LTCG exemption (₹)</label>
+                                <input id="txoRuleModalExempt" class="form-control form-control-sm" type="number" step="1" min="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small mb-0" for="txoRuleModalLtcgMode">LTCG eligibility</label>
+                                <select id="txoRuleModalLtcgMode" class="form-select form-select-sm">
+                                    <option value="twelve_months">More than 12 calendar months from acquisition</option>
+                                    <option value="holding_days">Legacy: min calendar days held</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small mb-0" for="txoRuleModalHoldDays">Min holding days (legacy only)</label>
+                                <input id="txoRuleModalHoldDays" class="form-control form-control-sm" type="number" step="1" min="1" max="3660">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0" for="txoRuleModalCost">Blended transaction cost (%)</label>
+                                <input id="txoRuleModalCost" class="form-control form-control-sm" type="number" step="0.01" min="0" max="100">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0" for="txoRuleModal94b">§94(8) months before record</label>
+                                <input id="txoRuleModal94b" class="form-control form-control-sm" type="number" step="1" min="1" max="36">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0" for="txoRuleModal94a">§94(8) months after record</label>
+                                <input id="txoRuleModal94a" class="form-control form-control-sm" type="number" step="1" min="1" max="60">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small mb-0" for="txoRuleModalCarry">STCL carry-forward (years)</label>
+                                <input id="txoRuleModalCarry" class="form-control form-control-sm" type="number" step="1" min="1" max="20">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small mb-0" for="txoRuleModalNotes">Notes (internal)</label>
+                                <textarea id="txoRuleModalNotes" class="form-control form-control-sm" rows="2"></textarea>
+                            </div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="txoRuleModalSetActive">
+                                    <label class="form-check-label small" for="txoRuleModalSetActive">Make this rule active after save (used for all calculations)</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer py-2">
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="saveTaxRuleModal()">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-pane fade" id="strategiesTab">
+            <p class="text-muted small mb-2">
+                Rows come from <code>tax_optimiser_strategy</code>. Changing <strong>On</strong> or <strong>params</strong> affects the next report / interactive session (no redeploy).
+                Numeric gates include <code>min_net_benefit_inr</code>, <code>min_tax_saved_to_trade_cost_ratio</code>, <code>turnover_sell_buy_multiplier</code>, <code>buyback_delay_days</code>, etc.
+            </p>
+            <div class="alert alert-light border small mb-2" role="note">
+                <p class="mb-1"><strong>Sort column — is it “priority”?</strong> Yes, in the everyday sense for <strong>this table</strong>: <strong>lower numbers appear first</strong> (10 before 20). The server returns rows in that order so you can read the playbook top-to-bottom.</p>
+                <p class="mb-0"><strong>Important:</strong> The engine runs <strong>book LTCG → book unrealised losses → book STCG</strong> (interactive queue order). The <strong>Sort</strong> column is for admin list order only. <strong>Defer / STCG sell hints</strong> are <strong>not</strong> strategies here — they attach to <strong>unified recommendation SELL</strong> rows.</p>
+            </div>
+            <div class="accordion mb-2" id="txoStrategiesPlainEnglish">
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#txoStratGuideBookLtcg" aria-expanded="false">
+                            What is <code>book_ltcg_exemption</code>?
+                        </button>
+                    </h2>
+                    <div id="txoStratGuideBookLtcg" class="accordion-collapse collapse" data-bs-parent="#txoStrategiesPlainEnglish">
+                        <div class="accordion-body small">
+                            <p class="mb-2"><strong>S1 — Book LTCG within the annual exemption.</strong> Listed equity–style LTCG often has an <strong>annual exemption</strong> (e.g. ₹1.25L). This strategy looks at <strong>open lots</strong> that are already <strong>LTCG-eligible</strong> if sold and picks a <strong>small subset of sells</strong> (modelled as sell + buy-back) to use remaining <strong>headroom</strong> while minimising effective turnover.</p>
+                            <p class="mb-2">A concrete recommendation appears only when <strong>tax saved ≥ min_tax_saved_to_trade_cost_ratio × trade cost</strong> (default <strong>2×</strong>) and min net benefit pass — <strong>no ratio bypass</strong> for missing marks.</p>
+                            <p class="mb-0 text-muted"><strong>Params (common):</strong> <code>min_net_benefit_inr</code>, <code>min_tax_saved_to_trade_cost_ratio</code> (default 2), <code>turnover_sell_buy_multiplier</code>, <code>buyback_delay_days</code>, <code>max_securities_per_client</code>.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#txoStratGuideBookStcg" aria-expanded="false">
+                            What is <code>book_stcg_gains</code>?
+                        </button>
+                    </h2>
+                    <div id="txoStratGuideBookStcg" class="accordion-collapse collapse" data-bs-parent="#txoStrategiesPlainEnglish">
+                        <div class="accordion-body small">
+                            <p class="mb-2"><strong>Low priority / conditional.</strong> The engine <strong>does not run</strong> this unless the client has <strong>open STCG unrealised losses</strong> or <strong>FY net realised STCG &lt; 0</strong>. Then it applies marginal STCG tax / set-off gates (default <code>require_fy_stcg_loss_offset</code>).</p>
+                            <p class="mb-0 text-muted"><strong>Params:</strong> same as before; deferral messaging for sells lives on <strong>unified recommendations</strong>, not here.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#txoStratGuideHarvest" aria-expanded="false">
+                            What is <code>harvest_unrealized_loss</code>?
+                        </button>
+                    </h2>
+                    <div id="txoStratGuideHarvest" class="accordion-collapse collapse" data-bs-parent="#txoStrategiesPlainEnglish">
+                        <div class="accordion-body small">
+                            <p class="mb-2"><strong>High priority — book unrealised losses (FY set-off).</strong> Only when there is <strong>realised gain this FY</strong> of the same character (STCG vs LTCG) on the report. Picks one open loss lot that clears the same 2× gates as LTCG booking.</p>
+                            <p class="mb-2">When <code>prioritize_section_94_8_bonus_window</code> is true (default), ties favour lots that are <strong>STCG unrealised losses</strong> on securities whose <strong>last bonus record date</strong> is roughly <strong>9–12 months</strong> before the as-of date (§94(8) review context).</p>
+                            <p class="mb-0 text-muted"><strong>Params:</strong> <code>min_net_benefit_inr</code>, <code>min_tax_saved_to_trade_cost_ratio</code> (default 2), <code>turnover_sell_buy_multiplier</code>, <code>prioritize_section_94_8_bonus_window</code>.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#txoStratGuideS94" aria-expanded="false">
+                            §94(8) — when does the report highlight it?
+                        </button>
+                    </h2>
+                    <div id="txoStratGuideS94" class="accordion-collapse collapse" data-bs-parent="#txoStrategiesPlainEnglish">
+                        <div class="accordion-body small">
+                            <p class="mb-2">There is <strong>no separate “ranking overlay” strategy</strong>. The FY report shows a <strong>§94(8) priority</strong> badge and fills the §94(8) column (for matching securities) only when the client has an <strong>open STCG unrealised loss</strong> and the security’s <strong>last bonus record date</strong> (BONUS corporate action) is about <strong>9–12 months</strong> before the as-of date.</p>
+                            <p class="mb-0 text-muted">Harvest loss picking uses <code>prioritize_section_94_8_bonus_window</code> with the same window heuristic.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="loadStrategies()">Reload from server</button>
+                <span id="strategiesMeta" class="small text-muted align-self-center"></span>
+            </div>
+            <div id="strategiesError" class="alert alert-danger d-none small"></div>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Code</th>
+                            <th style="min-width:14rem">Description</th>
+                            <th>On</th>
+                            <th class="text-nowrap" title="Lower number = listed first in this table. Engine order is LTCG → losses → STCG; On/Off controls whether a code runs.">Sort <span class="fw-normal text-muted">(list priority)</span></th>
+                            <th>Params (edit → Save row)</th>
+                            <th style="width:1%"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="strategiesTableBody"></tbody>
+                </table>
+            </div>
+            <pre id="strategiesOut" class="small bg-light p-2 rounded mt-2" style="max-height:180px; overflow:auto;"></pre>
+        </div>
+
+        <div class="tab-pane fade" id="mappingTab">
+            <p class="text-muted small mb-2">
+                This form updates <strong>tax fields on <code>asset_class</code></strong> (same row as the portfolio class name).
+                <strong>Global</strong> rules — LTCG 12-month vs holding-days, blended trade %, §94(8) windows, STCL carry years — are on the <strong>Tax rules</strong> tab.
+                <strong>Strategy thresholds</strong> (min net benefit, 2× turnover, buy-back delay, defer window, …) are on the <strong>Strategies</strong> tab.
+            </p>
+            <div class="accordion mb-3" id="txoMappingRuleRef">
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed py-2" type="button" data-bs-toggle="collapse" data-bs-target="#txoMappingRuleRefBody" aria-expanded="false">
+                            All implemented tax rules (where to edit each)
+                        </button>
+                    </h2>
+                    <div id="txoMappingRuleRefBody" class="accordion-collapse collapse" data-bs-parent="#txoMappingRuleRef">
+                        <div class="accordion-body small">
+                            <p class="fw-semibold mb-1">Global defaults → <strong>Tax rules</strong> tab (<code>tax_optimiser_tax_rule</code>, one active row; legacy <code>tax_optimiser_settings</code> if table not migrated)</p>
+                            <ul class="mb-3">
+                                <li>Default STCG / LTCG rates; annual LTCG exemption limit</li>
+                                <li>LTCG eligibility: <strong>twelve calendar months</strong> from acquisition vs legacy <strong>min holding days</strong></li>
+                                <li><code>trade_charges_pct</code> — blended % on model turnover; engine uses <strong>2×</strong> when modelling sell + buy-back</li>
+                                <li>§94(8) months before / after record date (labels on <strong>realised</strong> sell lines in reports)</li>
+                                <li>STCG loss carry-forward horizon (years)</li>
+                                <li>Internal notes</li>
+                            </ul>
+                            <p class="fw-semibold mb-1">Per class <code>asset_class.tax_*</code> → <strong>form below</strong></p>
+                            <ul class="mb-3">
+                                <li><code>ruleset</code> tag (e.g. <code>equity</code>, <code>debt</code>) for classification</li>
+                                <li>STCG rate, LTCG rate, LTCG exemption limit (override defaults for securities in this class)</li>
+                                <li><strong>LTCG minimum months</strong> — statutory-style holding threshold for this class (e.g. 12 listed equity, longer for some debt products — confirm current FY with CA)</li>
+                                <li><strong>LTCG mode</strong> — inherit global tax rule, or override with <strong>twelve_months</strong> vs <strong>holding_days</strong> for this class; optional <strong>holding days</strong> when using days mode</li>
+                                <li>Active flag; display name; free-text notes</li>
+                                <li>Portfolio class dropdown lists only <strong>asset classes used on the securities master</strong> (<code>security.asset_class_id</code>). Use <code>?all=1</code> on the catalog API for the full <code>asset_class</code> table. Add or classify securities first if a class is missing.</li>
+                            </ul>
+                            <p class="fw-semibold mb-1">Rows <code>tax_optimiser_strategy</code> → <strong>Strategies</strong> tab</p>
+                            <ul class="mb-3">
+                                <li><code>book_ltcg_exemption</code>: <code>min_net_benefit_inr</code>, <code>min_tax_saved_to_trade_cost_ratio</code>, <code>turnover_sell_buy_multiplier</code>, <code>buyback_delay_days</code>, <code>max_securities_per_client</code></li>
+                                <li><code>harvest_unrealized_loss</code>: cost gates as S1; <code>prioritize_section_94_8_bonus_window</code> (default true)</li>
+                                <li><code>book_stcg_gains</code>: runs only with ST loss context; <code>require_fy_stcg_loss_offset</code>, <code>max_stcg_crystallise_inr</code>, late-STCG / bonus-lot filters</li>
+                                <li>Legacy rows <code>defer_to_ltcg</code>, <code>realised_loss_review</code>, <code>section_94_8_ranking_overlay</code> are <strong>disabled</strong> by migration — defer hints use <strong>unified SELL</strong> rows.</li>
+                                <li>Follow-up batch rows tied to completed sessions (S6/S7 workflow)</li>
+                            </ul>
+                            <p class="fw-semibold mb-1">FIFO &amp; open lots (not edited in UI)</p>
+                            <ul class="mb-0">
+                                <li>FIFO matching, corporate actions (split/bonus), open-lot MTM — <code>capital_gains_service</code>; uses the settings and class rates above</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-2 mb-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label small mb-0">Portfolio asset class</label>
+                    <select id="mapAssetClassId" class="form-select">
+                        <option value="">— Load catalog —</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small mb-0">Display / match name (optional override)</label>
+                    <input id="mapName" class="form-control" placeholder="Defaults to selected class name">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">Ruleset tag</label>
+                    <input id="mapRuleset" class="form-control" placeholder="equity" value="equity">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">Active</label>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="mapActive" checked>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">STCG rate</label>
+                    <input id="mapStcg" class="form-control" type="number" step="0.001" value="0.20">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0">LTCG rate</label>
+                    <input id="mapLtcg" class="form-control" type="number" step="0.001" value="0.125">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">LTCG exemption ₹</label>
+                    <input id="mapExemption" class="form-control" type="number" step="1" value="125000">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0" title="Minimum calendar months for LTCG for this asset class (advisor / statute reference)">LTCG min months</label>
+                    <input id="mapLtcgMonths" class="form-control" type="number" step="1" min="1" max="600" value="12">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-0">LTCG rule for class</label>
+                    <select id="mapLtcgMode" class="form-select form-select-sm">
+                        <option value="inherit">Inherit global tax rule</option>
+                        <option value="twelve_months">Twelve calendar months</option>
+                        <option value="holding_days">Min holding (calendar days)</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-0" title="Used when LTCG rule = holding days">LTCG min days</label>
+                    <input id="mapLtcgHoldDays" class="form-control" type="number" step="1" min="1" placeholder="—">
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label small mb-0">Notes</label>
+                    <input id="mapNotes" class="form-control" placeholder="Optional">
+                </div>
+                <div class="col-md-12">
+                    <button type="button" class="btn btn-primary" onclick="saveMapping()">Save mapping</button>
+                    <button type="button" class="btn btn-outline-secondary ms-1" onclick="loadMappingTable()">Refresh table</button>
+                </div>
+            </div>
+            <div class="table-responsive" style="max-height:360px; overflow:auto;">
+                <table class="table table-sm table-striped" id="mappingTable">
+                    <thead><tr>
+                        <th>ID</th><th>Name</th><th>Ruleset</th><th>STCG</th><th>LTCG</th><th>Exempt ₹</th>
+                        <th class="text-nowrap" title="Minimum months for LTCG (this class)">LTCG mo</th>
+                        <th class="text-nowrap">LTCG mode</th><th>Active</th><th></th>
+                    </tr></thead>
+                    <tbody id="mappingTableBody"></tbody>
+                </table>
+            </div>
+            <pre id="mappingOut" class="small bg-light p-2 rounded mt-2" style="max-height:200px; overflow:auto;"></pre>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{# JSON bootstrap avoids HTML parsing &/? in URLs breaking inline JS (Unexpected token '&'). #}
+<script type="application/json" id="txo-page-config">{{ {'fyOptionsUrl': txo_fy_options_url|default('')}|tojson }}</script>
+<script>
+(function () {
+  try {
+    var el = document.getElementById('txo-page-config');
+    var cfg = el ? JSON.parse(el.textContent) : {};
+    window.TXO_FY_OPTIONS_URL = cfg.fyOptionsUrl || '';
+  } catch (e) {
+    window.TXO_FY_OPTIONS_URL = '';
+  }
+})();
+
+let sessionId = null;
+let currentSuggestionId = null;
+let TXO_LIVE_SESSION = null;
+let interactiveActionBusy = false;
+let savedReviewSessionId = null;
+
+function collectInteractiveStrategyTypesForPayload() {
+  var map = [
+    { id: 'txoStratBookLtcg', code: 'book_ltcg' },
+    { id: 'txoStratBookStcg', code: 'book_stcg' }
+  ];
+  var sel = [];
+  for (var i = 0; i < map.length; i++) {
+    var el = document.getElementById(map[i].id);
+    if (el && el.checked) sel.push(map[i].code);
+  }
+  if (sel.length === 0) return undefined;
+  return sel;
+}
+
+function txoInteractiveEnterStep2() {
+  var s1 = document.getElementById('interactiveWizardStep1');
+  var s2 = document.getElementById('interactiveWizardStep2');
+  if (s1) s1.classList.add('d-none');
+  if (s2) s2.classList.remove('d-none');
+}
+
+function txoInteractiveNewSession() {
+  sessionId = null;
+  currentSuggestionId = null;
+  TXO_LIVE_SESSION = null;
+  savedReviewSessionId = null;
+  var s1 = document.getElementById('interactiveWizardStep1');
+  var s2 = document.getElementById('interactiveWizardStep2');
+  if (s1) s1.classList.remove('d-none');
+  if (s2) s2.classList.add('d-none');
+  txoInteractiveUpdateSessionToolsEnabled();
+  var ban = document.getElementById('interactiveBanner');
+  if (ban) ban.innerHTML = '';
+  var rd = document.getElementById('interactiveReadable');
+  if (rd) rd.classList.add('d-none');
+  var em = document.getElementById('interactiveEmpty');
+  if (em) { em.classList.add('d-none'); em.innerHTML = ''; }
+  var hint = document.getElementById('interactiveSessionHint');
+  if (hint) hint.textContent = '';
+  var out = document.getElementById('interactiveOut');
+  if (out) out.textContent = '';
+}
+
+function txoInteractiveUpdateSessionToolsEnabled() {
+  var has = !!sessionId;
+  ['interactivePreviewEmailBtn', 'interactiveEmailBtn', 'interactiveFollowupBtn'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) el.disabled = !has;
+  });
+  var rb = document.getElementById('interactiveResetBtn');
+  if (rb) rb.disabled = !has;
+}
+
+async function txoWizardContinue() {
+  txoInteractiveEnterStep2();
+  await startSession(null);
+  if (!sessionId) {
+    var s1 = document.getElementById('interactiveWizardStep1');
+    var s2 = document.getElementById('interactiveWizardStep2');
+    if (s1) s1.classList.remove('d-none');
+    if (s2) s2.classList.add('d-none');
+  }
+}
+
+async function previewSessionEmail() {
+  if (!sessionId) return;
+  const data = await api('/enhanced-tax-optimiser/review/session/' + encodeURIComponent(sessionId) + '/email-preview', {
+    method: 'POST',
+    body: '{}'
+  });
+  if (!data.ok) {
+    alert(data.error || 'Preview failed');
+    return;
+  }
+  var modal = document.getElementById('txoEmailPreviewModal');
+  var frame = document.getElementById('txoEmailPreviewFrame');
+  if (!frame || !modal) return;
+  var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+  if (doc) {
+    doc.open();
+    doc.write(data.html || '');
+    doc.close();
+  }
+  if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+    bootstrap.Modal.getOrCreateInstance(modal).show();
+  }
+}
+
+async function scheduleTaxOptimiserFollowup() {
+  if (!sessionId) return;
+  var d = document.getElementById('interactiveFollowupDate');
+  if (!d || !d.value) {
+    alert('Pick a follow-up date.');
+    return;
+  }
+  const body = {
+    follow_up_date: d.value,
+    saved_review_session_id: savedReviewSessionId
+  };
+  const data = await api('/enhanced-tax-optimiser/review/session/' + encodeURIComponent(sessionId) + '/followup-tasks', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+  var bannerHtml = '';
+  if (data.ok && data.followup) {
+    var n = data.followup.count != null ? data.followup.count : (data.followup.task_ids || []).length;
+    bannerHtml = '<div class="alert alert-success py-2 small mb-0">Created <strong>' + n + '</strong> task(s). Open <a href="/tasks/">/tasks/</a> — notes include tool link and trade details.</div>';
+  } else {
+    bannerHtml = '<div class="alert alert-danger py-2 small mb-0">' + escapeHtml(data.error || 'Scheduling failed') + '</div>';
+    alert(data.error || 'Scheduling failed');
+  }
+  refreshInteractiveView(data, { bannerHtml: bannerHtml, keepBanner: true });
+}
+
+function apiResolveUrl(path) {
+  if (typeof path !== 'string') return '/api/v1/';
+  if (path.indexOf('/api/v1') === 0 || path.indexOf('/tools/tax-optimiser-enhanced') === 0) return path;
+  return '/api/v1' + (path.charAt(0) === '/' ? path : '/' + path);
+}
+
+async function api(path, opts={}) {
+  const { headers: hdrIn, ...rest } = opts;
+  const headers = Object.assign({'Content-Type': 'application/json'}, hdrIn || {});
+  const res = await fetch(apiResolveUrl(path), Object.assign({ credentials: 'same-origin', headers }, rest));
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  if (ct.indexOf('application/json') !== -1) {
+    try {
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: 'Invalid JSON from server', status: res.status };
+    }
+  }
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    return {
+      ok: false,
+      error: 'HTTP ' + res.status + ' (expected JSON). You may need to sign in again.',
+      _bodyPreview: text.slice(0, 120)
+    };
+  }
+}
+
+function fyLabelFromStartYear(sy) {
+  var yy = (sy + 1) % 100;
+  return 'FY ' + sy + '-' + (yy < 10 ? '0' : '') + yy;
+}
+
+/** India FY: 1 Apr (sy) – 31 Mar (sy+1); matches services.fy_tax_utils.fy_for_date */
+function clientSideFyOptions(backYears) {
+  backYears = backYears == null ? 8 : backYears;
+  var d = new Date();
+  var m = d.getMonth() + 1;
+  var curStart = m >= 4 ? d.getFullYear() : d.getFullYear() - 1;
+  var out = [];
+  for (var i = 0; i <= backYears; i++) {
+    var sy = curStart - i;
+    out.push({ fy_start_year: sy, label: fyLabelFromStartYear(sy) });
+  }
+  return out;
+}
+
+function fillReportFySelect(rows) {
+  var sel = document.getElementById('reportFy');
+  sel.innerHTML = '';
+  for (var j = 0; j < rows.length; j++) {
+    var o = rows[j];
+    var opt = document.createElement('option');
+    opt.value = String(o.fy_start_year);
+    opt.textContent = o.label || fyLabelFromStartYear(o.fy_start_year);
+    sel.appendChild(opt);
+  }
+}
+
+function setReportFyNote(msg, isError) {
+  var el = document.getElementById('reportFyNote');
+  if (!msg) {
+    el.classList.add('d-none');
+    el.textContent = '';
+    return;
+  }
+  el.textContent = msg;
+  el.classList.remove('d-none', 'alert-warning', 'alert-danger');
+  el.classList.add(isError ? 'alert-danger' : 'alert-warning');
+}
+function pretty(x){ return JSON.stringify(x, null, 2); }
+
+function fmtMoney(x) {
+  if (x == null || x === '' || (typeof x === 'number' && !isFinite(x))) return '—';
+  const n = Number(x);
+  return new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(Math.round(n));
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  const s = String(d).slice(0, 10);
+  return s;
+}
+
+/** True when strategy payload has a concrete minimum-turnover bundle (engine trade rows). */
+function txoMtrHasLots(payload) {
+  if (!payload || typeof payload !== 'object') return false;
+  const m = payload.minimum_turnover_recommendation;
+  return !!(m && m.lots && m.lots.length);
+}
+
+function txoReportBadgeTriState(payload, flagKey) {
+  if (!payload || typeof payload !== 'object') return false;
+  const v = payload[flagKey];
+  if (v === true || v === false) return !!v;
+  return txoMtrHasLots(payload);
+}
+
+function txoInteractiveReviewCell(c) {
+  const ir = c.interactive_review || {};
+  const st = ir.status;
+  const saved = ir.saved_at ? String(ir.saved_at).slice(0, 16).replace('T', ' ') : '';
+  const sent = ir.email_sent_at ? String(ir.email_sent_at).slice(0, 16).replace('T', ' ') : '';
+  if (st === 'email_sent') {
+    return '<span class="badge bg-primary" title="Client email sent' + (sent ? ' — ' + escapeHtml(sent) : '') + '">Reviewed &amp; sent</span>';
+  }
+  if (st === 'saved') {
+    return '<span class="badge bg-secondary" title="Interactive session saved' + (saved ? ' — ' + escapeHtml(saved) : '') + '">Reviewed</span>';
+  }
+  return '<button type="button" class="btn btn-sm btn-outline-success txo-mark-reviewed-btn" title="Mark this client as reviewed for selected FY">Mark reviewed</button>';
+}
+
+function clientFlags(c) {
+  const badges = [];
+  const s = c.suggestions || {};
+  if (s.book_ltcg) {
+    const bl = s.book_ltcg;
+    const showBookLtcgStrategyBadge = txoReportBadgeTriState(bl, 'report_book_ltcg_badge');
+    if (showBookLtcgStrategyBadge) {
+      badges.push('<span class="badge bg-info text-dark">Book LTCG (exemption headroom)</span>');
+    } else {
+      const hr = (typeof bl.headroom === 'number') ? bl.headroom : null;
+      const note = (bl.ltcg_no_qualified_trade_note != null && String(bl.ltcg_no_qualified_trade_note).trim())
+        ? String(bl.ltcg_no_qualified_trade_note).trim()
+        : 'LTCG exemption headroom may remain, but no lot clears strategy cost–benefit gates.';
+      if (hr != null && hr > 0) {
+        badges.push('<span class="badge bg-light text-dark border" title="' + escapeHtml(note) + '">LTCG headroom — no qualified trade</span>');
+      }
+    }
+  }
+  if (s.harvest_unrealized_loss && txoReportBadgeTriState(s.harvest_unrealized_loss, 'report_harvest_unrealized_badge')) {
+    badges.push('<span class="badge bg-success text-dark">Book losses (unrealised)</span>');
+  }
+  if (s.book_stcg && txoReportBadgeTriState(s.book_stcg, 'report_book_stcg_badge')) {
+    badges.push('<span class="badge bg-warning text-dark">STCG (after ST loss)</span>');
+  }
+  if (s.book_losses) {
+    badges.push('<span class="badge bg-secondary">FY realised losses</span>');
+  }
+  if (c.section_94_8_open_bonus_window_loss && txoMtrHasLots(s.harvest_unrealized_loss)) {
+    badges.push('<span class="badge bg-danger">S. 94(8) priority (bonus 9–12m + ST loss)</span>');
+  }
+  return badges.join(' ') || '<span class="text-muted">—</span>';
+}
+
+function headroomForClient(c, exemption) {
+  const s = c.suggestions || {};
+  const bl = s.book_ltcg;
+  if (bl && typeof bl.headroom === 'number') return bl.headroom;
+  const ltcg = Number(c.realized_ltcg || 0);
+  return Math.max(0, exemption - Math.max(0, ltcg));
+}
+
+async function loadFyOptions() {
+  setReportFyNote('', false);
+  var sel = document.getElementById('reportFy');
+  var fyPath = (TXO_FY_OPTIONS_URL && String(TXO_FY_OPTIONS_URL).length)
+    ? TXO_FY_OPTIONS_URL
+    : '/api/v1/enhanced-tax-optimiser/fy-options?back_years=8';
+  var data = await api(fyPath);
+  if (data.ok && data.options && data.options.length) {
+    fillReportFySelect(data.options);
+    return;
+  }
+  if (sel && sel.options && sel.options.length > 0) {
+    return;
+  }
+  fillReportFySelect(clientSideFyOptions(8));
+  var why = (data && data.error) ? data.error : 'FY API returned no options.';
+  setReportFyNote('Using built-in FY list (' + why + '). Scan still works.', false);
+}
+
+async function runFyScan() {
+  const errEl = document.getElementById('reportError');
+  const fy = document.getElementById('reportFy').value;
+  errEl.classList.add('d-none');
+  document.getElementById('reportSummary').classList.add('d-none');
+  document.getElementById('reportTableWrap').classList.add('d-none');
+  document.getElementById('reportOut').textContent = '';
+  if (!fy) {
+    errEl.textContent = 'Select a financial year.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+  const params = new URLSearchParams();
+  params.set('fy_start_year', fy);
+  const cn = document.getElementById('reportClientName').value.trim();
+  if (cn) params.set('client_name', cn);
+  const recOnly = document.getElementById('reportRecommendedTradesOnly');
+  params.set('recommended_trades_only', (recOnly && recOnly.checked) ? '1' : '0');
+  const btn = document.getElementById('reportScanBtn');
+  btn.disabled = true;
+  const data = await api(`/enhanced-tax-optimiser/report?${params.toString()}`);
+  btn.disabled = false;
+  document.getElementById('reportOut').textContent = pretty(data);
+  if (!data.ok || !data.data) {
+    errEl.textContent = data.error || 'Report failed.';
+    errEl.classList.remove('d-none');
+    return;
+  }
+  const r = data.data;
+  const clients = r.clients || [];
+  const ex = Number(r.ltcg_exemption_limit || 0);
+  const rmeta = r.report_meta || {};
+  let n948 = 0;
+  for (const c of clients) {
+    const sug = c.suggestions || {};
+    const hu = sug.harvest_unrealized_loss;
+    const mtr = hu && hu.minimum_turnover_recommendation;
+    const harvestLots = mtr && mtr.lots && mtr.lots.length;
+    if (c.section_94_8_open_bonus_window_loss && harvestLots) n948++;
+  }
+  const filterNote = rmeta.recommended_trades_only
+    ? `<div class="text-muted mt-1">Showing <strong>${Number(rmeta.clients_included || clients.length)}</strong> of <strong>${Number(rmeta.clients_considered || clients.length)}</strong> FY-activity clients with at least one modeled trade bundle. Sorted by estimated <strong>max</strong> net benefit (engine <code>net_benefit</code> per strategy).</div>`
+    : `<div class="text-muted mt-1">Showing all <strong>${clients.length}</strong> clients in scope, sorted by estimated max net benefit (trade opportunities first).</div>`;
+  const sum = document.getElementById('reportSummary');
+  sum.classList.remove('d-none');
+  sum.innerHTML = `
+    <div class="card border-0 shadow-sm">
+      <div class="card-body py-3">
+        <div class="row g-2 small">
+          <div class="col-md-4"><strong>${escapeHtml(r.fy_label || '')}</strong><br><span class="text-muted">${fmtDate(r.fy_start)} → ${fmtDate(r.fy_end)}</span></div>
+          <div class="col-md-4">Default STCG <strong>${(Number((r.rates ? r.rates.stcg_rate : 0) || 0) * 100).toFixed(2)}%</strong> · LTCG <strong>${(Number((r.rates ? r.rates.ltcg_rate : 0) || 0) * 100).toFixed(2)}%</strong><br>LTCG exemption <strong>₹${fmtMoney(ex)}</strong></div>
+          <div class="col-md-4">Rows in table: <strong>${clients.length}</strong>${n948 ? `<br><span class="badge bg-danger mt-1">S. 94(8) priority (harvest trade + bonus window): <strong>${n948}</strong> client(s)</span>` : ''}</div>
+        </div>
+        ${filterNote}
+      </div>
+    </div>`;
+  const tb = document.getElementById('reportTableBody');
+  tb.innerHTML = '';
+  if (!clients.length) {
+    document.getElementById('reportTableWrap').classList.add('d-none');
+    return;
+  }
+  document.getElementById('reportTableWrap').classList.remove('d-none');
+  for (const c of clients) {
+    const cid = c.client_id;
+    const nm = c.client_name || ('#' + cid);
+    const st = Number(c.realized_stcg || 0);
+    const lt = Number(c.realized_ltcg || 0);
+    const net = Number(c.total_realized_gain || 0);
+    const hr = headroomForClient(c, ex);
+    const topp = c.trade_opportunity || {};
+    const maxBen = Number(topp.max_net_benefit_inr);
+    const lines = c.realized_sell_lines || [];
+    let rowsHtml = '';
+    const s94pri = !!c.section_94_8_open_bonus_window_loss;
+    const s94sids = new Set((c.section_94_8_open_bonus_window_meta && c.section_94_8_open_bonus_window_meta.security_ids) ? c.section_94_8_open_bonus_window_meta.security_ids : []);
+    for (const ln of lines) {
+      const g = Number(ln.gain || 0);
+      const gt = escapeHtml(ln.gain_type || '');
+      const sym = escapeHtml(ln.security_symbol || ln.security_name || '');
+      const s94 = ln.section_94_8;
+      let note = '';
+      const sid = ln.security_id != null ? Number(ln.security_id) : null;
+      const showS94 = s94pri && sid != null && !Number.isNaN(sid) && s94sids.has(sid);
+      if (showS94 && s94 && s94.assessment) {
+        const det = s94.detail != null ? String(s94.detail) : '';
+        note = `<div class="small text-muted mt-1">${escapeHtml(s94.assessment)}${det ? ' — ' + escapeHtml(det.length > 120 ? det.slice(0, 120) + '…' : det) : ''}</div>`;
+      } else {
+        note = '<span class="text-muted">—</span>';
+      }
+      rowsHtml += `<tr><td>${sym}</td><td>${fmtDate(ln.sell_date)}</td><td>${gt}</td><td class="text-end font-monospace">${fmtMoney(g)}</td><td class="small">${note}</td></tr>`;
+    }
+    const trMain = document.createElement('tr');
+    trMain.className = 'txo-client-row';
+    trMain.innerHTML = `<td>${escapeHtml(nm)}</td>
+      <td class="text-end font-monospace">${fmtMoney(st)}</td>
+      <td class="text-end font-monospace">${fmtMoney(lt)}</td>
+      <td class="text-end font-monospace">${fmtMoney(net)}</td>
+      <td class="text-end font-monospace">${fmtMoney(hr)}</td>
+      <td class="text-end font-monospace" title="Max modeled net benefit across LTCG, harvest, and STCG bundles (not additive if you run multiple)">${topp.has_recommended_trades ? fmtMoney(maxBen) : '—'}</td>
+      <td class="small">${clientFlags(c)}</td>
+      <td class="small">${txoInteractiveReviewCell(c)}</td>
+      <td class="text-nowrap">
+        <button type="button" class="btn btn-sm btn-outline-primary txo-details-btn">Details</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary txo-step-btn ms-1" title="Open interactive review for this client only">Steps</button>
+      </td>`;
+    const trSub = document.createElement('tr');
+    trSub.className = 'd-none txo-detail-row';
+    trSub.innerHTML = `<td colspan="9" class="bg-light small p-2 border-top-0">
+      <div class="fw-semibold mb-1">${escapeHtml(nm)} — sell lines (${lines.length})</div>
+      <div class="table-responsive mb-0"><table class="table table-sm table-bordered mb-0">
+        <thead><tr><th>Security</th><th>Sell date</th><th>Type</th><th class="text-end">Gain ₹</th><th>§94(8) (bonus 9–12m ST loss only)</th></tr></thead>
+        <tbody>${rowsHtml || '<tr><td colspan="5" class="text-muted">No lines</td></tr>'}</tbody>
+      </table></div>
+    </td>`;
+    trMain.querySelector('.txo-details-btn').addEventListener('click', function () {
+      const open = trSub.classList.contains('d-none');
+      trSub.classList.toggle('d-none', !open);
+      this.textContent = open ? 'Hide' : 'Details';
+    });
+    trMain.querySelector('.txo-step-btn').addEventListener('click', function () {
+      startInteractiveForClient(cid);
+    });
+    const markBtn = trMain.querySelector('.txo-mark-reviewed-btn');
+    if (markBtn) {
+      markBtn.addEventListener('click', async function () {
+        await markClientReviewed(cid, nm);
+      });
+    }
+    tb.appendChild(trMain);
+    tb.appendChild(trSub);
+  }
+}
+
+async function markClientReviewed(clientId, clientName) {
+  const fy = selectedFyStartYear();
+  if (!fy) {
+    alert('Select a financial year first.');
+    return;
+  }
+  const data = await api('/enhanced-tax-optimiser/client/' + encodeURIComponent(String(clientId)) + '/mark-reviewed', {
+    method: 'POST',
+    body: JSON.stringify({ fy_start_year: fy })
+  });
+  if (!data.ok) {
+    alert(data.error || 'Failed to mark client reviewed.');
+    return;
+  }
+  await runFyScan();
+  const name = clientName || ('#' + String(clientId));
+  alert('Marked as reviewed: ' + name);
+}
+
+function selectedFyStartYear() {
+  const v = document.getElementById('reportFy').value;
+  return v ? parseInt(v, 10) : null;
+}
+
+function showInteractiveTab() {
+  const t = document.getElementById('interactiveTabBtn');
+  if (!t) return;
+  if (typeof bootstrap !== 'undefined' && bootstrap.Tab) {
+    bootstrap.Tab.getOrCreateInstance(t).show();
+  } else {
+    t.click();
+  }
+}
+
+async function startInteractiveForClient(clientId) {
+  showInteractiveTab();
+  txoInteractiveEnterStep2();
+  await startSession(clientId);
+}
+
+async function startSession(clientId) {
+  const fy = selectedFyStartYear();
+  const st = collectInteractiveStrategyTypesForPayload();
+  const body = {
+    fy_start_year: fy,
+    as_of_date: null
+  };
+  if (st) body.strategy_types = st;
+  if (clientId != null && clientId !== undefined && clientId !== '') {
+    body.client_id = parseInt(clientId, 10);
+  }
+  const data = await api('/enhanced-tax-optimiser/review/session/start', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+  const hintEl = document.getElementById('interactiveSessionHint');
+  const sess = data.session;
+  if (hintEl && sess && sess.meta) {
+    const scope = body.client_id ? ('Client ID ' + body.client_id) : 'All clients in FY';
+    var sp = (sess.meta.start_payload && sess.meta.start_payload.strategy_types) ? sess.meta.start_payload.strategy_types : null;
+    var stratNote = '';
+    if (sp && sp.length) {
+      stratNote = ' · Strategies: <strong>' + escapeHtml(sp.join(', ')) + '</strong>';
+    } else {
+      stratNote = ' · Strategies: <strong>all</strong>';
+    }
+    hintEl.innerHTML = 'Scope: <strong>' + escapeHtml(scope) + '</strong> · ' +
+      escapeHtml(sess.meta.fy_label || '') +
+      stratNote +
+      ' <span class="text-muted">(same FY as Report tab)</span>';
+  } else if (hintEl) {
+    hintEl.textContent = '';
+  }
+  if (data.ok && data.session_id) {
+    sessionId = data.session_id;
+    currentSuggestionId = (sess && sess.cursor_suggestion_id) ? sess.cursor_suggestion_id : null;
+  } else {
+    sessionId = null;
+    currentSuggestionId = null;
+    TXO_LIVE_SESSION = null;
+  }
+  txoInteractiveUpdateSessionToolsEnabled();
+  refreshInteractiveView(data, {});
+}
+
+async function act(action){
+  if (!sessionId || !currentSuggestionId || interactiveActionBusy) return;
+  interactiveActionBusy = true;
+  var btns = document.querySelectorAll('.txo-act-btn');
+  btns.forEach(function (b) { b.disabled = true; });
+  try {
+    var noteEl = document.getElementById('interactiveDecisionNote');
+    var revEl = document.getElementById('interactiveReversalAction');
+    var body = {
+      suggestion_id: currentSuggestionId,
+      action: action,
+      note: (noteEl && noteEl.value) ? String(noteEl.value).trim() : ''
+    };
+    if (revEl && revEl.value) {
+      body.reversal_action = revEl.value;
+    }
+    const data = await api('/enhanced-tax-optimiser/review/session/' + encodeURIComponent(sessionId) + '/action', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+    if (!data.ok) {
+      var msg = data.error || 'Action failed';
+      if (String(msg).toLowerCase().indexOf('session not found') >= 0) {
+        msg += ' Start a new session if this persists after deploy (live queue is stored in the database).';
+      }
+      alert(msg);
+    } else if (data.session) {
+      currentSuggestionId = data.session.cursor_suggestion_id || null;
+      if (noteEl) noteEl.value = '';
+      if (revEl) revEl.value = '';
+    }
+    refreshInteractiveView(data, {});
+  } finally {
+    interactiveActionBusy = false;
+    btns.forEach(function (b) { b.disabled = false; });
+  }
+}
+
+async function saveSession(){
+  if (!sessionId) return;
+  const data = await api(`/enhanced-tax-optimiser/review/session/${sessionId}/save`, {method: 'POST'});
+  let bannerHtml = '';
+  if (data.ok && data.saved) {
+    if (data.saved.id != null) savedReviewSessionId = data.saved.id;
+    bannerHtml = '<div class="alert alert-success py-2 small mb-0">Saved to database (review session id <strong>' +
+      escapeHtml(String(data.saved.id)) + '</strong>).</div>';
+  } else if (!data.ok) {
+    bannerHtml = '<div class="alert alert-danger py-2 small mb-0">' + escapeHtml(data.error || 'Save failed') + '</div>';
+    alert('Save failed: ' + (data.error || 'unknown error'));
+  }
+  refreshInteractiveView(data, { bannerHtml: bannerHtml });
+}
+
+async function emailSession(){
+  if (!sessionId) return;
+  const recipient = document.getElementById('emailRecipient').value;
+  const data = await api(`/enhanced-tax-optimiser/review/session/${sessionId}/email`, {
+    method: 'POST',
+    body: JSON.stringify({recipient_email: recipient})
+  });
+  let bannerHtml = '';
+  if (data.ok && data.email) {
+    const em = data.email;
+    const to = em.recipient ? escapeHtml(String(em.recipient)) : '';
+    bannerHtml = '<div class="alert alert-info py-2 small mb-0">Email sent' +
+      (to ? ' to <strong>' + to + '</strong>' : '') + '.</div>';
+  } else if (!data.ok) {
+    bannerHtml = '<div class="alert alert-danger py-2 small mb-0">' + escapeHtml(data.error || 'Email failed') + '</div>';
+    alert('Email failed: ' + (data.error || 'unknown error'));
+  }
+  refreshInteractiveView(data, { bannerHtml: bannerHtml });
+}
+
+async function resetSession() {
+  if (!sessionId) return;
+  const resetBody = {};
+  const st = collectInteractiveStrategyTypesForPayload();
+  if (st) resetBody.strategy_types = st;
+  const data = await api('/enhanced-tax-optimiser/review/session/' + sessionId + '/reset', {
+    method: 'POST',
+    body: JSON.stringify(resetBody)
+  });
+  var bh = '';
+  if (data.ok && data.session) {
+    currentSuggestionId = data.session.cursor_suggestion_id || null;
+    bh = '<div class="alert alert-warning py-2 small mb-0">Queue rebuilt — previous approve/reject/skip decisions were cleared.</div>';
+  } else {
+    bh = '<div class="alert alert-danger py-2 small mb-0">' + escapeHtml(data.error || 'Reset failed') + '</div>';
+  }
+  refreshInteractiveView(data, { bannerHtml: bh });
+}
+
+async function loadAssetClassCatalog(){
+  const data = await api('/enhanced-tax-optimiser/asset-class-catalog');
+  const sel = document.getElementById('mapAssetClassId');
+  if (!data.ok || !data.asset_classes) {
+    sel.innerHTML = '<option value="">Failed to load</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">— Select —</option>';
+  for (const ac of data.asset_classes) {
+    const o = document.createElement('option');
+    o.value = ac.id;
+    o.textContent = ac.name || ('#' + ac.id);
+    sel.appendChild(o);
+  }
+}
+
+function ensureSelectOption(selectEl, value, label){
+  if (value === null || value === undefined || value === '') return;
+  const v = String(value);
+  for (let i = 0; i < selectEl.options.length; i++) {
+    if (selectEl.options[i].value === v) return;
+  }
+  const o = document.createElement('option');
+  o.value = v;
+  o.textContent = label || ('#' + v);
+  selectEl.appendChild(o);
+}
+
+function fillMappingFormFromRow(row){
+  const sel = document.getElementById('mapAssetClassId');
+  ensureSelectOption(sel, row.asset_class_id, row.asset_class_name || '');
+  sel.value = String(row.asset_class_id);
+  document.getElementById('mapName').value = row.asset_class_name || '';
+  document.getElementById('mapRuleset').value = row.ruleset || 'equity';
+  document.getElementById('mapStcg').value = row.stcg_rate;
+  document.getElementById('mapLtcg').value = row.ltcg_rate;
+  document.getElementById('mapExemption').value = row.ltcg_exemption_limit;
+  const mo = document.getElementById('mapLtcgMonths');
+  if (mo) mo.value = row.ltcg_minimum_months != null ? row.ltcg_minimum_months : 12;
+  const md = document.getElementById('mapLtcgMode');
+  if (md) {
+    const m = (row.ltcg_eligibility_mode || '').trim().toLowerCase();
+    md.value = (m === 'twelve_months' || m === 'holding_days') ? m : 'inherit';
+  }
+  const hd = document.getElementById('mapLtcgHoldDays');
+  if (hd) hd.value = row.ltcg_holding_days != null && row.ltcg_holding_days !== '' ? row.ltcg_holding_days : '';
+  document.getElementById('mapActive').checked = !!row.is_active;
+  document.getElementById('mapNotes').value = row.notes || '';
+}
+
+async function loadMappingTable(){
+  const data = await api('/enhanced-tax-optimiser/asset-classes?all=1');
+  const tb = document.getElementById('mappingTableBody');
+  tb.innerHTML = '';
+  if (!data.ok || !data.rows) {
+    document.getElementById('mappingOut').textContent = pretty(data);
+    return;
+  }
+  for (const row of data.rows) {
+    const tr = document.createElement('tr');
+    const lm = row.ltcg_minimum_months != null ? row.ltcg_minimum_months : '—';
+    const lmode = (row.ltcg_eligibility_mode && String(row.ltcg_eligibility_mode).trim())
+      ? escapeHtml(String(row.ltcg_eligibility_mode))
+      : '<span class="text-muted">inherit</span>';
+    tr.innerHTML = `<td>${row.asset_class_id}</td><td>${escapeHtml(row.asset_class_name||'')}</td><td>${escapeHtml(row.ruleset||'')}</td>`+
+      `<td>${row.stcg_rate}</td><td>${row.ltcg_rate}</td><td>${row.ltcg_exemption_limit}</td>`+
+      `<td>${lm}</td><td class="small">${lmode}</td><td>${row.is_active?'Yes':'No'}</td>`+
+      `<td><button type="button" class="btn btn-sm btn-outline-primary">Edit</button></td>`;
+    tr.querySelector('button').onclick = () => fillMappingFormFromRow(row);
+    tb.appendChild(tr);
+  }
+  document.getElementById('mappingOut').textContent = data.rows.length + ' row(s)';
+}
+
+function escapeHtml(s){
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function txoSuggestionTypeLabel(t) {
+  if (t === 'harvest_loss') return 'Harvest loss (security)';
+  if (t === 'book_ltcg') return 'Book LTCG (exemption headroom)';
+  if (t === 'book_stcg') return 'Book STCG (crystallise gains)';
+  if (t === 'harvest_unrealized_loss') return 'Harvest unrealised loss';
+  if (t === 'book_losses') return 'Loss harvesting (bundle)';
+  if (t === 'defer_to_ltcg') return 'Defer toward LTCG';
+  return t || '—';
+}
+
+function txoQueueSymbolsFromItem(it) {
+  const p = it.payload || {};
+  const mtr = p.minimum_turnover_recommendation || {};
+  let lots = (mtr.lots && mtr.lots.length) ? mtr.lots : (it.proposed_trades || []);
+  if (!lots.length) lots = p.suggested_lots || [];
+  if (it.suggestion_type === 'defer_to_ltcg') lots = p.lots || [];
+  const syms = [];
+  const seen = new Set();
+  for (const l of lots) {
+    const s = (l.security_symbol || l.security_name || '').trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    syms.push(s);
+  }
+  return syms;
+}
+
+function txoQueueSecurityCell(it) {
+  const p = it.payload || {};
+  if (it.suggestion_type === 'harvest_loss' && p.sell_line) {
+    const ln = p.sell_line;
+    return escapeHtml(ln.security_symbol || ln.security_name || '—');
+  }
+  if (it.suggestion_type === 'book_ltcg' && it.ltcg_micro_queue && it.ltcg_micro_queue.current && it.ltcg_micro_queue.current.lot) {
+    const ln = it.ltcg_micro_queue.current.lot;
+    return escapeHtml(ln.security_symbol || ln.security_name || '—');
+  }
+  const syms = txoQueueSymbolsFromItem(it);
+  if (syms.length) {
+    const shown = syms.slice(0, 4).map(function (s) { return escapeHtml(s); }).join(', ');
+    return shown + (syms.length > 4 ? ' <span class="text-muted">…</span>' : '');
+  }
+  if (it.suggestion_type === 'book_ltcg') return '<span class="text-muted">Headroom</span>';
+  if (it.suggestion_type === 'defer_to_ltcg') return '<span class="text-muted">Timing</span>';
+  if (it.suggestion_type === 'book_losses') return '<span class="text-muted">Multiple lines</span>';
+  return '—';
+}
+
+function txoStatusBadge(st) {
+  const colors = { pending: 'warning', approve: 'success', reject: 'danger', skip: 'secondary' };
+  const c = colors[st] || 'light';
+  const label = st === 'approve' ? 'Approved' : st === 'reject' ? 'Rejected' : st === 'skip' ? 'Skipped' : (st || '—');
+  return '<span class="badge bg-' + c + '">' + escapeHtml(label) + '</span>';
+}
+
+function txoSection948Block(s94) {
+  if (!s94 || typeof s94 !== 'object') return '';
+  const parts = [];
+  if (s94.assessment) parts.push('<strong>' + escapeHtml(String(s94.assessment)) + '</strong>');
+  if (s94.detail) parts.push(escapeHtml(String(s94.detail)));
+  if (s94.fifo_quantity_sold != null) {
+    parts.push('<span class="text-muted">FIFO qty sold:</span> ' + escapeHtml(String(s94.fifo_quantity_sold)));
+  }
+  if (s94.record_date_is_corporate_action_date != null) {
+    parts.push('<span class="text-muted">Record date = corp. action date:</span> ' + escapeHtml(String(s94.record_date_is_corporate_action_date)));
+  }
+  if (s94.stcg_loss_carryforward_note) {
+    parts.push('<em class="d-block small">' + escapeHtml(String(s94.stcg_loss_carryforward_note)) + '</em>');
+  }
+  if (s94.stcg_loss_carryforward_years != null) {
+    parts.push('<span class="small text-muted">STCL carryforward (years): ' + escapeHtml(String(s94.stcg_loss_carryforward_years)) + '</span>');
+  }
+  if (!parts.length) return '';
+  return '<div class="small border-start border-3 border-info ps-2 mt-1">' + parts.join('<br>') + '</div>';
+}
+
+function txoRenderRejection(rr) {
+  if (!rr || typeof rr !== 'object') return '';
+  const m = rr.message;
+  if (m == null || String(m).trim() === '') return '';
+  return '<div class="alert alert-warning small mb-2 py-2"><strong>Engine outcome</strong><br>' +
+    escapeHtml(String(m)) + '</div>';
+}
+
+function txoRenderOpenLotsTable(lots, title) {
+  if (!lots || !lots.length) return '';
+  let rows = '';
+  for (const l of lots) {
+    rows += '<tr>' +
+      '<td><strong>' + escapeHtml(l.security_symbol || '—') + '</strong>' +
+      (l.security_name ? '<div class="small text-muted">' + escapeHtml(l.security_name) + '</div>' : '') + '</td>' +
+      '<td class="text-nowrap">' + fmtDate(l.purchase_date) + '</td>' +
+      '<td class="text-end font-monospace">' + (l.quantity != null ? escapeHtml(String(l.quantity)) : '—') + '</td>' +
+      '<td class="text-end font-monospace">' + fmtMoney(l.cost_basis) + '</td>' +
+      '<td class="text-end font-monospace">' + fmtMoney(l.market_value) + '</td>' +
+      '<td class="text-end font-monospace">' + fmtMoney(l.gain) + '</td>' +
+      '</tr>';
+  }
+  return '<div class="fw-semibold small mb-1">' + escapeHtml(title) + '</div>' +
+    '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-2">' +
+    '<thead class="table-light"><tr>' +
+    '<th>Security</th><th>Acquisition</th><th class="text-end">Qty</th>' +
+    '<th class="text-end">Cost ₹</th><th class="text-end">Market ₹</th><th class="text-end">Unrealised gain ₹</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function txoFmtGates(gates) {
+  if (!gates || typeof gates !== 'object') return '';
+  const parts = [];
+  if (gates.min_net_benefit != null) {
+    parts.push('Min net benefit: ' + (gates.min_net_benefit ? 'pass' : 'fail'));
+  }
+  if (gates.tax_saved_vs_cost_ratio != null) {
+    parts.push('Tax saved vs cost ratio: ' + (gates.tax_saved_vs_cost_ratio ? 'pass' : 'fail'));
+  }
+  if (!parts.length) return '';
+  return '<div class="small text-muted mb-1">Gates: ' + escapeHtml(parts.join(' · ')) + '</div>';
+}
+
+function txoCostVsTaxShieldListItem(taxShieldN, tradeCostN) {
+  const ts = Number(taxShieldN) || 0;
+  const tc = Number(tradeCostN) || 0;
+  if (ts > 1e-6) {
+    const costPct = (tc / ts) * 100;
+    const mult = tc > 1e-6 ? (ts / tc) : null;
+    return '<li class="text-muted"><strong>Cost vs tax shield:</strong> est. trade cost is <strong>' +
+      Number(costPct.toFixed(1)) + '%</strong> of the est. tax shield' +
+      (mult != null && isFinite(mult) ? ' · shield is <strong>' + Number(mult.toFixed(2)) + '×</strong> trade cost' : '') +
+      '.</li>';
+  }
+  if (tc > 1e-6) {
+    return '<li class="text-muted"><strong>Cost vs tax shield:</strong> trade cost <strong>₹' + fmtMoney(tc) +
+      '</strong>; model tax shield is negligible.</li>';
+  }
+  return '';
+}
+
+function txoSellBuyLiFromMtr(mtr) {
+  if (!mtr || typeof mtr !== 'object') {
+    return '<li class="text-muted"><strong>Model sell / buy amounts:</strong> not available.</li>';
+  }
+  const mvLot = (mtr.total_turnover != null && !isNaN(Number(mtr.total_turnover))) ? Number(mtr.total_turnover) : null;
+  let mult = 2;
+  if (mtr.effective_turnover != null && mvLot != null && mvLot > 1e-6) {
+    mult = Number(mtr.effective_turnover) / mvLot;
+  }
+  const tMultDisp = (Math.abs(mult - Math.round(mult)) < 1e-9) ? String(Math.round(mult)) : String(Number(mult.toFixed(2)));
+  if (mvLot != null && mvLot > 0) {
+    const totalSellBuy = mvLot * mult;
+    return '<li><strong>Model sell amount</strong> (subset at mark): <strong>₹' + fmtMoney(mvLot) + '</strong> · ' +
+      '<strong>Model buy-back</strong> (same notional): <strong>₹' + fmtMoney(mvLot) + '</strong> · ' +
+      '<strong>Total sell + buy</strong> (×' + escapeHtml(tMultDisp) + ' turnover, trade-cost basis): <strong>₹' + fmtMoney(totalSellBuy) + '</strong></li>';
+  }
+  return '<li class="text-muted"><strong>Model sell / buy amounts:</strong> not available without turnover in payload.</li>';
+}
+
+/**
+ * LTCG-style cost–benefit “hero” for harvest + STCG bundles (single MTR with lots).
+ * @param {'harvest_unrealized_loss'|'book_stcg'} kind
+ */
+function txoRenderMtrApprovalHeroCard(kind, mtr, lot, skipLabel) {
+  if (!mtr || !lot) return '';
+  const sym = String(lot.security_symbol || lot.security_name || 'This position');
+  const nm = (lot.security_name && lot.security_symbol) ? '<div class="small text-muted">' + escapeHtml(lot.security_name) + '</div>' : '';
+  const qty = (lot.quantity != null && lot.quantity !== '') ? escapeHtml(String(lot.quantity)) : '—';
+  const sl = (skipLabel != null && String(skipLabel).trim()) ? String(skipLabel).trim() : 'Skip';
+  const border = kind === 'harvest_unrealized_loss' ? 'border-warning' : 'border-success';
+  const accent = kind === 'harvest_unrealized_loss' ? 'text-warning' : 'text-success';
+  const taxShield = (mtr.estimated_tax_shield_inr != null && mtr.estimated_tax_shield_inr !== '')
+    ? Number(mtr.estimated_tax_shield_inr)
+    : Number(mtr.tax_saved != null ? mtr.tax_saved : 0);
+  const tradeCost = Number(mtr.trade_cost) || 0;
+  const netBen = Number(mtr.net_benefit) || 0;
+  const sellBuyLi = txoSellBuyLiFromMtr(mtr);
+  const costVsLi = txoCostVsTaxShieldListItem(taxShield, tradeCost);
+  let approveBullets = '';
+  if (kind === 'harvest_unrealized_loss') {
+    const gt = escapeHtml(String(mtr.gain_type || 'STCG'));
+    const lossAbs = Math.abs(Number(lot.unrealized_pnl != null ? lot.unrealized_pnl : lot.gain) || 0);
+    const s94 = mtr.prioritized_section_94_8_bonus_window ? ' <span class="badge bg-danger ms-1">S. 94(8) bonus-window tie-break</span>' : '';
+    approveBullets =
+      '<li><strong>Record unrealised loss</strong> (model sell + buy-back): <strong>₹' + fmtMoney(lossAbs) + '</strong> ' +
+      'as <strong>' + gt + '</strong> character if sold — to <strong>set off</strong> matching FY realised gains on this report (confirm with CA).</li>' +
+      sellBuyLi +
+      '<li><strong>Est. tax shield</strong> (rate × |loss|, illustrative): <strong>₹' + fmtMoney(taxShield) + '</strong></li>' +
+      '<li><strong>Est. trade cost</strong> (blended % on model turnover): <strong>₹' + fmtMoney(tradeCost) + '</strong></li>' +
+      costVsLi +
+      '<li><strong>Est. net benefit</strong> (shield − cost): <strong>₹' + fmtMoney(netBen) + '</strong>' + s94 + '</li>';
+  } else {
+    const tg = mtr.total_gain != null ? Number(mtr.total_gain) : 0;
+    const incTax = mtr.incremental_stcg_tax_inr != null ? Number(mtr.incremental_stcg_tax_inr) : null;
+    const fyNet = mtr.fy_net_stcg_realized_inr != null ? Number(mtr.fy_net_stcg_realized_inr) : null;
+    const reqOff = mtr.require_fy_stcg_loss_offset !== false;
+    approveBullets =
+      '<li><strong>Crystallise STCG gain</strong> (model sell + buy-back): <strong>₹' + fmtMoney(tg) + '</strong> ' +
+      (reqOff ? '<span class="text-muted">(only when FY set-off absorbs incremental STCG tax in the model)</span>' : '') +
+      '</li>' +
+      sellBuyLi;
+    if (incTax != null && !isNaN(incTax)) {
+      approveBullets += '<li><strong>Incremental FY STCG tax</strong> (model, marginal after realised FY net): <strong>₹' + fmtMoney(incTax) + '</strong></li>';
+    }
+    approveBullets +=
+      '<li><strong>Tax shield / effect in model</strong> (offset story): <strong>₹' + fmtMoney(taxShield) + '</strong></li>' +
+      '<li><strong>Est. trade cost</strong>: <strong>₹' + fmtMoney(tradeCost) + '</strong></li>' +
+      costVsLi +
+      '<li><strong>Est. net benefit</strong> (after tax &amp; cost in engine): <strong>₹' + fmtMoney(netBen) + '</strong></li>';
+    if (fyNet != null && !isNaN(fyNet)) {
+      approveBullets += '<li class="text-muted">FY net realised STCG (report, before this trade): <strong>₹' + fmtMoney(fyNet) + '</strong></li>';
+    }
+  }
+  const gp = mtr.gates_passed || {};
+  const gatesOk = (gp.min_net_benefit !== false && gp.tax_saved_vs_cost_ratio !== false) &&
+    (gp.min_net_benefit == null || gp.min_net_benefit) &&
+    (gp.tax_saved_vs_cost_ratio == null || gp.tax_saved_vs_cost_ratio);
+  let gateAlert = '';
+  if (!gatesOk) {
+    gateAlert = '<div class="alert alert-warning small py-2 mb-0 mt-2">Strategy <strong>gates</strong> are not fully met in the payload — you can still approve if you accept the trade-off.</div>';
+  }
+  return '<div class="d-flex flex-wrap align-items-stretch gap-2 mb-3 p-3 border border-2 ' + border + ' rounded bg-white shadow-sm">' +
+    '<div class="flex-grow-1 me-md-2">' +
+    '<div class="small text-muted text-uppercase fw-semibold mb-1">Approve or reject</div>' +
+    '<div class="fs-6"><strong class="' + accent + '">' + escapeHtml(sym) + '</strong>' + nm +
+    '<div class="small mt-2">Open position <strong>qty</strong>: ' + qty +
+    ' · <span class="badge bg-danger">Sell</span> then <span class="badge bg-info text-dark">buy-back</span> (model)</div>' +
+    '<div class="mt-3 pt-2 border-top">' +
+    '<div class="small fw-semibold text-body mb-1">If you approve this bundle</div>' +
+    '<ul class="small mb-0 ps-3">' + approveBullets + '</ul>' +
+    '</div>' + gateAlert +
+    '</div></div>' +
+    '<div class="d-flex flex-wrap gap-2 align-items-center">' +
+    '<button type="button" class="btn btn-success txo-act-btn px-3" onclick="act(\'approve\')">Approve</button>' +
+    '<button type="button" class="btn btn-danger txo-act-btn px-3" onclick="act(\'reject\')">Reject</button>' +
+    '<button type="button" class="btn btn-outline-secondary txo-act-btn" onclick="act(\'skip\')">' + escapeHtml(sl) + '</button>' +
+    '</div></div>';
+}
+
+function txoRenderSellLineTableRows(lines, title) {
+  if (!lines || !lines.length) return '';
+  let rows = '';
+  for (const ln of lines) {
+    const sym = escapeHtml(ln.security_symbol || ln.security_name || '');
+    const nm = (ln.security_name && ln.security_symbol) ? '<div class="small text-muted">' + escapeHtml(ln.security_name) + '</div>' : '';
+    const s94Html = txoSection948Block(ln.section_94_8);
+    rows += '<tr>' +
+      '<td>' + sym + nm + '</td>' +
+      '<td class="text-nowrap">' + fmtDate(ln.sell_date) + '</td>' +
+      '<td class="text-nowrap">' + fmtDate(ln.purchase_date) + '</td>' +
+      '<td>' + escapeHtml(ln.gain_type || '') + '</td>' +
+      '<td class="text-end font-monospace">' + fmtMoney(ln.gain) + '</td>' +
+      '<td class="text-end font-monospace">' + (ln.quantity != null ? escapeHtml(String(ln.quantity)) : '—') + '</td>' +
+      '<td class="text-end font-monospace">' + fmtMoney(ln.sale_value) + '</td>' +
+      '<td>' + (ln.holding_days != null ? escapeHtml(String(ln.holding_days)) : '—') + '</td>' +
+      '<td class="small">' + (s94Html || '—') + '</td>' +
+      '</tr>';
+  }
+  return '<div class="fw-semibold small mb-1">' + escapeHtml(title) + '</div>' +
+    '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-2">' +
+    '<thead class="table-light"><tr>' +
+    '<th>Security</th><th>Sell</th><th>Buy</th><th>Type</th><th class="text-end">Gain ₹</th>' +
+    '<th class="text-end">Qty</th><th class="text-end">Sale ₹</th><th>Days held</th><th>§94(8) / notes</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function txoRenderLtcgTopCandidatesTable(mq, clientId, fySy) {
+  const cand = mq.candidates || [];
+  if (!cand.length) return '';
+  const curIdx = (mq.current && mq.current.step_index != null) ? mq.current.step_index : (mq.cursor || 0);
+  const show = Math.min(10, cand.length);
+    const legsHtml = '<span class="text-nowrap"><span class="badge bg-danger">Sell</span> <span class="badge bg-info text-dark">Buy-back</span></span>';
+  let rows = '';
+  for (let i = 0; i < show; i++) {
+    const ln = cand[i];
+    const sym = escapeHtml(ln.security_symbol || ln.security_name || '—');
+    const nm = (ln.security_name && ln.security_symbol) ? '<div class="small text-muted">' + escapeHtml(ln.security_name) + '</div>' : '';
+    const qtyDisp = (ln.quantity != null && ln.quantity !== '') ? escapeHtml(String(ln.quantity)) : '—';
+    let st = 'Upcoming';
+    let rowClass = '';
+    if (i < curIdx) {
+      st = 'Done';
+      rowClass = 'text-muted';
+    }
+    if (i === curIdx) {
+      st = 'Current — Approve / Reject above';
+      rowClass = 'table-success';
+    }
+    let fifoCell = '<span class="text-muted small">—</span>';
+    if (clientId != null && ln.security_id != null && fySy != null) {
+      fifoCell = '<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="openFifoReplayModal(' +
+        Number(clientId) + ',' + Number(ln.security_id) + ',' + Number(fySy) + ',null)">FIFO</button>';
+    }
+    rows += '<tr class="' + rowClass + '"><td class="text-nowrap fw-semibold">' + (i + 1) + '</td><td>' + sym + nm + '</td>' +
+      '<td class="text-end font-monospace">' + qtyDisp + '</td>' +
+      '<td class="text-end font-monospace">' + fmtMoney(ln.gain) + '</td>' +
+      '<td class="text-end font-monospace">' + fmtMoney(ln.market_value) + '</td>' +
+      '<td class="small">' + legsHtml + '</td>' +
+      '<td class="small">' + escapeHtml(st) + '</td><td class="text-nowrap">' + fifoCell + '</td></tr>';
+  }
+  let capNote = '';
+  const totFull = mq.candidates_total_before_cap;
+  if (totFull != null && totFull > cand.length) {
+    capNote = '<p class="small text-warning mb-2 mb-0"><strong>Note:</strong> up to <strong>' + totFull +
+      '</strong> clubbed LTCG position(s) (same security / multiple buy dates merged) pass strategy gates; this session shows <strong>' +
+      cand.length + '</strong> of them (FIFO order). Use the Report tab for the full portfolio view.</p>';
+  }
+  return capNote +
+    '<div class="fw-semibold small mb-1">Next securities in queue (top ' + show + ' of ' + cand.length + ' in this session)</div>' +
+    '<div class="table-responsive mb-3"><table class="table table-sm table-bordered align-middle mb-0">' +
+    '<thead class="table-light"><tr><th style="width:2.5rem">#</th><th>Security</th><th class="text-end">Qty</th><th class="text-end">Unrealised gain ₹</th><th class="text-end">Market ₹</th>' +
+    '<th>Buy / Sell (model)</th><th>Status</th><th>FIFO</th></tr></thead><tbody>' +
+    rows + '</tbody></table></div>';
+}
+
+function txoRenderSuggestionPayloadHtml(item) {
+  const p = item.payload || {};
+  const ty = item.suggestion_type;
+  const blocks = [];
+  if (p.message) {
+    blocks.push('<p class="small mb-2">' + escapeHtml(String(p.message)) + '</p>');
+  }
+  if (ty === 'book_ltcg') {
+    const mq = item.ltcg_micro_queue;
+    const cur = mq && mq.current;
+    const fySy = selectedFyStartYear();
+    const cid = item.client_id;
+    if (cur && cur.lot) {
+      const rem = mq.remaining_headroom;
+      const ini = mq.initial_headroom;
+      const bookGainN = cur.book_gain != null ? Number(cur.book_gain) : 0;
+      const remN = rem != null ? Number(rem) : 0;
+      const headroomAfter = Math.max(0, remN - bookGainN);
+      const ltcgPct = (mq.ltcg_rate != null && !isNaN(Number(mq.ltcg_rate))) ? (Number(mq.ltcg_rate) * 100) : null;
+      const symCurrent = String(cur.lot.security_symbol || cur.lot.security_name || 'This lot');
+      const curQty = (cur.lot.quantity != null && cur.lot.quantity !== '') ? escapeHtml(String(cur.lot.quantity)) : '—';
+      const rateNote = ltcgPct != null
+        ? '<span class="text-muted"> (model LTCG rate ' + Number(ltcgPct.toFixed(4)) + '% on booked gain)</span>'
+        : '';
+      const tradeCostN = cur.trade_cost != null ? Number(cur.trade_cost) : 0;
+      const taxSavedN = cur.tax_saved != null ? Number(cur.tax_saved) : 0;
+      let costVsTaxLi = '';
+      if (taxSavedN > 1e-6) {
+        const costPctOfTax = (tradeCostN / taxSavedN) * 100;
+        const taxMultOfCost = tradeCostN > 1e-6 ? (taxSavedN / tradeCostN) : null;
+        costVsTaxLi = '<li class="text-muted"><strong>Cost vs tax shield:</strong> est. trade cost is <strong>' +
+          Number(costPctOfTax.toFixed(1)) + '%</strong> of the est. tax shield (cost ÷ tax shield × 100)' +
+          (taxMultOfCost != null && isFinite(taxMultOfCost)
+            ? ' · tax shield is <strong>' + Number(taxMultOfCost.toFixed(2)) + '×</strong> trade cost'
+            : '') +
+          '.</li>';
+      } else if (tradeCostN > 1e-6) {
+        costVsTaxLi = '<li class="text-muted"><strong>Cost vs tax shield:</strong> trade cost is <strong>₹' + fmtMoney(cur.trade_cost) +
+          '</strong>; est. tax shield for this slice is negligible in the model.</li>';
+      }
+      const mvLot = (cur.lot.market_value != null && !isNaN(Number(cur.lot.market_value))) ? Number(cur.lot.market_value) : null;
+      const tMultLot = (mq.turnover_mult != null && !isNaN(Number(mq.turnover_mult))) ? Number(mq.turnover_mult) : 2;
+      const tMultDisp = (Math.abs(tMultLot - Math.round(tMultLot)) < 1e-9) ? String(Math.round(tMultLot)) : String(tMultLot);
+      let sellBuyLi = '';
+      if (mvLot != null && mvLot > 0) {
+        const totalSellBuy = mvLot * tMultLot;
+        sellBuyLi = '<li><strong>Model sell amount</strong> (full lot at mark): <strong>₹' + fmtMoney(mvLot) + '</strong> · ' +
+          '<strong>Model buy-back amount</strong> (same notional): <strong>₹' + fmtMoney(mvLot) + '</strong> · ' +
+          '<strong>Total sell + buy</strong> (×' + escapeHtml(tMultDisp) + ' turnover, basis for trade cost): <strong>₹' + fmtMoney(totalSellBuy) + '</strong></li>';
+      } else {
+        sellBuyLi = '<li class="text-muted"><strong>Model sell / buy amounts:</strong> not available without a mark price for this lot.</li>';
+      }
+      blocks.push('<div class="d-flex flex-wrap align-items-stretch gap-2 mb-3 p-3 border border-2 border-success rounded bg-white shadow-sm">' +
+        '<div class="flex-grow-1 me-md-2">' +
+        '<div class="small text-muted text-uppercase fw-semibold mb-1">Approve or reject</div>' +
+        '<div class="fs-6"><strong class="text-success">' + escapeHtml(symCurrent) + '</strong>' +
+        (cur.lot.security_name && cur.lot.security_symbol ? '<div class="small text-muted">' + escapeHtml(cur.lot.security_name) + '</div>' : '') +
+        '<div class="small mt-2">Open position <strong>qty</strong>: ' + curQty +
+        ((cur.lot.clubbed_fifo_lot_count != null && Number(cur.lot.clubbed_fifo_lot_count) > 1)
+          ? ' <span class="text-muted">(model: <strong>' + Number(cur.lot.clubbed_fifo_lot_count) + '</strong> FIFO lots / buy dates combined for this security)</span>'
+          : '') +
+        ' · <span class="badge bg-danger">Sell</span> then <span class="badge bg-info text-dark">buy-back</span> (model, full clubbed position)</div>' +
+        '<div class="mt-3 pt-2 border-top">' +
+        '<div class="small fw-semibold text-body mb-1">If you approve this step</div>' +
+        '<ul class="small mb-0 ps-3">' +
+        '<li><strong>LTCG booked</strong> toward the ₹1.25L exemption: <strong>₹' + fmtMoney(cur.book_gain) + '</strong></li>' +
+        sellBuyLi +
+        '<li><strong>Est. tax shielded</strong> (not payable on that slice): <strong>₹' + fmtMoney(cur.tax_saved) + '</strong>' + rateNote + '</li>' +
+        '<li><strong>Est. trade cost</strong> (model, blended % on 2× turnover): <strong>₹' + fmtMoney(cur.trade_cost) + '</strong></li>' +
+        costVsTaxLi +
+        '<li class="text-muted">Exemption headroom after: <strong class="text-body">₹' + fmtMoney(headroomAfter) + '</strong> (now ₹' + fmtMoney(rem) + ')</li>' +
+        '</ul></div>' +
+        '</div></div>' +
+        '<div class="d-flex flex-wrap gap-2 align-items-center">' +
+        '<button type="button" class="btn btn-success txo-act-btn px-3" onclick="act(\'approve\')">Approve</button>' +
+        '<button type="button" class="btn btn-danger txo-act-btn px-3" onclick="act(\'reject\')">Reject</button>' +
+        '<button type="button" class="btn btn-outline-secondary txo-act-btn" onclick="act(\'skip\')">Skip Book LTCG</button>' +
+        '</div></div>');
+      const step = (cur.step_index != null ? cur.step_index + 1 : 1);
+      const tot = cur.total_steps != null ? cur.total_steps : '—';
+      blocks.push('<div class="alert alert-primary py-2 small mb-2">' +
+        '<strong>Book LTCG — step ' + step + ' of ' + tot + '</strong><br>' +
+        '<span class="text-muted">LTCG exemption headroom remaining (after approvals this session):</span> <strong>₹' + fmtMoney(rem) + '</strong> ' +
+        '<span class="text-muted">· started at ₹' + fmtMoney(ini) + '</span><br>' +
+        '<strong>This step:</strong> book <strong>₹' + fmtMoney(cur.book_gain) + '</strong> LTCG · est. tax shield <strong>₹' + fmtMoney(cur.tax_saved) + '</strong>' +
+        (ltcgPct != null ? ' <span class="text-muted">(× ' + Number(ltcgPct.toFixed(4)) + '%)</span>' : '') +
+        ' · headroom after ≈ <strong>₹' + fmtMoney(headroomAfter) + '</strong><br>' +
+        '<span class="text-muted">Approve</span> books <strong>this lot</strong> toward the exemption (headroom decreases). ' +
+        '<span class="text-muted">Reject</span> moves to the <strong>next ranked</strong> security.</div>');
+      blocks.push(txoRenderLtcgTopCandidatesTable(mq, cid, fySy));
+      blocks.push(txoRenderOpenLotsTable([cur.lot], 'Current suggestion (open lot)'));
+      if (cid != null && cur.lot.security_id != null && fySy != null) {
+        blocks.push('<div class="mb-2"><button type="button" class="btn btn-outline-primary btn-sm" onclick="openFifoReplayModal(' +
+          Number(cid) + ',' + Number(cur.lot.security_id) + ',' + Number(fySy) + ',null)">FIFO replay (this security)</button>' +
+          '<span class="small text-muted ms-2">Validate sell–lot matching before approving.</span></div>');
+      }
+      const gp = cur.gates_passed || {};
+      const gatesOk = gp.min_net_benefit && gp.tax_saved_vs_cost_ratio;
+      if (!gatesOk) {
+        blocks.push('<div class="alert alert-warning small py-2 mb-2">Cost–benefit gates are <strong>not</strong> met for this lot under default assumptions — you may still approve if you accept the trade-off.</div>');
+      }
+      blocks.push('<div class="card border-success mb-2"><div class="card-body py-2 small">' +
+        '<div class="fw-semibold mb-1">This step (model sell + buy-back)</div>' +
+        '<div>Book toward exemption (capped by remaining headroom): <strong>₹' + fmtMoney(cur.book_gain) + '</strong></div>' +
+        '<div class="mt-1">Tax saved (illustrative, × LTCG rate): <strong>₹' + fmtMoney(cur.tax_saved) + '</strong></div>' +
+        '<div class="mt-1">Trade cost (blended % on 2× turnover): <strong>₹' + fmtMoney(cur.trade_cost) + '</strong></div>' +
+        '<div class="mt-1">Net (illustrative): <strong>₹' + fmtMoney(cur.net_benefit) + '</strong></div>' +
+        '</div></div>');
+    }
+    if (!(cur && cur.lot) && p.headroom != null) {
+      blocks.push('<div class="small mb-1"><strong>Exemption headroom ₹</strong> ' + fmtMoney(p.headroom) + '</div>');
+    }
+    if (!(cur && cur.lot) && p.recommended_gain_to_book != null) {
+      blocks.push('<div class="small mb-1"><strong>Suggested gain to book ₹</strong> ' + fmtMoney(p.recommended_gain_to_book) + '</div>');
+    }
+    const bb = p.benefit_breakdown || {};
+    const cb = p.cost_breakdown || {};
+    const nm = p.net_metrics || {};
+    if (!(cur && cur.lot) && (bb.current_fy_tax_effect_inr != null || (cb.assumptions && cb.assumptions.length))) {
+      let asum = '';
+      if (cb.assumptions && cb.assumptions.length) {
+        asum = '<ul class="small mb-0 mt-1">' + cb.assumptions.map(function (a) {
+          return '<li>' + escapeHtml(String(a)) + '</li>';
+        }).join('') + '</ul>';
+      }
+      blocks.push('<div class="card border mb-2"><div class="card-body py-2 small">' +
+        '<div class="fw-semibold mb-1">' + escapeHtml(String(p.strategy_label || 'LTCG exemption strategy')) + '</div>' +
+        '<div>Illustrative tax effect (headroom × LTCG rate): <strong>₹' + fmtMoney(bb.current_fy_tax_effect_inr) + '</strong></div>' +
+        '<div class="mt-1">Net (placeholder until lot pick): <strong>₹' + fmtMoney(nm.net_current_fy_inr) + '</strong></div>' +
+        (asum ? '<div class="text-muted mt-2">Assumptions</div>' + asum : '') +
+        '</div></div>');
+    }
+  }
+  if (ty === 'harvest_unrealized_loss') {
+    const hmtr = p.minimum_turnover_recommendation || {};
+    const hrr = p.rejection_reason || {};
+    const hrej = (hrr && hrr.message) ? String(hrr.message).trim() : '';
+    const fySy2 = selectedFyStartYear();
+    const cid2 = item.client_id;
+    if (hmtr.lots && hmtr.lots.length) {
+      blocks.push(txoRenderMtrApprovalHeroCard('harvest_unrealized_loss', hmtr, hmtr.lots[0], 'Skip unrealised loss'));
+      if (hmtr.carryforward_note) {
+        blocks.push('<div class="alert alert-info py-2 small mb-2">' + escapeHtml(String(hmtr.carryforward_note)) + '</div>');
+      }
+      let hrows = '';
+      for (const l of hmtr.lots) {
+        let fifoB = '<span class="text-muted small">—</span>';
+        if (cid2 != null && l.security_id != null && fySy2 != null) {
+          fifoB = '<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="openFifoReplayModal(' +
+            Number(cid2) + ',' + Number(l.security_id) + ',' + Number(fySy2) + ',null)">FIFO</button>';
+        }
+        hrows += '<tr><td><strong>' + escapeHtml(l.security_symbol || '—') + '</strong>' +
+          (l.security_name ? '<div class="small text-muted">' + escapeHtml(l.security_name) + '</div>' : '') + '</td>' +
+          '<td class="text-end font-monospace">' + fmtMoney(l.unrealized_pnl != null ? l.unrealized_pnl : l.gain) + '</td>' +
+          '<td class="text-end font-monospace">' + fmtMoney(l.market_value) + '</td>' +
+          '<td class="text-end">' + escapeHtml(String(l.quantity != null ? l.quantity : '—')) + '</td>' +
+          '<td class="text-nowrap">' + fifoB + '</td></tr>';
+      }
+      blocks.push('<div class="table-responsive"><table class="table table-sm table-bordered mb-2"><thead class="table-light"><tr>' +
+        '<th>Security</th><th class="text-end">Unrealised P/L ₹</th><th class="text-end">Market ₹</th><th class="text-end">Qty</th><th>FIFO</th>' +
+        '</tr></thead><tbody>' + hrows + '</tbody></table></div>');
+      if (cid2 != null && hmtr.lots[0].security_id != null && fySy2 != null) {
+        blocks.push('<div class="mb-2"><button type="button" class="btn btn-outline-primary btn-sm" onclick="openFifoReplayModal(' +
+          Number(cid2) + ',' + Number(hmtr.lots[0].security_id) + ',' + Number(fySy2) + ',null)">FIFO replay (this security)</button>' +
+          '<span class="small text-muted ms-2">Validate sell–lot matching before approving.</span></div>');
+      }
+      blocks.push(txoFmtGates(hmtr.gates_passed));
+      blocks.push('<div class="card border-success mb-2"><div class="card-body py-2 small">' +
+        '<div class="fw-semibold mb-1">Bundle summary (engine)</div>' +
+        '<div>Tax shield (est.): <strong>₹' + fmtMoney(hmtr.estimated_tax_shield_inr) + '</strong> · Trade cost: <strong>₹' + fmtMoney(hmtr.trade_cost) + '</strong> · Net: <strong>₹' + fmtMoney(hmtr.net_benefit) + '</strong></div>' +
+        '<div class="mt-1 text-muted">Turnover 1× ₹<strong>' + fmtMoney(hmtr.total_turnover) + '</strong> · Effective ₹<strong>' + fmtMoney(hmtr.effective_turnover) + '</strong> · Model: <strong>' + escapeHtml(String(hmtr.turnover_model || 'in_model_2x')) + '</strong></div>' +
+        '</div></div>');
+    } else if (hrej) {
+      blocks.push(txoRenderRejection(hrr));
+    }
+  }
+  if (ty === 'book_stcg') {
+    const smtr = p.minimum_turnover_recommendation || {};
+    const srr = p.rejection_reason || {};
+    const srej = (srr && srr.message) ? String(srr.message).trim() : '';
+    const fySy3 = selectedFyStartYear();
+    const cid3 = item.client_id;
+    if (smtr.lots && smtr.lots.length) {
+      blocks.push(txoRenderMtrApprovalHeroCard('book_stcg', smtr, smtr.lots[0], 'Skip STCG crystallisation'));
+      blocks.push('<div class="alert alert-primary py-2 small mb-2">' +
+        '<strong>Book STCG</strong> — Engine assumes sell + buy-back with the same turnover cost model as LTCG. ' +
+        '<span class="text-muted">Approve</span> = agree to pursue this crystallisation; validate with <strong>FIFO replay</strong> below.</div>');
+      let srows = '';
+      for (const l of smtr.lots) {
+        let fifoB = '<span class="text-muted small">—</span>';
+        if (cid3 != null && l.security_id != null && fySy3 != null) {
+          fifoB = '<button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" onclick="openFifoReplayModal(' +
+            Number(cid3) + ',' + Number(l.security_id) + ',' + Number(fySy3) + ',null)">FIFO</button>';
+        }
+        srows += '<tr><td><strong>' + escapeHtml(l.security_symbol || '—') + '</strong>' +
+          (l.security_name ? '<div class="small text-muted">' + escapeHtml(l.security_name) + '</div>' : '') + '</td>' +
+          '<td class="text-end font-monospace">' + fmtMoney(l.gain) + '</td>' +
+          '<td class="text-end font-monospace">' + fmtMoney(l.market_value) + '</td>' +
+          '<td class="text-end">' + escapeHtml(String(l.quantity != null ? l.quantity : '—')) + '</td>' +
+          '<td class="text-nowrap">' + fifoB + '</td></tr>';
+      }
+      blocks.push('<div class="table-responsive"><table class="table table-sm table-bordered mb-2"><thead class="table-light"><tr>' +
+        '<th>Security</th><th class="text-end">Unrealised gain ₹</th><th class="text-end">Market ₹</th><th class="text-end">Qty</th><th>FIFO</th>' +
+        '</tr></thead><tbody>' + srows + '</tbody></table></div>');
+      if (cid3 != null && smtr.lots[0].security_id != null && fySy3 != null) {
+        blocks.push('<div class="mb-2"><button type="button" class="btn btn-outline-primary btn-sm" onclick="openFifoReplayModal(' +
+          Number(cid3) + ',' + Number(smtr.lots[0].security_id) + ',' + Number(fySy3) + ',null)">FIFO replay (this security)</button>' +
+          '<span class="small text-muted ms-2">Validate sell–lot matching before approving.</span></div>');
+      }
+      blocks.push(txoFmtGates(smtr.gates_passed));
+      blocks.push('<div class="card border-success mb-2"><div class="card-body py-2 small">' +
+        '<div class="fw-semibold mb-1">Bundle summary (engine)</div>' +
+        '<div>STCG gain (subset) ₹: <strong>' + fmtMoney(smtr.total_gain) + '</strong>' +
+        (smtr.incremental_stcg_tax_inr != null && smtr.incremental_stcg_tax_inr !== ''
+          ? ' · Incremental FY tax (est.): <strong>₹' + fmtMoney(smtr.incremental_stcg_tax_inr) + '</strong>'
+          : '') + '</div>' +
+        '<div class="mt-1">Tax effect in model ₹: <strong>' + fmtMoney(smtr.tax_saved) + '</strong> · Trade cost: <strong>₹' + fmtMoney(smtr.trade_cost) + '</strong> · Net benefit: <strong>₹' + fmtMoney(smtr.net_benefit) + '</strong></div>' +
+        '<div class="mt-1 text-muted">Turnover 1× ₹<strong>' + fmtMoney(smtr.total_turnover) + '</strong> · Effective ₹<strong>' + fmtMoney(smtr.effective_turnover) + '</strong></div>' +
+        '</div></div>');
+    } else if (srej) {
+      blocks.push(txoRenderRejection(srr));
+    }
+    const sbb = p.benefit_breakdown || {};
+    const scb = p.cost_breakdown || {};
+    const snm = p.net_metrics || {};
+    if (sbb.current_fy_tax_effect_inr != null || (scb.assumptions && scb.assumptions.length)) {
+      let asum2 = '';
+      if (scb.assumptions && scb.assumptions.length) {
+        asum2 = '<ul class="small mb-0 mt-1">' + scb.assumptions.map(function (a) {
+          return '<li>' + escapeHtml(String(a)) + '</li>';
+        }).join('') + '</ul>';
+      }
+      blocks.push('<div class="card border mb-2"><div class="card-body py-2 small">' +
+        '<div class="fw-semibold mb-1">' + escapeHtml(String(p.strategy_label || 'Book STCG')) + '</div>' +
+        '<div>Illustrative current-FY tax effect ₹: <strong>' + fmtMoney(sbb.current_fy_tax_effect_inr) + '</strong> ' +
+        '<span class="text-muted">(negative = more tax if you crystallise)</span></div>' +
+        '<div class="mt-1">Pre-tax spread (model) ₹: <strong>' + fmtMoney(snm.net_blended_inr_optional) + '</strong></div>' +
+        (asum2 ? '<div class="text-muted mt-2">Assumptions</div>' + asum2 : '') +
+        '</div></div>');
+    }
+  }
+  if (ty === 'harvest_loss' && p.sell_line) {
+    const cb = p.cost_benefit || {};
+    const tier = cb.section_94_8_tier || '—';
+    let tierClass = 'bg-secondary';
+    if (tier === 'clear') tierClass = 'bg-success';
+    else if (tier === 'review') tierClass = 'bg-warning text-dark';
+    else if (tier === 'high_risk') tierClass = 'bg-danger';
+    blocks.push('<div class="card bg-light border mb-2"><div class="card-body py-2 small">' +
+      '<div class="fw-semibold mb-1">Cost–benefit (heuristic)</div>' +
+      '<div>Estimated tax saving (rate × |loss|): <strong>₹' + fmtMoney(cb.estimated_tax_saving_inr) + '</strong> ' +
+      '<span class="text-muted">(' + escapeHtml(String(cb.gain_type || '')) + ')</span></div>' +
+      '<div class="mt-1">§94(8) tier: <span class="badge ' + tierClass + '">' + escapeHtml(String(tier)) + '</span>' +
+      ' · <span class="text-muted">Rank in client</span> ' + escapeHtml(String(cb.rank_within_client != null ? cb.rank_within_client : '—')) + '</div>' +
+      (cb.rationale ? '<div class="text-muted mt-2">' + escapeHtml(String(cb.rationale)) + '</div>' : '') +
+      '</div></div>');
+    blocks.push(txoRenderSellLineTableRows([p.sell_line], 'Suggested security (realised loss line)'));
+  }
+  const stcg = p.stcg_losses || [];
+  const ltcg = p.ltcg_losses || [];
+  if (stcg.length) blocks.push(txoRenderSellLineTableRows(stcg, 'STCG loss lines'));
+  if (ltcg.length) blocks.push(txoRenderSellLineTableRows(ltcg, 'LTCG loss lines'));
+  if (ty === 'defer_to_ltcg') {
+    blocks.push('<div class="alert alert-secondary small py-2 mb-2">Defer toward LTCG is <strong>not</strong> part of the trade queue anymore — use the <strong>Report</strong> tab for timing context. Mark this step done or skip.</div>');
+    if (p.message) blocks.push('<p class="small text-muted mb-0">' + escapeHtml(String(p.message)) + '</p>');
+  }
+  if (item.decision_note) {
+    blocks.push('<div class="small text-muted mt-2">Decision note: ' + escapeHtml(item.decision_note) + '</div>');
+  }
+  if (item.alternate_ids && item.alternate_ids.length) {
+    blocks.push('<div class="small text-muted">Related suggestion IDs: ' +
+      item.alternate_ids.map(function (x) { return escapeHtml(String(x)); }).join(', ') + '</div>');
+  }
+  return blocks.length ? blocks.join('') : '<p class="text-muted small mb-0">No structured fields in this suggestion.</p>';
+}
+
+function fmtFifoRupee(x) {
+  if (x == null || x === '' || (typeof x === 'number' && !isFinite(x))) return '—';
+  return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(x));
+}
+
+/** Cleared each interactive refresh; used so FIFO modal can show Book LTCG step metrics when opened for the same client/security. */
+function syncTxoFifoSuggestionContext(item) {
+  if (!item || item.suggestion_type !== 'book_ltcg' || !item.ltcg_micro_queue || !item.ltcg_micro_queue.current || !item.ltcg_micro_queue.current.lot) {
+    window.__txoFifoSuggestionCtx = null;
+    return;
+  }
+  var mq = item.ltcg_micro_queue;
+  var cur = mq.current;
+  var lot = cur.lot;
+  window.__txoFifoSuggestionCtx = {
+    client_id: item.client_id,
+    security_id: lot.security_id,
+    purchase_date: lot.purchase_date || lot.acquisition_date,
+    quantity: lot.quantity,
+    book_gain: cur.book_gain,
+    tax_saved: cur.tax_saved,
+    trade_cost: cur.trade_cost,
+    net_benefit: cur.net_benefit,
+    symbol: lot.security_symbol || ''
+  };
+}
+
+function txoNormIsoDate(d) {
+  if (d == null || d === '') return '';
+  var s = String(d);
+  return s.length >= 10 ? s.slice(0, 10) : s;
+}
+
+function txoFindReplayOpenLot(remLots, purchaseDate, qty) {
+  var pd = txoNormIsoDate(purchaseDate);
+  var q = Number(qty);
+  if (!remLots || !remLots.length || !pd || !isFinite(q)) return null;
+  for (var i = 0; i < remLots.length; i++) {
+    var lot = remLots[i];
+    if (txoNormIsoDate(lot.acquisition_date) === pd && Math.abs(Number(lot.quantity) - q) < 1e-4) {
+      return lot;
+    }
+  }
+  return null;
+}
+
+async function openFifoReplayModal(clientId, securityId, fyStartYear, highlightSellTxnId) {
+  var modalEl = document.getElementById('fifoReplayModal');
+  var body = document.getElementById('fifoReplayModalBody');
+  if (!modalEl || !body) return;
+  if (fyStartYear == null || fyStartYear === '') {
+    body.innerHTML = '<div class="alert alert-warning mb-0">Select a <strong>financial year</strong> on the Report tab (same FY as the session).</div>';
+    if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+    return;
+  }
+  body.innerHTML = '<div class="d-flex align-items-center gap-2 text-muted"><span class="spinner-border spinner-border-sm" role="status"></span> Loading FIFO replay…</div>';
+  if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  }
+  var params = new URLSearchParams();
+  params.set('client_id', String(clientId));
+  params.set('security_id', String(securityId));
+  params.set('fy_start_year', String(fyStartYear));
+  var data = await api('/enhanced-tax-optimiser/fifo-replay?' + params.toString());
+  if (!data.ok || !data.replay) {
+    body.innerHTML = '<div class="alert alert-danger mb-0">' + escapeHtml(data.error || 'Could not load FIFO replay.') + '</div>';
+    return;
+  }
+  var r = data.replay;
+  var html = '';
+  var ctx = window.__txoFifoSuggestionCtx;
+  var showSugg = ctx && Number(ctx.client_id) === Number(clientId) && Number(ctx.security_id) === Number(securityId);
+  if (showSugg) {
+    var rem0 = r.lots_remaining || [];
+    var matchedLot = txoFindReplayOpenLot(rem0, ctx.purchase_date, ctx.quantity);
+    var matchNote = matchedLot
+      ? '<p class="small mb-2 mb-0"><span class="text-success fw-semibold">Match:</span> this step’s lot lines up with an <strong>Open lots after replay</strong> row (same acquisition date and qty).</p>'
+      : '<p class="small mb-2 mb-0 text-warning"><strong>Note:</strong> could not match acquisition date + qty to a single open-lot row in this replay (corporate actions, rounding, or a fresher price snapshot). Figures below still come from the <strong>Book LTCG</strong> interactive step.</p>';
+    html += '<div class="card border-success mb-3 shadow-sm"><div class="card-header py-2 px-3 small bg-success text-white fw-semibold">Suggested sell — this Book LTCG step</div>';
+    html += '<div class="card-body py-2 px-3 small">';
+    html += matchNote;
+    html += '<ul class="mb-2 ps-3">';
+    html += '<li><strong>Buy / acquisition lots consumed</strong> (model): <strong>1</strong> — the optimiser sells one whole <em>open FIFO lot</em> row (not a proportional slice across several buys).</li>';
+    html += '<li><strong>Qty</strong> ' + escapeHtml(String(ctx.quantity)) + ' · <strong>Acquisition</strong> ' + escapeHtml(txoNormIsoDate(ctx.purchase_date) || '—') + '</li>';
+    html += '<li><strong>LTCG toward exemption</strong> (capped by headroom): ₹' + fmtFifoRupee(ctx.book_gain) + '</li>';
+    html += '<li><strong>Est. tax shielded</strong> (model LTCG rate × booked gain): ₹' + fmtFifoRupee(ctx.tax_saved) + '</li>';
+    html += '<li><strong>Est. trade cost</strong> (blended % on 2× turnover): ₹' + fmtFifoRupee(ctx.trade_cost) + '</li>';
+    html += '<li><strong>Net benefit</strong> (illustrative, tax shield − trade cost): ₹' + fmtFifoRupee(ctx.net_benefit) + '</li>';
+    html += '</ul>';
+    html += '<p class="text-muted mb-0 small">A full-position sell for this symbol would follow strict FIFO across <em>all</em> open lots; this workflow picks one ranked lot for exemption booking. Use historical sell tables above for actual txn matching.</p>';
+    html += '</div></div>';
+  }
+  html += '<div class="alert alert-light border small mb-3 py-2">';
+  html += '<strong>How to read this:</strong> <strong>Buy</strong> trades add FIFO lots (table below). Each <strong>sell</strong> consumes oldest lots first; per-sell tables show <strong>which acquisition (buy) dates</strong> matched, qty, cost, sale, and gain. ';
+  html += 'The <strong>rollup</strong> table totals quantity taken from each acquisition lot across <em>all</em> sells. <strong>Open lots</strong> at the end are what remains after the full replay.';
+  html += '</div>';
+  html += '<div class="mb-3 pb-2 border-bottom small">';
+  html += '<div><strong>' + escapeHtml(r.client_name || '') + '</strong> · <span class="font-monospace">' + escapeHtml(r.security_symbol || '') + '</span></div>';
+  html += '<div class="text-muted">Through <strong>' + escapeHtml(String(r.fy_end || '')) + '</strong> · ' +
+    escapeHtml(String(r.ltcg_rule_label || ('LTCG rule: ' + (r.ltcg_eligibility_mode || '')))) + '</div>';
+  html += '</div>';
+  var steps = r.steps || [];
+  var buySteps = [];
+  var matchedMap = {};
+  for (var pi = 0; pi < steps.length; pi++) {
+    var pst = steps[pi];
+    var pk = (pst.kind || '').toLowerCase();
+    if (pk === 'buy') {
+      buySteps.push(pst);
+      continue;
+    }
+    if (pk === 'sell') {
+      var psl = pst.fifo_slices || [];
+      for (var sx = 0; sx < psl.length; sx++) {
+        var sl0 = psl[sx];
+        var acq0 = String(sl0.matched_acquisition_date || '');
+        var cpu0 = sl0.cost_per_unit != null ? Number(sl0.cost_per_unit) : 0;
+        var key0 = acq0 + '|' + cpu0.toFixed(6);
+        if (!matchedMap[key0]) {
+          matchedMap[key0] = { acqDate: acq0, costPerUnit: cpu0, qty: 0, costBasis: 0, slices: 0 };
+        }
+        matchedMap[key0].qty += parseFloat(sl0.quantity) || 0;
+        matchedMap[key0].costBasis += parseFloat(sl0.cost_basis) || 0;
+        matchedMap[key0].slices += 1;
+      }
+    }
+  }
+  if (buySteps.length) {
+    html += '<div class="card border-primary mb-3"><div class="card-header py-2 px-3 small bg-primary text-white fw-semibold">Buy transactions (new FIFO lots)</div>';
+    html += '<div class="card-body py-2 px-0"><div class="table-responsive"><table class="table table-sm mb-0 align-middle">';
+    html += '<thead class="table-light"><tr><th>Date</th><th>Txn</th><th>Detail</th></tr></thead><tbody>';
+    for (var bi = 0; bi < buySteps.length; bi++) {
+      var bt = buySteps[bi];
+      html += '<tr><td class="text-nowrap">' + escapeHtml(bt.date || '') + '</td><td><code class="user-select-all">' + escapeHtml(String(bt.txn_id)) + '</code></td>';
+      html += '<td class="small">' + escapeHtml(bt.summary || '') + (bt.note ? '<div class="text-muted mt-1">' + escapeHtml(bt.note) + '</div>' : '') + '</td></tr>';
+    }
+    html += '</tbody></table></div></div></div>';
+  }
+  var sellIdx = 0;
+  var renderedSteps = 0;
+  for (var si = 0; si < steps.length; si++) {
+    var st = steps[si];
+    var k = (st.kind || '').toLowerCase();
+    if (k === 'buy') continue;
+    if (k === 'sell') {
+      sellIdx++;
+      renderedSteps++;
+      var isHi = highlightSellTxnId != null && String(st.txn_id) === String(highlightSellTxnId);
+      html += '<div class="card mb-3 ' + (isHi ? 'border-success border-2 shadow-sm' : 'border') + '">';
+      html += '<div class="card-header py-2 px-3 small ' + (isHi ? 'bg-success text-white' : 'bg-light') + '">';
+      html += '<span class="fw-semibold">Sell #' + sellIdx + '</span> · txn <code class="' + (isHi ? 'text-white' : '') + '">' + escapeHtml(String(st.txn_id)) + '</code> · ' + escapeHtml(st.date || '');
+      if (isHi) {
+        html += ' <span class="badge bg-white text-success ms-1">This line</span>';
+      }
+      html += '</div>';
+      html += '<div class="card-body py-2 px-3">';
+      html += '<p class="text-muted small mb-2 mb-0">' + escapeHtml(st.summary || '') + '</p>';
+      var slices = st.fifo_slices || [];
+      if (slices.length) {
+        html += '<p class="small text-muted mb-1 mb-0">Matched <strong>buy</strong> lots (FIFO) for this sell:</p>';
+        html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-2 align-middle">';
+        html += '<thead class="table-light"><tr><th>#</th><th class="text-end">Qty</th><th>Acquisition (buy lot)</th><th class="text-end">Cost ₹</th><th class="text-end">Sale ₹</th><th class="text-end">Gain ₹</th><th>Type</th><th class="text-end">Days</th></tr></thead><tbody>';
+        for (var j = 0; j < slices.length; j++) {
+          var sl = slices[j];
+          html += '<tr><td>' + (j + 1) + '</td>';
+          html += '<td class="text-end font-monospace">' + escapeHtml(String(sl.quantity)) + '</td>';
+          html += '<td>' + escapeHtml(String(sl.matched_acquisition_date || '')) + '</td>';
+          html += '<td class="text-end font-monospace">' + fmtFifoRupee(sl.cost_basis) + '</td>';
+          html += '<td class="text-end font-monospace">' + fmtFifoRupee(sl.sale_value) + '</td>';
+          html += '<td class="text-end font-monospace fw-semibold">' + fmtFifoRupee(sl.gain) + '</td>';
+          html += '<td><span class="badge bg-secondary">' + escapeHtml(String(sl.gain_type || '')) + '</span></td>';
+          html += '<td class="text-end">' + escapeHtml(String(sl.holding_days != null ? sl.holding_days : '')) + '</td></tr>';
+        }
+        html += '</tbody></table></div>';
+      }
+      if (st.lots_after) {
+        html += '<div class="mt-2"><span class="fw-semibold small text-body d-block mb-1">Open lots after this sell</span>';
+        html += '<div class="small text-muted border rounded p-2 bg-light" style="white-space:pre-wrap;word-break:break-word;">' + escapeHtml(String(st.lots_after)) + '</div></div>';
+      }
+      html += '</div></div>';
+      continue;
+    }
+    if (k === 'split' || k === 'bonus') {
+      renderedSteps++;
+      html += '<div class="alert alert-secondary py-2 px-3 small mb-2"><span class="badge bg-dark me-1">' + escapeHtml(k.toUpperCase()) + '</span> ';
+      html += '<span class="text-muted">' + escapeHtml(st.date || '') + '</span><br>' + escapeHtml(st.summary || '') + '</div>';
+    }
+  }
+  if (renderedSteps === 0 && buySteps.length) {
+    html += '<div class="alert alert-info mb-3">No <strong>sells</strong>, <strong>splits</strong>, or <strong>bonus</strong> through this FY end — only <strong>buy</strong> trades above. Nothing has been matched out of lots yet.</div>';
+  } else if (renderedSteps === 0) {
+    html += '<div class="alert alert-info mb-3">No <strong>sells</strong>, <strong>splits</strong>, or <strong>bonus</strong> events for this security on or before the FY end date (no transactions or empty history).</div>';
+  }
+  var mk = Object.keys(matchedMap);
+  if (mk.length) {
+    mk.sort(function (a, b) { return (matchedMap[a].acqDate || '').localeCompare(matchedMap[b].acqDate || ''); });
+    html += '<div class="card border-warning mb-3"><div class="card-header py-2 px-3 small bg-warning bg-opacity-25 fw-semibold">Buy lots matched in FIFO window (all sells combined)</div>';
+    html += '<div class="card-body py-2 px-0"><div class="table-responsive"><table class="table table-sm mb-0 align-middle">';
+    html += '<thead class="table-light"><tr><th>Acquisition date</th><th class="text-end">Qty taken</th><th class="text-end">₹/unit</th><th class="text-end">Cost matched ₹</th><th class="text-end">FIFO slices</th></tr></thead><tbody>';
+    for (var mi = 0; mi < mk.length; mi++) {
+      var row = matchedMap[mk[mi]];
+      html += '<tr><td class="text-nowrap">' + escapeHtml(String(row.acqDate)) + '</td>';
+      html += '<td class="text-end font-monospace">' + escapeHtml(String(row.qty)) + '</td>';
+      html += '<td class="text-end font-monospace">' + fmtFifoRupee(row.costPerUnit) + '</td>';
+      html += '<td class="text-end font-monospace">' + fmtFifoRupee(row.costBasis) + '</td>';
+      html += '<td class="text-end">' + escapeHtml(String(row.slices)) + '</td></tr>';
+    }
+    html += '</tbody></table></div><p class="small text-muted mb-0 px-2 mt-2">Each row is one <strong>acquisition lot</strong> (same date and cost/unit). Quantity is the total matched to <strong>sells</strong> through the FY end.</p></div></div>';
+  }
+  var rem = r.lots_remaining || [];
+  if (rem.length) {
+    html += '<div class="card border mb-3"><div class="card-header py-2 px-3 small bg-light fw-semibold">Open lots after replay (end of FY window)</div>';
+    html += '<div class="card-body py-2 px-0"><div class="table-responsive"><table class="table table-sm mb-0 align-middle">';
+    html += '<thead class="table-light"><tr><th>#</th><th>Acquisition date</th><th class="text-end">Qty</th><th class="text-end">₹/unit</th><th class="text-end">Embedded cost ₹</th></tr></thead><tbody>';
+    for (var ri = 0; ri < rem.length; ri++) {
+      var lot = rem[ri];
+      html += '<tr><td>' + (ri + 1) + '</td><td>' + escapeHtml(String(lot.acquisition_date || '')) + '</td>';
+      html += '<td class="text-end font-monospace">' + escapeHtml(String(lot.quantity)) + '</td>';
+      html += '<td class="text-end font-monospace">' + fmtFifoRupee(lot.cost_per_unit) + '</td>';
+      html += '<td class="text-end font-monospace">' + fmtFifoRupee(lot.embedded_cost) + '</td></tr>';
+    }
+    html += '</tbody></table></div></div></div>';
+  }
+  html += '<p class="text-muted small border-top pt-2 mb-0">' + escapeHtml(r.disclaimer || '') + '</p>';
+  body.innerHTML = html;
+}
+
+function refreshInteractiveView(apiData, options) {
+  options = options || {};
+  document.getElementById('interactiveOut').textContent = pretty(apiData);
+  if (apiData && apiData.session) {
+    TXO_LIVE_SESSION = apiData.session;
+  }
+  const ban = document.getElementById('interactiveBanner');
+  if (options.bannerHtml != null && options.bannerHtml !== '') {
+    ban.innerHTML = options.bannerHtml;
+  } else if (!options.keepBanner) {
+    ban.innerHTML = '';
+  }
+  renderInteractiveReadableArea(apiData);
+}
+
+function renderInteractiveReadableArea(apiData) {
+  window.__txoFifoSuggestionCtx = null;
+  const readable = document.getElementById('interactiveReadable');
+  const empty = document.getElementById('interactiveEmpty');
+  const sess = TXO_LIVE_SESSION;
+  empty.classList.add('d-none');
+  empty.innerHTML = '';
+
+  if (!apiData.ok && !sess) {
+    readable.classList.add('d-none');
+    empty.classList.remove('d-none');
+    empty.innerHTML = '<strong>Request failed.</strong> ' + escapeHtml(apiData.error || 'Unknown error');
+    return;
+  }
+
+  if (!sess || !sess.items || !sess.items.length) {
+    readable.classList.add('d-none');
+    if (apiData.ok && sess && (!sess.items || !sess.items.length)) {
+      empty.classList.remove('d-none');
+      empty.innerHTML = '<strong>No suggestion queue for this run.</strong> There were no realised loss lines or LTCG headroom items for this FY/scope. Use <strong>Details</strong> on the Report tab for the full sell-line table.';
+    }
+    return;
+  }
+
+  readable.classList.remove('d-none');
+  const items = sess.items;
+  const pendingN = items.filter(function (i) { return i.status === 'pending'; }).length;
+  const doneN = items.length - pendingN;
+  document.getElementById('interactiveProgress').textContent = doneN + ' / ' + items.length + ' reviewed';
+
+  const curId = sess.cursor_suggestion_id;
+  const queueBody = document.getElementById('interactiveQueueBody');
+  queueBody.innerHTML = '';
+  let lastStrategyType = null;
+  for (let j = 0; j < items.length; j++) {
+    const it = items[j];
+    if (it.suggestion_type !== lastStrategyType) {
+      lastStrategyType = it.suggestion_type;
+      const secTr = document.createElement('tr');
+      secTr.className = 'table-secondary';
+      secTr.innerHTML = '<td colspan="5" class="small fw-semibold py-1">' + escapeHtml(txoSuggestionTypeLabel(it.suggestion_type)) + '</td>';
+      queueBody.appendChild(secTr);
+    }
+    const isCur = it.suggestion_id === curId;
+    const tr = document.createElement('tr');
+    if (isCur) tr.classList.add('table-primary');
+    tr.innerHTML = '<td>' + (j + 1) + '</td>' +
+      '<td class="small">' + escapeHtml(it.client_name || ('#' + it.client_id)) + '</td>' +
+      '<td class="small">' + txoQueueSecurityCell(it) + '</td>' +
+      '<td class="small">' + escapeHtml(txoSuggestionTypeLabel(it.suggestion_type)) + '</td>' +
+      '<td class="small">' + txoStatusBadge(it.status) + '</td>';
+    queueBody.appendChild(tr);
+  }
+
+  const currentBody = document.getElementById('interactiveCurrentBody');
+  const currentItem = curId ? items.find(function (i) { return i.suggestion_id === curId; }) : null;
+  if (!curId || !currentItem) {
+    currentBody.innerHTML = '<p class="text-muted small mb-0"><strong>Queue finished.</strong> There is no pending suggestion. Use <strong>Save</strong>, <strong>Preview email</strong> / <strong>Send email</strong>, and <strong>Schedule follow-up tasks</strong> as needed.</p>';
+    var sf = document.getElementById('interactiveCurrentStickyActions');
+    if (sf) {
+      sf.classList.add('d-none');
+      sf.innerHTML = '';
+    }
+    return;
+  }
+
+  currentBody.innerHTML =
+    '<div class="d-flex flex-wrap justify-content-between gap-2 mb-3">' +
+    '<div><span class="text-muted small">Client</span><br><strong>' + escapeHtml(currentItem.client_name || ('#' + currentItem.client_id)) + '</strong></div>' +
+    '<div><span class="text-muted small">Suggestion type</span><br><span class="badge bg-dark">' + escapeHtml(txoSuggestionTypeLabel(currentItem.suggestion_type)) + '</span></div>' +
+    '<div><span class="text-muted small">Status</span><br>' + txoStatusBadge(currentItem.status) + '</div>' +
+    '<div><span class="text-muted small">Suggestion ID</span><br><code class="small user-select-all">' + escapeHtml(String(currentItem.suggestion_id)) + '</code></div>' +
+    '</div>' +
+    txoRenderSuggestionPayloadHtml(currentItem);
+
+  syncTxoFifoSuggestionContext(currentItem);
+
+  var stickyFoot = document.getElementById('interactiveCurrentStickyActions');
+  if (stickyFoot) {
+    if (currentItem.suggestion_type === 'book_ltcg' && currentItem.ltcg_micro_queue && currentItem.ltcg_micro_queue.current && currentItem.ltcg_micro_queue.current.lot) {
+      var ln0 = currentItem.ltcg_micro_queue.current.lot;
+      var cur0 = currentItem.ltcg_micro_queue.current;
+      var s0 = escapeHtml(String(ln0.security_symbol || ln0.security_name || 'Current lot'));
+      var q0 = (ln0.quantity != null && ln0.quantity !== '') ? escapeHtml(String(ln0.quantity)) : '—';
+      var bg0 = (cur0.book_gain != null) ? fmtMoney(cur0.book_gain) : '—';
+      var ts0 = (cur0.tax_saved != null) ? fmtMoney(cur0.tax_saved) : '—';
+      var tc0 = (cur0.trade_cost != null) ? fmtMoney(cur0.trade_cost) : '—';
+      var nb0 = (cur0.net_benefit != null) ? fmtMoney(cur0.net_benefit) : '—';
+      stickyFoot.classList.remove('d-none');
+      stickyFoot.innerHTML = '<div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">' +
+        '<span class="small mb-0"><strong>' + s0 + '</strong> · qty <strong>' + q0 + '</strong> · 1 acq. lot · book <strong>₹' + bg0 + '</strong> · tax <strong>₹' + ts0 + '</strong> · cost <strong>₹' + tc0 + '</strong> · net <strong>₹' + nb0 + '</strong> · <span class="badge bg-danger">Sell</span> <span class="badge bg-info text-dark">Buy-back</span></span>' +
+        '<div class="d-flex flex-wrap gap-2">' +
+        '<button type="button" class="btn btn-sm btn-success txo-act-btn" onclick="act(\'approve\')">Approve</button>' +
+        '<button type="button" class="btn btn-sm btn-danger txo-act-btn" onclick="act(\'reject\')">Reject</button>' +
+        '<button type="button" class="btn btn-sm btn-outline-secondary txo-act-btn" onclick="act(\'skip\')">Skip Book LTCG</button>' +
+        '</div></div>';
+    } else if (currentItem.suggestion_type === 'harvest_unrealized_loss') {
+      var ph = currentItem.payload || {};
+      var hm = ph.minimum_turnover_recommendation || {};
+      var hlots = hm.lots || [];
+      if (hlots.length) {
+        var h0 = hlots[0];
+        var hs0 = escapeHtml(String(h0.security_symbol || h0.security_name || '—'));
+        var hnb = hm.net_benefit != null ? fmtMoney(hm.net_benefit) : '—';
+        var hts = hm.estimated_tax_shield_inr != null ? fmtMoney(hm.estimated_tax_shield_inr) : '—';
+        var htc = hm.trade_cost != null ? fmtMoney(hm.trade_cost) : '—';
+        stickyFoot.classList.remove('d-none');
+        stickyFoot.innerHTML = '<div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">' +
+          '<span class="small mb-0"><strong>Harvest unrealised loss</strong> · <strong>' + hs0 + '</strong> · shield <strong>₹' + hts + '</strong> · cost <strong>₹' + htc + '</strong> · net <strong>₹' + hnb + '</strong></span>' +
+          '<div class="d-flex flex-wrap gap-2">' +
+          '<button type="button" class="btn btn-sm btn-success txo-act-btn" onclick="act(\'approve\')">Approve</button>' +
+          '<button type="button" class="btn btn-sm btn-danger txo-act-btn" onclick="act(\'reject\')">Reject</button>' +
+          '<button type="button" class="btn btn-sm btn-outline-secondary txo-act-btn" onclick="act(\'skip\')">Skip unrealised loss</button>' +
+          '</div></div>';
+      } else {
+        stickyFoot.classList.add('d-none');
+        stickyFoot.innerHTML = '';
+      }
+    } else if (currentItem.suggestion_type === 'book_stcg') {
+      var ps = currentItem.payload || {};
+      var sm = ps.minimum_turnover_recommendation || {};
+      var slots = sm.lots || [];
+      if (slots.length) {
+        var sL0 = slots[0];
+        var ss0 = escapeHtml(String(sL0.security_symbol || sL0.security_name || '—'));
+        var snb = sm.net_benefit != null ? fmtMoney(sm.net_benefit) : '—';
+        var stc = sm.trade_cost != null ? fmtMoney(sm.trade_cost) : '—';
+        stickyFoot.classList.remove('d-none');
+        stickyFoot.innerHTML = '<div class="d-flex flex-wrap gap-2 align-items-center justify-content-between">' +
+          '<span class="small mb-0"><strong>Book STCG</strong> · <strong>' + ss0 + '</strong> · cost <strong>₹' + stc + '</strong> · net <strong>₹' + snb + '</strong></span>' +
+          '<div class="d-flex flex-wrap gap-2">' +
+          '<button type="button" class="btn btn-sm btn-success txo-act-btn" onclick="act(\'approve\')">Approve</button>' +
+          '<button type="button" class="btn btn-sm btn-danger txo-act-btn" onclick="act(\'reject\')">Reject</button>' +
+          '<button type="button" class="btn btn-sm btn-outline-secondary txo-act-btn" onclick="act(\'skip\')">Skip STCG</button>' +
+          '</div></div>';
+      } else {
+        stickyFoot.classList.add('d-none');
+        stickyFoot.innerHTML = '';
+      }
+    } else {
+      stickyFoot.classList.add('d-none');
+      stickyFoot.innerHTML = '';
+    }
+  }
+
+  if (currentItem.suggestion_type === 'harvest_loss' && currentItem.payload && currentItem.payload.sell_line) {
+    var ln = currentItem.payload.sell_line;
+    var sid = ln.security_id;
+    var stid = ln.sell_txn_id;
+    if (sid != null && stid != null) {
+      var fifoWrap = document.createElement('div');
+      fifoWrap.className = 'mt-3 pt-3 border-top';
+      var fifoBtn = document.createElement('button');
+      fifoBtn.type = 'button';
+      fifoBtn.className = 'btn btn-outline-primary btn-sm';
+      fifoBtn.textContent = 'View FIFO matching (all sells for this security)';
+      fifoBtn.onclick = function () {
+        openFifoReplayModal(currentItem.client_id, sid, selectedFyStartYear(), stid);
+      };
+      fifoWrap.appendChild(fifoBtn);
+      var fifoHint = document.createElement('p');
+      fifoHint.className = 'small text-muted mb-0 mt-2';
+      fifoHint.textContent = 'Same logic as the capital gains report. This suggestion’s sell is highlighted. Split/bonus appear when they apply.';
+      fifoWrap.appendChild(fifoHint);
+      currentBody.appendChild(fifoWrap);
+    }
+  }
+}
+
+async function saveMapping(){
+  const idRaw = document.getElementById('mapAssetClassId').value;
+  const assetClassId = parseInt(idRaw, 10);
+  if (!assetClassId) {
+    alert('Select a portfolio asset class.');
+    return;
+  }
+  const sel = document.getElementById('mapAssetClassId');
+  const optName = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text.trim() : '';
+  const nameOverride = document.getElementById('mapName').value.trim();
+  const modeEl = document.getElementById('mapLtcgMode');
+  const modeVal = modeEl ? modeEl.value : 'inherit';
+  const holdDaysRaw = document.getElementById('mapLtcgHoldDays') ? document.getElementById('mapLtcgHoldDays').value.trim() : '';
+  const body = {
+    asset_class_id: assetClassId,
+    asset_class_name: nameOverride || optName || ('Class ' + assetClassId),
+    ruleset: (document.getElementById('mapRuleset').value || 'equity').trim().toLowerCase(),
+    stcg_rate: parseFloat(document.getElementById('mapStcg').value || '0.2'),
+    ltcg_rate: parseFloat(document.getElementById('mapLtcg').value || '0.125'),
+    ltcg_exemption_limit: parseFloat(document.getElementById('mapExemption').value || '125000'),
+    ltcg_minimum_months: parseInt(document.getElementById('mapLtcgMonths') ? document.getElementById('mapLtcgMonths').value : '12', 10) || 12,
+    ltcg_eligibility_mode: modeVal === 'inherit' ? null : modeVal,
+    ltcg_holding_days: holdDaysRaw === '' ? null : parseInt(holdDaysRaw, 10),
+    is_active: document.getElementById('mapActive').checked,
+    notes: document.getElementById('mapNotes').value || null
+  };
+  const data = await api('/enhanced-tax-optimiser/asset-classes/map', { method: 'POST', body: JSON.stringify(body) });
+  document.getElementById('mappingOut').textContent = pretty(data);
+  if (data.ok) loadMappingTable();
+}
+
+function txoFillTaxRuleModal(row) {
+  const idEl = document.getElementById('txoRuleModalId');
+  if (idEl) idEl.value = row && row.id != null ? String(row.id) : '';
+  const title = document.getElementById('txoTaxRuleModalLabel');
+  if (title) title.textContent = (row && row.id) ? 'Edit tax rule' : 'New tax rule';
+  const nm = row || {};
+  const set = function (id, v) {
+    const el = document.getElementById(id);
+    if (el) el.value = v != null && v !== '' ? String(v) : '';
+  };
+  set('txoRuleModalName', nm.name || '');
+  set('txoRuleModalSort', nm.sort_order != null ? nm.sort_order : 0);
+  set('txoRuleModalStcg', nm.default_stcg_rate != null ? nm.default_stcg_rate : 0.2);
+  set('txoRuleModalLtcg', nm.default_ltcg_rate != null ? nm.default_ltcg_rate : 0.125);
+  set('txoRuleModalExempt', nm.default_ltcg_exemption_limit != null ? nm.default_ltcg_exemption_limit : 125000);
+  const modeEl = document.getElementById('txoRuleModalLtcgMode');
+  if (modeEl) modeEl.value = (nm.ltcg_eligibility_mode === 'holding_days') ? 'holding_days' : 'twelve_months';
+  set('txoRuleModalHoldDays', nm.ltcg_holding_days != null ? nm.ltcg_holding_days : 365);
+  set('txoRuleModalCost', nm.trade_charges_pct != null ? nm.trade_charges_pct : 0.1);
+  set('txoRuleModal94b', nm.section_94_8_months_before_record != null ? nm.section_94_8_months_before_record : 3);
+  set('txoRuleModal94a', nm.section_94_8_months_after_record != null ? nm.section_94_8_months_after_record : 9);
+  set('txoRuleModalCarry', nm.stcg_loss_carryforward_years != null ? nm.stcg_loss_carryforward_years : 8);
+  const notesEl = document.getElementById('txoRuleModalNotes');
+  if (notesEl) notesEl.value = nm.notes || '';
+  const actEl = document.getElementById('txoRuleModalSetActive');
+  if (actEl) {
+    actEl.checked = !!(nm.is_active);
+    actEl.disabled = !!(nm.id && nm.is_active);
+  }
+}
+
+function openTaxRuleModal(row) {
+  txoFillTaxRuleModal(row || null);
+  const modalEl = document.getElementById('txoTaxRuleModal');
+  if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  }
+}
+
+async function saveTaxRuleModal() {
+  const idRaw = document.getElementById('txoRuleModalId') && document.getElementById('txoRuleModalId').value;
+  const body = {
+    name: document.getElementById('txoRuleModalName').value,
+    sort_order: parseInt(document.getElementById('txoRuleModalSort').value, 10) || 0,
+    default_stcg_rate: parseFloat(document.getElementById('txoRuleModalStcg').value),
+    default_ltcg_rate: parseFloat(document.getElementById('txoRuleModalLtcg').value),
+    default_ltcg_exemption_limit: parseFloat(document.getElementById('txoRuleModalExempt').value),
+    ltcg_eligibility_mode: document.getElementById('txoRuleModalLtcgMode').value,
+    ltcg_holding_days: parseInt(document.getElementById('txoRuleModalHoldDays').value, 10),
+    trade_charges_pct: parseFloat(document.getElementById('txoRuleModalCost').value || '0.1'),
+    section_94_8_months_before_record: parseInt(document.getElementById('txoRuleModal94b').value, 10),
+    section_94_8_months_after_record: parseInt(document.getElementById('txoRuleModal94a').value, 10),
+    stcg_loss_carryforward_years: parseInt(document.getElementById('txoRuleModalCarry').value, 10),
+    notes: document.getElementById('txoRuleModalNotes').value
+  };
+  const act = document.getElementById('txoRuleModalSetActive');
+  if (act && act.checked && !act.disabled) {
+    body.set_active = true;
+  }
+  let data;
+  if (idRaw) {
+    data = await api('/enhanced-tax-optimiser/tax-rules/' + encodeURIComponent(idRaw), {
+      method: 'PATCH',
+      body: JSON.stringify(body)
+    });
+  } else {
+    data = await api('/enhanced-tax-optimiser/tax-rules', { method: 'POST', body: JSON.stringify(body) });
+  }
+  document.getElementById('rulesOut').textContent = pretty(data);
+  if (!data.ok) {
+    alert(data.error || 'Save failed');
+    return;
+  }
+  if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+    const m = document.getElementById('txoTaxRuleModal');
+    if (m) {
+      const mi = bootstrap.Modal.getInstance(m);
+      if (mi) mi.hide();
+    }
+  }
+  await loadTaxRulesTable();
+}
+
+async function activateTaxRule(id) {
+  const data = await api('/enhanced-tax-optimiser/tax-rules/' + encodeURIComponent(id) + '/activate', {
+    method: 'POST',
+    body: '{}'
+  });
+  document.getElementById('rulesOut').textContent = pretty(data);
+  if (!data.ok) {
+    alert(data.error || 'Activate failed');
+    return;
+  }
+  await loadTaxRulesTable();
+}
+
+async function deleteTaxRule(id) {
+  if (!confirm('Delete this tax rule? You cannot delete the last one.')) return;
+  const data = await api('/enhanced-tax-optimiser/tax-rules/' + encodeURIComponent(id), { method: 'DELETE' });
+  document.getElementById('rulesOut').textContent = pretty(data);
+  if (!data.ok) {
+    alert(data.error || 'Delete failed');
+    return;
+  }
+  await loadTaxRulesTable();
+}
+
+async function addTaxRuleRow() {
+  const data = await api('/enhanced-tax-optimiser/tax-rules', { method: 'POST', body: JSON.stringify({}) });
+  document.getElementById('rulesOut').textContent = pretty(data);
+  if (!data.ok) {
+    alert(data.error || 'Could not add rule');
+    return;
+  }
+  await loadTaxRulesTable();
+  if (data.row) {
+    openTaxRuleModal(data.row);
+  }
+}
+
+async function loadTaxRulesTable() {
+  const errEl = document.getElementById('taxRulesError');
+  const metaEl = document.getElementById('taxRulesMeta');
+  if (errEl) {
+    errEl.classList.add('d-none');
+    errEl.textContent = '';
+  }
+  const data = await api('/enhanced-tax-optimiser/tax-rules');
+  document.getElementById('rulesOut').textContent = pretty(data);
+  const tb = document.getElementById('taxRulesTableBody');
+  if (!tb) return;
+  tb.innerHTML = '';
+  if (!data.ok || !data.rows) {
+    if (data && data.error && errEl) {
+      errEl.textContent = data.error;
+      errEl.classList.remove('d-none');
+    }
+    if (metaEl) metaEl.textContent = '';
+    return;
+  }
+  if (metaEl) metaEl.textContent = data.rows.length + ' rule(s) — active row drives backend calculations';
+  for (const row of data.rows) {
+    const tr = document.createElement('tr');
+    if (row.is_active) {
+      tr.classList.add('table-success');
+    }
+    const tdAct = document.createElement('td');
+    if (row.is_active) {
+      tdAct.innerHTML = '<span class="badge bg-success">Active</span>';
+    } else {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn btn-sm btn-outline-primary py-0';
+      b.textContent = 'Activate';
+      b.onclick = function () { activateTaxRule(row.id); };
+      tdAct.appendChild(b);
+    }
+    const modeShort = row.ltcg_eligibility_mode === 'holding_days' ? 'Min days' : '12 mo';
+    const tdName = document.createElement('td');
+    tdName.className = 'small fw-semibold';
+    tdName.textContent = row.name || '';
+    const mkNum = function (v) {
+      const td = document.createElement('td');
+      td.className = 'text-end small font-monospace';
+      td.textContent = v != null ? String(v) : '—';
+      return td;
+    };
+    const tdUpd = document.createElement('td');
+    tdUpd.className = 'small text-muted';
+    tdUpd.textContent = row.updated_at ? String(row.updated_at).slice(0, 19) : '—';
+    const tdBtn = document.createElement('td');
+    tdBtn.className = 'text-nowrap';
+    const ed = document.createElement('button');
+    ed.type = 'button';
+    ed.className = 'btn btn-sm btn-outline-secondary py-0 me-1';
+    ed.textContent = 'Edit';
+    ed.onclick = function () { openTaxRuleModal(row); };
+    tdBtn.appendChild(ed);
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'btn btn-sm btn-outline-danger py-0';
+    del.textContent = 'Delete';
+    del.onclick = function () { deleteTaxRule(row.id); };
+    tdBtn.appendChild(del);
+    tr.appendChild(tdAct);
+    tr.appendChild(tdName);
+    tr.appendChild(mkNum(row.default_stcg_rate));
+    tr.appendChild(mkNum(row.default_ltcg_rate));
+    tr.appendChild(mkNum(row.default_ltcg_exemption_limit));
+    const tdMode = document.createElement('td');
+    tdMode.className = 'small';
+    tdMode.textContent = modeShort;
+    tr.appendChild(tdMode);
+    tr.appendChild(mkNum(row.trade_charges_pct));
+    const td94 = document.createElement('td');
+    td94.className = 'text-end small';
+    td94.textContent = (row.section_94_8_months_before_record != null ? row.section_94_8_months_before_record : '—') +
+      ' / ' + (row.section_94_8_months_after_record != null ? row.section_94_8_months_after_record : '—');
+    tr.appendChild(td94);
+    tr.appendChild(mkNum(row.stcg_loss_carryforward_years));
+    tr.appendChild(tdUpd);
+    tr.appendChild(tdBtn);
+    tb.appendChild(tr);
+  }
+}
+
+function txoStrategyShortDescription(code) {
+  const c = String(code || '').trim();
+  const map = {
+    book_ltcg_exemption: 'S1 · LTCG exemption headroom; tax saved ≥ ratio×cost (default 2×), no ratio bypass.',
+    book_stcg_gains: 'S2 · STCG crystallise only if ST loss context; marginal-tax gates; low queue priority.',
+    harvest_unrealized_loss: 'S3 · Book one open loss for FY set-off (needs matching realised gain); optional S. 94(8) tie-break.',
+    defer_to_ltcg: '(Legacy row — disable.) Defer hints use unified recommendation SELL rows.',
+    realised_loss_review: '(Legacy row — disable.) Realised-line queue removed.',
+    section_94_8_ranking_overlay: '(Legacy row — disable.) §94(8) badge uses bonus 9–12m + open ST loss rule.'
+  };
+  if (map[c]) return map[c];
+  return 'See accordion above for plain-English notes, or requirements doc for this code.';
+}
+
+async function loadStrategies(){
+  const errEl = document.getElementById('strategiesError');
+  const metaEl = document.getElementById('strategiesMeta');
+  const outEl = document.getElementById('strategiesOut');
+  const tb = document.getElementById('strategiesTableBody');
+  if (errEl) errEl.classList.add('d-none');
+  const data = await api('/enhanced-tax-optimiser/strategies');
+  if (outEl) outEl.textContent = pretty(data);
+  if (!tb) return;
+  tb.innerHTML = '';
+  if (!data.ok || !data.rows) {
+    if (errEl) {
+      errEl.textContent = data.error || 'Could not load strategies';
+      errEl.classList.remove('d-none');
+    }
+    if (metaEl) metaEl.textContent = '';
+    return;
+  }
+  if (metaEl) metaEl.textContent = data.rows.length + ' row(s) — edit params and click Save on each row';
+  for (const row of data.rows) {
+    const tr = document.createElement('tr');
+    tr.dataset.strategyId = String(row.id);
+    const tdCode = document.createElement('td');
+    tdCode.innerHTML = '<code class="user-select-all">' + escapeHtml(row.code) + '</code>';
+    const tdDesc = document.createElement('td');
+    tdDesc.className = 'small text-muted';
+    tdDesc.textContent = txoStrategyShortDescription(row.code);
+    const tdOn = document.createElement('td');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'form-check-input txo-strat-enabled';
+    cb.checked = !!row.enabled;
+    cb.title = 'Strategy enabled for next report / session';
+    tdOn.appendChild(cb);
+    const tdSort = document.createElement('td');
+    const inSort = document.createElement('input');
+    inSort.type = 'number';
+    inSort.className = 'form-control form-control-sm txo-strat-sort';
+    inSort.style.width = '4.5rem';
+    inSort.value = String(row.sort_order != null ? row.sort_order : 0);
+    tdSort.appendChild(inSort);
+    const tdParams = document.createElement('td');
+    tdParams.className = 'small';
+    const p = row.params || {};
+    const keys = Object.keys(p).sort();
+    if (!keys.length) {
+      tdParams.innerHTML = '<span class="text-muted">No params (enable/sort only)</span>';
+    } else {
+      for (const k of keys) {
+        const v = p[k];
+        const wrap = document.createElement('div');
+        wrap.className = 'd-flex flex-wrap align-items-center gap-2 mb-1';
+        const lab = document.createElement('span');
+        lab.className = 'small text-muted';
+        lab.style.minWidth = '10.5rem';
+        lab.textContent = k;
+        wrap.appendChild(lab);
+        if (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v)))) {
+          const inp = document.createElement('input');
+          inp.type = 'number';
+          inp.className = 'form-control form-control-sm txo-strat-param flex-grow-1';
+          inp.style.minWidth = '6rem';
+          inp.step = 'any';
+          inp.dataset.paramKey = k;
+          inp.value = typeof v === 'number' ? String(v) : String(Number(v));
+          wrap.appendChild(inp);
+        } else if (typeof v === 'boolean') {
+          const ichk = document.createElement('input');
+          ichk.type = 'checkbox';
+          ichk.className = 'form-check-input txo-strat-param-bool';
+          ichk.dataset.paramKey = k;
+          ichk.checked = !!v;
+          wrap.appendChild(ichk);
+        } else if (v !== null && typeof v === 'object') {
+          const pre = document.createElement('span');
+          pre.className = 'text-muted small font-monospace';
+          pre.textContent = JSON.stringify(v);
+          wrap.appendChild(pre);
+        } else {
+          const inp = document.createElement('input');
+          inp.type = 'text';
+          inp.className = 'form-control form-control-sm txo-strat-param-text flex-grow-1';
+          inp.style.minWidth = '6rem';
+          inp.dataset.paramKey = k;
+          inp.value = v == null ? '' : String(v);
+          wrap.appendChild(inp);
+        }
+        tdParams.appendChild(wrap);
+      }
+    }
+    const tdBtn = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-sm btn-primary text-nowrap';
+    btn.textContent = 'Save row';
+    btn.onclick = function () { saveStrategyRow(tr); };
+    tdBtn.appendChild(btn);
+    tr.appendChild(tdCode);
+    tr.appendChild(tdDesc);
+    tr.appendChild(tdOn);
+    tr.appendChild(tdSort);
+    tr.appendChild(tdParams);
+    tr.appendChild(tdBtn);
+    tr._txoStratRow = JSON.parse(JSON.stringify(row));
+    tb.appendChild(tr);
+  }
+}
+
+async function saveStrategyRow(tr){
+  if (!tr || !tr.dataset.strategyId) return;
+  const id = parseInt(tr.dataset.strategyId, 10);
+  const snap = tr._txoStratRow || {};
+  const enabled = tr.querySelector('.txo-strat-enabled').checked;
+  const sortEl = tr.querySelector('.txo-strat-sort');
+  const sort_order = sortEl ? parseInt(sortEl.value, 10) || 0 : 0;
+  const params = Object.assign({}, snap.params || {});
+  tr.querySelectorAll('input.txo-strat-param').forEach(function (inp) {
+    const k = inp.dataset.paramKey;
+    if (!k) return;
+    const n = parseFloat(inp.value);
+    if (!isNaN(n)) params[k] = n;
+  });
+  tr.querySelectorAll('input.txo-strat-param-bool').forEach(function (inp) {
+    const k = inp.dataset.paramKey;
+    if (k) params[k] = inp.checked;
+  });
+  tr.querySelectorAll('input.txo-strat-param-text').forEach(function (inp) {
+    const k = inp.dataset.paramKey;
+    if (k) params[k] = inp.value;
+  });
+  const data = await api('/enhanced-tax-optimiser/strategies/' + id, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled: enabled, sort_order: sort_order, params: params })
+  });
+  const outEl = document.getElementById('strategiesOut');
+  if (outEl) outEl.textContent = pretty(data);
+  if (!data.ok) {
+    alert(data.error || 'Save failed');
+    return;
+  }
+  if (data.row) {
+    tr._txoStratRow = JSON.parse(JSON.stringify(data.row));
+  }
+  const metaEl = document.getElementById('strategiesMeta');
+  if (metaEl) metaEl.textContent = 'Saved strategy id ' + id + ' (' + (snap.code || '') + ')';
+}
+
+document.getElementById('rulesTabBtn').addEventListener('shown.bs.tab', () => { loadTaxRulesTable(); });
+document.getElementById('mappingTabBtn').addEventListener('shown.bs.tab', () => {
+  loadAssetClassCatalog().then(loadMappingTable);
+});
+var strategiesTabBtn = document.getElementById('strategiesTabBtn');
+if (strategiesTabBtn) {
+  strategiesTabBtn.addEventListener('shown.bs.tab', function () { loadStrategies(); });
+}
+
+loadFyOptions()
+  .then(function () { return runFyScan(); })
+  .catch(function (e) {
+    console.error(e);
+    fillReportFySelect(clientSideFyOptions(8));
+    setReportFyNote('FY list built in the browser (startup error). You can still run a scan.', false);
+    runFyScan();
+  });
+</script>
+{% endblock %}

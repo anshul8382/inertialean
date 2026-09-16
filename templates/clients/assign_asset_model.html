@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+  <h2>Assign Asset Model to {{ client.name }}</h2>
+  <form method="POST">
+    <div class="mb-3">
+      <label for="asset_model_id" class="form-label">Select Asset Model</label>
+      <select class="form-control" id="asset_model_id" name="asset_model_id" required>
+        <option value="">-- Select --</option>
+        {% for model in asset_models %}
+          <option value="{{ model.id }}" {% if model_assignment and model_assignment.asset_model_id == model.id %}selected{% endif %}>{{ model.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">Assign</button>
+    <a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="btn btn-secondary">Cancel</a>
+  </form>
+</div>
+{% endblock %} 

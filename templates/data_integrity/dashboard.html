@@ -1,0 +1,386 @@
+{% extends "base.html" %}
+
+{% block title %}Data Integrity Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="page-title-box">
+                <div class="page-title-right">
+                    <ol class="breadcrumb m-0">
+                        <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                        <li class="breadcrumb-item active">Data Integrity</li>
+                    </ol>
+                </div>
+                <h4 class="page-title">
+                    <i class="fas fa-shield-alt me-2"></i>Data Integrity Dashboard
+                </h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card widget-flat border-danger border-start border-3">
+                <div class="card-body">
+                    <div class="float-end">
+                        <i class="fas fa-exclamation-circle text-danger fa-2x"></i>
+                    </div>
+                    <h5 class="text-muted fw-normal mt-0">Critical</h5>
+                    <h3 class="mt-3 mb-3 text-danger">{{ severity_summary.critical | default(0) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card widget-flat border-warning border-start border-3">
+                <div class="card-body">
+                    <div class="float-end">
+                        <i class="fas fa-exclamation-triangle text-warning fa-2x"></i>
+                    </div>
+                    <h5 class="text-muted fw-normal mt-0">Warning</h5>
+                    <h3 class="mt-3 mb-3 text-warning">{{ severity_summary.warning | default(0) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card widget-flat border-success border-start border-3">
+                <div class="card-body">
+                    <div class="float-end">
+                        <i class="fas fa-check-circle text-success fa-2x"></i>
+                    </div>
+                    <h5 class="text-muted fw-normal mt-0">Resolved (30d)</h5>
+                    <h3 class="mt-3 mb-3 text-success">{{ resolved_count | default(0) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card widget-flat border-info border-start border-3">
+                <div class="card-body">
+                    <div class="float-end">
+                        <i class="fas fa-clock text-info fa-2x"></i>
+                    </div>
+                    <h5 class="text-muted fw-normal mt-0">Last Run</h5>
+                    <h6 class="mt-3 mb-1">
+                        {% if last_run %}
+                            {{ last_run.started_at.strftime('%b %d, %H:%M') if last_run.started_at else 'N/A' }}
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </h6>
+                    <small class="text-muted">
+                        {% if last_run %}
+                            {{ last_run.status }} - {{ last_run.issues_found }} issues
+                        {% endif %}
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="d-flex gap-2">
+                <form action="{{ url_for('data_integrity.rerun_agent') }}" method="POST" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="mode" value="incremental">
+                    <button type="submit" class="btn btn-primary" title="Clients with recent activity (last 7 days)">
+                        <i class="fas fa-sync-alt me-1"></i> Refresh client checks
+                    </button>
+                </form>
+                <form action="{{ url_for('data_integrity.rerun_agent') }}" method="POST" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="mode" value="full">
+                    <button type="submit" class="btn btn-outline-primary" title="All accessible clients">
+                        <i class="fas fa-sync-alt me-1"></i> Refresh client checks
+                    </button>
+                </form>
+                <a href="{{ url_for('data_integrity.add_feedback') }}" class="btn btn-outline-secondary ms-auto">
+                    <i class="fas fa-lightbulb me-1"></i> Submit Feedback
+                </a>
+                <a href="{{ url_for('agents_dashboard.agent_feedback', agent_name='data_integrity_manager', next=request.path) }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-comment-dots me-1"></i> Agent Feedback
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- How this agent works -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="header-title mb-0">How Data Integrity Manager works</h4>
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#diHowItWorks">
+                        Toggle
+                    </button>
+                </div>
+                <div class="collapse" id="diHowItWorks">
+                    <div class="card-body">
+                        <ul class="mb-0">
+                            <li><strong>Creates issues</strong> (not alerts) for: Recommendation↔Trade matching, Cashflows, Duplicates, Date integrity, Negative values.</li>
+                            <li><strong>Skips checks</strong>: Holdings vs Transactions and Corporate Actions (handled by forward calc in your setup).</li>
+                            <li><strong>Learning</strong>: user feedback can create one-time exceptions (`DataIntegrityException`) or client patterns (`ClientBehaviorPattern`).</li>
+                            <li><strong>Resolution</strong>: resolving issues closes them; the orchestrator later decides if a consolidated client alert is needed.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Issues by Category -->
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="header-title">Issues by Category</h4>
+                </div>
+                <div class="card-body p-0">
+                    {% if categories %}
+                        {% for cat_name, cat in categories.items() %}
+                        <div class="border-bottom p-3">
+                            <div class="d-flex align-items-center justify-content-between">
+                                <div class="d-flex align-items-center">
+                                    {% if cat.max_severity == 'critical' %}
+                                        <span class="badge bg-danger me-2">●</span>
+                                    {% elif cat.max_severity == 'warning' %}
+                                        <span class="badge bg-warning me-2">●</span>
+                                    {% else %}
+                                        <span class="badge bg-info me-2">●</span>
+                                    {% endif %}
+                                    <div>
+                                        <h5 class="mb-1">{{ cat_name.replace('_', ' ').title() }}</h5>
+                                        <small class="text-muted">
+                                            {{ cat.total_issues }} issues affecting {{ cat.total_clients }} clients
+                                        </small>
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <a href="{{ url_for('data_integrity.category_detail', category=cat_name) }}" 
+                                       class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-success" 
+                                            data-bs-toggle="modal" 
+                                            data-bs-target="#resolveModal"
+                                            data-category="{{ cat_name }}"
+                                            data-count="{{ cat.total_issues }}">
+                                        <i class="fas fa-check"></i> Resolve All
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-warning"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#alertModal"
+                                            data-category="{{ cat_name }}"
+                                            data-count="{{ cat.total_issues }}"
+                                            data-clients="{{ cat.total_clients }}">
+                                        <i class="fas fa-bell"></i> Create Alert
+                                    </button>
+                                </div>
+                            </div>
+                            {% if cat.checks %}
+                            <div class="mt-2 ps-4">
+                                {% for check in cat.checks[:3] %}
+                                <span class="badge bg-light text-dark me-1">
+                                    {{ check.name.replace('_', ' ') }}: {{ check.issue_count }}
+                                </span>
+                                {% endfor %}
+                                {% if cat.checks|length > 3 %}
+                                <span class="text-muted">+{{ cat.checks|length - 3 }} more</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                            <h5>No Open Issues</h5>
+                            <p class="text-muted">All data integrity checks passed.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar -->
+        <div class="col-lg-4">
+            <!-- Recent Runs -->
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="header-title">Recent Runs</h4>
+                </div>
+                <div class="card-body p-0">
+                    {% if recent_runs %}
+                        {% for run in recent_runs %}
+                        <div class="d-flex align-items-center border-bottom p-2">
+                            {% if run.status == 'completed' %}
+                                <i class="fas fa-check-circle text-success me-2"></i>
+                            {% elif run.status == 'running' %}
+                                <i class="fas fa-spinner fa-spin text-primary me-2"></i>
+                            {% else %}
+                                <i class="fas fa-times-circle text-danger me-2"></i>
+                            {% endif %}
+                            <div class="flex-grow-1">
+                                <small class="d-block">{{ run.run_mode }}</small>
+                                <small class="text-muted">
+                                    {{ run.started_at.strftime('%b %d, %H:%M') if run.started_at else 'N/A' }}
+                                </small>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-secondary">{{ run.issues_found }}</span>
+                                <small class="d-block text-muted">
+                                    {{ "%.1f"|format(run.duration_seconds or 0) }}s
+                                </small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-3">
+                            <small class="text-muted">No runs yet</small>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Recent Feedback -->
+            <div class="card mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="header-title mb-0">Recent Feedback</h4>
+                    <a href="{{ url_for('data_integrity.feedback_list') }}" class="btn btn-sm btn-link">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    {% if recent_feedback %}
+                        {% for fb in recent_feedback %}
+                        <div class="border-bottom p-2">
+                            <div class="d-flex justify-content-between">
+                                <span class="badge bg-{{ 'success' if fb.status == 'addressed' else 'warning' if fb.status == 'in_review' else 'secondary' }}">
+                                    {{ fb.status }}
+                                </span>
+                                <small class="text-muted">{{ fb.created_at.strftime('%b %d') if fb.created_at else '' }}</small>
+                            </div>
+                            <p class="mb-0 small mt-1">{{ fb.description[:80] }}{% if fb.description|length > 80 %}...{% endif %}</p>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-3">
+                            <small class="text-muted">No feedback yet</small>
+                            <br>
+                            <a href="{{ url_for('data_integrity.add_feedback') }}" class="btn btn-sm btn-outline-primary mt-2">
+                                <i class="fas fa-plus"></i> Add Feedback
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Resolve Modal -->
+<div class="modal fade" id="resolveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="resolveForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Bulk Resolve Issues</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Resolve all <strong id="resolveCount">0</strong> issues in <strong id="resolveCategory">category</strong>?</p>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Resolution Type</label>
+                        <select name="resolution" class="form-select">
+                            <option value="fixed">Fixed - Data was corrected</option>
+                            <option value="exception">Exception - Skip these specific cases</option>
+                            <option value="false_positive">False Positive - Not actual issues</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Notes (optional)</label>
+                        <textarea name="note" class="form-control" rows="2" placeholder="Add a note about this resolution..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Resolve All</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Alert Modal -->
+<div class="modal fade" id="alertModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="alertForm" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Create Alert</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Alert Title</label>
+                        <input type="text" name="title" id="alertTitle" class="form-control" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Priority</label>
+                        <select name="priority" class="form-select">
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+                    
+                    <p class="text-muted small">
+                        This will create an alert summarizing <strong id="alertCount">0</strong> issues 
+                        affecting <strong id="alertClients">0</strong> clients.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Create Alert</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Resolve Modal
+    const resolveModal = document.getElementById('resolveModal');
+    resolveModal.addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        const category = button.getAttribute('data-category');
+        const count = button.getAttribute('data-count');
+        
+        document.getElementById('resolveCategory').textContent = category.replace(/_/g, ' ');
+        document.getElementById('resolveCount').textContent = count;
+        document.getElementById('resolveForm').action = '/data-integrity/bulk-resolve/' + category;
+    });
+    
+    // Alert Modal
+    const alertModal = document.getElementById('alertModal');
+    alertModal.addEventListener('show.bs.modal', function(event) {
+        const button = event.relatedTarget;
+        const category = button.getAttribute('data-category');
+        const count = button.getAttribute('data-count');
+        const clients = button.getAttribute('data-clients');
+        
+        document.getElementById('alertTitle').value = 'Data Integrity: ' + category.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        document.getElementById('alertCount').textContent = count;
+        document.getElementById('alertClients').textContent = clients;
+        document.getElementById('alertForm').action = '/data-integrity/create-alert/' + category;
+    });
+});
+</script>
+{% endblock %}

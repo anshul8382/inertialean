@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block title %}Invoice Management{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<style>
+    .status-badge {
+        font-size: 0.85rem;
+        padding: 0.35em 0.65em;
+    }
+    .overdue {
+        color: #dc3545;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-file-invoice-dollar"></i> Invoice Management</h1>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('invoices.generate_invoice_from_agreement') }}" class="btn btn-success">
+                <i class="fas fa-bolt"></i> Generate invoice
+            </a>
+            <a href="{{ url_for('invoices.upload_invoices') }}" class="btn btn-primary">
+                <i class="fas fa-file-upload"></i> Import CSV / TSV / Excel
+            </a>
+            <a href="{{ url_for('invoices.manager_plan') }}" class="btn btn-outline-primary">
+                <i class="fas fa-chess-king"></i> Billing Manager Plan
+            </a>
+            <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    {% if missing_agreement_clients %}
+    <div class="alert alert-warning border-warning shadow-sm" role="alert">
+        <h2 class="h6 alert-heading mb-2"><i class="fas fa-file-contract"></i> Clients with no linked agreement</h2>
+        <p class="mb-2 small mb-0">
+            The following client(s) had one or more invoices imported without a signed/active agreement on file.
+            Add or complete an agreement and update the invoice if your process requires it.
+        </p>
+        <ul class="mb-0 small">
+            {% for c in missing_agreement_clients %}
+            <li>
+                <a href="{{ url_for('clients.client_details', client_id=c.id) }}">{{ c.name }}</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    {% if show_failed_import_download %}
+    <div class="alert alert-danger border-danger shadow-sm d-flex flex-wrap align-items-center justify-content-between gap-2" role="alert">
+        <div>
+            <strong><i class="fas fa-exclamation-circle"></i> Last import had commit failures.</strong>
+            <span class="small d-block text-muted">Download a CSV of those rows, fix them, and upload again. Existing invoice numbers are skipped automatically.</span>
+        </div>
+        <a href="{{ url_for('invoices.download_invoice_import_failures') }}" class="btn btn-sm btn-outline-danger flex-shrink-0">
+            <i class="fas fa-download"></i> Download failed rows (CSV)
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Invoices</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_invoices }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-file-invoice fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Pending Invoices</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ pending_invoices }}</div>
+                            <div class="text-xs text-muted">₹{{ "{:,.0f}".format(pending_amount|float) }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Overdue Invoices</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ overdue_invoices }}</div>
+                            <div class="text-xs text-muted">₹{{ "{:,.0f}".format(overdue_amount|float) }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Paid Invoices</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ paid_invoices }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Filters</h6>
+        </div>
+        <div class="card-body">
+            <form method="GET" class="row g-3">
+                <div class="col-md-3">
+                    <label for="status" class="form-label">Status</label>
+                    <select class="form-select" id="status" name="status">
+                        <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option>
+                        <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+                        <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>Sent</option>
+                        <option value="paid" {% if status_filter == 'paid' %}selected{% endif %}>Paid</option>
+                        <option value="overdue" {% if status_filter == 'overdue' %}selected{% endif %}>Overdue</option>
+                        <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="client_id" class="form-label">Client</label>
+                    <select class="form-select" id="client_id" name="client_id">
+                        <option value="">All Clients</option>
+                        {% for client in clients %}
+                        <option value="{{ client.id }}" {% if selected_client_id == client.id %}selected{% endif %}>
+                            {{ client.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="date_from" class="form-label">From Date</label>
+                    <input type="date" class="form-control" id="date_from" name="date_from" value="{{ date_from }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="date_to" class="form-label">To Date</label>
+                    <input type="date" class="form-control" id="date_to" name="date_to" value="{{ date_to }}">
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-filter"></i> Apply Filters
+                    </button>
+                    <a href="{{ url_for('invoices.list_invoices') }}" class="btn btn-secondary">
+                        <i class="fas fa-times"></i> Clear Filters
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Invoices Table -->
+    <div class="card shadow">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Invoices</h6>
+        </div>
+        <div class="card-body">
+            {% if invoices %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" id="invoicesTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Invoice #</th>
+                            <th>Client</th>
+                            <th>Invoice Date</th>
+                            <th>Due Date</th>
+                            <th>Billing Period</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Paid Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for invoice in invoices %}
+                        <tr>
+                            <td><strong>{{ invoice.invoice_number }}</strong></td>
+                            <td>{{ invoice.client.name }}</td>
+                            <td>{{ invoice.invoice_date.strftime('%Y-%m-%d') }}</td>
+                            <td class="{% if invoice.due_date < today and invoice.status != 'paid' %}overdue{% endif %}">
+                                {{ invoice.due_date.strftime('%Y-%m-%d') }}
+                            </td>
+                            <td>
+                                {{ invoice.billing_period_start.strftime('%b %d') }} - 
+                                {{ invoice.billing_period_end.strftime('%b %d, %Y') }}
+                            </td>
+                            <td>₹{{ "{:,.2f}".format(invoice.total_amount|float) }}</td>
+                            <td>
+                                {% if invoice.status == 'draft' %}
+                                    <span class="badge bg-secondary status-badge">Draft</span>
+                                {% elif invoice.status == 'sent' %}
+                                    <span class="badge bg-warning status-badge">Sent</span>
+                                {% elif invoice.status == 'paid' %}
+                                    <span class="badge bg-success status-badge">Paid</span>
+                                {% elif invoice.status == 'overdue' %}
+                                    <span class="badge bg-danger status-badge">Overdue</span>
+                                {% elif invoice.status == 'cancelled' %}
+                                    <span class="badge bg-dark status-badge">Cancelled</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if invoice.paid_date %}
+                                    {{ invoice.paid_date.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <a href="{{ url_for('invoices.view_invoice', invoice_id=invoice.id) }}" 
+                                       class="btn btn-sm btn-outline-primary" title="View">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('invoices.edit_invoice', invoice_id=invoice.id) }}" 
+                                       class="btn btn-sm btn-outline-secondary" title="Edit">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-file-invoice fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No invoices found</h5>
+                <p class="text-muted">No invoices match your filter criteria.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script>
+$(document).ready(function() {
+    $('#invoicesTable').DataTable({
+        order: [[2, 'desc']], // Sort by invoice date descending
+        pageLength: 25,
+        language: {
+            search: "Search invoices:"
+        }
+    });
+});
+</script>
+{% endblock %}
+
+
+
+
+
+

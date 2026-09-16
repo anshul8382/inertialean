@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Review Schedule - {{ client.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1>Edit Review Schedule</h1>
+            <p class="text-muted">Client: <strong>{{ client.name }}</strong></p>
+        </div>
+        <a href="{{ url_for('clients.client_review_schedule', client_id=client.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Schedule
+        </a>
+    </div>
+
+    <!-- Warning Alert -->
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <h5 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> Important Warning</h5>
+        <p class="mb-2">
+            <strong>Changing the review schedule will affect ALL future review calculations!</strong>
+        </p>
+        <ul class="mb-0">
+            <li><strong>First Review Date</strong> is the anchor point for all review cycles</li>
+            <li>Changing it will shift all future calculated review dates</li>
+            <li><strong>Frequency</strong> determines the interval between reviews</li>
+            <li>Existing review workflows will NOT be automatically updated</li>
+        </ul>
+        <hr>
+        <p class="mb-0">
+            <i class="fas fa-lightbulb"></i> <strong>Recommendation:</strong> After updating the schedule, 
+            review all future workflows and manually adjust their dates if needed.
+        </p>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-calendar-edit"></i> Review Schedule Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Current Settings Display -->
+                    <div class="alert alert-info mb-4">
+                        <h6 class="alert-heading">Current Settings:</h6>
+                        <p class="mb-1"><strong>First Review Date:</strong> {{ schedule.first_review_date.strftime('%Y-%m-%d') }}</p>
+                        <p class="mb-0"><strong>Frequency:</strong> 
+                            {% if schedule.frequency == 'half_yearly' %}
+                                Half Yearly (6 months)
+                            {% elif schedule.frequency == 'yearly' %}
+                                Yearly (12 months)
+                            {% else %}
+                                {{ schedule.frequency|title }}
+                            {% endif %}
+                        </p>
+                    </div>
+
+                    <form method="POST" id="editScheduleForm">
+                        {{ form.hidden_tag() }}
+                        
+                        <!-- First Review Date -->
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold">
+                                {{ form.first_review_date.label }} <span class="text-danger">*</span>
+                                <i class="fas fa-info-circle text-primary" 
+                                   data-bs-toggle="tooltip" 
+                                   title="This is the anchor date for calculating all future reviews"></i>
+                            </label>
+                            {{ form.first_review_date(class="form-control") }}
+                            {% if form.first_review_date.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.first_review_date.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">
+                                All future reviews will be calculated from this date based on the frequency
+                            </small>
+                        </div>
+
+                        <!-- Review Frequency -->
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold">
+                                {{ form.frequency.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.frequency(class="form-select") }}
+                            {% if form.frequency.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.frequency.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">
+                                <strong>Half Yearly:</strong> Reviews every 6 months<br>
+                                <strong>Yearly:</strong> Reviews every 12 months
+                            </small>
+                        </div>
+
+                        <!-- Notes -->
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold">{{ form.notes.label }}</label>
+                            {{ form.notes(class="form-control", rows=3) }}
+                            <small class="form-text text-muted">Any special notes about this review schedule</small>
+                        </div>
+
+                        <!-- Confirmation Checkbox -->
+                        <div class="form-check mb-4">
+                            <input class="form-check-input" type="checkbox" id="confirmChanges" required>
+                            <label class="form-check-label text-danger fw-bold" for="confirmChanges">
+                                I understand that changing the schedule will affect all future review calculations
+                            </label>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary" id="submitBtn" disabled>
+                                <i class="fas fa-save"></i> Update Review Schedule
+                            </button>
+                            <a href="{{ url_for('clients.client_review_schedule', client_id=client.id) }}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Impact Preview -->
+            <div class="card mt-4 shadow-sm">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-calculator"></i> Impact Preview</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">Based on the new settings, future reviews will be scheduled as follows:</p>
+                    <div id="impactPreview" class="text-muted">
+                        <small>Select a first review date and frequency to see the impact</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Enable submit button only when confirmation is checked
+document.getElementById('confirmChanges').addEventListener('change', function() {
+    document.getElementById('submitBtn').disabled = !this.checked;
+});
+
+// Add confirmation dialog before submitting
+document.getElementById('editScheduleForm').addEventListener('submit', function(e) {
+    if (!confirm('Are you sure you want to update the review schedule? This will affect how all future reviews are calculated.')) {
+        e.preventDefault();
+    }
+});
+
+// Initialize tooltips
+var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+    return new bootstrap.Tooltip(tooltipTriggerEl)
+});
+
+// Impact preview calculator
+function updateImpactPreview() {
+    const firstDate = document.getElementById('first_review_date').value;
+    const frequency = document.getElementById('frequency').value;
+    
+    if (firstDate && frequency) {
+        const previewDiv = document.getElementById('impactPreview');
+        const date = new Date(firstDate);
+        const interval = frequency === 'half_yearly' ? 6 : 12;
+        
+        let html = '<table class="table table-sm"><thead><tr><th>Review #</th><th>Expected Date</th><th>Gap (months)</th></tr></thead><tbody>';
+        
+        for (let i = 0; i < 5; i++) {
+            const reviewDate = new Date(date);
+            reviewDate.setMonth(reviewDate.getMonth() + (interval * i));
+            const dateStr = reviewDate.toISOString().split('T')[0];
+            html += `<tr><td>Review ${i + 1}</td><td>${dateStr}</td><td>${i === 0 ? '-' : interval}</td></tr>`;
+        }
+        
+        html += '</tbody></table>';
+        html += '<small class="text-muted"><i class="fas fa-info-circle"></i> These are calculated dates. Actual review dates may be adjusted manually.</small>';
+        
+        previewDiv.innerHTML = html;
+    }
+}
+
+// Listen for changes
+document.getElementById('first_review_date').addEventListener('change', updateImpactPreview);
+document.getElementById('frequency').addEventListener('change', updateImpactPreview);
+
+// Initial preview
+updateImpactPreview();
+
+// Highlight changed fields
+document.querySelectorAll('select, input, textarea').forEach(function(element) {
+    const originalValue = element.value;
+    element.addEventListener('change', function() {
+        if (this.value !== originalValue) {
+            this.classList.add('border-warning');
+            this.classList.add('border-2');
+        } else {
+            this.classList.remove('border-warning');
+            this.classList.remove('border-2');
+        }
+    });
+});
+</script>
+
+{% endblock %}
+

@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Permissions - {{ role.display_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0">Edit Permissions: {{ role.display_name }}</h1>
+        <div>
+            <a href="{{ url_for('roles.edit_role', role_id=role.id) }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Role
+            </a>
+            <a href="{{ url_for('roles.list_roles') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-list"></i> All Roles
+            </a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Role Information</h6>
+                    <p class="mb-1"><strong>Name:</strong> {{ role.name }}</p>
+                    <p class="mb-1"><strong>Display Name:</strong> {{ role.display_name }}</p>
+                    {% if role.parent_role %}
+                        <p class="mb-0"><strong>Parent Role:</strong> 
+                            <span class="badge bg-info">{{ role.parent_role.display_name }}</span>
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Permission Summary</h6>
+                    <p class="mb-1"><strong>Direct Permissions:</strong> {{ current_permissions|length }}</p>
+                    <p class="mb-1"><strong>Inherited Permissions:</strong> {{ inherited_permissions|length - current_permissions|length }}</p>
+                    <p class="mb-0"><strong>Total Access:</strong> {{ inherited_permissions|length }} routes</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" id="permissionsForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-key"></i> Route Permissions
+                </h5>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAll()">
+                        <i class="fas fa-check-square"></i> Select All
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAll()">
+                        <i class="fas fa-square"></i> Deselect All
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if role.parent_role %}
+                <div class="alert alert-info mb-4">
+                    <i class="fas fa-info-circle"></i> 
+                    <strong>Inheritance:</strong> This role inherits permissions from 
+                    <strong>{{ role.parent_role.display_name }}</strong>. 
+                    Checked permissions below override inherited ones. Unchecked permissions will use inherited values if available.
+                </div>
+                {% endif %}
+
+                {% for category, routes in all_routes.items() %}
+                <div class="mb-4">
+                    <h6 class="border-bottom pb-2 mb-3">
+                        <i class="fas fa-folder"></i> {{ category }}
+                        <button type="button" class="btn btn-sm btn-outline-primary ms-2" 
+                                onclick="toggleCategory('{{ category|replace(' ', '-')|lower }}')">
+                            Toggle All
+                        </button>
+                    </h6>
+                    <div class="row">
+                        {% for endpoint, display_name in routes %}
+                        <div class="col-md-6 col-lg-4 mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input category-{{ category|replace(' ', '-')|lower }}" 
+                                       type="checkbox" 
+                                       name="permissions" 
+                                       value="{{ endpoint }}" 
+                                       id="perm_{{ endpoint }}"
+                                       {% if endpoint in current_permissions %}checked{% endif %}>
+                                <label class="form-check-label" for="perm_{{ endpoint }}">
+                                    {{ display_name }}
+                                    {% if endpoint in inherited_permissions and endpoint not in current_permissions %}
+                                        <span class="badge bg-info ms-1" title="Inherited from parent role">I</span>
+                                    {% endif %}
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="card-footer">
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <a href="{{ url_for('roles.list_roles') }}" class="btn btn-outline-secondary">Cancel</a>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Permissions
+                    </button>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+function selectAll() {
+    document.querySelectorAll('input[name="permissions"]').forEach(cb => cb.checked = true);
+}
+
+function deselectAll() {
+    document.querySelectorAll('input[name="permissions"]').forEach(cb => cb.checked = false);
+}
+
+function toggleCategory(category) {
+    const categoryName = category.replace(/\s+/g, '-').toLowerCase();
+    const checkboxes = document.querySelectorAll(`.category-${categoryName}`);
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    checkboxes.forEach(cb => cb.checked = !allChecked);
+}
+</script>
+{% endblock %}
+

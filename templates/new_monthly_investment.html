@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}New Monthly Investment{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>New Monthly Investment</h1>
+        <a href="{{ url_for('main.list_monthly_investments') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Monthly Investments
+        </a>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('monthly_investments.new_monthly_investment') }}">
+                {{ form.hidden_tag() }}
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            {{ form.client_id.label(class="form-label") }}
+                            {{ form.client_id(class="form-select") }}
+                            {% if form.client_id.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.client_id.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.planned_amount.label(class="form-label") }}
+                            {{ form.planned_amount(class="form-control", step="0.01") }}
+                            {% if form.planned_amount.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.planned_amount.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            {{ form.investment_date.label(class="form-label") }}
+                            {{ form.investment_date(class="form-control") }}
+                            {% if form.investment_date.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.investment_date.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="change_frequency_months" class="form-label">
+                                <strong>Portfolio Change Frequency (months)</strong>
+                            </label>
+                            <input type="number" 
+                                   class="form-control" 
+                                   id="change_frequency_months" 
+                                   name="change_frequency_months" 
+                                   min="1" 
+                                   value="{{ schedule.change_frequency_months if schedule else 1 }}"
+                                   placeholder="1">
+                            <div class="form-text">How often portfolio changes occur (1=monthly, 2=every 2 months, 3=every 3 months, etc.)</div>
+                            {% if schedule %}
+                            <div class="alert alert-info mt-2">
+                                <small><i class="fas fa-info-circle"></i> Current schedule frequency: {{ schedule.change_frequency_months }} month(s). 
+                                <a href="{{ url_for('clients.manage_monthly_schedule', client_id=schedule.client_id) }}">Edit full schedule</a></small>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    {{ form.submit(class="btn btn-primary") }}
+                    <a href="{{ url_for('main.list_monthly_investments') }}" class="btn btn-secondary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const clientSelect = document.getElementById('client_id');
+    const frequencyInput = document.getElementById('change_frequency_months');
+    const frequencyInfo = document.querySelector('.alert-info');
+    
+    if (clientSelect) {
+        clientSelect.addEventListener('change', function() {
+            const clientId = this.value;
+            if (clientId) {
+                // Fetch schedule for selected client
+                fetch(`/clients/${clientId}/schedule/api`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.schedule) {
+                            frequencyInput.value = data.schedule.change_frequency_months || 1;
+                            // Show info if schedule exists
+                            if (frequencyInfo) {
+                                frequencyInfo.style.display = 'block';
+                                frequencyInfo.querySelector('small').innerHTML = 
+                                    `<i class="fas fa-info-circle"></i> Current schedule frequency: ${data.schedule.change_frequency_months || 1} month(s). ` +
+                                    `<a href="/clients/${clientId}/monthly-schedule">Edit full schedule</a>`;
+                            }
+                        } else {
+                            frequencyInput.value = 1;
+                            if (frequencyInfo) {
+                                frequencyInfo.style.display = 'none';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching schedule:', error);
+                        frequencyInput.value = 1;
+                    });
+            } else {
+                frequencyInput.value = 1;
+                if (frequencyInfo) {
+                    frequencyInfo.style.display = 'none';
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %} 

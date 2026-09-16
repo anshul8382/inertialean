@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+
+{% block title %}Salary Detail — {{ user.username }} — {{ breakdown.month_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            Salary Detail — {{ user.username }}
+            <small class="text-muted">{{ breakdown.month_name }}</small>
+        </h1>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('attendance.admin_user_details', user_id=user.id, year=selected_year, month=selected_month) }}" class="btn btn-outline-primary">
+                <i class="fas fa-calendar-day"></i> Day-wise attendance
+            </a>
+            <a href="{{ url_for('attendance.admin_salary_calculation', year=selected_year, month=selected_month) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Salary Calculation
+            </a>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-lg-7 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Base pay calculation</h6>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3">
+                        Rates from stipend config.
+                        Full ₹{{ "%.2f"|format(breakdown.stipend_config.full_day_stipend) }} ·
+                        Half ₹{{ "%.2f"|format(breakdown.stipend_config.half_day_stipend) }} ·
+                        Leave ₹{{ "%.2f"|format(breakdown.stipend_config.leave_stipend) }}
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Component</th>
+                                    <th class="text-end">Amount (₹)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>{{ breakdown.lines.full_days.label }}</td>
+                                    <td class="text-end text-num">{{ "%.2f"|format(breakdown.lines.full_days.amount) }}</td>
+                                </tr>
+                                <tr>
+                                    <td>{{ breakdown.lines.half_days.label }}</td>
+                                    <td class="text-end text-num">{{ "%.2f"|format(breakdown.lines.half_days.amount) }}</td>
+                                </tr>
+                                <tr>
+                                    <td>{{ breakdown.lines.leave_days.label }}</td>
+                                    <td class="text-end text-num">{{ "%.2f"|format(breakdown.lines.leave_days.amount) }}</td>
+                                </tr>
+                                <tr class="table-light">
+                                    <th>Base stipend</th>
+                                    <th class="text-end text-num">{{ "%.2f"|format(breakdown.base_stipend) }}</th>
+                                </tr>
+                                <tr>
+                                    <td>Approved claims ({{ breakdown.claim_rows|length }})</td>
+                                    <td class="text-end text-num">{{ "%.2f"|format(breakdown.approved_claims_amount) }}</td>
+                                </tr>
+                                <tr>
+                                    <td>Sales incentive</td>
+                                    <td class="text-end text-num">{{ "%.2f"|format(breakdown.sales_incentive) }}</td>
+                                </tr>
+                                <tr>
+                                    <td>Internal incentive</td>
+                                    <td class="text-end text-num">{{ "%.2f"|format(breakdown.internal_incentive) }}</td>
+                                </tr>
+                                <tr class="table-success">
+                                    <th>Total salary</th>
+                                    <th class="text-end text-num">₹{{ "%.2f"|format(breakdown.total_salary) }}</th>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="small text-muted mt-3 mb-0">
+                        Formula: base stipend + approved claims + sales incentive + internal incentive
+                    </p>
+                    {% if breakdown.status %}
+                    <p class="mt-2 mb-0">
+                        Status:
+                        {% if breakdown.status == 'calculated' %}
+                            <span class="badge bg-info">Calculated</span>
+                        {% elif breakdown.status == 'paid' %}
+                            <span class="badge bg-success">Paid</span>
+                        {% elif breakdown.status == 'closed' %}
+                            <span class="badge bg-secondary">Closed</span>
+                        {% else %}
+                            <span class="badge bg-light text-dark">{{ breakdown.status }}</span>
+                        {% endif %}
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Enter / update incentives</h6>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted">
+                        Use the <a href="{{ url_for('attendance.incentive_simulator') }}">incentive simulator</a>
+                        to estimate amounts, then enter the final figures here for payroll.
+                    </p>
+                    <form method="POST" action="{{ url_for('attendance.admin_salary_detail', user_id=user.id, year=selected_year, month=selected_month) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="mb-3">
+                            <label for="sales_incentive" class="form-label">Sales incentive (₹)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="sales_incentive"
+                                   name="sales_incentive" value="{{ "%.2f"|format(breakdown.sales_incentive) }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="internal_incentive" class="form-label">Internal incentive (₹)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" id="internal_incentive"
+                                   name="internal_incentive" value="{{ "%.2f"|format(breakdown.internal_incentive) }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="admin_notes" class="form-label">Admin notes</label>
+                            <textarea class="form-control" id="admin_notes" name="admin_notes" rows="3"
+                                      placeholder="Optional notes (e.g. simulator inputs used)">{{ breakdown.existing_salary.admin_notes if breakdown.existing_salary and breakdown.existing_salary.admin_notes else '' }}</textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save calculation
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if breakdown.claim_rows %}
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Approved claims this month</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th class="text-end">Amount (₹)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for claim in breakdown.claim_rows %}
+                        <tr>
+                            <td>{{ claim.claim_date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ claim.description }}</td>
+                            <td class="text-end text-num">{{ "%.2f"|format(claim.amount) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                Day-wise attendance — {{ breakdown.month_name }}
+                ({{ breakdown.counts.full_days }} full · {{ breakdown.counts.half_days }} half · {{ breakdown.counts.leave_days }} leave)
+            </h6>
+        </div>
+        <div class="card-body">
+            {% if breakdown.day_rows %}
+            <div class="table-responsive">
+                <table class="table table-bordered" id="salaryDayTable" data-mobile-table="scroll">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Day</th>
+                            <th>Type</th>
+                            <th class="text-end">Stipend (₹)</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in breakdown.day_rows %}
+                        <tr>
+                            <td>{{ row.date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ row.weekday }}</td>
+                            <td>
+                                {% if row.attendance_type == 'full_day' %}
+                                    <span class="badge badge-success">Full Day</span>
+                                {% elif row.attendance_type == 'half_day' %}
+                                    <span class="badge badge-warning">Half Day</span>
+                                {% else %}
+                                    <span class="badge badge-danger">Leave</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end text-num">{{ "%.2f"|format(row.stipend_amount) }}</td>
+                            <td>{{ row.notes or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No attendance marked for this month.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    if ($('#salaryDayTable').length) {
+        $('#salaryDayTable').DataTable({
+            "order": [[0, "asc"]],
+            "pageLength": 31,
+            "responsive": true
+        });
+    }
+});
+</script>
+{% endblock %}

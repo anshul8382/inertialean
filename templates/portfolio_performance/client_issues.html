@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ client.name }} - Portfolio Performance{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <h4>{{ client.name }} - Portfolio Performance Issues</h4>
+  <p>{{ total_issues }} open issue(s).</p>
+  <a href="{{ url_for('clients.client_details', client_id=client.id) }}">View Client Profile</a>
+  <form action="{{ url_for('portfolio_performance.resolve_issues') }}" method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="resolution" value="fixed">
+    {% for cat_name, issues in issues_by_category.items() %}
+    <div class="card mt-3">
+      <div class="card-header">{{ cat_name }}</div>
+      <div class="card-body">
+        {% for issue in issues %}
+        <div class="mb-2">
+          <input type="checkbox" name="issue_id" value="{{ issue.id }}">
+          <span class="badge bg-{{ 'danger' if issue.severity == 'critical' else 'warning' }}">{{ issue.severity }}</span>
+          {{ issue.message }}
+          {% if issue.details %}
+          <small class="text-muted">Portfolio: {{ issue.details.get('portfolio_xirr_pct') }}% | Benchmark: {{ issue.details.get('benchmark_xirr_pct') }}%</small>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    <button type="submit" class="btn btn-success mt-2">Resolve Selected</button>
+  </form>
+</div>
+{% endblock %}

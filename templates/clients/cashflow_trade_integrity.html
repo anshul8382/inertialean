@@ -1,0 +1,607 @@
+{% extends "base.html" %}
+{% block title %}Cashflow vs trades — {{ case.client_name or ('Client #' ~ client_id) }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <div>
+      <h1 class="h3 mb-1">{{ case.client_name or ('Client #' ~ client_id) }}</h1>
+      <p class="text-muted mb-0 small">
+        Cashflow vs trade integrity — suggest only; the system never edits cashflows or trades.
+        You make changes in existing screens, then re-check.
+      </p>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('clients.client_details', client_id=client_id) }}">Client</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ case.deep_links.cashflows }}">Cashflows</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ case.deep_links.transactions }}">Trades</a>
+      <form method="post" action="{{ url_for('clients.integrity_refresh', client_id=client_id) }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ url_for('clients.cashflow_trade_integrity', client_id=client_id) }}">
+        <button type="submit" class="btn btn-primary btn-sm" title="Runs all integrity agents, heals cleared issues, syncs alerts/tasks, refreshes packs">
+          <i class="fas fa-sync-alt me-1"></i> Refresh client checks
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {% set st = case.status %}
+  {% set accepted_closed = (st == 'accepted_non_material' and case.acceptance) %}
+  {% set st_label = 'Matched' if st in ('matched', 'ignore_opening_book') else ('Accepted residual' if st == 'accepted_non_material' else ('Needs review' if st == 'mismatch_review' else ('Not matched' if st == 'mismatch_material' else st))) %}
+  <div class="alert {% if st == 'matched' or st == 'ignore_opening_book' or accepted_closed %}alert-success{% elif st == 'mismatch_review' %}alert-warning{% else %}alert-danger{% endif %}">
+    <strong>Status:</strong> {{ st_label }}
+    {% if st == 'ignore_opening_book' %}
+    <span class="badge bg-light text-success border ms-1">opening book OK</span>
+    {% endif %}
+    <span class="text-muted small ms-2">({{ st }})</span>
+    {% if accepted_closed %}
+    <div class="mt-2 fw-semibold">No other open cashflow↔trade issues.</div>
+    <div class="small mt-1">
+      Previously reviewed residual is accepted
+      {% if case.acceptance.accepted_at %}
+      ({{ case.acceptance.accepted_at[:19] }} UTC){% endif %}.
+      Expand <em>Accepted residual details</em> below only if you need the original issue and comment.
+    </div>
+    {% elif case.match_explanation %}
+    <div class="mt-2">{{ case.match_explanation }}</div>
+    {% elif case.guess_summary %}
+    <div class="small mt-1">{{ case.guess_summary }}</div>
+    {% endif %}
+  </div>
+
+  {% if case.calculation_health %}
+  {% set ch = case.calculation_health %}
+  <div class="alert {% if ch.tone == 'success' %}alert-success{% elif ch.tone == 'warning' %}alert-warning{% elif ch.tone == 'secondary' %}alert-secondary{% else %}alert-danger{% endif %}">
+    <div class="d-flex flex-wrap justify-content-between gap-2 align-items-start">
+      <div>
+        <strong>Data health for calculations</strong>
+        <div class="mt-1">{{ ch.headline }}</div>
+        <p class="small mb-0 mt-2">{{ ch.summary }}</p>
+        {% if ch.calculation_impact %}
+        <p class="small mb-0 mt-2"><strong>What may be impacted:</strong> {{ ch.calculation_impact }}</p>
+        {% endif %}
+      </div>
+      <span class="badge bg-light text-dark border">{{ ch.level }}</span>
+    </div>
+    {% if ch.periods %}
+    <ul class="small mb-0 mt-3">
+      {% for p in ch.periods %}
+      <li>
+        <strong>{{ p.label }}</strong>
+        {% if p.range %} — {{ p.range }}{% endif %}
+        <span class="text-muted">({{ p.basis }} · {{ p.trust }})</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if case.advisor_notes and case.advisor_notes.reconciled_through %}
+  <div class="alert alert-info">
+    <strong>Advisor notes approved</strong> through
+    <strong>{{ case.advisor_notes.reconciled_through }}</strong>
+    {% if case.advisor_notes.approved_at %}
+    <span class="text-muted small">({{ case.advisor_notes.approved_at[:19] }} UTC)</span>
+    {% endif %}
+    — CF↔trade mismatch ignored through that date; after it, trades vs cashflows apply as usual.
+    <div class="small mt-1">
+      Advisor net ₹{{ "{:,.0f}".format(case.advisor_notes.advisor_net_inr or 0) }}
+      · system ₹{{ "{:,.0f}".format(case.advisor_notes.system_net_through_inr or 0) }}
+      · gap ₹{{ "{:,.0f}".format(case.advisor_notes.difference or 0) }}
+    </div>
+    <form method="post" class="mt-2" onsubmit="return confirm('Clear the approved advisor-notes cutoff?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="advisor_notes_clear">
+      <button type="submit" class="btn btn-sm btn-outline-secondary">Clear cutoff</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="card mb-3">
+    <div class="card-header"><strong>Advisor spreadsheet notes</strong></div>
+    <div class="card-body">
+      <p class="small text-muted mb-2">
+        Paste from Sheets: date + amount in <strong>lakhs</strong>
+        (−ve = purchase, +ve = sales). Python checks that system cashflows match through the last note date.
+        If they match, <strong>Approve</strong> saves an audited artifact and ignores CF↔trade mismatch through that date.
+      </p>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="form-label small" for="advisor_notes_paste">Paste rows (tab or comma separated)</label>
+        <textarea class="form-control font-monospace small mb-2" id="advisor_notes_paste" name="advisor_notes_paste"
+                  rows="6" placeholder="Date&#9;Amount (lakhs)&#10;2019-03-15&#9;-2.5&#10;2020-01-10&#9;1.0">{{ (notes_preview.paste_text if notes_preview else '') }}</textarea>
+        <div class="d-flex flex-wrap gap-2">
+          <button type="submit" name="action" value="advisor_notes_check" class="btn btn-outline-primary btn-sm">Check vs system</button>
+          {% if notes_preview and notes_preview.can_approve and notes_preview.match %}
+          <input type="hidden" name="paste_hash" value="{{ notes_preview.match.paste_hash }}">
+          <button type="submit" name="action" value="advisor_notes_approve" class="btn btn-success btn-sm"
+                  onclick="return confirm('Approve and save reconciled-through {{ notes_preview.match.reconciled_through }}?');">
+            Approve through {{ notes_preview.match.reconciled_through }}
+          </button>
+          {% endif %}
+        </div>
+      </form>
+
+      {% if notes_preview %}
+      <hr>
+      {% if notes_preview.parsed %}
+      <div class="small mb-2">
+        Parsed <strong>{{ notes_preview.parsed.row_count }}</strong> rows · through
+        <strong>{{ notes_preview.parsed.reconciled_through }}</strong> ·
+        advisor net ₹{{ "{:,.0f}".format(notes_preview.parsed.advisor_net_inr or 0) }}
+        ({{ notes_preview.parsed.advisor_net_lakhs }} L)
+      </div>
+      {% endif %}
+      {% if notes_preview.match %}
+      <div class="alert {% if notes_preview.can_approve %}alert-success{% else %}alert-warning{% endif %} small mb-2">
+        {{ notes_preview.match.llm_explanation or notes_preview.match.explanation }}
+        <div class="mt-1 text-muted">
+          System net through date: ₹{{ "{:,.0f}".format(notes_preview.match.system_net_through_inr or 0) }}
+          · gap ₹{{ "{:,.0f}".format(notes_preview.match.difference or 0) }}
+          · tolerance ₹{{ "{:,.0f}".format(notes_preview.match.tolerance or 0) }}
+        </div>
+      </div>
+      {% if notes_preview.match.day_gaps %}
+      <details class="small mb-2">
+        <summary>{{ notes_preview.match.day_gap_count }} day-level gap(s) (warnings)</summary>
+        <ul class="mb-0 mt-1">
+          {% for g in notes_preview.match.day_gaps %}
+          <li>{{ g.date }}: advisor ₹{{ "{:,.0f}".format(g.advisor_inr) }} vs system ₹{{ "{:,.0f}".format(g.system_inr) }} (Δ {{ "{:,.0f}".format(g.difference) }})</li>
+          {% endfor %}
+        </ul>
+      </details>
+      {% endif %}
+      {% endif %}
+      {% if notes_preview.error and not notes_preview.ok %}
+      <div class="text-danger small">{{ notes_preview.error }}</div>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="border rounded p-3 h-100">
+        <div class="text-muted small">
+          {% if case.has_skip_trade_date %}Post-cutoff cashflow net{% else %}Recorded cashflow net{% endif %}
+        </div>
+        <div class="fs-5">{{ "{:,.0f}".format(case.post_cutoff_cashflow_net if case.has_skip_trade_date and case.post_cutoff_cashflow_net is not none else case.recorded_net_cashflow or 0) }}</div>
+        {% if case.has_skip_trade_date and (case.opening_first_real_trade_date or case.first_real_trade_date) %}
+        <div class="text-muted small mt-1">From first real trade {{ case.opening_first_real_trade_date or case.first_real_trade_date }}</div>
+        {% elif case.advisor_notes_through %}
+        <div class="text-muted small mt-1">After advisor notes {{ case.advisor_notes_through }}</div>
+        {% elif case.reconcile_start_date %}
+        <div class="text-muted small mt-1">Reconcile from {{ case.reconcile_start_date }}</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="border rounded p-3 h-100">
+        <div class="text-muted small">Post-cutoff trade net</div>
+        <div class="fs-5">{{ "{:,.0f}".format(case.post_cutoff_trade_net or 0) }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="border rounded p-3 h-100">
+        <div class="text-muted small">Opening book net (2000-01-01)</div>
+        <div class="fs-5">{{ "{:,.0f}".format(case.opening_trade_net or 0) }}</div>
+        {% if case.has_skip_trade_date and case.opening_epoch_cashflow_net is not none %}
+        <div class="text-muted small mt-1">Opening-epoch CF {{ "{:,.0f}".format(case.opening_epoch_cashflow_net) }} (not day-matched)</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="border rounded p-3 h-100">
+        <div class="text-muted small">Post-cutoff gap / threshold</div>
+        <div class="fs-5">{{ "{:,.0f}".format(case.difference or 0) }} / {{ "{:,.0f}".format(case.materiality_threshold or 0) }}</div>
+      </div>
+    </div>
+  </div>
+
+  {% if case.has_skip_trade_date %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <h6 class="mb-2">Opening book epoch (expected — not a mismatch)</h6>
+      <p class="small mb-3">
+        Trades dated <strong>2000-01-01</strong> are opening/snapshot positions (often average cost).
+        <strong>First real trade</strong> = earliest BUY/SELL after 2000-01-01
+        {% if case.opening_first_real_trade_date or case.first_real_trade_date %}
+        (<strong>{{ case.opening_first_real_trade_date or case.first_real_trade_date }}</strong>){% endif %}.
+        Advisor cashflows <strong>before</strong> that first real trade funded the opening book and are
+        <strong>not</strong> day-matched.
+        {% if case.advisor_notes_through %}
+        Approved advisor notes cover system cashflows through
+        <strong>{{ case.advisor_notes_through }}</strong>; CF↔trade checks apply after that date.
+        {% endif %}
+        We match cashflows vs trades starting from the <strong>most recent</strong> activity and walk
+        backward to find <strong>trade reconcile-from</strong>
+        {% if case.trade_reconcile_from or case.matched_from_recent_date %}
+        (<strong>{{ case.trade_reconcile_from or case.matched_from_recent_date }}</strong>){% endif %}
+        — the date from which CF and trades stay within band.
+        {% if case.advisor_notes_through %}
+        Approved advisor notes cover system cashflows through
+        <strong>{{ case.advisor_notes_through }}</strong> (not a substitute for first real trade).
+        {% endif %}
+        {% if case.raw_status == 'ignore_opening_book' or case.status == 'ignore_opening_book' or case.status == 'matched' %}
+        Current status shows as <strong>Matched</strong>.
+        {% else %}
+        Post-window cashflows and trades are what drive match / not matched.
+        {% endif %}
+      </p>
+      <div class="row g-3 small">
+        <div class="col-md-3">
+          <div class="text-muted">First real trade (after 2000-01-01)</div>
+          <div class="fw-semibold">{{ case.opening_first_real_trade_date or case.first_real_trade_date or '—' }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-muted">Trade reconcile-from (calculated)</div>
+          <div class="fw-semibold">{{ case.trade_reconcile_from or case.matched_from_recent_date or '—' }}</div>
+          <div class="text-muted">From most recent back</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-muted">Opening-epoch cashflow net</div>
+          <div class="fw-semibold">{{ "{:,.0f}".format(case.opening_epoch_cashflow_net or 0) }}</div>
+          <div class="text-muted">Before first real trade</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-muted">Opening-book trade net (2000-01-01)</div>
+          <div class="fw-semibold">{{ "{:,.0f}".format(case.opening_trade_net or 0) }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-muted">Difference (CF − opening trades)</div>
+          <div class="fw-semibold">{{ "{:,.0f}".format(case.opening_book_gap if case.opening_book_gap is not none else ((case.opening_epoch_cashflow_net or 0) - (case.opening_trade_net or 0))) }}</div>
+          <div class="text-muted">Not a concern (security replacement / incomplete early trade history)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% set chrono = case.chronological or (case.resolution.chronological if case.resolution else {}) %}
+  {% set res = case.resolution or {} %}
+  {% set acc = case.acceptance or {} %}
+  {% set acc_snap = acc.snapshot or {} %}
+
+  {% if accepted_closed %}
+  <details class="card mb-3">
+    <summary class="card-header" style="cursor:pointer;list-style-position:outside;">
+      <strong>Accepted residual details</strong>
+      <span class="text-muted small ms-2">— expand to see what was reviewed and the resolution comment</span>
+    </summary>
+    <div class="card-body">
+      <div class="alert alert-secondary py-2 mb-3">
+        <div class="fw-semibold">Resolution comment</div>
+        <div class="mt-1">{{ acc.reason or '—' }}</div>
+        <div class="small text-muted mt-2">
+          Accepted at {{ acc.accepted_at or '—' }}
+          {% if acc.user_id %} · user #{{ acc.user_id }}{% endif %}
+        </div>
+      </div>
+
+      {% if acc_snap.source_label or acc_snap.finding or acc_snap.focus_day %}
+      <h6 class="mb-2">Issue that was accepted</h6>
+      {% if acc_snap.source_label %}<div class="fw-semibold mb-1">{{ acc_snap.source_label }}</div>{% endif %}
+      {% if acc_snap.finding %}<p class="small mb-2">{{ acc_snap.finding }}</p>{% endif %}
+      {% if acc_snap.root_cause %}<p class="small mb-2"><strong>Likely cause:</strong> {{ acc_snap.root_cause }}</p>{% endif %}
+      {% if acc_snap.focus_day and acc_snap.focus_day.date %}
+      <div class="border rounded p-2 mb-3 bg-light small">
+        Focus day {{ acc_snap.focus_day.date }} · {{ acc_snap.focus_day.issue or '' }}
+        · day gap {{ "{:,.0f}".format(acc_snap.focus_day.day_difference or 0) }}
+        · CF {{ "{:,.0f}".format(acc_snap.focus_day.cashflow_net or 0) }}
+        / trades {{ "{:,.0f}".format(acc_snap.focus_day.trade_net or 0) }}
+      </div>
+      {% endif %}
+      {% if acc_snap.reviewed_days %}
+      <div class="table-responsive mb-3">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Date</th><th>Issue</th><th>Day diff</th><th>CF / trades</th></tr></thead>
+          <tbody>
+          {% for d in acc_snap.reviewed_days %}
+            <tr>
+              <td>{{ d.date }}</td>
+              <td>{{ d.issue }}</td>
+              <td>{{ "{:,.0f}".format(d.day_difference or 0) }}</td>
+              <td class="small">{{ "{:,.0f}".format(d.cashflow_net or 0) }} / {{ "{:,.0f}".format(d.trade_net or 0) }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+      {% elif case.match_explanation %}
+      <p class="small mb-3">{{ case.match_explanation }}</p>
+      {% endif %}
+
+      {% if chrono and (chrono.matched_through_date or chrono.first_break_date) %}
+      <div class="border rounded p-2 mb-3 small">
+        <div class="fw-semibold mb-1">Chronological snapshot</div>
+        Matched through {{ chrono.matched_through_date or '—' }}
+        · first break {{ chrono.first_break_date or 'none' }}
+        · final gap {{ "{:,.0f}".format(chrono.final_cum_gap or 0) }}
+      </div>
+      {% endif %}
+
+      {% if case.has_large_day_review or case.large_day_deviations %}
+      <div class="table-responsive mb-2">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>Date</th><th>Issue</th><th>Day diff</th><th>CF / trades</th></tr></thead>
+          <tbody>
+          {% for d in case.large_day_deviations or [] %}
+            <tr>
+              <td>{{ d.date }}</td>
+              <td>{{ d.issue }}</td>
+              <td>{{ "{:,.0f}".format(d.day_difference or 0) }}</td>
+              <td class="small">{{ "{:,.0f}".format(d.cashflow_net or 0) }} / {{ "{:,.0f}".format(d.trade_net or 0) }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+
+      <p class="small text-muted mb-0">
+        Live diagnostics above can still change after Re-check. The acceptance comment is the audit trail for why this residual was closed.
+      </p>
+    </div>
+  </details>
+
+  {% else %}
+
+  {% if chrono and (chrono.matched_through_date or chrono.first_break_date) %}
+  <div class="card mb-3">
+    <div class="card-header bg-light">
+      <strong>Chronological match (from the beginning)</strong>
+    </div>
+    <div class="card-body small">
+      <div class="row g-2">
+        <div class="col-md-4">
+          <div class="text-muted">Matched through</div>
+          <div class="fw-semibold">{{ chrono.matched_through_date or '—' }}</div>
+          <div>CF {{ "{:,.0f}".format(chrono.matched_through_cashflow_net or 0) }}
+            / trades {{ "{:,.0f}".format(chrono.matched_through_trade_net or 0) }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="text-muted">First break</div>
+          <div class="fw-semibold">{{ chrono.first_break_date or 'None (fully matched)' }}</div>
+        </div>
+        <div class="col-md-4">
+          <div class="text-muted">Final cumulative gap</div>
+          <div class="fw-semibold">{{ "{:,.0f}".format(chrono.final_cum_gap or 0) }}</div>
+        </div>
+      </div>
+      <p class="text-muted mb-0 mt-2">
+        Healthy prefix is trusted. Focus on bad-apple days after the break.
+        Corporate actions change quantities only — they do not explain cashflow↔trade gaps.
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if case.clubbed_explanations %}
+  <div class="card mb-3 border-success">
+    <div class="card-header bg-light">Explained by clubbing (±14 days) — ignored for day flags</div>
+    <ul class="list-group list-group-flush">
+      {% for ex in case.clubbed_explanations[:12] %}
+      <li class="list-group-item small">{{ ex.summary }}</li>
+      {% endfor %}
+    </ul>
+    {% if case.clubbed_explanations|length > 12 %}
+    <div class="card-footer small text-muted">…and {{ case.clubbed_explanations|length - 12 }} more</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if res.fix_options or res.root_cause or res.source %}
+  <div class="card mb-3 border-primary">
+    <div class="card-header bg-white">
+      <strong>{{ res.headline or 'Source of mismatch — what to check' }}</strong>
+      {% if res.explains_lifetime_gap %}
+      <span class="badge bg-danger ms-2">This day explains the full gap</span>
+      {% endif %}
+      {% if res.source and res.source.confidence %}
+      <span class="badge bg-secondary ms-1">confidence: {{ res.source.confidence }}</span>
+      {% endif %}
+    </div>
+    <div class="card-body">
+      {% if res.source and res.source.label %}
+      <div class="alert alert-secondary py-2 mb-3">
+        <div class="fw-semibold">{{ res.source.label }}</div>
+        {% if res.source.evidence %}
+        <ul class="small mb-0 mt-1">
+          {% for ev in res.source.evidence %}
+          <li>{{ ev }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      {% if res.finding %}
+      <p class="mb-2"><strong>What we found:</strong> {{ res.finding }}</p>
+      {% endif %}
+      {% if res.root_cause %}
+      <p class="mb-3"><strong>Likely cause:</strong> {{ res.root_cause }}</p>
+      {% endif %}
+
+      {% if res.check_exactly %}
+      <h6 class="mb-2">Check exactly (in order)</h6>
+      <ol class="mb-3">
+        {% for chk in res.check_exactly %}
+        <li class="mb-2">
+          <div class="fw-semibold">{{ chk.title }}</div>
+          <div class="small">{{ chk.detail }}</div>
+          {% if chk.url %}<a class="small" href="{{ chk.url }}">Open</a>{% endif %}
+          {% if chk.links %}
+          <div class="mt-1">
+            {% for lk in chk.links %}
+            <a class="badge bg-light text-dark border text-decoration-none me-1" href="{{ lk.url }}">{{ lk.label }}</a>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+      {% endif %}
+
+      {% if res.focus_day %}
+      <div class="border rounded p-2 mb-3 bg-light">
+        <div class="small text-muted mb-1">Focus day</div>
+        <div class="fw-semibold">
+          {{ res.focus_day.date }} · {{ res.focus_day.issue }}
+          · day gap {{ "{:,.0f}".format(res.focus_day.day_difference or 0) }}
+          · CF {{ "{:,.0f}".format(res.focus_day.cashflow_net or 0) }}
+          / trades {{ "{:,.0f}".format(res.focus_day.trade_net or 0) }}
+        </div>
+        {% if res.focus_day.trade_lines %}
+        <div class="small mt-1">Trades: {{ res.focus_day.trade_lines|join('; ') }}</div>
+        {% endif %}
+        {% if res.focus_day.nearby_cashflow_candidates %}
+        <div class="small mt-1">
+          Nearby CF candidates:
+          {% for c in res.focus_day.nearby_cashflow_candidates %}
+          <a href="{{ c.url }}">#{{ c.id }} @ {{ c.date }} ({{ "{:,.0f}".format(c.amount or 0) }})</a>{% if not loop.last %}, {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+        <div class="mt-2 d-flex flex-wrap gap-2">
+          {% if res.focus_day.window_cashflows_url %}
+          <a class="btn btn-sm btn-outline-primary" href="{{ res.focus_day.window_cashflows_url }}">Cashflows ±14d</a>
+          {% endif %}
+          {% if res.focus_day.transactions_url %}
+          <a class="btn btn-sm btn-outline-secondary" href="{{ res.focus_day.transactions_url }}">All trades</a>
+          {% endif %}
+          {% for tl in res.focus_day.trade_edit_links or [] %}
+          <a class="btn btn-sm btn-outline-dark" href="{{ tl.url }}">{{ tl.label }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <h6 class="mb-2">Suggested fixes (you do the edits)</h6>
+      <ol class="mb-0">
+        {% for opt in res.fix_options %}
+        <li class="mb-3">
+          <div class="fw-semibold">{{ opt.title }}</div>
+          {% if opt.why %}<div class="small text-muted">Why: {{ opt.why }}</div>{% endif %}
+          {% if opt.how %}<div class="small">How: {{ opt.how }}</div>{% endif %}
+          {% if opt.url %}
+          <a class="small" href="{{ opt.url }}">{{ opt.url_label or 'Open' }}</a>
+          {% endif %}
+          {% if opt.trade_links %}
+          <div class="mt-1">
+            {% for tl in opt.trade_links %}
+            <a class="badge bg-light text-dark border text-decoration-none me-1" href="{{ tl.url }}">{{ tl.label }}</a>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+      {% if res.after_fix %}
+      <p class="small text-muted mb-0 mt-2">{{ res.after_fix }}</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="row g-3">
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">Checklist {% if case.day_deviations_informational %}(optional){% else %}(you do the edits){% endif %}</div>
+        <ul class="list-group list-group-flush">
+          {% for step in case.checklist or [] %}
+          <li class="list-group-item">
+            <strong>{{ step.title }}</strong>
+            {% if step.hint %}<div class="small text-muted">{{ step.hint }}</div>{% endif %}
+            {% if step.url %}<a class="small" href="{{ step.url }}">Open</a>{% endif %}
+          </li>
+          {% else %}
+          <li class="list-group-item text-muted">No steps</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card h-100">
+        <div class="card-header">
+          {% if case.has_large_day_review %}
+          Large day deviations to review (amounts outside day band)
+          {% elif case.day_deviations_informational %}
+          Day deviations (small hints — not blocking match)
+          {% else %}
+          Suspect days (review these)
+          {% endif %}
+        </div>
+        <div class="table-responsive" style="max-height:320px;overflow:auto;">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>Date</th><th>Issue</th><th>Day diff</th><th>CF / trades</th><th></th></tr></thead>
+            <tbody>
+            {% if case.has_large_day_review %}
+              {% set day_rows = case.large_day_deviations %}
+            {% elif case.small_day_deviations %}
+              {% set day_rows = case.small_day_deviations %}
+            {% else %}
+              {% set day_rows = case.suspect_days or [] %}
+            {% endif %}
+            {% for d in day_rows %}
+              <tr {% if d.severity == 'review' %}class="table-warning"{% endif %}>
+                <td>{{ d.date }}</td>
+                <td>{{ d.issue }}</td>
+                <td>{{ "{:,.0f}".format(d.day_difference or 0) }}</td>
+                <td class="small">{{ "{:,.0f}".format(d.cashflow_net or 0) }} / {{ "{:,.0f}".format(d.trade_net or 0) }}</td>
+                <td class="small text-nowrap">
+                  <a href="{{ url_for('main.list_cashflows', client_id=client_id, start_date=d.date, end_date=d.date) }}">Cashflows</a>
+                  {% if d.transaction_ids %}
+                  · <a href="{{ url_for('main.transactions', client_id=client_id) }}">Trades</a>
+                  {% endif %}
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="5" class="text-muted">None</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% if case.has_large_day_review %}
+        <div class="card-footer small text-muted">
+          Lifetime totals can still “match” while individual days have large amount gaps.
+          Clubbing needs nearby dates <em>and</em> similar combined amounts (₹10L CF vs ₹1L nearby trades is not clubbing).
+          {% if case.small_day_deviations %}
+          <span class="d-block mt-1">{{ case.small_day_deviations|length }} smaller day hint(s) omitted from this table.</span>
+          {% endif %}
+        </div>
+        {% elif case.day_deviations_informational and (case.small_day_deviations or case.suspect_days) %}
+        <div class="card-footer small text-muted">
+          These are smaller day skews after clubbing checks; they do not block the lifetime match.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if st in ['mismatch_material', 'mismatch_review'] %}
+  <div class="card mt-3">
+    <div class="card-body">
+      <h6>Accept residual (optional)</h6>
+      <p class="small text-muted mb-2">Audited note only — does not change cashflows or trades.</p>
+      <form method="post" class="row g-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="accept_residual">
+        <div class="col-md-8">
+          <label class="form-label small">Reason</label>
+          <input class="form-control form-control-sm" name="reason" maxlength="500" placeholder="e.g. Clubbed month notes; residual not material" required>
+        </div>
+        <div class="col-md-4">
+          <button type="submit" class="btn btn-outline-secondary btn-sm">Accept residual / mark non-material</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {% endif %}
+
+  {% include "partials/guided_case_chat.html" %}
+</div>
+{% endblock %}

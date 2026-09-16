@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Hot Stocks Management{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+{% endblock %}
+
+{% block content %}
+{% from 'partials/mobile/macros.html' import maint_child_open, maint_desktop_open, maint_desktop_close %}
+{{ maint_child_open('Hot stocks', url_for('main.securities'), 'Research team preferred securities.') }}
+{{ maint_desktop_open('container-fluid') }}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-fire text-danger"></i> Hot Stocks Management
+        </h1>
+        <div>
+            <a href="{{ url_for('main.securities') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Securities
+            </a>
+        </div>
+    </div>
+
+    <!-- Hot Stocks Section -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-fire text-danger"></i> Current Hot Stocks (Research Team Preferred)
+            </h6>
+            <div class="d-flex align-items-center">
+                <input type="text" id="hotStocksSearch" class="form-control form-control-sm" placeholder="Search hot stocks..." style="width: 250px;">
+                <button type="button" id="clearHotStocksSearch" class="btn btn-sm btn-outline-secondary ml-2" style="display:none;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if hot_stocks %}
+            <div class="table-responsive">
+                <table class="table table-bordered" id="hotStocksTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Name</th>
+                            <th>Asset Class</th>
+                            <th>Current Price</th>
+                            <th>Last Updated</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stock in hot_stocks %}
+                        <tr>
+                            <td><strong>{{ stock.symbol }}</strong></td>
+                            <td>{{ stock.name }}</td>
+                            <td>{{ stock.asset_class.name if stock.asset_class else 'N/A' }}</td>
+                            <td>₹{{ "%.2f"|format(stock.current_price) if stock.current_price else 'N/A' }}</td>
+                            <td>{{ stock.last_updated.strftime('%Y-%m-%d %H:%M') if stock.last_updated else 'Never' }}</td>
+                            <td>
+                                <form method="POST" action="{{ url_for('main.remove_hot_stock', security_id=stock.id) }}" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" 
+                                            onclick="return confirm('Remove {{ stock.symbol }} from hot stocks?')">
+                                        <i class="fas fa-times"></i> Remove
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> No hot stocks have been added yet. Use the section below to add preferred stocks.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Add Hot Stocks Section -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-plus"></i> Add Stocks to Hot Stocks List
+            </h6>
+            <div class="d-flex align-items-center">
+                <input type="text" id="allStocksSearch" class="form-control form-control-sm" placeholder="Search all stocks..." style="width: 250px;">
+                <button type="button" id="clearAllStocksSearch" class="btn btn-sm btn-outline-secondary ml-2" style="display:none;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if all_securities %}
+            <form method="POST" action="{{ url_for('main.bulk_add_hot_stocks') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="table-responsive">
+                    <table class="table table-bordered" id="allStocksTable" width="100%" cellspacing="0">
+                        <thead>
+                            <tr>
+                                <th>
+                                    <input type="checkbox" id="selectAll" onchange="toggleAllCheckboxes()">
+                                </th>
+                                <th>Symbol</th>
+                                <th>Name</th>
+                                <th>Asset Class</th>
+                                <th>Current Price</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stock in all_securities %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" name="security_ids" value="{{ stock.id }}" class="stock-checkbox">
+                                </td>
+                                <td><strong>{{ stock.symbol }}</strong></td>
+                                <td>{{ stock.name }}</td>
+                                <td>{{ stock.asset_class.name if stock.asset_class else 'N/A' }}</td>
+                                <td>₹{{ "%.2f"|format(stock.current_price) if stock.current_price else 'N/A' }}</td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('main.add_hot_stock', security_id=stock.id) }}" style="display: inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" class="btn btn-sm btn-outline-success">
+                                            <i class="fas fa-fire"></i> Add
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-success" id="bulkAddBtn" disabled>
+                        <i class="fas fa-fire"></i> Add Selected to Hot Stocks
+                    </button>
+                    <span class="text-muted ml-2" id="selectedCount">0 stocks selected</span>
+                </div>
+            </form>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> All available stocks are already in the hot stocks list.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+{% endblock %}
+
+{% block scripts %}
+<!-- DataTables JS -->
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+
+<script>
+function toggleAllCheckboxes() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.stock-checkbox');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll.checked;
+    });
+    
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const checkboxes = document.querySelectorAll('.stock-checkbox:checked');
+    const count = checkboxes.length;
+    const bulkAddBtn = document.getElementById('bulkAddBtn');
+    const selectedCount = document.getElementById('selectedCount');
+    
+    selectedCount.textContent = `${count} stock${count !== 1 ? 's' : ''} selected`;
+    bulkAddBtn.disabled = count === 0;
+}
+
+// Add event listeners to checkboxes
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.stock-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectedCount);
+    });
+    
+    updateSelectedCount();
+});
+
+// Initialize DataTables
+$(document).ready(function() {
+    // Initialize Hot Stocks Table (if it exists)
+    var hotStocksTable = null;
+    if ($('#hotStocksTable').length) {
+        hotStocksTable = $('#hotStocksTable').DataTable({
+            "order": [[0, "asc"]],
+            "pageLength": 25,
+            "searching": true, // Enable searching but hide default box
+            "dom": 'lrtip' // Remove default search box from layout (f = filter/search)
+        });
+        
+        // Hot Stocks Search
+        $('#hotStocksSearch').on('keyup', function() {
+            hotStocksTable.search(this.value).draw();
+            if (this.value) {
+                $('#clearHotStocksSearch').show();
+            } else {
+                $('#clearHotStocksSearch').hide();
+            }
+        });
+        
+        $('#clearHotStocksSearch').on('click', function() {
+            $('#hotStocksSearch').val('');
+            hotStocksTable.search('').draw();
+            $(this).hide();
+        });
+    }
+    
+    // Initialize All Stocks Table (if it exists)
+    var allStocksTable = null;
+    if ($('#allStocksTable').length) {
+        allStocksTable = $('#allStocksTable').DataTable({
+            "order": [[1, "asc"]],
+            "pageLength": 25,
+            "searching": true, // Enable searching but hide default box
+            "dom": 'lrtip', // Remove default search box from layout (f = filter/search)
+            "columnDefs": [
+                { "orderable": false, "targets": 0 } // Disable sorting on checkbox column
+            ]
+        });
+        
+        // All Stocks Search
+        $('#allStocksSearch').on('keyup', function() {
+            allStocksTable.search(this.value).draw();
+            if (this.value) {
+                $('#clearAllStocksSearch').show();
+            } else {
+                $('#clearAllStocksSearch').hide();
+            }
+        });
+        
+        $('#clearAllStocksSearch').on('click', function() {
+            $('#allStocksSearch').val('');
+            allStocksTable.search('').draw();
+            $(this).hide();
+        });
+    }
+});
+</script>
+{% endblock %} 

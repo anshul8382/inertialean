@@ -1,0 +1,434 @@
+{#
+  Billing configuration: structure wizard + optional per-class advanced editor.
+
+  Usage:
+    {% from "agreements/_billing_rates_widget.html" import billing_rates_widget %}
+    {{ billing_rates_widget(form.asset_types.choices, existing_slabs, fixed_fee_config, billing_structure_config, transition_config) }}
+#}
+{% macro billing_rates_widget(ac_choices, existing_slabs, fixed_fee_config, billing_structure_config=None, transition_config=None) %}
+{% set _ff = (fixed_fee_config or {}) %}
+{% set _ff_amount = _ff.get('fixed_annual_fee', '') %}
+{% set _ff_esc    = _ff.get('fixed_fee_escalation_pct', '') %}
+{% set _tr = transition_config or {} %}
+{% set _fy_fee = _tr.get('first_year_fixed_annual_fee', '') %}
+{% set _fy_freq = _tr.get('first_year_billing_frequency', 'yearly') %}
+{% set _cfg = billing_structure_config or {} %}
+{% set _st = _cfg.get('billing_structure_type', 'uniform') %}
+{% set _tiered_ids = _cfg.get('tiered_ac_ids') or [] %}
+{% set _exceptions = _cfg.get('exceptions') or [] %}
+
+<div class="card border-0 shadow-sm mb-4" id="billingRatesWidget">
+  <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center py-2">
+    <span class="fw-semibold"><i class="fas fa-percentage text-primary me-1"></i> Billing configuration</span>
+    <small class="text-muted" id="billingWidgetSubtitle">Choose a fee structure, then review generated schedule text</small>
+  </div>
+  <div class="card-body px-3 py-2">
+
+    <div id="firstYearFixedSection" style="display:none;">
+      <p class="small text-muted mb-2">
+        Year 1 is a fixed annual fee; from the first anniversary of the billing start date, invoices use AUA rates below.
+        A standard clause is written to Special Note when you save (unless you override it).
+      </p>
+      <div class="row g-3 align-items-end">
+        <div class="col-md-5">
+          <label class="form-label fw-semibold">First-year fixed fee (₹/year) <span class="text-danger">*</span></label>
+          <input type="number" step="0.01" min="0" class="form-control" name="first_year_fixed_annual_fee"
+                 value="{{ _fy_fee }}" placeholder="e.g. 25000">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">First-year invoice frequency</label>
+          <select class="form-select" name="first_year_billing_frequency">
+            <option value="yearly" {% if _fy_freq == 'yearly' %}selected{% endif %}>Yearly</option>
+            <option value="half_yearly" {% if _fy_freq == 'half_yearly' %}selected{% endif %}>Half-yearly</option>
+            <option value="quarterly" {% if _fy_freq == 'quarterly' %}selected{% endif %}>Quarterly</option>
+          </select>
+        </div>
+      </div>
+      <hr class="my-3">
+    </div>
+
+    <div id="fixedFeeSection" style="display:none;">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-5">
+          <label class="form-label fw-semibold">Fixed annual fee (₹) <span class="text-danger">*</span></label>
+          <input type="number" step="0.01" min="0" class="form-control" name="fixed_annual_fee"
+                 value="{{ _ff_amount }}" placeholder="e.g. 120000">
+          <small class="text-muted">Total fee for one full year (before escalation).</small>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Annual escalation (%)</label>
+          <input type="number" step="0.01" min="0" max="100" class="form-control" name="fixed_fee_escalation_pct"
+                 value="{{ _ff_esc }}" placeholder="e.g. 5">
+        </div>
+      </div>
+    </div>
+
+    <div id="auaRatesSection">
+      <!-- Structure type -->
+      <div class="mb-3" id="billingStructureSection">
+        <label class="form-label fw-semibold small text-uppercase text-secondary">Fee structure</label>
+        <div class="d-flex flex-wrap gap-2">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="billing_structure_type" id="bst_uniform"
+                   value="uniform" {% if _st == 'uniform' %}checked{% endif %}>
+            <label class="form-check-label" for="bst_uniform">Same rate — all asset classes</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="billing_structure_type" id="bst_differential"
+                   value="differential" {% if _st == 'differential' %}checked{% endif %}>
+            <label class="form-check-label" for="bst_differential">Different rates for selected classes</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="billing_structure_type" id="bst_tiered"
+                   value="aum_tiered" {% if _st == 'aum_tiered' %}checked{% endif %}>
+            <label class="form-check-label" for="bst_tiered">AUM bands (e.g. equity tiers)</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="billing_structure_type" id="bst_advanced"
+                   value="advanced" {% if _st == 'advanced' %}checked{% endif %}>
+            <label class="form-check-label" for="bst_advanced">Advanced (per class)</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Uniform -->
+      <div class="billing-mode-panel border rounded p-3 mb-2" id="panel_uniform" data-mode="uniform">
+        <div class="row g-2">
+          <div class="col-md-4">
+            <label class="form-label form-label-sm">Rate (% p.a.) <span class="text-danger">*</span></label>
+            <input type="number" step="0.0001" min="0" class="form-control form-control-sm" name="uniform_rate_pct"
+                   value="{{ _cfg.get('uniform_rate_pct') or _cfg.get('default_rate_pct') or '1.25' }}" placeholder="1.25">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm">Min fee (₹)</label>
+            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="uniform_min_fee"
+                   value="{{ _cfg.get('uniform_min_fee') or '' }}" placeholder="0">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm">Max fee (₹)</label>
+            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="uniform_max_fee"
+                   value="{{ _cfg.get('uniform_max_fee') or '' }}" placeholder="(no cap)">
+          </div>
+        </div>
+        <small class="text-muted">Applies to every asset class selected above.</small>
+      </div>
+
+      <!-- Differential -->
+      <div class="billing-mode-panel border rounded p-3 mb-2" id="panel_differential" data-mode="differential" style="display:none;">
+        <div class="row g-2 mb-2">
+          <div class="col-md-4">
+            <label class="form-label form-label-sm">Default rate (% p.a.)</label>
+            <input type="number" step="0.0001" min="0" class="form-control form-control-sm" name="default_rate_pct"
+                   value="{{ _cfg.get('default_rate_pct') or '1.25' }}">
+          </div>
+        </div>
+        <label class="form-label form-label-sm fw-semibold">Exceptions (higher or lower rate for specific classes)</label>
+        <input type="hidden" name="billing_exception_count" id="billing_exception_count"
+               value="{{ _exceptions|length if _exceptions else 0 }}">
+        <div id="billing_exceptions_body">
+          {% for ex in _exceptions %}
+          <div class="row g-2 mb-1 billing-exception-row">
+            <div class="col-md-6">
+              <select class="form-select form-select-sm" name="billing_exception_{{ loop.index0 }}_ac_id">
+                {% for ac_id, ac_name in ac_choices %}
+                <option value="{{ ac_id }}" {% if ex.ac_id == ac_id %}selected{% endif %}>{{ ac_name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <input type="number" step="0.0001" min="0" class="form-control form-control-sm"
+                     name="billing_exception_{{ loop.index0 }}_rate_pct" value="{{ ex.rate_pct }}" placeholder="% p.a.">
+            </div>
+            <div class="col-md-2">
+              <button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="billingRemoveException(this)">×</button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary mt-1" onclick="billingAddException()">
+          <i class="fas fa-plus"></i> Add exception
+        </button>
+      </div>
+
+      <!-- AUM tiered -->
+      <div class="billing-mode-panel border rounded p-3 mb-2" id="panel_aum_tiered" data-mode="aum_tiered" style="display:none;">
+        <div class="row g-2 mb-2">
+          <div class="col-md-5">
+            <label class="form-label form-label-sm">Preset for tiered classes</label>
+            <select class="form-select form-select-sm" name="equity_preset" id="equity_preset">
+              <option value="standard_equity" {% if _cfg.get('equity_preset', 'standard_equity') == 'standard_equity' %}selected{% endif %}>
+                Standard equity: 0–25L 2%, 25–50L 1.5%, 50L+ 1%
+              </option>
+              <option value="custom" {% if _cfg.get('equity_preset') == 'custom' %}selected{% endif %}>
+                Custom (use Advanced per-class slabs for tiered classes)
+              </option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label form-label-sm">Other classes — flat rate (% p.a.)</label>
+            <input type="number" step="0.0001" min="0" class="form-control form-control-sm" name="other_rate_pct"
+                   value="{{ _cfg.get('other_rate_pct') or _cfg.get('default_rate_pct') or '1.25' }}">
+          </div>
+        </div>
+        <label class="form-label form-label-sm fw-semibold">Asset classes with AUM bands</label>
+        <div class="d-flex flex-wrap gap-2" id="tieredAcCheckboxes">
+          {% for ac_id, ac_name in ac_choices %}
+          <div class="form-check">
+            <input class="form-check-input tiered-ac-cb" type="checkbox" name="tiered_ac_{{ ac_id }}" value="1"
+                   id="tiered_ac_{{ ac_id }}"
+                   {% if ac_id in _tiered_ids %}checked{% endif %}>
+            <label class="form-check-label small" for="tiered_ac_{{ ac_id }}">{{ ac_name }}</label>
+          </div>
+          {% endfor %}
+        </div>
+        <small class="text-muted d-block mt-1">Typically Equity. Other selected classes use the flat rate above.</small>
+      </div>
+
+      <!-- Generated schedule preview (read-only; saved on submit) -->
+      <div class="alert alert-light border small mb-2" id="feeSchedulePreviewWrap" style="display:none;">
+        <strong>Agreement fee table</strong> (auto-generated on save as Assets / Rate columns, placeholder <code>&lt;&lt;billing_fee_schedule&gt;&gt;</code>).
+        For debt at 0%, add an exception for <em>Fixed income / Debt</em> (and Debt ETF / Debt Mutual Funds) — the default rate alone will otherwise bill them at 1%.
+        <pre class="mb-0 mt-1 small text-wrap" id="feeSchedulePreview" style="white-space: pre-wrap;"></pre>
+      </div>
+
+      <!-- Advanced per-class (legacy) -->
+      <div id="billingAdvancedSection" style="display:none;">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="small fw-semibold text-secondary">Per asset class (advanced)</span>
+        </div>
+        <div id="billingRatesSections">
+          {% for ac_id, ac_name in ac_choices %}
+          {% set ac_slabs = (existing_slabs or {}).get(ac_id, []) %}
+          {% set use_slab_mode = ac_slabs | length > 1 %}
+
+          <div class="asset-rate-section border rounded mb-2 px-3 py-2"
+               data-asset-class-id="{{ ac_id }}" style="display:none;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-semibold text-secondary small text-uppercase">{{ ac_name }}</span>
+              <div class="form-check form-switch mb-0">
+                <input class="form-check-input" type="checkbox" id="use_slabs_{{ ac_id }}"
+                       name="use_slabs_{{ ac_id }}" value="1" {% if use_slab_mode %}checked{% endif %}
+                       onchange="billingRatesToggleSlab({{ ac_id }})">
+                <label class="form-check-label small" for="use_slabs_{{ ac_id }}">Tiered slabs</label>
+              </div>
+            </div>
+            <div class="flat-rate-row row g-2" id="flat_{{ ac_id }}"
+                 style="{{ 'display:none' if use_slab_mode else '' }}">
+              <div class="col-md-4">
+                <label class="form-label form-label-sm mb-1 text-muted">Rate (%)</label>
+                <input type="number" step="0.0001" min="0" class="form-control form-control-sm"
+                       name="rate_pct_{{ ac_id }}"
+                       value="{{ ac_slabs[0].rate_pct if (ac_slabs and not use_slab_mode) else '' }}"
+                       placeholder="1.25">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label form-label-sm mb-1 text-muted">Min fee (₹)</label>
+                <input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                       name="min_fee_{{ ac_id }}"
+                       value="{{ ac_slabs[0].min_fee if (ac_slabs and not use_slab_mode) else '' }}" placeholder="0">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label form-label-sm mb-1 text-muted">Max fee (₹)</label>
+                <input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                       name="max_fee_{{ ac_id }}"
+                       value="{{ (ac_slabs[0].max_fee if ac_slabs[0].max_fee is not none else '') if (ac_slabs and not use_slab_mode) else '' }}"
+                       placeholder="(no cap)">
+              </div>
+            </div>
+            <div class="slab-rate-section" id="slab_section_{{ ac_id }}"
+                 style="{{ '' if use_slab_mode else 'display:none' }}">
+              <input type="hidden" name="slab_count_{{ ac_id }}" id="slab_count_{{ ac_id }}"
+                     value="{{ ac_slabs | length if use_slab_mode else 1 }}">
+              <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-1">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Min AUM (₹)</th><th>Max AUM (₹)</th><th>Rate (%)</th>
+                      <th>Min fee</th><th>Max fee</th><th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="slab_body_{{ ac_id }}">
+                    {% if use_slab_mode %}
+                      {% for slab in ac_slabs %}
+                      <tr>
+                        <td><input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                                   name="slab_{{ ac_id }}_{{ loop.index0 }}_min_amount" value="{{ slab.min_amount }}"></td>
+                        <td><input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                                   name="slab_{{ ac_id }}_{{ loop.index0 }}_max_amount"
+                                   value="{{ slab.max_amount if slab.max_amount is not none else '' }}"></td>
+                        <td><input type="number" step="0.0001" min="0" class="form-control form-control-sm"
+                                   name="slab_{{ ac_id }}_{{ loop.index0 }}_rate_pct" value="{{ slab.rate_pct }}"></td>
+                        <td><input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                                   name="slab_{{ ac_id }}_{{ loop.index0 }}_min_fee" value="{{ slab.min_fee }}"></td>
+                        <td><input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                                   name="slab_{{ ac_id }}_{{ loop.index0 }}_max_fee"
+                                   value="{{ slab.max_fee if slab.max_fee is not none else '' }}"></td>
+                        <td><button type="button" class="btn btn-sm btn-outline-danger px-2"
+                                    onclick="billingRatesRemoveSlab({{ ac_id }}, this)">×</button></td>
+                      </tr>
+                      {% endfor %}
+                    {% else %}
+                      <tr>
+                        <td><input type="number" class="form-control form-control-sm"
+                                   name="slab_{{ ac_id }}_0_min_amount" value="0"></td>
+                        <td><input type="number" class="form-control form-control-sm"
+                                   name="slab_{{ ac_id }}_0_max_amount" value=""></td>
+                        <td><input type="number" class="form-control form-control-sm"
+                                   name="slab_{{ ac_id }}_0_rate_pct" value=""></td>
+                        <td><input type="number" class="form-control form-control-sm"
+                                   name="slab_{{ ac_id }}_0_min_fee" value="0"></td>
+                        <td><input type="number" class="form-control form-control-sm"
+                                   name="slab_{{ ac_id }}_0_max_fee" value=""></td>
+                        <td><button type="button" class="btn btn-sm btn-outline-danger px-2"
+                                    onclick="billingRatesRemoveSlab({{ ac_id }}, this)">×</button></td>
+                      </tr>
+                    {% endif %}
+                  </tbody>
+                </table>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-secondary"
+                      onclick="billingRatesAddSlab({{ ac_id }})"><i class="fas fa-plus"></i> Add slab</button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  if (window._billingRatesWidgetLoaded) return;
+  window._billingRatesWidgetLoaded = true;
+
+  var AC_CHOICES = {{ ac_choices | tojson }};
+
+  window.billingWidgetApplyAdvisoryModel = function (model) {
+    var isFixed = (model === 'fixed_fee');
+    var isFixedThen = (model === 'fixed_then_aua');
+    var ff = document.getElementById('fixedFeeSection');
+    var fy = document.getElementById('firstYearFixedSection');
+    var aua = document.getElementById('auaRatesSection');
+    var subtitle = document.getElementById('billingWidgetSubtitle');
+    var valGroup = document.getElementById('valuationDateRuleGroup');
+    if (fy) fy.style.display = isFixedThen ? '' : 'none';
+    if (ff) ff.style.display = isFixed ? '' : 'none';
+    if (aua) aua.style.display = isFixed ? 'none' : '';
+    if (subtitle) {
+      if (isFixed) subtitle.textContent = 'Fixed fee — escalation after each completed year';
+      else if (isFixedThen) subtitle.textContent = 'Year 1 fixed fee, then AUA — configure rates for year 2 onwards';
+      else subtitle.textContent = 'Fee structure wizard — saved rates drive invoices and agreement text';
+    }
+    if (valGroup) valGroup.style.display = isFixed ? 'none' : '';
+    if (!isFixed) billingApplyStructureMode();
+  };
+
+  function billingStructureType() {
+    var r = document.querySelector('input[name="billing_structure_type"]:checked');
+    return r ? r.value : 'uniform';
+  }
+
+  window.billingApplyStructureMode = function () {
+    var mode = billingStructureType();
+    document.querySelectorAll('.billing-mode-panel').forEach(function (p) {
+      p.style.display = (p.getAttribute('data-mode') === mode) ? '' : 'none';
+    });
+    var adv = document.getElementById('billingAdvancedSection');
+    if (adv) adv.style.display = (mode === 'advanced' || (mode === 'aum_tiered' && document.getElementById('equity_preset') && document.getElementById('equity_preset').value === 'custom')) ? '' : 'none';
+    billingRatesRefreshSections();
+  };
+
+  window.billingRatesRefreshSections = function () {
+    var sel = document.getElementById('asset_types');
+    if (!sel) return;
+    var selected = new Set(Array.from(sel.selectedOptions || []).map(function (o) { return o.value; }));
+    document.querySelectorAll('.asset-rate-section').forEach(function (div) {
+      div.style.display = selected.has(div.getAttribute('data-asset-class-id')) ? '' : 'none';
+    });
+  };
+
+  window.billingRatesToggleSlab = function (acId) {
+    var cb = document.getElementById('use_slabs_' + acId);
+    document.getElementById('flat_' + acId).style.display = cb.checked ? 'none' : '';
+    document.getElementById('slab_section_' + acId).style.display = cb.checked ? '' : 'none';
+  };
+
+  window.billingRatesAddSlab = function (acId) {
+    var tbody = document.getElementById('slab_body_' + acId);
+    var count = tbody.querySelectorAll('tr').length;
+    var row = document.createElement('tr');
+    row.innerHTML = '<td><input type="number" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_min_amount"></td>' +
+      '<td><input type="number" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_max_amount"></td>' +
+      '<td><input type="number" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_rate_pct"></td>' +
+      '<td><input type="number" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_min_fee"></td>' +
+      '<td><input type="number" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_max_fee"></td>' +
+      '<td><button type="button" class="btn btn-sm btn-outline-danger" onclick="billingRatesRemoveSlab(' + acId + ', this)">×</button></td>';
+    tbody.appendChild(row);
+    billingRatesRenumber(acId);
+  };
+
+  window.billingRatesRemoveSlab = function (acId, btn) {
+    var tbody = document.getElementById('slab_body_' + acId);
+    if (tbody.querySelectorAll('tr').length <= 1) return;
+    btn.closest('tr').remove();
+    billingRatesRenumber(acId);
+  };
+
+  window.billingRatesRenumber = function (acId) {
+    var tbody = document.getElementById('slab_body_' + acId);
+    var rows = tbody.querySelectorAll('tr');
+    rows.forEach(function (row, idx) {
+      row.querySelectorAll('input[name]').forEach(function (inp) {
+        inp.name = inp.name.replace(new RegExp('slab_' + acId + '_\\d+_'), 'slab_' + acId + '_' + idx + '_');
+      });
+    });
+    document.getElementById('slab_count_' + acId).value = rows.length;
+  };
+
+  window.billingAddException = function () {
+    var tbody = document.getElementById('billing_exceptions_body');
+    var idx = tbody.querySelectorAll('.billing-exception-row').length;
+    var opts = AC_CHOICES.map(function (p) {
+      return '<option value="' + p[0] + '">' + p[1] + '</option>';
+    }).join('');
+    var row = document.createElement('div');
+    row.className = 'row g-2 mb-1 billing-exception-row';
+    row.innerHTML = '<div class="col-md-6"><select class="form-select form-select-sm" name="billing_exception_' + idx + '_ac_id">' + opts + '</select></div>' +
+      '<div class="col-md-4"><input type="number" step="0.0001" class="form-control form-control-sm" name="billing_exception_' + idx + '_rate_pct" placeholder="% p.a."></div>' +
+      '<div class="col-md-2"><button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="billingRemoveException(this)">×</button></div>';
+    tbody.appendChild(row);
+    document.getElementById('billing_exception_count').value = idx + 1;
+  };
+
+  window.billingRemoveException = function (btn) {
+    btn.closest('.billing-exception-row').remove();
+    var tbody = document.getElementById('billing_exceptions_body');
+    var rows = tbody.querySelectorAll('.billing-exception-row');
+    rows.forEach(function (row, idx) {
+      row.querySelectorAll('[name]').forEach(function (inp) {
+        inp.name = inp.name.replace(/billing_exception_\d+_/, 'billing_exception_' + idx + '_');
+      });
+    });
+    document.getElementById('billing_exception_count').value = rows.length;
+  };
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var advisoryModelSel = document.getElementById('advisory_model');
+    if (advisoryModelSel) {
+      billingWidgetApplyAdvisoryModel(advisoryModelSel.value);
+      advisoryModelSel.addEventListener('change', function () { billingWidgetApplyAdvisoryModel(this.value); });
+    }
+    document.querySelectorAll('input[name="billing_structure_type"]').forEach(function (el) {
+      el.addEventListener('change', billingApplyStructureMode);
+    });
+    var preset = document.getElementById('equity_preset');
+    if (preset) preset.addEventListener('change', billingApplyStructureMode);
+    billingRatesRefreshSections();
+    var sel = document.getElementById('asset_types');
+    if (sel) sel.addEventListener('change', billingRatesRefreshSections);
+    billingApplyStructureMode();
+  });
+})();
+</script>
+{% endmacro %}

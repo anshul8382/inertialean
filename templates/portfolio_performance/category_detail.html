@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Category{% endblock %}
+{% block content %}
+<p>Total: {{ total_issues }} issues, {{ total_clients }} clients.</p>
+<a href="{{ url_for("portfolio_performance.dashboard") }}">Back</a>
+{% for row in clients_with_issues %}
+<div><a href="{{ url_for("portfolio_performance.client_issues", client_id=row.client_id) }}">{{ row.client_name }}</a></div>
+{% endfor %}
+{% endblock %}

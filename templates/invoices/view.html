@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Invoice {{ invoice.invoice_number }}{% endblock %}
+
+{% block content %}
+{% set can_manage_finance = current_user.is_admin or current_user.is_manager %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-file-invoice-dollar"></i> Invoice: {{ invoice.invoice_number }}</h1>
+        <div>
+            {% if can_manage_finance %}
+            <a href="{{ url_for('invoices.edit_invoice', invoice_id=invoice.id) }}" class="btn btn-primary">
+                <i class="fas fa-edit"></i> Edit Invoice
+            </a>
+            {% endif %}
+            <a href="{{ url_for('invoices.download_invoice_pdf', invoice_id=invoice.id) }}" class="btn btn-outline-danger">
+                <i class="fas fa-file-pdf"></i> Download PDF
+            </a>
+            <a href="{{ url_for('invoices.download_invoice_portfolio_excel', invoice_id=invoice.id) }}" class="btn btn-outline-success">
+                <i class="fas fa-file-excel"></i> Download Portfolio (Excel)
+            </a>
+            {% if zoho and zoho.configured and can_manage_finance %}
+            <form method="post" action="{{ url_for('invoices.zoho_push_invoice', invoice_id=invoice.id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-info">{% if zoho.linked %}Re-send Zoho{% else %}Create in Zoho{% endif %}</button>
+            </form>
+            {% if zoho.linked %}
+            <form method="post" action="{{ url_for('invoices.zoho_sync_invoice', invoice_id=invoice.id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-info">Sync Zoho status</button>
+            </form>
+            <a href="{{ url_for('invoices.zoho_invoice_pdf', invoice_id=invoice.id) }}" class="btn btn-outline-secondary">Zoho PDF</a>
+            {% endif %}
+            {% if zoho.zoho_payment_id %}
+            <a href="{{ url_for('invoices.zoho_payment_receipt', invoice_id=invoice.id) }}" class="btn btn-outline-success">Zoho receipt</a>
+            {% elif zoho.linked and invoice.status != 'paid' %}
+            <form method="post" action="{{ url_for('invoices.zoho_mark_paid', invoice_id=invoice.id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-success" onclick="return confirm('Record payment in Zoho and mark this invoice paid?');">Mark paid in Zoho</button>
+            </form>
+            {% endif %}
+            {% endif %}
+            <a href="{{ url_for('invoices.list_invoices') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to List
+            </a>
+        </div>
+    </div>
+
+    {% if zoho and zoho.linked %}
+    <div class="alert alert-light border small mb-3">
+        Zoho linked — invoice ID <code>{{ zoho.zoho_invoice_id }}</code>
+        {% if zoho.zoho_payment_id %} · payment ID <code>{{ zoho.zoho_payment_id }}</code>{% endif %}
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Invoice Details -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Invoice Details</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Invoice Number:</strong><br>
+                            {{ invoice.invoice_number }}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Status:</strong><br>
+                            {% if invoice.status == 'draft' %}
+                                <span class="badge bg-secondary">Draft</span>
+                            {% elif invoice.status == 'sent' %}
+                                <span class="badge bg-warning">Sent</span>
+                            {% elif invoice.status == 'paid' %}
+                                <span class="badge bg-success">Paid</span>
+                            {% elif invoice.status == 'overdue' %}
+                                <span class="badge bg-danger">Overdue</span>
+                            {% elif invoice.status == 'cancelled' %}
+                                <span class="badge bg-dark">Cancelled</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Client:</strong><br>
+                            {{ invoice.client.name }}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Agreement:</strong><br>
+                            {{ invoice.agreement.agreement_type|title if invoice.agreement else 'N/A' }}
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <strong>Invoice Date:</strong><br>
+                            {{ invoice.invoice_date.strftime('%Y-%m-%d') }}
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Due Date:</strong><br>
+                            {{ invoice.due_date.strftime('%Y-%m-%d') }}
+                        </div>
+                        <div class="col-md-4">
+                            <strong>Paid Date:</strong><br>
+                            {% if invoice.paid_date %}
+                                {{ invoice.paid_date.strftime('%Y-%m-%d') }}
+                            {% else %}
+                                <span class="text-muted">Not paid</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Billing Period:</strong><br>
+                            {{ invoice.billing_period_start.strftime('%B %d, %Y') }} - 
+                            {{ invoice.billing_period_end.strftime('%B %d, %Y') }}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Payment Method:</strong><br>
+                            {{ invoice.payment_method or 'N/A' }}
+                        </div>
+                    </div>
+                    {% if invoice.payment_reference %}
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <strong>Payment Reference:</strong><br>
+                            {{ invoice.payment_reference }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if invoice.notes %}
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <strong>Notes:</strong><br>
+                            {{ invoice.notes }}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Line Items -->
+            {% if line_items %}
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Invoice Line Items</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Asset Class</th>
+                                    <th>Portfolio Value</th>
+                                    <th>Rate</th>
+                                    <th>Calculated Fee</th>
+                                    <th>Final Fee</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in line_items %}
+                                <tr>
+                                    <td>{{ item.asset_class_name }}</td>
+                                    <td>₹{{ "{:,.2f}".format(item.portfolio_value|float) }}</td>
+                                    <td>{{ "{:.2f}".format(item.rate_percentage|float * 100) }}%</td>
+                                    <td>₹{{ "{:,.2f}".format(item.calculated_fee|float) }}</td>
+                                    <td>₹{{ "{:,.2f}".format(item.final_fee|float) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Summary Card -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Amount Summary</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <strong>Net Amount:</strong><br>
+                        <span class="h5">₹{{ "{:,.2f}".format(invoice.net_amount|float) }}</span>
+                    </div>
+                    <div class="mb-3">
+                        <strong>Tax ({{ "{:.2f}".format(invoice.tax_rate|float * 100) }}%):</strong><br>
+                        <span class="h5">₹{{ "{:,.2f}".format(invoice.tax_amount|float) }}</span>
+                    </div>
+                    <hr>
+                    <div class="mb-3">
+                        <strong>Total Amount:</strong><br>
+                        <span class="h4 text-primary">₹{{ "{:,.2f}".format(invoice.total_amount|float) }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions Card -->
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        {% if can_manage_finance %}
+                        {% if invoice.status == 'draft' %}
+                        <button type="button" class="btn btn-warning" onclick="updateStatus('sent')">
+                            <i class="fas fa-paper-plane"></i> Mark as Sent
+                        </button>
+                        {% elif invoice.status == 'sent' %}
+                        <button type="button" class="btn btn-success" onclick="updateStatus('paid')">
+                            <i class="fas fa-check"></i> Mark as Paid
+                        </button>
+                        {% endif %}
+                        {% endif %}
+                        {% if can_manage_finance %}
+                        <a href="{{ url_for('invoices.edit_invoice', invoice_id=invoice.id) }}" class="btn btn-outline-primary">
+                            <i class="fas fa-edit"></i> Edit Details
+                        </a>
+                        {% endif %}
+                        {% if invoice.pdf_path %}
+                        <a href="{{ invoice.pdf_path }}" class="btn btn-outline-info" target="_blank">
+                            <i class="fas fa-file-pdf"></i> View PDF
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function updateStatus(newStatus) {
+    if (confirm(`Are you sure you want to mark this invoice as ${newStatus}?`)) {
+        fetch('{{ url_for("invoices.update_invoice_status", invoice_id=invoice.id) }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}',
+            },
+            body: JSON.stringify({ status: newStatus })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while updating the status.');
+        });
+    }
+}
+</script>
+{% endblock %}
+
+
+
+
+
+

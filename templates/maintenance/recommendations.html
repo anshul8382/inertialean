@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link %}
+
+{% block title %}Maintenance — Recommendations{% endblock %}
+
+{% block content %}
+{{ maint_hub_open('Recommendations', 'Unified recommendations, monthly cycles, and recommended trades.', url_for('main.maintenance_reviews')) }}
+  {{ maint_link('fa-list', 'All recommendations', url_for('unified_recommendations.unified_recommendations')) }}
+  {{ maint_link('fa-plus', 'Generate new recommendations', url_for('unified_recommendations.generate_unified_recommendations')) }}
+  {{ maint_link('fa-calendar-alt', 'Monthly investments', url_for('main.list_monthly_investments')) }}
+  {{ maint_link('fa-exchange-alt', 'All recommended trades', url_for('recommended_trades.list_all_recommended_trades')) }}
+  {% include 'partials/mobile/record_trade_details_mobile.html' %}
+{{ maint_hub_close() }}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0"><i class="fas fa-calendar-check text-primary"></i> Recommendations</h1>
+        <a href="{{ url_for('main.maintenance_reviews') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-clipboard-list"></i> Reviews
+        </a>
+    </div>
+    <p class="text-muted mb-4">Unified recommendations, monthly investment cycles, and recommended trades.</p>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('unified_recommendations.unified_recommendations') }}">
+                        <i class="fas fa-list d-block mb-2 fa-lg"></i> All recommendations
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-primary w-100 py-3" href="{{ url_for('unified_recommendations.generate_unified_recommendations') }}">
+                        <i class="fas fa-plus d-block mb-2 fa-lg"></i> Generate new recommendations
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('main.list_monthly_investments') }}">
+                        <i class="fas fa-calendar-alt d-block mb-2 fa-lg"></i> Monthly investments
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('recommended_trades.list_all_recommended_trades') }}">
+                        <i class="fas fa-list d-block mb-2 fa-lg"></i> All recommended trades
+                    </a>
+                </div>
+                {% include "maintenance/_record_trade_details_card.html" %}
+            </div>
+        </div>
+    </div>
+{{ maint_desktop_close() }}
+{% endblock %}

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Billing Manager Plan{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h1 class="h3 mb-0"><i class="fas fa-chess-king"></i> Billing Manager Plan</h1>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('invoices.list_invoices') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Invoices
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header py-2">
+            <strong>Run Plan</strong>
+        </div>
+        <div class="card-body">
+            <form method="post" class="row g-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="col-md-3">
+                    <label class="form-label" for="as_of_date">As-of date</label>
+                    <input type="date" class="form-control" id="as_of_date" name="as_of_date" value="{{ params.as_of_date }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="weekly_capacity">Weekly capacity (1-5)</label>
+                    <input type="number" min="1" max="5" class="form-control" id="weekly_capacity" name="weekly_capacity" value="{{ params.weekly_capacity }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="value_weight">Value weight</label>
+                    <input type="number" min="0" step="0.05" class="form-control" id="value_weight" name="value_weight" value="{{ params.value_weight }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="overdue_weight">Overdue weight</label>
+                    <input type="number" min="0" step="0.05" class="form-control" id="overdue_weight" name="overdue_weight" value="{{ params.overdue_weight }}">
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-play"></i> Build Plan
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if plan %}
+    <div class="row g-3 mb-4">
+        <div class="col-lg-3 col-md-6">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs text-uppercase text-primary fw-bold">Due billings</div>
+                    <div class="h5 mb-0">{{ plan.summary.due_billings }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs text-uppercase text-success fw-bold">Total due value</div>
+                    <div class="h5 mb-0">₹{{ "{:,.0f}".format(plan.summary.total_due_estimated_value|float) }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs text-uppercase text-warning fw-bold">Weeks to catch up</div>
+                    <div class="h5 mb-0">{{ plan.summary.weeks_to_catch_up }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs text-uppercase text-danger fw-bold">Catch-up by week ending</div>
+                    <div class="h6 mb-0">{{ plan.summary.catch_up_by_week_end or "N/A" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-2"><strong>This Week Priority (Top {{ plan.parameters.weekly_capacity }})</strong></div>
+        <div class="card-body">
+            {% if plan.weekly_plan %}
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Client</th>
+                            <th>Agreement</th>
+                            <th>Last billed</th>
+                            <th>Due since</th>
+                            <th>Days overdue</th>
+                            <th>Estimated value</th>
+                            <th>Reason</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in plan.weekly_plan %}
+                        <tr>
+                            <td>{{ r.client_name }}</td>
+                            <td>{{ r.agreement_id }}</td>
+                            <td>{{ r.last_billed_date or "—" }}</td>
+                            <td>{{ r.next_billing_date }}</td>
+                            <td>{{ r.days_overdue }}</td>
+                            <td>₹{{ "{:,.0f}".format(r.estimated_invoice_value|float) }}</td>
+                            <td><span class="badge bg-light text-dark border">{{ r.selection_reason }}</span></td>
+                            <td>{{ "{:.3f}".format(r.priority_score|float) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-muted">No due opportunities found.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-2"><strong>Catch-up Roadmap by Week</strong></div>
+        <div class="card-body">
+            {% if plan.monthly_projection.roadmap_by_week %}
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Week</th>
+                            <th>Date range</th>
+                            <th>Planned billings</th>
+                            <th>Planned value</th>
+                            <th>Clients</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for wk in plan.monthly_projection.roadmap_by_week %}
+                        <tr>
+                            <td>Week {{ wk.week_index }}</td>
+                            <td>{{ wk.week_start }} to {{ wk.week_end }}</td>
+                            <td>{{ wk.planned_billings }}</td>
+                            <td>₹{{ "{:,.0f}".format(wk.planned_estimated_value|float) }}</td>
+                            <td>
+                                {% for item in wk.planned_clients %}
+                                    <span class="badge bg-light text-dark border mb-1">{{ item.client_name }} (₹{{ "{:,.0f}".format(item.estimated_invoice_value|float) }})</span>
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-muted">No backlog to schedule.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-2"><strong>Missing Inputs / Flags</strong></div>
+        <div class="card-body">
+            {% if plan.missing_inputs %}
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Client</th>
+                            <th>Agreement</th>
+                            <th>Flags</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rec in plan.missing_inputs %}
+                        <tr>
+                            <td>{{ rec.client_name }}</td>
+                            <td>{{ rec.agreement_id }}</td>
+                            <td>
+                                {% for f in rec.flags %}
+                                    <div class="small mb-1">
+                                        <span class="badge {% if f.severity == 'hard' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                                            {{ f.severity }}
+                                        </span>
+                                        <strong>{{ f.code }}</strong>: {{ f.message }}
+                                    </div>
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-muted">No flagged gaps.</div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

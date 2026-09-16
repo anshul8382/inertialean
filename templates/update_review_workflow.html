@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Update Review Workflow - {{ client.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Update Review Workflow</h1>
+        <div>
+            <a href="{{ url_for('clients.client_review_schedule', client_id=client.id) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Review Schedule
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-edit"></i> Update Review Workflow
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <h6 class="font-weight-bold">Client</h6>
+                            <p>{{ client.name }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="font-weight-bold">Review Date</h6>
+                            <p>{{ workflow.review_date.strftime('%Y-%m-%d') }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="font-weight-bold">Assigned To</h6>
+                            <p>{{ workflow.assigned_user.username if workflow.assigned_user else '—' }}</p>
+                        </div>
+                    </div>
+
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        
+                        <div class="form-group mb-3">
+                            <label for="review_date" class="form-label">Review Date</label>
+                            <input type="date" class="form-control" id="review_date" name="review_date" 
+                                   value="{{ workflow.review_date.strftime('%Y-%m-%d') }}" required>
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle"></i> Changing the review date may affect cycle alignment. 
+                                Use this if the automatically calculated date is too soon.
+                            </small>
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="status" class="form-label">Status</label>
+                            <select class="form-control" id="status" name="status" required>
+                                <option value="initiated" {{ 'selected' if workflow.status == 'initiated' }}>Initiated</option>
+                                <option value="sent" {{ 'selected' if workflow.status == 'sent' }}>Review Sent</option>
+                                <option value="meeting" {{ 'selected' if workflow.status == 'meeting' }}>Meeting Scheduled</option>
+                                <option value="closed" {{ 'selected' if workflow.status == 'closed' }}>Closed</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="meeting_date" class="form-label">Meeting Date & Time</label>
+                            <input type="datetime-local" class="form-control" id="meeting_date" name="meeting_date" 
+                                   value="{{ workflow.meeting_date.strftime('%Y-%m-%dT%H:%M') if workflow.meeting_date else '' }}">
+                            <small class="form-text text-muted">Set this when status is 'Meeting Scheduled'</small>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="4" 
+                                      placeholder="Add notes about this review workflow">{{ workflow.notes or '' }}</textarea>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="meeting_notes" class="form-label">Meeting Notes</label>
+                            <textarea class="form-control" id="meeting_notes" name="meeting_notes" rows="4" 
+                                      placeholder="Add notes from the meeting">{{ workflow.meeting_notes or '' }}</textarea>
+                            <small class="form-text text-muted">Add this after the meeting is completed</small>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Update Workflow
+                            </button>
+                            <a href="{{ url_for('clients.client_review_schedule', client_id=client.id) }}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-hide meeting date field if status is not 'meeting'
+document.getElementById('status').addEventListener('change', function() {
+    const meetingDateGroup = document.getElementById('meeting_date').closest('.form-group');
+    if (this.value === 'meeting') {
+        meetingDateGroup.style.display = 'block';
+    } else {
+        meetingDateGroup.style.display = 'none';
+    }
+});
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const statusSelect = document.getElementById('status');
+    const meetingDateGroup = document.getElementById('meeting_date').closest('.form-group');
+    if (statusSelect.value !== 'meeting') {
+        meetingDateGroup.style.display = 'none';
+    }
+});
+</script>
+{% endblock %}

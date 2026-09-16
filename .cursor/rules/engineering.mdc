@@ -1,0 +1,181 @@
+---
+description: Engineering & Architecture unit — enterprise modular monolith, stack, layers, alignment
+globs: "**/*.py,routes/**,services/**,api/**,templates/**/*.html,docs/ARCHITECTURE*.md,docs/CODEBASE_STANDARDIZATION_PLAN.md"
+alwaysApply: false
+---
+
+# Engineering & Architecture Unit
+
+Single rule for **how we build and evolve** Inertia as an **enterprise-grade modular monolith**: bounded domains, strict layers, API-first, security, and module alignment.
+
+**Canonical doc:** `docs/ARCHITECTURE_MODULES_AND_ALIGNMENT.md`  
+**Roadmap:** `docs/CODEBASE_STANDARDIZATION_PLAN.md`
+
+---
+
+## 1. Architecture stance
+
+Inertia is **one deployable Flask app** with **clear domain boundaries** — not microservices.
+
+| Principle | Rule |
+|-----------|------|
+| **API-first** | User-facing capability → versioned JSON API; web and mobile are clients |
+| **Thin edges** | Routes/API: auth, validate, call service, respond — **no business logic** |
+| **Single write path** | HTTP, agents, and Airflow call the **same services** |
+| **Fail closed** | Missing auth → 401; missing client access → 403; optional modules fail alone |
+| **Audit by default** | Client view/export/advice actions → `services/audit_service.log_audit_event()` |
+| **Preserve production** | Do not delete clients_v2, JWT, api/v2, Hub, agents registry when refactoring |
+
+### Layer stack (enforce top → bottom)
+
+```
+Presentation   routes/ · api/v1 · api/v2 · apps/mobile/
+Cross-cutting  auth · CSRF · 2FA · RBAC · client access · audit
+Application    services/  (orchestrate use cases)
+Foundation     services/foundation/  (atomic, no upward deps)
+Persistence    models.py · models/
+Async plane    agents/ · airflow/dags/  (outside HTTP)
+```
+
+**Violations to reject:** SQL in templates; calculation in route handlers; duplicate logic in v1 and v2 API modules; new logic in `routes/main.py`.
+
+---
+
+## 2. Bounded domains
+
+Place every feature in **one** domain; cross-domain via shared services only.
+
+| Domain | Scope |
+|--------|--------|
+| Identity & access | auth, 2FA, JWT, roles |
+| Client & CRM | clients_v2, clients, leads, agreements |
+| Portfolio & transactions | holdings, trades, prices, corporate actions |
+| Advice & reviews | recommendations, reviews, period analysis, tax optimiser |
+| Workflows & ops | monthly cycles, tasks, alerts, assignment rules |
+| Analytics & reporting | practice/client analytics, exports |
+| Compliance & integrity | agents, hub, audit, SEBI exports |
+| Platform & admin | users, settings, Airflow, cron |
+
+**Not in core app:** Financial planning — external module; scaffold in repo; enable with `FINANCIAL_PLANNING_ENABLED=true` when integrated (architecture doc §13).
+
+When adding a module: name the domain, pick or create a blueprint, add service(s), update architecture doc if it is a new cross-domain link.
+
+---
+
+## 3. Stack
+
+- **Backend:** Flask + SQLAlchemy + MySQL; APIs at `/api/v1`, `/api/v2`
+- **Web:** Jinja2 + Bootstrap; extend `base.html`; CSRF on mutating forms
+- **Mobile:** Expo app `apps/mobile/` — same APIs as web
+- **Auth:** Session (web) + Bearer JWT (`services/jwt_service.py`); mandatory 2FA via `two_factor_enforcement`
+- **Scheduling:** Airflow for heavy/scheduled; in-process cron only for lightweight workflow triggers
+- **Responses:** `api/core/response.APIResponse` for JSON consistency
+
+---
+
+## 4. Security & access (non-negotiable)
+
+- Every sensitive route/API: `@login_required` or API blueprint `before_request` guard
+- Client-scoped URLs: blueprint `@bp.before_request` → `enforce_client_id_from_view_args()` from `access_control.py`
+- **Never** authorize from client-supplied `client_id` in body alone — URL/view args + `can_access_client()`
+- Secrets from env/`config.py` only; CSRF exempt only via documented allowlist
+- After auth/routes/API changes: `python3 scripts/run_security_audit.py --severity high`
+
+---
+
+## 5. Service layer
+
+- Logic lives in `services/`; routes/API/agents are adapters
+- Stateless; use `db.session`; **caller commits** (except audit helper with explicit `commit=True`)
+- Return dicts/lists at layer boundaries
+- Prefer `services/foundation/` for atomic shared logic (price, security, client CRUD)
+- Avoid circular imports — late-import inside functions when needed
+- Target structure (incremental): `services/portfolio/`, `services/workflow/`, etc.
+
+**Key services:** `task_assignment_service`, `price_service`, `recommendation_service`, `audit_service`, `client_service`, `jwt_service`
+
+---
+
+## 6. API versioning
+
+| Version | Use |
+|---------|-----|
+| v1 | Mobile auth/clients, tax optimiser, general CRUD, cron hooks |
+| v2 | Period analysis, transaction CRUD/bulk/holdings |
+
+Shared calculations → **one service** imported by both versions. Register new blueprints via `_safe_register` pattern in `api/v1/__init__.py`.
+
+Public endpoints → explicit entry in `api/v1/auth_guard.py` only.
+
+---
+
+## 7. Module alignment (client detail hub)
+
+`/clients/<id>` is the integration hub for client-scoped features.
+
+**Required for new client features:**
+1. Backend data in detail route or dedicated API consumed by detail page
+2. Visible section/link on client detail template
+3. Client access enforced (blueprint hook or `@client_access_required`)
+4. Audit log for view/export/mutation when SEBI-relevant
+
+**Navigation rules:**
+- Every nav/detail link → existing route (`has_endpoint` / `NAV_*_ENABLED`)
+- Every page route → reachable from nav, client detail, or documented URL
+- No orphan routes or dead links
+- Update `docs/ARCHITECTURE_MODULES_AND_ALIGNMENT.md` when adding modules
+
+---
+
+## 8. routes/main.py (legacy hotspot ~1,900 lines)
+
+- **Freeze:** no new business logic — extract to domain blueprint + service
+- Acceptable: redirects, thin wrappers, legacy URLs pending migration
+- ReviewWorkflow: `apply_review_assignment(workflow)` on create/status change
+- Use `@login_required`, `@handle_errors`; commit/rollback in handler after service call
+
+**Extract targets (priority):** maintenance uploads, securities admin, practice dashboard widgets → dedicated blueprints.
+
+---
+
+## 9. Models & persistence
+
+- New models → `models/` package; migrate from monolithic `models.py` when editing
+- Migrations → `migrations/<script>.py`, run manually
+- No HTTP or flash in models
+
+---
+
+## 10. Runtime agents
+
+- Subclass `BaseAgent`; register in `agents/__init__.py` and **`agents/registry.py`**
+- Agents call services; yield `DataIntegrityIssue`; do not create alerts directly
+- Groups defined in registry — place new agents in the correct group
+
+---
+
+## 11. Enterprise quality bar
+
+Before marking architecture-sensitive work done:
+
+- [ ] Logic in service, not route/template/API handler?
+- [ ] Domain identified; no duplicate cross-domain logic?
+- [ ] Client access + auth enforced?
+- [ ] API added/updated if mobile or external client needs it?
+- [ ] Audit events for compliance-relevant actions?
+- [ ] Tests for service or API path?
+- [ ] Security audit clean for high+ if auth/routes touched?
+- [ ] Architecture doc updated if new module or menu item?
+
+### Known remediation (do not block small fixes; plan for refactors)
+
+- Split `routes/main.py` and `models.py` by domain (phased)
+- Expand `services/foundation/`; introduce domain subpackages
+- Add `GET /api/v1/health` for ops
+- Replace user-specific access hacks in `access_control.py` with role permissions
+
+---
+
+## Invoke
+
+@ Engineering · @ Architect · new blueprints · services · API · "architecture review" · module alignment

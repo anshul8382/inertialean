@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Dashboard</h1>
+    </div>
+
+    <div class="row">
+        <!-- Total Clients Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Clients</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_clients }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-users fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Portfolios Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Total Portfolios</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_portfolios }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-pie fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upcoming Meetings Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Upcoming Meetings</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ upcoming_meetings }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Assets Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Total Assets</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% if total_assets is not none %}
+                                    ₹{{ "%.2f"|format(total_assets) }}
+                                {% else %}
+                                    ₹0.00
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-rupee-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Recent Activity</h6>
+                </div>
+                <div class="card-body">
+                    {% if recent_activities %}
+                        {% for activity in recent_activities %}
+                        <div class="mb-3 pb-3 {% if not loop.last %}border-bottom{% endif %}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center mb-1">
+                                        {% if activity.type == 'investment' %}
+                                            <i class="fas fa-calendar-check text-success me-2"></i>
+                                        {% elif activity.type == 'workflow' %}
+                                            <i class="fas fa-tasks text-info me-2"></i>
+                                        {% elif activity.type == 'review' %}
+                                            <i class="fas fa-clipboard-check text-primary me-2"></i>
+                                        {% elif activity.type == 'call' %}
+                                            <i class="fas fa-phone text-warning me-2"></i>
+                                        {% elif activity.type == 'meeting' %}
+                                            <i class="fas fa-calendar-alt text-danger me-2"></i>
+                                        {% else %}
+                                            <i class="fas fa-circle text-secondary me-2"></i>
+                                        {% endif %}
+                                        <h6 class="mb-0">{{ activity.title }}</h6>
+                                    </div>
+                                    <p class="small text-muted mb-0 ms-4">{{ activity.description }}</p>
+                                </div>
+                                <small class="text-muted ms-2 text-nowrap">
+                                    {% if activity.timestamp %}
+                                        {{ activity.timestamp.strftime('%Y-%m-%d %H:%M') }}
+                                    {% else %}
+                                        N/A
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                            <p class="text-muted mb-0">No recent activity.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

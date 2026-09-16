@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link %}
+
+{% block title %}Maintenance — Reference data{% endblock %}
+
+{% block content %}
+{{ maint_hub_open('Reference data', 'Asset classes, securities, models, and prices.', url_for('main.maintenance_trade_data')) }}
+  {{ maint_link('fa-layer-group', 'Asset classes', url_for('main.list_asset_classes')) }}
+  {{ maint_link('fa-coins', 'Securities', url_for('main.securities')) }}
+  {% if config.get('NAV_CORPORATE_ACTIONS_ENABLED') %}
+  {{ maint_link('fa-sitemap', 'Corporate actions', url_for('corporate_actions.list_actions'), 'Splits, bonuses, dividends') }}
+  {% endif %}
+  {{ maint_link('fa-chart-line', 'Historical prices', url_for('historical_prices.view_historical_prices'), 'Browse and edit by security') }}
+  {{ maint_link('fa-upload', 'Upload prices', url_for('historical_prices.upload_page'), 'CSV, benchmarks, NAV sync') }}
+  {{ maint_link('fa-project-diagram', 'Allocation models', url_for('main.models'), 'Asset and security models') }}
+  {{ maint_link('fa-shapes', 'Security models', url_for('main.models', _anchor='security-models'), 'Jump to list on models page') }}
+  {% if config.get('NAV_PARRVA_ENABLED') %}
+  {{ maint_link('fa-paper-plane', 'PaRRVA submit', url_for('parrva.submit_page'), 'Submit client portfolios to PaRRVA') }}
+  {% endif %}
+{{ maint_hub_close() }}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0"><i class="fas fa-book text-primary"></i> Reference data</h1>
+        <a href="{{ url_for('main.maintenance_trade_data') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-exchange-alt"></i> Trade data
+        </a>
+    </div>
+    <p class="text-muted mb-4">Asset classes, securities, corporate actions, historical prices, allocation models, and PaRRVA.</p>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('main.list_asset_classes') }}">
+                        <i class="fas fa-layer-group d-block mb-2 fa-lg"></i> Asset classes
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('main.securities') }}">
+                        <i class="fas fa-coins d-block mb-2 fa-lg"></i> Securities
+                    </a>
+                </div>
+                {% if config.get('NAV_CORPORATE_ACTIONS_ENABLED') %}
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('corporate_actions.list_actions') }}">
+                        <i class="fas fa-sitemap d-block mb-2 fa-lg"></i> Corporate actions
+                        <small class="d-block text-muted fw-normal mt-1">Splits, bonuses, dividends, mergers</small>
+                    </a>
+                </div>
+                {% endif %}
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('historical_prices.view_historical_prices') }}">
+                        <i class="fas fa-chart-line d-block mb-2 fa-lg"></i> Historical prices
+                        <small class="d-block text-muted fw-normal mt-1">Browse and edit by security</small>
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-secondary w-100 py-3" href="{{ url_for('historical_prices.upload_page') }}">
+                        <i class="fas fa-upload d-block mb-2 fa-lg"></i> Upload prices
+                        <small class="d-block text-muted fw-normal mt-1">CSV, benchmarks, NAV sync</small>
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-success w-100 py-3" href="{{ url_for('main.models') }}">
+                        <i class="fas fa-project-diagram d-block mb-2 fa-lg"></i> Allocation models
+                        <small class="d-block text-muted fw-normal mt-1">Asset &amp; security models</small>
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-secondary w-100 py-3" href="{{ url_for('main.models', _anchor='security-models') }}">
+                        <i class="fas fa-shapes d-block mb-2 fa-lg"></i> Security models
+                        <small class="d-block text-muted fw-normal mt-1">Jump to list on models page</small>
+                    </a>
+                </div>
+                {% if config.get('NAV_PARRVA_ENABLED') %}
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('parrva.submit_page') }}">
+                        <i class="fas fa-paper-plane d-block mb-2 fa-lg"></i> PaRRVA submit
+                        <small class="d-block text-muted fw-normal mt-1">Submit client portfolios to PaRRVA</small>
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{{ maint_desktop_close() }}
+{% endblock %}

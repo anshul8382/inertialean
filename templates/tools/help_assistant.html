@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}Ask INERTIA{% endblock %}
+
+{% block extra_css %}
+<style>
+.help-chat-wrap { max-width: 900px; margin: 0 auto; }
+.help-chat-log {
+    min-height: 320px;
+    max-height: 55vh;
+    overflow-y: auto;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
+}
+.help-msg { margin-bottom: 1rem; }
+.help-msg.user .bubble { background: #e7f1ff; margin-left: 2rem; }
+.help-msg.assistant .bubble { background: #fff; margin-right: 2rem; border: 1px solid #dee2e6; }
+.help-msg .bubble {
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    white-space: pre-wrap;
+    font-size: 0.95rem;
+}
+.help-msg .label { font-size: 0.75rem; color: #6c757d; margin-bottom: 0.25rem; }
+.help-msg .meta { font-size: 0.7rem; color: #868e96; margin-top: 0.35rem; }
+.help-doc-panel {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: #fff8e6;
+    border: 1px solid #ffe08a;
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid help-chat-wrap py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+        <div>
+            <h1 class="h3 mb-1"><i class="fas fa-comments text-primary"></i> Ask INERTIA</h1>
+            <p class="text-muted mb-0 small">Read-only help: Ollama only generates text from docs and whitelisted code excerpts. It cannot change code, data, or files. No live client data or SQL.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('assistant.assistant_hub') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left"></i> Assistant
+            </a>
+            <a href="{{ url_for('main.user_manual_pdf') }}" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener noreferrer">
+                <i class="fas fa-file-pdf"></i> PDF manual
+            </a>
+        </div>
+    </div>
+
+    {% if not ai_enabled %}
+    <div class="alert alert-warning">
+        <strong>AI-assisted answers are disabled.</strong> Common questions still answer instantly from the docs. For full AI answers, set <code>ENABLE_AI_SERVICES=true</code> in the server environment and restart the app.
+    </div>
+    {% elif not ollama_ok %}
+    <div class="alert alert-danger">
+        <strong>Ollama is not reachable.</strong> Common questions still answer instantly from the docs. For full AI answers, on the app server run <code>systemctl status ollama</code> and ensure <code>llama3.1:8b</code> is pulled.
+    </div>
+    {% else %}
+    <div class="alert alert-success py-2 small mb-3">
+        <i class="fas fa-check-circle"></i> Connected to Ollama
+        {% if ollama_models %} — models: {{ ollama_models|join(', ') }}{% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body p-0">
+            <div id="helpChatLog" class="help-chat-log">
+                <div class="help-msg assistant">
+                    <div class="label">INERTIA</div>
+                    <div class="bubble">Ask about menus, workflows, monthly investments, reviews, or uploads. Common questions (e.g. creating a workflow) answer instantly; others use local AI with codebase context.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <label for="helpQuestion" class="form-label fw-semibold">Your question</label>
+            <textarea id="helpQuestion" class="form-control mb-2" rows="3" placeholder="e.g. How do I create a new workflow?"></textarea>
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="button" class="btn btn-primary" id="helpSendBtn">
+                    <i class="fas fa-paper-plane"></i> Send
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="helpClearBtn">Clear chat</button>
+            </div>
+            <p id="helpError" class="text-danger small mt-2 mb-0 d-none"></p>
+            <p class="text-muted small mt-2 mb-0">Instant answers when possible; AI replies often 15–45s. Verify critical steps in the PDF manual.</p>
+        </div>
+    </div>
+
+    {% if can_approve_knowledge %}
+    <div class="card shadow-sm mt-3 border-warning">
+        <div class="card-header py-2 bg-warning bg-opacity-10">
+            <strong class="small">Pending knowledge updates</strong> (manager/admin)
+        </div>
+        <div class="card-body py-2" id="helpPendingList">
+            <p class="text-muted small mb-0">Loading…</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+    const logEl = document.getElementById('helpChatLog');
+    const inputEl = document.getElementById('helpQuestion');
+    const sendBtn = document.getElementById('helpSendBtn');
+    const errEl = document.getElementById('helpError');
+    const canApprove = {{ 'true' if can_approve_knowledge else 'false' }};
+    let history = [];
+    let lastQuestion = '';
+
+    function appendMsg(role, text, meta) {
+        const wrap = document.createElement('div');
+        wrap.className = 'help-msg ' + role;
+        let html = '<div class="label">' + (role === 'user' ? 'You' : 'INERTIA') + '</div><div class="bubble"></div>';
+        if (meta) html += '<div class="meta">' + meta + '</div>';
+        wrap.innerHTML = html;
+        wrap.querySelector('.bubble').textContent = text;
+        logEl.appendChild(wrap);
+        logEl.scrollTop = logEl.scrollHeight;
+        return wrap;
+    }
+
+    function appendDocPanel(parentMsg, question, reply) {
+        const panel = document.createElement('div');
+        panel.className = 'help-doc-panel';
+        panel.innerHTML = '<div class="mb-1"><strong>Improve help docs?</strong> (You edit — not AI.) Submit for manager approval; only <code>docs/HELP_ASSISTANT_KNOWLEDGE.md</code> is updated, never application code.</div>'
+            + '<textarea class="form-control form-control-sm mb-2 doc-propose-text" rows="4"></textarea>'
+            + '<button type="button" class="btn btn-sm btn-outline-warning doc-propose-btn">Submit doc update</button>'
+            + '<span class="doc-propose-status small ms-2 text-muted"></span>';
+        const ta = panel.querySelector('.doc-propose-text');
+        ta.value = 'Q: ' + question + '\n\nA:\n' + reply;
+        panel.querySelector('.doc-propose-btn').addEventListener('click', async function () {
+            const statusEl = panel.querySelector('.doc-propose-status');
+            statusEl.textContent = 'Sending…';
+            try {
+                const r = await fetch('{{ url_for("assistant.help_knowledge_propose") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                    body: JSON.stringify({ question: question, proposed_text: ta.value }),
+                });
+                const data = await r.json();
+                if (data.success) {
+                    statusEl.textContent = canApprove
+                        ? 'Saved — approve below if you are admin/manager.'
+                        : 'Submitted — a manager will approve.';
+                    if (canApprove) loadPending();
+                } else {
+                    statusEl.textContent = data.error || 'Failed';
+                }
+            } catch (e) {
+                statusEl.textContent = 'Network error';
+            }
+        });
+        parentMsg.appendChild(panel);
+    }
+
+    function setError(msg) {
+        if (!msg) { errEl.classList.add('d-none'); errEl.textContent = ''; return; }
+        errEl.textContent = msg;
+        errEl.classList.remove('d-none');
+    }
+
+    async function send() {
+        const q = (inputEl.value || '').trim();
+        if (!q) return;
+        lastQuestion = q;
+        setError('');
+        appendMsg('user', q);
+        inputEl.value = '';
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Thinking…';
+        const t0 = performance.now();
+        try {
+            const r = await fetch('{{ url_for("assistant.help_assistant_chat") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify({ question: q, history: history }),
+            });
+            const data = await r.json();
+            if (!data.success) {
+                setError(data.error || 'Request failed');
+                return;
+            }
+            history.push({ role: 'user', content: q });
+            history.push({ role: 'assistant', content: data.reply });
+            if (history.length > 12) history = history.slice(-12);
+            const ms = data.elapsed_ms != null ? data.elapsed_ms : Math.round(performance.now() - t0);
+            const meta = (data.fast_path ? 'Instant (docs + codebase)' : ('AI · ' + (data.model || 'ollama'))) + ' · ' + ms + ' ms';
+            const msgEl = appendMsg('assistant', data.reply, meta);
+            appendDocPanel(msgEl, q, data.reply);
+        } catch (e) {
+            setError('Network error. Try again.');
+        } finally {
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Send';
+        }
+    }
+
+    async function loadPending() {
+        const el = document.getElementById('helpPendingList');
+        if (!el || !canApprove) return;
+        try {
+            const r = await fetch('{{ url_for("assistant.help_knowledge_pending") }}');
+            const data = await r.json();
+            if (!data.success || !data.proposals || !data.proposals.length) {
+                el.innerHTML = '<p class="text-muted small mb-0">No pending proposals.</p>';
+                return;
+            }
+            el.innerHTML = '';
+            data.proposals.forEach(function (p) {
+                const card = document.createElement('div');
+                card.className = 'border rounded p-2 mb-2 small';
+                card.innerHTML = '<div class="fw-semibold">' + escapeHtml(p.question) + '</div>'
+                    + '<div class="text-muted">By ' + escapeHtml(p.user_name || '') + '</div>'
+                    + '<pre class="mb-2 mt-1" style="white-space:pre-wrap;font-size:0.8rem">' + escapeHtml(p.proposed_text) + '</pre>'
+                    + '<button type="button" class="btn btn-sm btn-success">Approve → add to knowledge</button>';
+                card.querySelector('button').addEventListener('click', async function () {
+                    const rr = await fetch('{{ url_for("assistant.help_knowledge_approve") }}', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                        body: JSON.stringify({ proposal_id: p.id }),
+                    });
+                    const res = await rr.json();
+                    if (res.success) {
+                        card.remove();
+                        if (!el.children.length) el.innerHTML = '<p class="text-muted small mb-0">No pending proposals.</p>';
+                    } else {
+                        alert(res.error || 'Approve failed');
+                    }
+                });
+                el.appendChild(card);
+            });
+        } catch (e) {
+            el.innerHTML = '<p class="text-danger small mb-0">Could not load pending list.</p>';
+        }
+    }
+
+    function escapeHtml(s) {
+        const d = document.createElement('div');
+        d.textContent = s || '';
+        return d.innerHTML;
+    }
+
+    sendBtn?.addEventListener('click', send);
+    inputEl?.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+    });
+    document.getElementById('helpClearBtn')?.addEventListener('click', function () {
+        history = [];
+        logEl.innerHTML = '<div class="help-msg assistant"><div class="label">INERTIA</div><div class="bubble">Chat cleared. Ask another question.</div></div>';
+        setError('');
+    });
+    if (canApprove) loadPending();
+})();
+</script>
+{% endblock %}

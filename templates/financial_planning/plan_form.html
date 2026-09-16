@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}{% if plan %}Edit{% else %}Create{% endif %} Plan – {{ client.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-edit"></i> {% if plan %}Edit{% else %}Create{% endif %} Financial Plan – {{ client.name }}</h1>
+        <a href="{{ url_for('financial_planning.client_plan', client_id=client.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="post" action="{% if plan %}{{ url_for('financial_planning.plan_edit', client_id=client.id) }}{% else %}{{ url_for('financial_planning.plan_create', client_id=client.id) }}{% endif %}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                {# Prefer form_data when re-rendering after save error #}
+                {% set fd = form_data or {} %}
+                <h5 class="border-bottom pb-2 mb-3">Overview</h5>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Plan name</label>
+                        <input type="text" name="plan_name" class="form-control" value="{{ fd.get('plan_name') or (plan.plan_name if plan else 'Financial Plan') }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Plan date</label>
+                        <input type="date" name="plan_date" class="form-control" value="{{ fd.get('plan_date') or (plan.plan_date.strftime('%Y-%m-%d') if plan and plan.plan_date else '') }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Review date</label>
+                        <input type="date" name="review_date" class="form-control" value="{{ fd.get('review_date') or (plan.review_date.strftime('%Y-%m-%d') if plan and plan.review_date else '') }}">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Status</label>
+                        <select name="status" class="form-select">
+                            {% set _status = fd.get('status') or (plan.status if plan else 'draft') %}
+                            <option value="draft" {% if _status == 'draft' %}selected{% endif %}>Draft</option>
+                            <option value="active" {% if _status == 'active' %}selected{% endif %}>Active</option>
+                            <option value="archived" {% if _status == 'archived' %}selected{% endif %}>Archived</option>
+                        </select>
+                    </div>
+                </div>
+
+                <h5 class="border-bottom pb-2 mb-3 mt-4">Assets and liabilities</h5>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Current net worth (Inertia portfolio)</label>
+                        <input type="text" name="current_net_worth" class="form-control" value="{{ fd.get('current_net_worth') or ("%.2f"|format(plan.current_net_worth) if plan and plan.current_net_worth is not none else '0') }}" placeholder="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Cash and bank</label>
+                        <input type="text" name="cash_and_bank" class="form-control" value="{{ fd.get('cash_and_bank') or ("%.2f"|format(plan.cash_and_bank) if plan and plan.cash_and_bank is not none else '0') }}" placeholder="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Real estate value</label>
+                        <input type="text" name="real_estate_value" class="form-control" value="{{ fd.get('real_estate_value') or ("%.2f"|format(plan.real_estate_value) if plan and plan.real_estate_value is not none else '0') }}" placeholder="0">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Other assets</label>
+                        <input type="text" name="other_assets_value" class="form-control" value="{{ fd.get('other_assets_value') or ("%.2f"|format(plan.other_assets_value) if plan and plan.other_assets_value is not none else '0') }}" placeholder="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Other liabilities</label>
+                        <input type="text" name="other_liabilities" class="form-control" value="{{ fd.get('other_liabilities') or ("%.2f"|format(plan.other_liabilities) if plan and plan.other_liabilities is not none else '0') }}" placeholder="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Total liabilities</label>
+                        <input type="text" name="total_liabilities" class="form-control" value="{{ fd.get('total_liabilities') or ("%.2f"|format(plan.total_liabilities) if plan and plan.total_liabilities is not none else '') }}" placeholder="0">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <label class="form-label">Include in planning net worth</label>
+                        {% if fd %}{% set inc_port = fd.get('include_inertia_portfolio') == 'on' %}{% set inc_cash = fd.get('include_cash_and_bank') == 'on' %}{% set inc_re = fd.get('include_real_estate') == 'on' %}{% set inc_other = fd.get('include_other_assets') == 'on' %}{% set inc_liab = fd.get('include_liabilities') == 'on' %}
+                        {% else %}{% set inc_port = not plan or plan.include_inertia_portfolio %}{% set inc_cash = not plan or plan.include_cash_and_bank %}{% set inc_re = plan and plan.include_real_estate %}{% set inc_other = plan and plan.include_other_assets %}{% set inc_liab = not plan or plan.include_liabilities %}
+                        {% endif %}
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" name="include_inertia_portfolio" id="inc_port" {% if inc_port %}checked{% endif %}>
+                            <label class="form-check-label" for="inc_port">Inertia portfolio</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" name="include_cash_and_bank" id="inc_cash" {% if inc_cash %}checked{% endif %}>
+                            <label class="form-check-label" for="inc_cash">Cash and bank</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" name="include_real_estate" id="inc_re" {% if inc_re %}checked{% endif %}>
+                            <label class="form-check-label" for="inc_re">Real estate</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" name="include_other_assets" id="inc_other" {% if inc_other %}checked{% endif %}>
+                            <label class="form-check-label" for="inc_other">Other assets</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" name="include_liabilities" id="inc_liab" {% if inc_liab %}checked{% endif %}>
+                            <label class="form-check-label" for="inc_liab">Liabilities</label>
+                        </div>
+                    </div>
+                </div>
+
+                <h5 class="border-bottom pb-2 mb-3 mt-4">Cash flow and emergency</h5>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Monthly income</label>
+                        <input type="text" name="monthly_income" class="form-control" value="{{ fd.get('monthly_income') or ("%.2f"|format(plan.monthly_income) if plan and plan.monthly_income is not none else '') }}" placeholder="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Monthly expenses</label>
+                        <input type="text" name="monthly_expenses" class="form-control" value="{{ fd.get('monthly_expenses') or ("%.2f"|format(plan.monthly_expenses) if plan and plan.monthly_expenses is not none else '') }}" placeholder="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Monthly savings</label>
+                        <input type="text" name="monthly_savings" class="form-control" value="{{ fd.get('monthly_savings') or ("%.2f"|format(plan.monthly_savings) if plan and plan.monthly_savings is not none else '') }}" placeholder="0">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Emergency fund target</label>
+                        <input type="text" name="emergency_fund_target" class="form-control" value="{{ fd.get('emergency_fund_target') or ("%.2f"|format(plan.emergency_fund_target) if plan and plan.emergency_fund_target is not none else '') }}" placeholder="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Emergency fund current</label>
+                        <input type="text" name="emergency_fund_current" class="form-control" value="{{ fd.get('emergency_fund_current') or ("%.2f"|format(plan.emergency_fund_current) if plan and plan.emergency_fund_current is not none else '') }}" placeholder="0">
+                    </div>
+                </div>
+
+                <h5 class="border-bottom pb-2 mb-3 mt-4">Risk and insurance</h5>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Risk tolerance</label>
+                        {% set _risk = fd.get('risk_tolerance') or (plan.risk_tolerance if plan else '') %}
+                        <select name="risk_tolerance" class="form-select">
+                            <option value="">—</option>
+                            <option value="conservative" {% if _risk == 'conservative' %}selected{% endif %}>Conservative</option>
+                            <option value="moderate" {% if _risk == 'moderate' %}selected{% endif %}>Moderate</option>
+                            <option value="aggressive" {% if _risk == 'aggressive' %}selected{% endif %}>Aggressive</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Time horizon (years)</label>
+                        <input type="number" name="time_horizon" class="form-control" value="{{ fd.get('time_horizon') or (plan.time_horizon if plan and plan.time_horizon is not none else '') }}" placeholder="Years" min="1">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Life insurance coverage</label>
+                        <input type="text" name="life_insurance_coverage" class="form-control" value="{{ fd.get('life_insurance_coverage') or ("%.2f"|format(plan.life_insurance_coverage) if plan and plan.life_insurance_coverage is not none else '') }}" placeholder="0">
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Health insurance coverage</label>
+                        <input type="text" name="health_insurance_coverage" class="form-control" value="{{ fd.get('health_insurance_coverage') or ("%.2f"|format(plan.health_insurance_coverage) if plan and plan.health_insurance_coverage is not none else '') }}" placeholder="0">
+                    </div>
+                </div>
+
+                <div class="mb-3 mt-4">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" class="form-control" rows="3">{{ fd.get('notes') or (plan.notes if plan and plan.notes else '') }}</textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary">{% if plan %}Update{% else %}Create{% endif %} plan</button>
+                <a href="{{ url_for('financial_planning.client_plan', client_id=client.id) }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Missing Routes Review{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-unlink"></i> Missing Routes Review</h2>
+            <p class="text-muted mb-0">
+                Routes that exist in the app but are not currently linked in the main desktop menu.
+            </p>
+        </div>
+        <span class="badge bg-primary fs-6">{{ missing_routes|length }} total</span>
+    </div>
+
+    <div class="alert alert-info" role="alert">
+        Use this page to review candidates before promoting them into standard navigation groups.
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Direct Links (No URL Parameters)</strong>
+            <span class="badge bg-secondary">{{ direct_missing_routes|length }}</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Label</th>
+                        <th>Endpoint</th>
+                        <th>Path</th>
+                        <th>Methods</th>
+                        <th>Blueprint</th>
+                        <th>Open</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in direct_missing_routes %}
+                    <tr>
+                        <td>{{ item.label }}</td>
+                        <td><code>{{ item.endpoint }}</code></td>
+                        <td><code>{{ item.rule }}</code></td>
+                        <td>{{ item.methods|join(", ") }}</td>
+                        <td>{{ item.blueprint }}</td>
+                        <td>
+                            {% if item.url %}
+                            <a class="btn btn-sm btn-outline-primary" href="{{ item.url }}">Open</a>
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-muted text-center py-3">No direct missing routes found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>Parameterized Routes (Need Context)</strong>
+            <span class="badge bg-secondary">{{ parameterized_missing_routes|length }}</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Label</th>
+                        <th>Endpoint</th>
+                        <th>Path</th>
+                        <th>Methods</th>
+                        <th>Blueprint</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in parameterized_missing_routes %}
+                    <tr>
+                        <td>{{ item.label }}</td>
+                        <td><code>{{ item.endpoint }}</code></td>
+                        <td><code>{{ item.rule }}</code></td>
+                        <td>{{ item.methods|join(", ") }}</td>
+                        <td>{{ item.blueprint }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-muted text-center py-3">No parameterized missing routes found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Data integrity — {{ case.client_name or ('Client #' ~ client_id) }}{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <div>
+      <h1 class="h3 mb-1">Client data integrity</h1>
+      <p class="text-muted mb-0">{{ case.client_name or ('Client #' ~ client_id) }} —
+        Suggest only — you edit in existing screens, then re-check.</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('clients.client_details', client_id=client_id) }}">Client</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ case.deep_links.firm_data_integrity }}">Firm issues</a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('clients.data_integrity_list') }}">All clients</a>
+      <form method="post" action="{{ url_for('clients.integrity_refresh', client_id=client_id) }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ url_for('clients.data_integrity', client_id=client_id) }}">
+        <button type="submit" class="btn btn-primary btn-sm" title="Runs all integrity agents, heals cleared issues, syncs alerts/tasks, refreshes packs">
+          <i class="fas fa-sync-alt me-1"></i> Refresh client checks
+        </button>
+      </form>
+    </div>
+  </div>
+
+    {% if case.price_refreshed_live %}
+    <p class="small text-muted mb-2">Price section refreshed live from firm sheet-suppress JSON (not waiting for next DI nightly).</p>
+    {% endif %}
+
+    {% if leftovers and leftovers.symbols %}
+    <div class="alert alert-secondary small">
+      <strong>Firm price leftovers (by symbol):</strong>
+      {{ leftovers.total_symbols or leftovers.symbols|length }} securities still need feed/backfill after sheet check —
+      fix once per symbol (not per client).
+      <a href="/hub/system/price-accuracy">Open price accuracy hub</a>
+      <ul class="mb-0 mt-1">
+        {% for s in leftovers.symbols[:8] %}
+        <li>{{ s.symbol }} — spike {{ s.spike }}, missing {{ s.missing }}, zero {{ s.zero }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+  {% set st = case.overall_status %}
+  <div class="alert {% if st == 'matched' %}alert-success{% elif st == 'needs_review' %}alert-warning{% elif st == 'not_matched' %}alert-danger{% else %}alert-secondary{% endif %}">
+    <strong>Overall:</strong> {{ case.overall_label }}
+    <span class="text-muted small ms-2">({{ st }})</span>
+    {% if case.from_nightly and case.as_of %}
+    <span class="text-muted small ms-2">Nightly pack {{ case.as_of[:19] }} UTC</span>
+    {% elif analysis and analysis.from_nightly and analysis.as_of %}
+    <span class="text-muted small ms-2">Analysis from nightly {{ analysis.as_of[:19] }} UTC</span>
+    {% endif %}
+  </div>
+
+  {% if analysis and analysis.attention %}
+  <div class="card mb-4 border-primary">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <strong><i class="fas fa-lightbulb me-1"></i> What needs attention &amp; how to resolve</strong>
+      <span class="badge bg-light text-dark border">
+        {% if analysis.from_nightly %}Nightly{% elif analysis.source == 'llm' %}LLM guide{% else %}Playbook guide{% endif %}
+        · suggest only
+      </span>
+    </div>
+    <div class="card-body">
+      <p class="mb-3">{{ analysis.headline }}</p>
+      {% for item in analysis.attention %}
+      <div class="border rounded p-3 mb-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+          <div>
+            <span class="badge bg-secondary me-1">#{{ item.priority }}</span>
+            <strong>{{ item.title }}</strong>
+            {% for sid in item.signal_ids or [] %}
+            <span class="badge bg-light text-dark border">{{ sid }}</span>
+            {% endfor %}
+          </div>
+          <span class="badge {{ {'matched':'bg-success','needs_review':'bg-warning text-dark','not_matched':'bg-danger'}.get(item.status, 'bg-secondary') }}">
+            {{ {'matched':'Matched','needs_review':'Needs review','not_matched':'Not matched'}.get(item.status, item.status) }}
+          </span>
+        </div>
+        {% if item.finding_summaries %}
+        <ul class="small text-muted mb-2">
+          {% for fs in item.finding_summaries %}
+          <li>{{ fs }}</li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+        <p class="small mb-2"><strong>Why it matters:</strong> {{ item.why_it_matters }}</p>
+        <p class="small mb-1"><strong>How to resolve:</strong></p>
+        <ol class="small mb-2">
+          {% for step in item.how_to_resolve or [] %}
+          <li>{{ step }}</li>
+          {% endfor %}
+        </ol>
+        {% if item.open_url %}
+        <a class="btn btn-sm btn-outline-primary" href="{{ item.open_url }}">Open fix screen</a>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% elif analysis %}
+  <div class="alert alert-success">{{ analysis.headline }}</div>
+  {% endif %}
+
+  {% for sec in case.sections or [] %}
+  <div class="card mb-3 {% if sec.informational %}border-secondary{% endif %}">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <strong>{{ sec.title }}</strong>
+        {% for sid in sec.signal_ids or [] %}
+        <span class="badge bg-light text-dark border">{{ sid }}</span>
+        {% endfor %}
+      </div>
+      <span class="badge {{ {'matched':'bg-success','needs_review':'bg-warning text-dark','not_matched':'bg-danger','unknown':'bg-secondary'}.get(sec.status, 'bg-secondary') }}">
+        {{ {'matched':'Matched','needs_review':'Needs review','not_matched':'Not matched','unknown':'Unknown'}.get(sec.status, sec.status) }}
+      </span>
+    </div>
+    <div class="card-body">
+      <p class="small mb-2">{{ sec.summary }}</p>
+      {% if sec.detail_url %}
+      <a class="btn btn-sm btn-outline-primary mb-2" href="{{ sec.detail_url }}">Open section detail</a>
+      {% endif %}
+      {% set findings = sec.get('items') or [] %}
+      {% if findings %}
+      <ul class="list-group list-group-flush">
+        {% for it in findings[:10] %}
+        <li class="list-group-item px-0 small d-flex justify-content-between gap-2">
+          <span>{{ it.title }}</span>
+          {% if it.url %}<a href="{{ it.url }}">Open</a>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+
+  {% if case.g8 %}
+  <div class="card mb-3">
+    <div class="card-header"><strong>Cashflow ↔ trades — quick totals</strong></div>
+    <div class="card-body small">
+      <div class="row g-2">
+        <div class="col-md-3">Post-cutoff gap<br><strong>{{ "{:,.0f}".format(case.g8.difference or 0) }}</strong></div>
+        <div class="col-md-3">Threshold<br><strong>{{ "{:,.0f}".format(case.g8.materiality_threshold or 0) }}</strong></div>
+        <div class="col-md-3">First real trade<br><strong>{{ case.g8.first_real_trade_date or case.g8.reconcile_start_date or '—' }}</strong></div>
+        <div class="col-md-3">Opening epoch Δ<br><strong>{{ "{:,.0f}".format(case.g8.opening_book_gap or 0) if case.g8.opening_book_gap is not none else '—' }}</strong></div>
+      </div>
+      <a class="btn btn-sm btn-outline-primary mt-2" href="{{ url_for('clients.cashflow_trade_integrity', client_id=client_id) }}">Full cashflow ↔ trades playbook</a>
+    </div>
+  </div>
+  {% endif %}
+
+  {% set guided_modules = guided_modules|default([]) %}
+  {% set preselect_module = preselect_module|default('client_data_integrity') %}
+  {% include 'partials/guided_case_chat.html' %}
+</div>
+{% endblock %}

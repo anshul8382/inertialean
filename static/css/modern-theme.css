@@ -1,0 +1,420 @@
+/**
+ * Modern Mobile-First Theme for INERTIA Investment Management
+ * Progressive Web App (PWA) ready design system
+ */
+
+:root {
+    /* Color Palette */
+    --primary-color: #2563eb;
+    --primary-dark: #1e40af;
+    --primary-light: #3b82f6;
+    --secondary-color: #10b981;
+    --secondary-dark: #059669;
+    --secondary-light: #34d399;
+    --accent-color: #f59e0b;
+    --danger-color: #ef4444;
+    --warning-color: #f59e0b;
+    --success-color: #10b981;
+    --info-color: #3b82f6;
+    
+    /* Neutral Colors */
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-600: #4b5563;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --gray-900: #111827;
+    
+    /* Spacing System */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-2xl: 3rem;
+    --spacing-3xl: 4rem;
+    
+    /* Typography */
+    --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-size-2xl: 1.5rem;
+    --font-size-3xl: 1.875rem;
+    --font-size-4xl: 2.25rem;
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    
+    /* Border Radius */
+    --radius-sm: 0.25rem;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --radius-xl: 1rem;
+    --radius-full: 9999px;
+    
+    /* Transitions */
+    --transition-fast: 150ms ease-in-out;
+    --transition-base: 200ms ease-in-out;
+    --transition-slow: 300ms ease-in-out;
+    
+    /* Touch Targets (Mobile) */
+    --touch-target-min: 44px;
+}
+
+/* Base Styles */
+body.modern-app {
+    font-family: var(--font-family-base);
+    color: var(--gray-800);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Enhanced Cards */
+.modern-app .card {
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-base);
+    background: white;
+}
+
+.modern-app .card:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
+}
+
+.modern-app .card-header {
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--gray-200);
+    padding: var(--spacing-md) var(--spacing-lg);
+    font-weight: 600;
+    color: var(--gray-900);
+}
+
+.modern-app .card-body {
+    padding: var(--spacing-lg);
+}
+
+/* Enhanced Buttons - Touch Friendly */
+.modern-app .btn {
+    min-height: var(--touch-target-min);
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    transition: all var(--transition-base);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);
+    cursor: pointer;
+    border: none;
+    box-shadow: var(--shadow-sm);
+}
+
+.modern-app .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.modern-app .btn:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-sm);
+}
+
+.modern-app .btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.modern-app .btn-primary:hover {
+    background: var(--primary-dark);
+    color: white;
+}
+
+.modern-app .btn-secondary {
+    background: var(--secondary-color);
+    color: white;
+}
+
+.modern-app .btn-secondary:hover {
+    background: var(--secondary-dark);
+    color: white;
+}
+
+/* Enhanced Form Controls */
+.modern-app .form-control,
+.modern-app .form-select {
+    min-height: var(--touch-target-min);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-base);
+    font-size: var(--font-size-base);
+}
+
+.modern-app .form-control:focus,
+.modern-app .form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    outline: none;
+}
+
+.modern-app .form-label {
+    font-weight: 500;
+    color: var(--gray-700);
+    margin-bottom: var(--spacing-sm);
+    font-size: var(--font-size-sm);
+}
+
+/* Enhanced Tables - Mobile Responsive */
+.modern-app .table-responsive {
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 992px) {
+    .modern-app .table-responsive {
+        overflow: hidden;
+    }
+}
+
+.modern-app .table {
+    margin-bottom: 0;
+}
+
+.modern-app .table thead th {
+    background: var(--gray-50);
+    color: var(--gray-900);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: var(--font-size-xs);
+    letter-spacing: 0.05em;
+    padding: var(--spacing-md);
+    border-bottom: 2px solid var(--gray-200);
+}
+
+.modern-app .table tbody tr {
+    transition: background-color var(--transition-fast);
+}
+
+.modern-app .table tbody tr:hover {
+    background-color: var(--gray-50);
+}
+
+.modern-app .table tbody td {
+    padding: var(--spacing-md);
+    vertical-align: middle;
+}
+
+/* Mobile Bottom Navigation */
+.mobile-bottom-nav {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid var(--gray-200);
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    padding: var(--spacing-sm) 0;
+    height: 60px;
+}
+
+.mobile-bottom-nav .nav-item {
+    flex: 1;
+    text-align: center;
+}
+
+.mobile-bottom-nav .nav-link {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-xs);
+    color: var(--gray-500);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+    min-height: var(--touch-target-min);
+}
+
+.mobile-bottom-nav .nav-link i {
+    font-size: var(--font-size-xl);
+    margin-bottom: var(--spacing-xs);
+}
+
+.mobile-bottom-nav .nav-link span {
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+}
+
+.mobile-bottom-nav .nav-link.active {
+    color: var(--primary-color);
+}
+
+.mobile-bottom-nav .nav-link:active {
+    opacity: 0.7;
+}
+
+/* Show mobile nav only on mobile */
+@media (max-width: 991.98px) {
+    .mobile-bottom-nav {
+        display: flex;
+    }
+    
+    /* Add padding to body to prevent content from being hidden behind nav */
+    body.modern-app {
+        padding-bottom: 60px;
+    }
+}
+
+/* Enhanced Navbar */
+.modern-app .navbar.modern-navbar {
+    box-shadow: var(--shadow-md);
+    padding: var(--spacing-sm) 0;
+}
+
+.modern-app .navbar-nav .nav-link {
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-md);
+    transition: all var(--transition-fast);
+}
+
+.modern-app .navbar-nav .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Loading States */
+.modern-app .spinner-border {
+    width: 2rem;
+    height: 2rem;
+    border-width: 0.2em;
+}
+
+.modern-app .spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15em;
+}
+
+/* Badges */
+.modern-app .badge {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-full);
+    font-weight: 500;
+    font-size: var(--font-size-xs);
+}
+
+/* Alerts */
+.modern-app .alert {
+    border-radius: var(--radius-md);
+    border: none;
+    padding: var(--spacing-md) var(--spacing-lg);
+    box-shadow: var(--shadow-sm);
+}
+
+/* Custom Scrollbar */
+.modern-app ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.modern-app ::-webkit-scrollbar-track {
+    background: var(--gray-100);
+}
+
+.modern-app ::-webkit-scrollbar-thumb {
+    background: var(--gray-400);
+    border-radius: var(--radius-full);
+}
+
+.modern-app ::-webkit-scrollbar-thumb:hover {
+    background: var(--gray-500);
+}
+
+/* Responsive Typography */
+@media (max-width: 767.98px) {
+    .modern-app h1 {
+        font-size: var(--font-size-2xl);
+    }
+    
+    .modern-app h2 {
+        font-size: var(--font-size-xl);
+    }
+    
+    .modern-app h3 {
+        font-size: var(--font-size-lg);
+    }
+    
+    .modern-app .card-body {
+        padding: var(--spacing-md);
+    }
+}
+
+/* Focus States for Accessibility */
+.modern-app *:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+/* Smooth Scrolling */
+@media (prefers-reduced-motion: no-preference) {
+    .modern-app {
+        scroll-behavior: smooth;
+    }
+}
+
+/* Print Styles */
+@media print {
+    .mobile-bottom-nav {
+        display: none !important;
+    }
+    
+    .modern-app .card {
+        box-shadow: none;
+        border: 1px solid var(--gray-300);
+    }
+}
+
+/* Capacitor native shell (iOS/Android WebView) — full web app + mobile chrome */
+body.mobile-app.capacitor-shell {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    -webkit-overflow-scrolling: touch;
+}
+
+body.mobile-app.capacitor-shell .mobile-bottom-nav {
+    display: flex;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    height: calc(60px + env(safe-area-inset-bottom, 0px));
+}
+
+body.mobile-app.capacitor-shell .navbar.modern-navbar {
+    padding-top: env(safe-area-inset-top, 0px);
+}
+
+/* Capacitor WebView: keep top nav usable; collapse uses Bootstrap toggler */
+body.mobile-app.capacitor-shell .navbar-collapse {
+    max-height: min(70vh, 480px);
+    overflow-y: auto;
+}
+
+body.mobile-app.capacitor-shell main,
+body.mobile-app.capacitor-shell .container-fluid {
+    max-width: 100%;
+    overflow-x: visible;
+}
+
+/* Legacy block — superseded by mobile-layout.css; keep safe-area only */
+

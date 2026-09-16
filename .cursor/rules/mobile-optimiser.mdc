@@ -1,0 +1,65 @@
+---
+description: Optimise for mobile and parallel web + Capacitor shell + Expo; API-first, mobile UI gate on every user-facing change
+globs: "**/api/**/*.py,**/templates/**/*.html,**/static/**/*.css,**/static/**/*.js,apps/capacitor-shell/**/*,apps/mobile/**/*,docs/MOBILE*.md"
+alwaysApply: false
+---
+
+# Mobile Optimiser Agent
+
+Ensure **mobile stays current with every feature change**. Primary mobile app today = **Capacitor shell** (`apps/capacitor-shell/`) loading the same web UI. Future = **Expo** (`apps/mobile/`) with JWT APIs.
+
+## Authority
+
+- **Capacitor (Option B — production mobile now):** Full web app in WebView; role-based nav from Jinja. Any template/static change **automatically affects Android/iOS** after refresh/sync.
+- **Expo (Option A — later):** Native screens; requires `/api/v1` endpoints. See `docs/MOBILE_STRATEGY.md`.
+- **Mobile UI stack (global):** `mobile-layout.css`, `mobile-ui.css`, `mobile-layout.js`, `mobile-config.js` loaded from `base.html`.
+
+## Mandatory checklist — user-facing changes
+
+Every change to **templates, static CSS/JS, routes that render HTML, or user-visible APIs**:
+
+1. **Capacitor parity** — Web change = mobile app change. No separate “mobile template” unless documented; fix the shared template.
+2. **Extend `base.html`** — New screens must not bypass the mobile stack (`base_clean.html` is not wired for full mobile).
+3. **Mobile UI checklist** — Follow `docs/MOBILE_UI_DEVELOPER_CHECKLIST.md` (touch targets, headers, tables, opt-out attributes).
+4. **Avoid mobile breakers** — No inline `min-width` on tables; no mouse-only actions; DataTables pages must remain filterable on phone.
+5. **Automated check** — Run `python3 scripts/run_mobile_ui_check.py` before marking done (included in `run_agent_approval_loop.py`).
+6. **Manual verify** — Test at ≤991px width or on Capacitor emulator/device; force-refresh after CSS/JS changes (no native rebuild needed for static assets).
+
+## API-first (Expo path)
+
+When adding behaviour that Expo will need later:
+
+- [ ] Stable versioned endpoint (`/api/v1` or `/api/v2`)
+- [ ] Same auth rules as web (JWT for native; session for Capacitor)
+- [ ] Update `docs/MOBILE_STRATEGY.md` API table if contract changes
+
+## Template opt-out attributes
+
+| Attribute | When |
+|-----------|------|
+| `data-mobile-table="scroll"` | Wide grid must horizontal-scroll, not card layout |
+| `data-inertia-no-card="true"` | Never auto card-table |
+| `data-inertia-no-wrap="true"` | Do not auto-wrap in scroll region |
+
+## Manual classes
+
+| Class | When |
+|-------|------|
+| `.mobile-card-table` | Force card rows on phone |
+| `.mobile-action-stack` | Full-width stacked buttons |
+| `.rec-workflow-mobile` | Rec module: sticky bar + summary grid |
+
+## Feature brief (Mobile Optimiser row)
+
+State explicitly:
+
+- **Capacitor impact:** which templates/static files change
+- **Mobile UX:** header/actions/table strategy
+- **API (Expo):** new/changed endpoints or N/A
+- **Test plan:** `run_mobile_ui_check.py` + manual steps (viewport width / device)
+
+## Invoke
+
+User says "mobile optimiser," "Capacitor," "mobile UI," "phone layout," or edits templates/static/apps/capacitor-shell. @ Mobile Optimiser.
+
+**Do not skip** for backend-only refactors with no user-visible change (state N/A in gate).

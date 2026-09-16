@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Ticket {{ ticket.ticket_number }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-ticket-alt"></i> Ticket {{ ticket.ticket_number }}</h1>
+        <div>
+            <a href="{{ url_for('tickets.edit_ticket', ticket_id=ticket.id) }}" class="btn btn-primary">
+                <i class="fas fa-edit"></i> Edit Ticket
+            </a>
+            <a href="{{ url_for('tickets.list_tickets') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Tickets
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Ticket Details</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Title</h6>
+                        <p>{{ ticket.title }}</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Description</h6>
+                        <p>{{ ticket.description }}</p>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6 class="font-weight-bold">Priority</h6>
+                            <span class="badge {% if ticket.priority == 'critical' %}bg-danger{% elif ticket.priority == 'high' %}bg-warning{% elif ticket.priority == 'medium' %}bg-info{% else %}bg-secondary{% endif %}">
+                                {{ ticket.priority|title }}
+                            </span>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <h6 class="font-weight-bold">Status</h6>
+                            <span class="badge {% if ticket.status == 'open' %}bg-primary{% elif ticket.status == 'in_progress' %}bg-warning{% elif ticket.status == 'snoozed' %}bg-info{% elif ticket.status == 'resolved' %}bg-success{% elif ticket.status == 'closed' %}bg-secondary{% else %}bg-dark{% endif %}">
+                                {{ ticket.status|replace('_', ' ')|title }}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <h6 class="font-weight-bold">Alert Type</h6>
+                            <p>{{ ticket.alert_type|replace('_', ' ')|title }}</p>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <h6 class="font-weight-bold">Client</h6>
+                            <p><a href="{{ url_for('clients.client_details', client_id=ticket.client_id) }}">{{ ticket.client.name }}</a></p>
+                        </div>
+                    </div>
+                    
+                    {% if ticket.resolution_notes %}
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Resolution Notes</h6>
+                        <p>{{ ticket.resolution_notes }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-lg-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Snooze</h6>
+                </div>
+                <div class="card-body">
+                    {% if ticket.status == 'snoozed' %}
+                        <p class="mb-2">
+                            <span class="badge bg-info">Snoozed</span>
+                        </p>
+                        <p class="small text-muted mb-3">
+                            {% if ticket.snoozed_until %}
+                                Until {{ ticket.snoozed_until.strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                                Until unsnoozed
+                            {% endif %}
+                        </p>
+                        {% if ticket.snooze_reason %}
+                            <div class="mb-3">
+                                <h6 class="font-weight-bold">Reason</h6>
+                                <p class="mb-0">{{ ticket.snooze_reason }}</p>
+                            </div>
+                        {% endif %}
+                        <form method="POST" action="{{ url_for('tickets.unsnooze_ticket', ticket_id=ticket.id) }}">
+                            {{ unsnooze_form.hidden_tag() }}
+                            {{ unsnooze_form.submit(class="btn btn-outline-primary btn-sm") }}
+                        </form>
+                    {% else %}
+                        {% if ticket.status in ['resolved', 'closed', 'cancelled'] %}
+                            <p class="text-muted mb-0">Resolved/closed tickets cannot be snoozed.</p>
+                        {% else %}
+                            <form method="POST" action="{{ url_for('tickets.snooze_ticket', ticket_id=ticket.id) }}">
+                                {{ snooze_form.hidden_tag() }}
+                                <div class="mb-3">
+                                    {{ snooze_form.snoozed_until.label(class="form-label") }}
+                                    {{ snooze_form.snoozed_until(class="form-control") }}
+                                    {% if snooze_form.snoozed_until.errors %}
+                                        <div class="text-danger">{{ snooze_form.snoozed_until.errors[0] }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="mb-3">
+                                    {{ snooze_form.snooze_reason.label(class="form-label") }}
+                                    {{ snooze_form.snooze_reason(class="form-control", rows=3) }}
+                                    {% if snooze_form.snooze_reason.errors %}
+                                        <div class="text-danger">{{ snooze_form.snooze_reason.errors[0] }}</div>
+                                    {% endif %}
+                                </div>
+                                {{ snooze_form.submit(class="btn btn-outline-primary btn-sm") }}
+                            </form>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">SLA Information</h6>
+                </div>
+                <div class="card-body">
+                    {% if ticket.sla_hours %}
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">SLA Timeline</h6>
+                        <p>{{ ticket.sla_hours }} hours</p>
+                    </div>
+                    
+                    {% if ticket.sla_deadline %}
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">SLA Deadline</h6>
+                        <p>{{ ticket.sla_deadline.strftime('%Y-%m-%d %H:%M') }}</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">SLA Status</h6>
+                        {% if ticket.status == 'snoozed' %}
+                            <span class="badge bg-info">Snoozed</span>
+                        {% else %}
+                            {% if ticket.is_overdue %}
+                                <span class="badge bg-danger">Overdue</span>
+                                <p class="text-danger small mt-1">{{ ticket.age_hours - (ticket.sla_hours or 0) }} hours overdue</p>
+                            {% elif ticket.hours_remaining %}
+                                {% if ticket.hours_remaining <= 24 %}
+                                    <span class="badge bg-warning">{{ "%.1f"|format(ticket.hours_remaining) }} hours remaining</span>
+                                {% else %}
+                                    <span class="badge bg-info">{{ "%.0f"|format(ticket.hours_remaining/24) }} days remaining</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-success">On Time</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <p class="text-muted">No SLA configured for this ticket.</p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Assignment</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Assigned To</h6>
+                        <p>{{ ticket.assigned_user.username if ticket.assigned_user else 'Unassigned' }}</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Created By</h6>
+                        <p>{{ ticket.creator.username if ticket.creator else 'N/A' }}</p>
+                    </div>
+                    
+                    {% if ticket.resolved_by %}
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Resolved By</h6>
+                        <p>{{ ticket.resolver.username if ticket.resolver else 'N/A' }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Timeline</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Created</h6>
+                        <p>{{ ticket.created_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Last Updated</h6>
+                        <p>{{ ticket.updated_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                    </div>
+                    
+                    {% if ticket.resolved_at %}
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Resolved</h6>
+                        <p>{{ ticket.resolved_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if ticket.closed_at %}
+                    <div class="mb-3">
+                        <h6 class="font-weight-bold">Closed</h6>
+                        <p>{{ ticket.closed_at.strftime('%Y-%m-%d %H:%M') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

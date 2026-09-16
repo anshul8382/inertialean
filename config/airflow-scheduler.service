@@ -1,0 +1,26 @@
+[Unit]
+Description=Airflow Scheduler - Inertia Investment Management
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=inertia
+Group=inertia
+WorkingDirectory=/home/inertia/app
+
+Environment="AIRFLOW_HOME=/home/inertia/app/airflow"
+Environment="PATH=/home/inertia/airflow_venv/bin:/usr/local/bin:/usr/bin:/bin"
+
+ExecStart=/home/inertia/airflow_venv/bin/airflow scheduler
+
+Restart=always
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
+
+StandardOutput=append:/home/inertia/app/airflow/logs/scheduler.log
+StandardError=append:/home/inertia/app/airflow/logs/scheduler.log
+
+[Install]
+WantedBy=multi-user.target

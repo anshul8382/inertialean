@@ -1,0 +1,75 @@
+{% if asset_class_warnings %}
+<div class="row mb-4" id="asset-class-mismatch-warning-wrap">
+    <div class="col-12">
+        <div class="alert alert-warning alert-dismissible fade show"
+             id="asset-class-mismatch-warning"
+             role="alert"
+             data-client-id="{{ client.id }}"
+             data-fingerprint="{{ asset_class_warning_fingerprint|default('')|e }}"
+             data-dismiss-url="{{ url_for('clients.dismiss_asset_class_warning_route', client_id=client.id) }}">
+            <h5 class="alert-heading mb-2">
+                <i class="fas fa-exclamation-triangle"></i> Asset class data needs review
+            </h5>
+            <p class="mb-2">
+                Portfolio weights use the <strong>asset class stored on each security</strong> in Maintenance.
+                The items below look misclassified (name/type suggests a different class). Fix reference data — allocations will not be auto-corrected.
+            </p>
+            <ul class="mb-2 small">
+                {% for w in asset_class_warnings[:8] %}
+                <li>
+                    <strong>{{ w.symbol }}</strong> — stored: <code>{{ w.stored_class }}</code>,
+                    suggested: <code>{{ w.suggested_class }}</code>
+                    {% if w.security_id %}
+                    · <a href="{{ url_for('main.edit_security', security_id=w.security_id) }}">Edit security</a>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% if asset_class_warnings|length > 8 %}
+            <p class="mb-0 small text-muted">… and {{ asset_class_warnings|length - 8 }} more. Check all holdings in Maintenance → Securities.</p>
+            {% endif %}
+            <button type="button"
+                    class="btn-close"
+                    id="asset-class-mismatch-warning-close"
+                    data-bs-dismiss="alert"
+                    aria-label="Dismiss asset class warning"></button>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    var alertEl = document.getElementById('asset-class-mismatch-warning');
+    if (!alertEl) return;
+
+    var clientId = alertEl.getAttribute('data-client-id');
+    var fingerprint = alertEl.getAttribute('data-fingerprint') || '';
+    var dismissUrl = alertEl.getAttribute('data-dismiss-url');
+    var storageKey = 'inertia_asset_class_warning_' + clientId;
+
+    if (fingerprint && localStorage.getItem(storageKey) === fingerprint) {
+        var wrap = document.getElementById('asset-class-mismatch-warning-wrap');
+        if (wrap) wrap.remove();
+        return;
+    }
+
+    function persistDismissal() {
+        if (!fingerprint) return;
+        localStorage.setItem(storageKey, fingerprint);
+        if (!dismissUrl) return;
+        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        var csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
+        fetch(dismissUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify({ fingerprint: fingerprint })
+        }).catch(function () { /* localStorage still hides on next visit */ });
+    }
+
+    alertEl.addEventListener('closed.bs.alert', persistDismissal);
+})();
+</script>
+{% endif %}

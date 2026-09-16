@@ -1,0 +1,652 @@
+/**
+ * INERTIA Mobile App UI — native-style shell for phone / Capacitor.
+ * Dual layout: .im-mobile-only (redesigned) vs .im-desktop-only (existing).
+ * Active when body.inertia-mobile-app (≤991px or Capacitor).
+ */
+
+@media (max-width: 991.98px) {
+  body.inertia-mobile-app {
+    background: var(--gray-50, #f9fafb);
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Hub/list pages: mobile block is the full UI — hide duplicate desktop grid */
+  body.inertia-mobile-app .im-desktop-only.im-collapsed-on-mobile {
+    display: none !important;
+  }
+
+  /* Workflow/forms: show desktop block below mobile header (scroll to interact) */
+  body.inertia-mobile-app .im-desktop-only:not(.im-collapsed-on-mobile) {
+    display: block !important;
+    width: 100%;
+    max-width: 100%;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    padding-bottom: 1rem;
+    box-sizing: border-box;
+  }
+
+  body.inertia-mobile-app .im-desktop-only:not(.im-collapsed-on-mobile) .rec-page-header h1 {
+    font-size: 1.25rem;
+  }
+
+  /* Hide desktop mega-navbar — bottom nav + top bar + More menu */
+  body.inertia-mobile-app .navbar.modern-navbar.im-desktop-nav {
+    display: none !important;
+  }
+
+  body.inertia-mobile-app main.mobile-page-root {
+    margin-top: 0 !important;
+    padding-top: 0.5rem;
+    padding-left: 0;
+    padding-right: 0;
+    max-width: 100%;
+  }
+
+  body.inertia-mobile-app main.mobile-page-root > .container-fluid,
+  body.inertia-mobile-app main.mobile-page-root > .container {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  /* ── Top bar ── */
+  .im-mobile-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 1030;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 52px;
+    padding: 0.35rem 0.75rem;
+    padding-top: calc(0.35rem + env(safe-area-inset-top, 0px));
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--gray-200, #e5e7eb);
+  }
+
+  .im-mobile-topbar__back {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    color: var(--gray-700, #374151);
+    text-decoration: none;
+    border: none;
+    background: transparent;
+  }
+
+  .im-mobile-topbar__back:active {
+    background: var(--gray-100, #f3f4f6);
+  }
+
+  .im-mobile-topbar__title {
+    flex: 1;
+    min-width: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--gray-900, #111827);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin: 0;
+  }
+
+  .im-mobile-topbar__actions {
+    display: flex;
+    gap: 0.25rem;
+    flex-shrink: 0;
+  }
+
+  .im-mobile-topbar__actions .btn,
+  .im-mobile-topbar__actions a.btn {
+    min-height: 40px;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.85rem;
+  }
+
+  /* ── Page shell ── */
+  .im-mobile-page {
+    padding-bottom: 1rem;
+  }
+
+  .im-mobile-section {
+    margin-bottom: 1.25rem;
+  }
+
+  .im-mobile-section__title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gray-500, #6b7280);
+    margin: 0 0 0.5rem 0.15rem;
+  }
+
+  /* ── Metric grid (dashboard) ── */
+  .im-metric-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.65rem;
+  }
+
+  .im-metric-tile {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    background: #fff;
+    border-radius: 0.85rem;
+    padding: 0.85rem;
+    border: 1px solid var(--gray-200, #e5e7eb);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    transition: transform 0.15s ease;
+  }
+
+  .im-metric-tile:active {
+    transform: scale(0.98);
+  }
+
+  .im-metric-tile__label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--gray-500, #6b7280);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.35rem;
+  }
+
+  .im-metric-tile__value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: var(--gray-900, #111827);
+    line-height: 1.2;
+  }
+
+  .im-metric-tile__sub {
+    font-size: 0.75rem;
+    color: var(--gray-500, #6b7280);
+    margin-top: 0.25rem;
+  }
+
+  .im-metric-tile--accent {
+    border-left: 4px solid var(--primary-color, #2563eb);
+  }
+
+  .im-metric-tile--success {
+    border-left: 4px solid var(--success-color, #10b981);
+  }
+
+  .im-metric-tile--warning {
+    border-left: 4px solid var(--warning-color, #f59e0b);
+  }
+
+  .im-metric-tile--danger {
+    border-left: 4px solid var(--danger-color, #ef4444);
+  }
+
+  .im-metric-tile--wide {
+    grid-column: 1 / -1;
+  }
+
+  /* ── Search + filter bar ── */
+  .im-mobile-search {
+    position: relative;
+    margin-bottom: 0.65rem;
+  }
+
+  .im-mobile-search input {
+    width: 100%;
+    min-height: 44px;
+    padding: 0.5rem 0.85rem 0.5rem 2.5rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--gray-200, #e5e7eb);
+    background: #fff;
+    font-size: 1rem;
+  }
+
+  .im-mobile-search i {
+    position: absolute;
+    left: 0.85rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400, #9ca3af);
+  }
+
+  .im-mobile-filter-row {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.25rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .im-mobile-filter-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .im-filter-chip {
+    flex-shrink: 0;
+    min-height: 36px;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid var(--gray-200, #e5e7eb);
+    background: #fff;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--gray-700, #374151);
+    white-space: nowrap;
+  }
+
+  .im-filter-chip.is-active {
+    background: var(--primary-color, #2563eb);
+    border-color: var(--primary-color, #2563eb);
+    color: #fff;
+  }
+
+  .im-filter-chip select {
+    border: none;
+    background: transparent;
+    font-size: inherit;
+    font-weight: inherit;
+    color: inherit;
+    padding: 0;
+    min-height: auto;
+  }
+
+  /* ── List cards ── */
+  .im-list-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .im-list-card {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+    background: #fff;
+    border-radius: 0.85rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid var(--gray-200, #e5e7eb);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  }
+
+  .im-list-card:active {
+    background: var(--gray-50, #f9fafb);
+  }
+
+  .im-list-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .im-list-card__title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--gray-900, #111827);
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  .im-list-card__meta {
+    font-size: 0.82rem;
+    color: var(--gray-500, #6b7280);
+    margin: 0.15rem 0 0;
+  }
+
+  .im-list-card__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.65rem;
+    align-items: center;
+    margin-top: 0.5rem;
+  }
+
+  .im-list-card__actions {
+    display: flex;
+    gap: 0.35rem;
+    margin-top: 0.65rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--gray-100, #f3f4f6);
+  }
+
+  .im-list-card__actions .btn {
+    flex: 1;
+    min-height: 40px;
+    font-size: 0.85rem;
+  }
+
+  .im-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+
+  .im-badge--success { background: #d1fae5; color: #065f46; }
+  .im-badge--info { background: #dbeafe; color: #1e40af; }
+  .im-badge--warning { background: #fef3c7; color: #92400e; }
+  .im-badge--danger { background: #fee2e2; color: #991b1b; }
+  .im-badge--muted { background: var(--gray-100, #f3f4f6); color: var(--gray-600, #4b5563); }
+
+  /* ── FAB ── */
+  .im-fab {
+    position: fixed;
+    right: 1rem;
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    z-index: 1040;
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    background: var(--secondary-color, #10b981);
+    color: #fff;
+    border: none;
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.45);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    text-decoration: none;
+  }
+
+  .im-fab:active {
+    transform: scale(0.95);
+  }
+
+  /* ── Empty state ── */
+  .im-empty-state {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--gray-500, #6b7280);
+  }
+
+  .im-empty-state i {
+    font-size: 2.5rem;
+    margin-bottom: 0.75rem;
+    opacity: 0.5;
+  }
+
+  /* ── Bottom nav polish ── */
+  body.inertia-mobile-app .mobile-bottom-nav {
+    height: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-top: 1px solid var(--gray-200, #e5e7eb);
+    box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.06);
+  }
+
+  body.inertia-mobile-app .mobile-bottom-nav .nav-link.active {
+    color: var(--secondary-color, #10b981);
+    font-weight: 600;
+  }
+
+  /* ── More menu offcanvas ── */
+  .im-more-menu .offcanvas-body {
+    padding: 0;
+  }
+
+  .im-more-menu__link {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1.25rem;
+    color: var(--gray-800, #1f2937);
+    text-decoration: none;
+    border-bottom: 1px solid var(--gray-100, #f3f4f6);
+    min-height: 48px;
+  }
+
+  .im-more-menu__link:active {
+    background: var(--gray-50, #f9fafb);
+  }
+
+  .im-more-menu__link i {
+    width: 1.25rem;
+    text-align: center;
+    color: var(--gray-500, #6b7280);
+  }
+
+  .im-more-menu__section-title {
+    margin: 0;
+    padding: 0.75rem 1.25rem 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--gray-500, #6b7280);
+  }
+
+  .im-more-menu__divider {
+    margin: 0.5rem 0;
+    border-color: var(--gray-200, #e5e7eb);
+  }
+
+  .im-maint-crossnav .im-more-menu__link {
+    font-size: 0.9rem;
+  }
+
+  .im-maint-record-trade {
+    margin-top: 0.5rem;
+  }
+
+  /* ── Quick action grid (client detail) ── */
+  .im-quick-actions {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+  }
+
+  .im-quick-action {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.75rem 0.35rem;
+    background: #fff;
+    border: 1px solid var(--gray-200, #e5e7eb);
+    border-radius: 0.75rem;
+    text-decoration: none;
+    color: var(--gray-800, #1f2937);
+    font-size: 0.7rem;
+    font-weight: 600;
+    min-height: 72px;
+  }
+
+  .im-quick-action i {
+    font-size: 1.25rem;
+    color: var(--primary-color, #2563eb);
+  }
+
+  .im-mobile-banner {
+    margin: 1rem 0;
+    padding: 0.75rem 1rem;
+    background: #eff6ff;
+    border-radius: 0.75rem;
+    font-size: 0.85rem;
+    color: #1e40af;
+    line-height: 1.4;
+  }
+
+  /* ── Auth pages (login / 2FA) ── */
+  body.inertia-mobile-app:not(.mobile-app) .im-auth-mobile,
+  body.inertia-mobile-app.mobile-app .im-auth-mobile {
+    min-height: calc(100vh - 64px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 1rem;
+    background: linear-gradient(180deg, #f0fdf4 0%, #f9fafb 40%);
+  }
+
+  body.inertia-mobile-app .im-auth-mobile .card {
+    width: 100%;
+    max-width: 400px;
+    border-radius: 1rem;
+    border: none;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  body.inertia-mobile-app .im-auth-mobile .form-control {
+    min-height: 48px;
+    font-size: 1rem;
+    border-radius: 0.65rem;
+  }
+
+  body.inertia-mobile-app .im-auth-mobile .btn-primary,
+  body.inertia-mobile-app .im-auth-mobile .btn-user {
+    width: 100%;
+    min-height: 48px;
+    border-radius: 0.65rem;
+    font-size: 1rem;
+  }
+
+  /* Hide desktop login split image on phone */
+  body.inertia-mobile-app .bg-login-image {
+    display: none !important;
+  }
+
+  body.inertia-mobile-app .im-auth-mobile .col-lg-6 {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+
+  /* ── Segment tabs (scroll) ── */
+  .im-segment-nav {
+    display: flex;
+    gap: 0.35rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    margin-bottom: 1rem;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .im-segment-nav a {
+    flex-shrink: 0;
+    padding: 0.45rem 0.85rem;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid var(--gray-200, #e5e7eb);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--gray-700, #374151);
+    text-decoration: none;
+  }
+
+  .im-segment-nav a.active {
+    background: var(--primary-color, #2563eb);
+    border-color: var(--primary-color, #2563eb);
+    color: #fff;
+  }
+
+  /* ── Skeleton loading ── */
+  .im-skeleton {
+    background: linear-gradient(90deg, #f3f4f6 25%, #e5e7eb 50%, #f3f4f6 75%);
+    background-size: 200% 100%;
+    animation: im-skeleton-shimmer 1.2s ease-in-out infinite;
+    border-radius: 0.5rem;
+  }
+
+  .im-skeleton-card {
+    height: 88px;
+    margin-bottom: 0.65rem;
+  }
+
+  @keyframes im-skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Pull-to-refresh hint */
+  .im-pull-hint {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--gray-400, #9ca3af);
+    padding: 0.25rem;
+  }
+
+  body.inertia-mobile-app.im-pull-active main.mobile-page-root {
+    transition: transform 0.15s ease;
+  }
+
+  /* Period analysis mobile containment */
+  body.inertia-mobile-app #resultsSection {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  body.inertia-mobile-app #resultsSection .card,
+  body.inertia-mobile-app #resultsSection table {
+    max-width: 100%;
+  }
+
+  /* Settings / hub list cards */
+  .im-settings-link {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: #fff;
+    border: 1px solid var(--gray-200, #e5e7eb);
+    border-radius: 0.85rem;
+    margin-bottom: 0.5rem;
+    text-decoration: none;
+    color: inherit;
+    min-height: 56px;
+  }
+
+  .im-settings-link:active {
+    background: var(--gray-50, #f9fafb);
+  }
+
+  .im-settings-link i:first-child {
+    width: 1.5rem;
+    text-align: center;
+    color: var(--primary-color, #2563eb);
+  }
+
+  .im-settings-link span {
+    flex: 1;
+    font-weight: 500;
+  }
+
+  /* Optional dark mode (system preference) */
+  @media (prefers-color-scheme: dark) {
+    body.inertia-mobile-app {
+      --im-bg: #111827;
+      --im-surface: #1f2937;
+      --im-text: #f9fafb;
+      --im-muted: #9ca3af;
+      --gray-50: #1f2937;
+      --gray-200: #374151;
+    }
+
+    body.inertia-mobile-app .im-mobile-topbar,
+    body.inertia-mobile-app .im-list-card,
+    body.inertia-mobile-app .im-settings-link,
+    body.inertia-mobile-app .im-metric-tile {
+      background: var(--im-surface, #1f2937);
+      border-color: var(--gray-200, #374151);
+      color: var(--im-text, #f9fafb);
+    }
+
+    body.inertia-mobile-app .im-skeleton {
+      background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
+    }
+  }
+}
+
+@media (min-width: 992px) {
+  .im-mobile-only {
+    display: none !important;
+  }
+}

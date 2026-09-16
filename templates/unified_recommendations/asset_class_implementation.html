@@ -1,0 +1,593 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import rec_mobile_open, rec_mobile_close, rec_desktop_open, rec_desktop_close, rec_action_link %}
+
+{% block title %}{{ asset_class_name }} Implementation - {{ client.name }}{% endblock %}
+
+{% block content %}
+{{ rec_mobile_open(asset_class_name ~ ' — ' ~ client.name, url_for('unified_recommendations.review_recommendations', client_id=client.id, session_id=pending_data.get('edit_session_id') or session.get('current_recommendation_session_id')), 'Distribute allocation across securities below.') }}
+<div class="im-metric-grid mb-2">
+  <div class="im-metric-tile"><span class="im-metric-tile__label">Required</span><span class="im-metric-tile__value">₹{{ "{:,.0f}".format(asset_recommendation.get('required_change', 0.0)) }}</span></div>
+</div>
+<a href="#" class="im-settings-link im-scroll-to-desktop" onclick="return false;"><i class="fas fa-table"></i><span>Security table &amp; complete button below</span><i class="fas fa-chevron-down text-muted"></i></a>
+{{ rec_mobile_close() }}
+{{ rec_desktop_open() }}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>{{ asset_class_name }} Implementation for {{ client.name }}</h1>
+        <div>
+            <button type="button" class="btn btn-success" onclick="completeImplementation()">
+                <i class="fas fa-check"></i> Complete Implementation
+            </button>
+            <a href="{{ url_for('unified_recommendations.review_recommendations', client_id=client.id, session_id=pending_data.get('edit_session_id') or session.get('current_recommendation_session_id')) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Review
+            </a>
+        </div>
+    </div>
+
+    <!-- Asset Class Summary -->
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">{{ asset_class_name }} Allocation Summary</h5>
+            <small class="text-muted">Distribute the allocated amount across securities in this asset class</small>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Current Value</h6>
+                            <h4 class="text-primary">₹{{ "%.2f"|format(asset_recommendation.get('current_value', 0.0)) }}</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Required Change</h6>
+                            <h4 class="{% if (asset_recommendation.get('required_change', 0)) > 0 %}text-success{% else %}text-danger{% endif %}">
+                                ₹{{ "%.2f"|format(asset_recommendation.get('required_change', 0.0)) }}
+                            </h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Total Allocated</h6>
+                            <h4 class="text-warning" id="total-allocated-amount">₹0.00</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h6 class="card-title">Remaining</h6>
+                            <h4 class="text-info" id="remaining-amount">₹0.00</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Security Distribution -->
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Security Distribution</h5>
+            <small class="text-muted">Allocate the {{ asset_class_name }} amount across individual securities</small>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Security</th>
+                            <th>Current Weight</th>
+                            <th>Target Weight</th>
+                            <th>Future Weight</th>
+                            <th>Amount to Invest/Sell</th>
+                            <th>Current Qty</th>
+                            <th>New Qty</th>
+                            <th>Qty Change</th>
+                            <th>Current Price</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="securities-table">
+                        {% for security in asset_securities %}
+                        <tr data-security-id="{{ security.security_id }}">
+                            <td>
+                                <strong>{{ security.symbol|default('N/A') }}</strong><br>
+                                <small class="text-muted">{{ security.security_name|default('N/A') }}</small>
+                            </td>
+                            <td class="current-weight-cell">{{ "%.2f"|format(security.current_weight|default(0.0)) }}%</td>
+                            <td class="target-weight-cell">{{ "%.2f"|format(security.target_weight|default(0.0)) }}%</td>
+                            <td class="future-weight-cell">{{ "%.2f"|format(security.future_weight|default(0.0)) }}%</td>
+                            <td>
+                                <input type="number" 
+                                       class="form-control form-control-sm allocation-amount-input" 
+                                       data-security-id="{{ security.security_id }}"
+                                       value="{{ "%.2f"|format(security.amount|default(0.0)) }}"
+                                       step="0.01"
+                                       onchange="updateSecurityAllocation(this)">
+                            </td>
+                            <td class="current-quantity-cell">
+                                {{ (security.current_quantity|default(0))|int }}
+                            </td>
+                            <td>
+                                <input type="number" 
+                                       class="form-control form-control-sm quantity-input" 
+                                       data-security-id="{{ security.security_id }}"
+                                       value="{{ (security.new_quantity|default(security.quantity|default(0)))|int }}"
+                                       step="1" min="0"
+                                       onchange="updateSecurityAllocation(this)">
+                            </td>
+                            <td class="quantity-change-cell">
+                                {% set new_qty = security.new_quantity|default(security.quantity|default(0)) %}
+                                <span class="badge {% if (new_qty - security.current_quantity|default(0)) > 0 %}bg-success{% elif (new_qty - security.current_quantity|default(0)) < 0 %}bg-danger{% else %}bg-secondary{% endif %}">
+                                    {% set qty_change = (new_qty - security.current_quantity|default(0)) %}
+                                    {% if qty_change > 0 %}+{% endif %}{{ qty_change|int }}
+                                </span>
+                            </td>
+                            <td class="current-price-cell">
+                                ₹{{ "%.2f"|format(security.current_price|default(0.0)) }}
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeSecurityAllocation('{{ security.security_id }}')">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr id="totals-row" class="table-info">
+                            <td colspan="3"><strong>Total</strong></td>
+                            <td><strong class="total-allocated">₹0.00</strong></td>
+                            <td><strong class="total-current-quantity">0</strong></td>
+                            <td><strong class="total-quantity">0</strong></td>
+                            <td><strong class="total-quantity-change">0</strong></td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            
+            <div class="mt-3">
+                <button type="button" class="btn btn-success" onclick="addNewSecurity()">
+                    <i class="fas fa-plus"></i> Add Security
+                </button>
+                <button type="button" class="btn btn-primary" onclick="autoDistribute()">
+                    <i class="fas fa-magic"></i> Auto-Distribute
+                </button>
+                <button type="button" class="btn btn-warning" onclick="saveAllocation()">
+                    <i class="fas fa-save"></i> Save Allocation
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Indicator -->
+    <div class="card shadow mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Implementation Progress</h5>
+        </div>
+        <div class="card-body">
+            <div class="progress mb-3">
+                <div class="progress-bar" role="progressbar" id="progress-bar" style="width: 0%"></div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="alert alert-info">
+                        <strong>Target Amount:</strong> ₹{{ "%.2f"|format(asset_recommendation.required_change|default(0.0)) }}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="alert alert-success" id="completion-status">
+                        <strong>Allocated:</strong> <span id="allocated-amount">₹0.00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+{{ rec_desktop_close() }}
+
+<script>
+const targetAmount = {{ asset_recommendation.get('required_change', 0.0) }};
+const assetClassName = "{{ asset_class_name }}";
+
+function updateSecurityAllocation(input) {
+    const row = input.closest('tr');
+    const securityId = input.dataset.securityId;
+    
+    // Get all inputs for this security
+    const amountInput = row.querySelector('.allocation-amount-input');
+    const quantityInput = row.querySelector('.quantity-input');
+    const currentPriceCell = row.querySelector('.current-price-cell');
+    
+    // Get current price for this security
+    const currentPrice = getCurrentPrice(securityId);
+    
+    // Update related fields based on what changed
+    if (input.classList.contains('allocation-amount-input')) {
+        const amount = parseFloat(input.value) || 0;
+        if (currentPrice > 0) {
+            quantityInput.value = Math.round(amount / currentPrice);
+        }
+    } else if (input.classList.contains('quantity-input')) {
+        const quantity = parseInt(input.value) || 0;
+        if (currentPrice > 0) {
+            const amount = quantity * currentPrice;
+            amountInput.value = amount.toFixed(2);
+        }
+    }
+    
+    // Update quantity change display
+    const currentQuantityCell = row.querySelector('.current-quantity-cell');
+    const quantityChangeCell = row.querySelector('.quantity-change-cell');
+    if (currentQuantityCell && quantityChangeCell) {
+        const currentQuantity = parseInt(currentQuantityCell.textContent) || 0;
+        const newQuantity = parseInt(quantityInput.value) || 0;
+        const quantityChange = newQuantity - currentQuantity;
+        
+        const badge = quantityChangeCell.querySelector('.badge');
+        badge.textContent = (quantityChange > 0 ? '+' : '') + quantityChange;
+        badge.className = 'badge ' + (quantityChange > 0 ? 'bg-success' : quantityChange < 0 ? 'bg-danger' : 'bg-secondary');
+    }
+    
+    // Update current price display
+    const amount = parseFloat(amountInput.value) || 0;
+    const quantity = parseInt(quantityInput.value) || 0;
+    if (quantity > 0) {
+        currentPriceCell.textContent = '₹' + (amount / quantity).toFixed(2);
+    } else {
+        // Keep the original current price when no quantity
+        const securityData = {{ asset_securities|tojson_safe }};
+        const security = securityData.find(s => s.security_id == securityId);
+        if (security) {
+            currentPriceCell.textContent = '₹' + (security.current_price || 0).toFixed(2);
+        }
+    }
+    
+    // Update totals and progress
+    updateTotals();
+    updateProgress();
+}
+
+function getCurrentPrice(securityId) {
+    // Get current price from the security data
+    const securityData = {{ asset_securities|tojson_safe }};
+    for (const security of securityData) {
+        if (security.security_id == securityId) {
+            if (security.quantity > 0) {
+                return security.amount / security.quantity;
+            }
+            break;
+        }
+    }
+    return 100.0; // Default fallback
+}
+
+function updateTotals() {
+    console.log('updateTotals called');
+    const rows = document.querySelectorAll('tr[data-security-id]');
+    let totalAllocated = 0;
+    let totalCurrentQuantity = 0;
+    let totalNewQuantity = 0;
+    let totalQuantityChange = 0;
+    
+    console.log('Found rows:', rows.length);
+    
+    rows.forEach((row, index) => {
+        const amountInput = row.querySelector('.allocation-amount-input');
+        const quantityInput = row.querySelector('.quantity-input');
+        const currentQuantityCell = row.querySelector('.current-quantity-cell');
+        
+        const amount = parseFloat(amountInput?.value) || 0;
+        const quantity = parseInt(quantityInput?.value) || 0;
+        const currentQty = parseInt(currentQuantityCell?.textContent) || 0;
+        
+        console.log(`Row ${index}: amount=${amount}, quantity=${quantity}, currentQty=${currentQty}`);
+        
+        totalAllocated += amount;
+        totalNewQuantity += quantity;
+        totalCurrentQuantity += currentQty;
+    });
+    
+    totalQuantityChange = totalNewQuantity - totalCurrentQuantity;
+    
+    console.log('Totals calculated:', {
+        totalAllocated,
+        totalCurrentQuantity,
+        totalNewQuantity,
+        totalQuantityChange
+    });
+    
+    // Update totals row
+    const totalsRow = document.querySelector('#totals-row');
+    if (totalsRow) {
+        const allocatedCell = totalsRow.querySelector('.total-allocated');
+        const currentQuantityCell = totalsRow.querySelector('.total-current-quantity');
+        const quantityCell = totalsRow.querySelector('.total-quantity');
+        const quantityChangeCell = totalsRow.querySelector('.total-quantity-change');
+        
+        if (allocatedCell) allocatedCell.textContent = '₹' + totalAllocated.toFixed(2);
+        if (currentQuantityCell) currentQuantityCell.textContent = totalCurrentQuantity;
+        if (quantityCell) quantityCell.textContent = totalNewQuantity;
+        if (quantityChangeCell) {
+            quantityChangeCell.textContent = (totalQuantityChange > 0 ? '+' : '') + totalQuantityChange;
+            quantityChangeCell.className = 'total-quantity-change ' + (totalQuantityChange > 0 ? 'text-success' : totalQuantityChange < 0 ? 'text-danger' : 'text-secondary');
+        }
+    }
+    
+    // Update summary cards
+    document.getElementById('total-allocated-amount').textContent = '₹' + totalAllocated.toFixed(2);
+    document.getElementById('remaining-amount').textContent = '₹' + (targetAmount - totalAllocated).toFixed(2);
+    document.getElementById('allocated-amount').textContent = '₹' + totalAllocated.toFixed(2);
+}
+
+function updateProgress() {
+    const totalAllocated = parseFloat(document.getElementById('total-allocated-amount').textContent.replace('₹', '').replace(',', '')) || 0;
+    const progressPercentage = Math.min((totalAllocated / targetAmount) * 100, 100);
+    
+    const progressBar = document.getElementById('progress-bar');
+    progressBar.style.width = progressPercentage + '%';
+    
+    if (progressPercentage >= 100) {
+        progressBar.className = 'progress-bar bg-success';
+    } else if (progressPercentage >= 75) {
+        progressBar.className = 'progress-bar bg-warning';
+    } else {
+        progressBar.className = 'progress-bar bg-info';
+    }
+}
+
+function editSecurityAllocation(securityId) {
+    const row = document.querySelector(`tr[data-security-id="${securityId}"]`);
+    if (row) {
+        const firstInput = row.querySelector('input');
+        if (firstInput) {
+            firstInput.focus();
+            firstInput.select();
+        }
+    }
+}
+
+function removeSecurityAllocation(securityId) {
+    if (confirm('Are you sure you want to remove this security allocation?')) {
+        const row = document.querySelector(`tr[data-security-id="${securityId}"]`);
+        if (row) {
+            row.remove();
+            updateTotals();
+            updateProgress();
+            showAlert('Security allocation removed successfully!', 'success');
+        }
+    }
+}
+
+function addNewSecurity() {
+    const securityName = prompt('Enter security symbol (e.g., RELIANCE):');
+    if (!securityName) return;
+    
+    const tbody = document.querySelector('#securities-table');
+    const newRow = document.createElement('tr');
+    const tempId = 'new_' + Date.now();
+    newRow.setAttribute('data-security-id', tempId);
+    
+    newRow.innerHTML = `
+        <td>
+            <strong>${securityName.toUpperCase()}</strong><br>
+            <small class="text-muted">New Security</small>
+        </td>
+        <td>0.00%</td>
+        <td>0.00%</td>
+        <td>0.00%</td>
+        <td>
+            <input type="number" 
+                   class="form-control form-control-sm allocation-amount-input" 
+                   data-security-id="${tempId}"
+                   value="0.00"
+                   step="0.01"
+                   onchange="updateSecurityAllocation(this)">
+        </td>
+        <td class="current-quantity-cell">0</td>
+        <td>
+            <input type="number" 
+                   class="form-control form-control-sm quantity-input" 
+                   data-security-id="${tempId}"
+                   value="0"
+                   step="1" min="0"
+                   onchange="updateSecurityAllocation(this)">
+        </td>
+        <td class="quantity-change-cell">
+            <span class="badge bg-secondary">0</span>
+        </td>
+        <td class="current-price-cell">₹0.00</td>
+        <td>
+            <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeSecurityAllocation('${tempId}')">
+                <i class="fas fa-trash"></i>
+            </button>
+        </td>
+    `;
+    
+    tbody.appendChild(newRow);
+    updateTotals();
+    updateProgress();
+    showAlert('New security added successfully!', 'success');
+}
+
+function autoDistribute() {
+    const rows = document.querySelectorAll('tr[data-security-id]');
+    const remainingAmount = targetAmount - (parseFloat(document.getElementById('total-allocated-amount').textContent.replace('₹', '').replace(',', '')) || 0);
+    
+    if (remainingAmount <= 0) {
+        showAlert('All amount has already been allocated!', 'warning');
+        return;
+    }
+    
+    // Distribute remaining amount equally among securities with target weights
+    const securitiesWithTargets = Array.from(rows).filter(row => {
+        const targetWeight = parseFloat(row.querySelector('.target-weight-cell').textContent) || 0;
+        return targetWeight > 0;
+    });
+    
+    if (securitiesWithTargets.length === 0) {
+        showAlert('No securities with target weights found for auto-distribution!', 'warning');
+        return;
+    }
+    
+    // Calculate total target weight
+    let totalTargetWeight = 0;
+    securitiesWithTargets.forEach(row => {
+        const targetWeight = parseFloat(row.querySelector('.target-weight-cell').textContent) || 0;
+        totalTargetWeight += targetWeight;
+    });
+    
+    // Distribute based on target weights
+    securitiesWithTargets.forEach(row => {
+        const targetWeight = parseFloat(row.querySelector('.target-weight-cell').textContent) || 0;
+        const allocationAmount = row.querySelector('.allocation-amount-input');
+        const quantityInput = row.querySelector('.quantity-input');
+        
+        const newAmount = (targetWeight / totalTargetWeight) * remainingAmount;
+        const currentAmount = parseFloat(allocationAmount.value) || 0;
+        const finalAmount = currentAmount + newAmount;
+        
+        allocationAmount.value = finalAmount.toFixed(2);
+        
+        // Update quantity based on current price
+        const currentPrice = getCurrentPrice(row.dataset.securityId);
+        if (currentPrice > 0) {
+            quantityInput.value = Math.round(finalAmount / currentPrice);
+        }
+    });
+    
+    updateTotals();
+    updateProgress();
+    showAlert('Auto-distribution completed successfully!', 'success');
+}
+
+function saveAllocation() {
+    console.log('Save allocation called');
+    const rows = document.querySelectorAll('tr[data-security-id]');
+    const securityAllocations = [];
+    
+    console.log('Found rows:', rows.length);
+    
+    rows.forEach(row => {
+        const securityId = row.dataset.securityId;
+        const amountInput = row.querySelector('.allocation-amount-input');
+        const quantityInput = row.querySelector('.quantity-input');
+        const currentQuantityCell = row.querySelector('.current-quantity-cell');
+        
+        const amount = parseFloat(amountInput.value) || 0;
+        const quantity = parseInt(quantityInput.value) || 0;
+        
+        console.log(`Security ${securityId}: amount=${amount}, quantity=${quantity}`);
+        
+        if (amount !== 0) { // Changed from amount > 0 to amount !== 0 to include negative amounts
+            securityAllocations.push({
+                security_id: securityId,
+                amount: amount,
+                quantity: quantity
+            });
+        }
+    });
+    
+    console.log('Security allocations to save:', securityAllocations);
+    
+    // Update the session with the new allocations
+    fetch('{{ url_for("unified_recommendations.update_asset_class_allocation") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name=csrf-token]').getAttribute('content')
+        },
+        body: JSON.stringify({
+            asset_class: assetClassName,
+            security_allocations: securityAllocations
+        })
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        return response.json();
+    })
+    .then(data => {
+        console.log('Response data:', data);
+        if (data.success) {
+            showAlert('Allocation saved successfully!', 'success');
+        } else {
+            showAlert('Error saving allocation: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Save allocation error:', error);
+        showAlert('Error saving allocation: ' + error, 'error');
+    });
+}
+
+function completeImplementation() {
+    const totalAllocated = parseFloat(document.getElementById('total-allocated-amount').textContent.replace('₹', '').replace(',', '')) || 0;
+    const remaining = targetAmount - totalAllocated;
+    
+    if (Math.abs(remaining) > 0.01) {
+        if (!confirm(`There is ₹${remaining.toFixed(2)} remaining to be allocated. Are you sure you want to complete the implementation?`)) {
+            return;
+        }
+    }
+    
+    // Save the allocation first
+    saveAllocation();
+    
+    // Show success message and redirect
+    showAlert('Implementation completed successfully! Redirecting back to review...', 'success');
+    setTimeout(() => {
+        window.location.href = '{{ url_for("unified_recommendations.review_recommendations", client_id=client.id, session_id=pending_data.get("edit_session_id") or session.get("current_recommendation_session_id")) }}';
+    }, 2000);
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    
+    const container = document.querySelector('.container');
+    container.insertBefore(alertDiv, container.firstChild);
+    
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 5000);
+}
+
+// Initialize when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Asset class implementation page loaded');
+    console.log('Target amount:', targetAmount);
+    console.log('Asset class:', assetClassName);
+    console.log('saveAllocation function defined:', typeof saveAllocation);
+    
+    // Initialize quantity change displays for existing rows
+    const rows = document.querySelectorAll('tr[data-security-id]');
+    rows.forEach(row => {
+        const currentQuantityCell = row.querySelector('.current-quantity-cell');
+        const quantityChangeCell = row.querySelector('.quantity-change-cell');
+        const quantityInput = row.querySelector('.quantity-input');
+        
+        if (currentQuantityCell && quantityChangeCell && quantityInput) {
+            const currentQuantity = parseInt(currentQuantityCell.textContent) || 0;
+            const newQuantity = parseInt(quantityInput.value) || 0;
+            const quantityChange = newQuantity - currentQuantity;
+            
+            const badge = quantityChangeCell.querySelector('.badge');
+            badge.textContent = (quantityChange > 0 ? '+' : '') + quantityChange;
+            badge.className = 'badge ' + (quantityChange > 0 ? 'bg-success' : quantityChange < 0 ? 'bg-danger' : 'bg-secondary');
+        }
+    });
+    
+    updateTotals();
+    updateProgress();
+});
+</script>
+{% endblock %}

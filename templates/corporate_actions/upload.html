@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_child_open, maint_desktop_open, maint_desktop_close %}
+
+{% block page_title %}Upload Corporate Actions{% endblock %}
+
+{% block content %}
+{{ maint_child_open('Corporate actions upload', url_for('main.data_upload_links'), 'Upload an NSE dump. Dividend, bonus, and split are read from PURPOSE. You will review before anything is saved.') }}
+{{ maint_desktop_open('container-fluid mt-4') }}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <div class="card card-app shadow-sm">
+                <div class="card-header">
+                    <h1 class="h4 mb-0"><i class="fas fa-upload" aria-hidden="true"></i> Upload corporate actions</h1>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h2 class="h5">NSE file layout</h2>
+                            <p>Excel (.xlsx, .xls) or CSV/TSV. Dividend, bonus, and split are calculated from <strong>PURPOSE</strong> — extra columns are ignored.</p>
+                            <ul>
+                                <li><strong>SYMBOL</strong> — required</li>
+                                <li><strong>EX-DATE</strong> — required, DD-MMM-YYYY (e.g. 03-Nov-2025)</li>
+                                <li><strong>PURPOSE</strong> — required for parsing</li>
+                                <li><strong>FACE VALUE</strong> — used for % dividends (optional)</li>
+                                <li>COMPANY NAME, SERIES, RECORD DATE, book-closure dates — optional</li>
+                            </ul>
+
+                            <div class="alert alert-info" role="status">
+                                <h3 class="h6"><i class="fas fa-info-circle" aria-hidden="true"></i> PURPOSE examples</h3>
+                                <ul class="mb-0">
+                                    <li>Interim Dividend - Rs 11 Per Share / Re 1 Per Share</li>
+                                    <li>Face Value Split (Sub-Division) - From Rs 10/- Per Share To Rs 5/- Per Share</li>
+                                    <li>Bonus 1:3 / Bonus Issue 1:1 — stored as extra shares per share held (1:3 → 0.333, 1:1 → 1)</li>
+                                    <li>Distribution - Rs 3.60 Per Unit Consisting Of Interest / Dividend / Return Of Capital (InvIT/REIT — <strong>full amount as dividend</strong>; PURPOSE keeps the breakdown)</li>
+                                </ul>
+                            </div>
+                            <p class="small text-muted">Held names appear first and are pre-selected. Other names in the securities master are listed as “Not held” — tick them to import. Gilt “Interest Payment” (SERIES GS) is listed but not imported.</p>
+
+                            <p class="mb-3">
+                                <a href="{{ url_for('corporate_actions.download_corporate_actions_sample') }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-download" aria-hidden="true"></i> Download sample CSV
+                                </a>
+                                <span class="text-muted small ms-2">SYMBOL must already exist in securities master.</span>
+                            </p>
+
+                            <form method="POST" enctype="multipart/form-data">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="mb-3">
+                                    <label for="file" class="form-label">Select file</label>
+                                    <input type="file" class="form-control" id="file" name="file" accept=".xlsx,.xls,.csv,.tsv,.txt" required>
+                                    <small class="text-muted">Excel, CSV, or tab-separated NSE dump</small>
+                                </div>
+                                <div class="action-bar">
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-search" aria-hidden="true"></i> Parse and review
+                                    </button>
+                                    <a href="{{ url_for('corporate_actions.list_actions') }}" class="btn btn-outline-secondary">
+                                        View all actions
+                                    </a>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-header">
+                                    <h2 class="h6 mb-0"><i class="fas fa-file-alt" aria-hidden="true"></i> Sample</h2>
+                                </div>
+                                <div class="card-body">
+                                    <pre class="mb-0 small">SYMBOL,PURPOSE,FACE VALUE,EX-DATE
+BEML,Face Value Split (Sub-Division) - From Rs 10/- Per Share To Rs 5/- Per Share,5,03-Nov-2025
+HINDUNILVR,Interim Dividend - Rs 19 Per Share,1,07-Nov-2025
+BEPL,Interim Dividend - Re 1 Per Share,1,04-Nov-2025</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+{% endblock %}

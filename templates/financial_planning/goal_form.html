@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}{{ 'Edit' if goal else 'Add' }} Goal – {{ client.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-bullseye"></i> {{ 'Edit' if goal else 'Add' }} Goal – {{ client.name }}</h1>
+        <a href="{{ url_for('financial_planning.goals_list', client_id=client.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to goals
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <form method="post" action="{{ url_for('financial_planning.goal_edit', client_id=client.id, goal_id=goal.id) if goal else url_for('financial_planning.goal_add', client_id=client.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Goal name</label>
+                        <input type="text" name="goal_name" class="form-control" value="{{ goal.goal_name if goal else '' }}" placeholder="e.g. Retirement, Child Education" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Goal type</label>
+                        <select name="goal_type" class="form-select" required>
+                            <option value="retirement" {{ 'selected' if goal and goal.goal_type == 'retirement' else '' }}>Retirement</option>
+                            <option value="education" {{ 'selected' if goal and goal.goal_type == 'education' else '' }}>Education</option>
+                            <option value="house" {{ 'selected' if goal and goal.goal_type == 'house' else '' }}>House</option>
+                            <option value="vacation" {{ 'selected' if goal and goal.goal_type == 'vacation' else '' }}>Vacation</option>
+                            <option value="emergency" {{ 'selected' if goal and goal.goal_type == 'emergency' else '' }}>Emergency</option>
+                            <option value="other" {{ 'selected' if goal and goal.goal_type == 'other' or not goal else '' }}>Other</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Target amount</label>
+                        <input type="text" name="target_amount" class="form-control" value="{{ "%.2f"|format(goal.target_amount) if goal else '' }}" placeholder="0" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Current progress (saved so far)</label>
+                        <input type="text" name="current_progress" class="form-control" value="{{ "%.2f"|format(goal.current_progress) if goal and goal.current_progress is not none else '0' }}" placeholder="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Target date</label>
+                        <input type="date" name="target_date" class="form-control" value="{{ goal.target_date.strftime('%Y-%m-%d') if goal and goal.target_date else '' }}" required>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Monthly contribution</label>
+                        <input type="text" name="monthly_contribution" class="form-control" value="{{ "%.2f"|format(goal.monthly_contribution) if goal and goal.monthly_contribution is not none else '' }}" placeholder="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Expected return rate (%)</label>
+                        <input type="text" name="expected_return_rate" class="form-control" value="{{ "%.2f"|format(goal.expected_return_rate) if goal and goal.expected_return_rate is not none else '12' }}" placeholder="12">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Inflation rate (%)</label>
+                        <input type="text" name="inflation_rate" class="form-control" value="{{ "%.2f"|format(goal.inflation_rate) if goal and goal.inflation_rate is not none else '0' }}" placeholder="0">
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Priority (1=highest)</label>
+                        <input type="number" name="priority" class="form-control" value="{{ goal.priority if goal else 1 }}" min="1" max="5">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Status</label>
+                        <select name="status" class="form-select">
+                            <option value="active" {{ 'selected' if not goal or goal.status == 'active' else '' }}>Active</option>
+                            <option value="achieved" {{ 'selected' if goal and goal.status == 'achieved' else '' }}>Achieved</option>
+                            <option value="paused" {{ 'selected' if goal and goal.status == 'paused' else '' }}>Paused</option>
+                            <option value="cancelled" {{ 'selected' if goal and goal.status == 'cancelled' else '' }}>Cancelled</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Notes</label>
+                    <textarea name="notes" class="form-control" rows="2">{{ goal.notes if goal and goal.notes else '' }}</textarea>
+                </div>
+
+                <button type="submit" class="btn btn-primary">{{ 'Update' if goal else 'Add' }} goal</button>
+                <a href="{{ url_for('financial_planning.goals_list', client_id=client.id) }}" class="btn btn-secondary">Cancel</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,842 @@
+{% extends "base.html" %}
+
+{% block title %}Recommendations{% endblock %}
+
+{% block extra_css %}
+<style>
+    .bulk-actions {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .bulk-actions.hidden {
+        display: none;
+    }
+    
+    .select-all-container {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .checkbox-cell {
+        width: 40px;
+        text-align: center;
+    }
+    
+    .hidden {
+        display: none !important;
+    }
+    
+    .table-responsive {
+        overflow-x: auto;
+    }
+    
+    .table th {
+        white-space: nowrap;
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+    }
+    
+    .table td {
+        vertical-align: middle;
+    }
+    
+    .inline-edit {
+        border: 1px solid #ced4da;
+        transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    }
+    
+    .inline-edit:focus {
+        border-color: #80bdff;
+        outline: 0;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+    
+    .inline-edit.changed {
+        border-color: #28a745;
+        background-color: #f8fff9;
+    }
+    
+    .save-changes, .cancel-changes {
+        margin-right: 5px;
+    }
+    
+    .total-value {
+        font-weight: bold;
+        color: #28a745;
+    }
+    
+    .badge {
+        font-size: 0.75em;
+    }
+    
+    .input-group-sm .input-group-text {
+        font-size: 0.875rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .use-current-price {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    /* Responsive adjustments */
+    @media (max-width: 768px) {
+        .table-responsive {
+            font-size: 0.875rem;
+        }
+        
+        .inline-edit {
+            font-size: 0.875rem;
+            padding: 0.25rem 0.5rem;
+        }
+        
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Recommendations</h2>
+        <div>
+            <a href="{{ url_for('recommended_trades.list_all_recommended_trades', status='sent') }}" class="btn btn-outline-primary">All sent trades</a>
+            <a href="{{ url_for('main.maintenance_recommendations') }}" class="btn btn-outline-secondary">Record trade details (per client)</a>
+            <a href="{{ url_for('main.generate_recommendations') }}" class="btn btn-primary">Generate New Recommendations</a>
+            <a href="{{ url_for('recommended_trades.add_recommended_trade') }}" class="btn btn-success ms-2">Add Trade</a>
+        </div>
+    </div>
+
+    <div class="alert alert-info">
+        <strong>Sent / batch updates:</strong> Use
+        <a href="{{ url_for('main.maintenance_recommendations') }}">Maintenance &rarr; Record trade details</a>
+        for per-client inline editing (quantity, prices, execution date, Save all).
+        Choosing a client in the filter below opens that client&rsquo;s trade page directly.
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('main.recommendations') }}" class="row g-3">
+                <div class="col-md-3">
+                    <label for="client_id" class="form-label">Client</label>
+                    <select class="form-select" id="client_id" name="client_id">
+                        <option value="">All Clients</option>
+                        {% for client in clients %}
+                        <option value="{{ client.id }}" {% if selected_client_id == client.id %}selected{% endif %}>
+                            {{ client.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="action" class="form-label">Action</label>
+                    <select class="form-select" id="action" name="action">
+                        <option value="">All Actions</option>
+                        <option value="BUY" {% if selected_action == 'BUY' %}selected{% endif %}>BUY</option>
+                        <option value="SELL" {% if selected_action == 'SELL' %}selected{% endif %}>SELL</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="status" class="form-label">Status</label>
+                    <select class="form-select" id="status" name="status">
+                        <option value="">All Status</option>
+                        <option value="PENDING" {% if selected_status == 'PENDING' %}selected{% endif %}>Pending</option>
+                        <option value="SENT" {% if selected_status == 'SENT' %}selected{% endif %}>Sent</option>
+                        <option value="EXECUTED" {% if selected_status == 'EXECUTED' %}selected{% endif %}>Executed</option>
+                        <option value="CANCELLED" {% if selected_status == 'CANCELLED' %}selected{% endif %}>Cancelled</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">&nbsp;</label>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Apply Filters</button>
+                        <a href="{{ url_for('main.recommendations') }}" class="btn btn-secondary">Clear Filters</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Filter Summary -->
+    {% if selected_client_id or selected_action or selected_status %}
+    <div class="alert alert-info mb-4">
+        <strong>Active Filters:</strong>
+        {% if selected_client_id %}
+            {% set selected_client = clients|selectattr('id', 'equalto', selected_client_id)|first %}
+            <span class="badge bg-primary me-2">Client: {{ selected_client.name if selected_client else 'Unknown' }}</span>
+        {% endif %}
+        {% if selected_action %}
+            <span class="badge bg-success me-2">Action: {{ selected_action }}</span>
+        {% endif %}
+        {% if selected_status %}
+            <span class="badge bg-warning me-2">Status: {{ selected_status }}</span>
+        {% endif %}
+        <a href="{{ url_for('main.recommendations') }}" class="btn btn-sm btn-outline-secondary ms-2">Clear All</a>
+    </div>
+    {% endif %}
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Recommendations</h5>
+                    <h3 class="card-text">{{ recommendations|length }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Buy Value</h5>
+                    <h3 class="card-text">₹{{ recommendations|selectattr('action', 'equalto', 'BUY')|map(attribute='total_amount')|select|sum|default(0)|number_format(2) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Sell Value</h5>
+                    <h3 class="card-text">₹{{ recommendations|selectattr('action', 'equalto', 'SELL')|map(attribute='total_amount')|select|sum|default(0)|number_format(2) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Net Investment</h5>
+                    {% set buy_total = recommendations|selectattr('action', 'equalto', 'BUY')|map(attribute='total_amount')|select|sum|default(0) %}
+                    {% set sell_total = recommendations|selectattr('action', 'equalto', 'SELL')|map(attribute='total_amount')|select|sum|default(0) %}
+                    <h3 class="card-text">₹{{ (buy_total - sell_total)|number_format(2) }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Actions Panel -->
+    <div class="bulk-actions hidden" id="bulkActions">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <div class="select-all-container">
+                    <input type="checkbox" id="selectAll" class="form-check-input">
+                    <label for="selectAll" class="form-check-label">
+                        <strong>Select All</strong>
+                    </label>
+                    <span class="text-muted ms-2">(<span id="selectedCount">0</span> selected)</span>
+                </div>
+            </div>
+            <div class="col-md-6 text-end">
+                <button type="button" class="btn btn-danger" id="bulkDeleteBtn" disabled>
+                    <i class="fas fa-trash"></i> Delete Selected (<span id="deleteCount">0</span>)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-striped" id="recommendationsTable">
+            <thead>
+                <tr>
+                    <th class="checkbox-cell">
+                        <input type="checkbox" id="headerCheckbox" class="form-check-input">
+                    </th>
+                    <th>Client</th>
+                    <th>Security</th>
+                    <th>Action</th>
+                    <th>Quantity</th>
+                    <th>Recommended Price</th>
+                    <th>Current Price</th>
+                    <th>Execution Price</th>
+                    <th>Execution Date</th>
+                    <th>Status</th>
+                    <th>Total Value</th>
+                    <th>Created At</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for recommendation in recommendations %}
+                <tr data-trade-id="{{ recommendation.id }}">
+                    <td class="checkbox-cell">
+                        <input type="checkbox" class="form-check-input recommendation-checkbox" value="{{ recommendation.id }}">
+                    </td>
+                    <td>
+                        {% if recommendation.client %}
+                            <a href="{{ url_for('recommended_trades.client_recommended_trades', client_id=recommendation.client_id) }}">
+                                <strong>{{ recommendation.client.name }}</strong>
+                            </a>
+                            <br><small class="text-muted">{{ recommendation.client.email|display_email }}</small>
+                        {% else %}
+                            <span class="text-muted">Market-wide</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <strong>{{ recommendation.security.symbol }}</strong>
+                        <br><small class="text-muted">{{ recommendation.security.name }}</small>
+                    </td>
+                    <td>
+                        <select class="form-control form-control-sm inline-edit" data-field="action" data-original="{{ recommendation.action }}" style="min-width: 90px;">
+                            <option value="BUY" {% if recommendation.action == 'BUY' %}selected{% endif %}>BUY</option>
+                            <option value="SELL" {% if recommendation.action == 'SELL' %}selected{% endif %}>SELL</option>
+                        </select>
+                    </td>
+                    <td>
+                        {% if recommendation.client_id %}
+                            <input type="number" class="form-control form-control-sm inline-edit" 
+                                   data-field="quantity" data-original="{{ recommendation.quantity|int if recommendation.quantity else '' }}"
+                                   value="{{ recommendation.quantity|int if recommendation.quantity else '' }}" 
+                                   step="1" min="0" style="width: 80px;">
+                        {% else %}
+                            <span class="text-muted">N/A</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if recommendation.client_id %}
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">₹</span>
+                                <input type="number" class="form-control bg-light" 
+                                       value="{{ '%.2f' % recommendation.target_price if recommendation.target_price is not none else '' }}" 
+                                       step="0.01" min="0" style="width: 80px;" readonly>
+                            </div>
+                        {% else %}
+                            {% if recommendation.target_price is not none %}
+                                ₹{{ recommendation.target_price|number_format(2) }}
+                            {% else %}
+                                <span class="text-muted">N/A</span>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if recommendation.security.current_price %}
+                            ₹{{ recommendation.security.current_price|number_format(2) }}
+                        {% else %}
+                            <span class="text-muted">N/A</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if recommendation.client_id %}
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text">₹</span>
+                                <input type="number" class="form-control inline-edit" 
+                                       data-field="actual_price" data-original="{{ '%.2f' % recommendation.actual_price if recommendation.actual_price else ('%.2f' % recommendation.security.current_price if recommendation.security.current_price else '') }}"
+                                       value="{{ '%.2f' % recommendation.actual_price if recommendation.actual_price else ('%.2f' % recommendation.security.current_price if recommendation.security.current_price else '') }}" 
+                                       step="0.01" min="0" style="width: 80px;">
+                            </div>
+                        {% else %}
+                            {% if recommendation.actual_price %}
+                                ₹{{ recommendation.actual_price|number_format(2) }}
+                            {% else %}
+                                <span class="text-muted">N/A</span>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if recommendation.client_id %}
+                            <input type="date" class="form-control form-control-sm inline-edit" 
+                                   data-field="executed_at" 
+                                   data-original="{{ recommendation.executed_at.strftime('%Y-%m-%d') if recommendation.executed_at else now.strftime('%Y-%m-%d') }}"
+                                   value="{{ recommendation.executed_at.strftime('%Y-%m-%d') if recommendation.executed_at else now.strftime('%Y-%m-%d') }}" 
+                                   style="width: 130px;">
+                        {% else %}
+                            {% if recommendation.executed_at %}
+                                {{ recommendation.executed_at.strftime('%Y-%m-%d') }}
+                            {% else %}
+                                <span class="text-muted">N/A</span>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if recommendation.client_id %}
+                            <select class="form-control form-control-sm inline-edit" 
+                                    data-field="status" data-original="{{ recommendation.status }}" style="min-width: 120px;">
+                                <option value="pending" {% if recommendation.status == 'pending' %}selected{% endif %}>Pending</option>
+                                <option value="sent" {% if recommendation.status == 'sent' %}selected{% endif %}>Sent</option>
+                                <option value="executed" {% if recommendation.status == 'executed' %}selected{% endif %}>Executed</option>
+                                <option value="cancelled" {% if recommendation.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                            </select>
+                        {% else %}
+                            <span class="badge {% if recommendation.calculated_status == 'pending' %}bg-warning text-dark{% elif recommendation.calculated_status == 'executed' %}bg-success text-white{% elif recommendation.calculated_status == 'cancelled' %}bg-danger text-white{% else %}bg-secondary text-white{% endif %}">
+                                {{ recommendation.calculated_status.title() }}
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="total-value" data-trade-id="{{ recommendation.id }}">
+                            {% if recommendation.total_amount %}
+                                ₹{{ recommendation.total_amount|number_format(2) }}
+                            {% else %}
+                                <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td>{{ recommendation.created_at.strftime('%Y-%m-%d %H:%M') if recommendation.created_at else 'N/A' }}</td>
+                    <td>
+                        {% if recommendation.client_id %}
+                            <button class="btn btn-sm save-changes" data-trade-id="{{ recommendation.id }}" style="display: none; background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                                <i class="fas fa-save"></i>
+                            </button>
+                            <button class="btn btn-sm cancel-changes" data-trade-id="{{ recommendation.id }}" style="display: none; background-color: #6c757d; border-color: #6c757d; color: white;">
+                                <i class="fas fa-times"></i>
+                            </button>
+                            {% if recommendation.status in ['pending', 'sent'] %}
+                                <button class="btn btn-sm execute-trade" data-trade-id="{{ recommendation.id }}" title="Execute Trade" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                                    <i class="fas fa-play"></i> Execute
+                                </button>
+                            {% endif %}
+                        {% endif %}
+                        <button class="btn btn-danger btn-sm delete-recommendation" title="Delete Recommendation">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Bulk Delete Confirmation Modal -->
+<div class="modal fade" id="bulkDeleteModal" tabindex="-1" aria-labelledby="bulkDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkDeleteModalLabel">Confirm Bulk Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong><span id="modalDeleteCount">0</span> recommendations</strong>?</p>
+                <p class="text-danger"><small>This action cannot be undone.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="bulkDeleteForm" method="POST" action="{{ url_for('main.bulk_delete_recommendations') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="recommendation_ids" id="recommendationIds">
+                    <button type="submit" class="btn btn-danger">Delete Selected</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Execute Trade Modal -->
+<div class="modal fade" id="executeTradeModal" tabindex="-1" aria-labelledby="executeTradeModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="executeTradeModalLabel">Execute Trade</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="executeTradeForm" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="trade_id" id="executeTradeId">
+                    
+                    <div class="mb-3">
+                        <label for="executeQuantity" class="form-label">Quantity</label>
+                        <input type="number" class="form-control" id="executeQuantity" name="quantity" step="1" min="1" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="executePrice" class="form-label">Execution Price</label>
+                        <div class="input-group">
+                            <span class="input-group-text">₹</span>
+                            <input type="number" class="form-control" id="executePrice" name="actual_price" step="0.01" min="0" required>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="executeNotes" class="form-label">Notes (Optional)</label>
+                        <textarea class="form-control" id="executeNotes" name="notes" rows="3" placeholder="Add any notes about this trade execution..."></textarea>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <strong>Trade Summary:</strong>
+                        <div id="executeTradeSummary"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmExecuteTrade">Execute Trade</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success/Error Messages -->
+<div id="messageContainer"></div>
+
+<script>
+$(document).ready(function() {
+    const INLINE_UPDATE_URL = {{ url_for('recommended_trades.inline_update_trade')|tojson }};
+    const EXECUTE_TRADE_URL = {{ url_for('recommended_trades.execute_trade_api')|tojson }};
+    const DELETE_REC_URL = {{ url_for('main.api_delete_recommendation')|tojson }};
+
+    function rowTargetPrice(row) {
+        const readonly = row.find('td').eq(5).find('input[readonly]');
+        if (readonly.length) {
+            return readonly.val() || '0';
+        }
+        return row.find('input[data-field="target_price"]').val() || '0';
+    }
+
+    const checkboxes = $('.recommendation-checkbox');
+    const headerCheckbox = $('#headerCheckbox');
+    const selectAllCheckbox = $('#selectAll');
+    const bulkActions = $('#bulkActions');
+    const selectedCount = $('#selectedCount');
+    const deleteCount = $('#deleteCount');
+    const bulkDeleteBtn = $('#bulkDeleteBtn');
+    const modalDeleteCount = $('#modalDeleteCount');
+    const recommendationIds = $('#recommendationIds');
+
+    // Function to update counts and visibility
+    function updateBulkActions() {
+        const checkedBoxes = checkboxes.filter(':checked');
+        const count = checkedBoxes.length;
+        
+        selectedCount.text(count);
+        deleteCount.text(count);
+        modalDeleteCount.text(count);
+        
+        if (count > 0) {
+            bulkActions.removeClass('hidden');
+            bulkDeleteBtn.prop('disabled', false);
+        } else {
+            bulkActions.addClass('hidden');
+            bulkDeleteBtn.prop('disabled', true);
+        }
+        
+        // Update header checkbox state
+        if (count === 0) {
+            headerCheckbox.prop('indeterminate', false).prop('checked', false);
+        } else if (count === checkboxes.length) {
+            headerCheckbox.prop('indeterminate', false).prop('checked', true);
+        } else {
+            headerCheckbox.prop('indeterminate', true);
+        }
+    }
+
+    // Individual checkbox change
+    checkboxes.on('change', updateBulkActions);
+
+    // Header checkbox (select all in table)
+    headerCheckbox.on('change', function() {
+        const isChecked = $(this).prop('checked');
+        checkboxes.prop('checked', isChecked);
+        selectAllCheckbox.prop('checked', isChecked);
+        updateBulkActions();
+    });
+
+    // Select all checkbox (in bulk actions panel)
+    selectAllCheckbox.on('change', function() {
+        const isChecked = $(this).prop('checked');
+        checkboxes.prop('checked', isChecked);
+        headerCheckbox.prop('indeterminate', false).prop('checked', isChecked);
+        updateBulkActions();
+    });
+
+    // Bulk delete button click
+    bulkDeleteBtn.on('click', function() {
+        const checkedBoxes = checkboxes.filter(':checked');
+        const ids = checkedBoxes.map(function() {
+            return this.value;
+        }).get().join(',');
+        
+        recommendationIds.val(ids);
+        $('#bulkDeleteModal').modal('show');
+    });
+
+    // Initialize
+    updateBulkActions();
+    
+    // Set default values for execution fields
+    function setDefaultExecutionValues() {
+        const now = new Date();
+        const currentDateTime = now.toISOString().slice(0, 16); // Format: YYYY-MM-DDTHH:MM
+        
+        $('input[data-field="executed_at"]').each(function() {
+            if (!$(this).val()) {
+                $(this).val(currentDateTime);
+                $(this).attr('data-original', currentDateTime);
+            }
+        });
+        
+        $('input[data-field="actual_price"]').each(function() {
+            if (!$(this).val()) {
+                const row = $(this).closest('tr');
+                const securityId = row.find('.use-current-price').data('security-id');
+                // The current price should already be set in the template, but we'll ensure it's properly set
+                const currentPrice = row.find('td:nth-child(7)').text().replace('₹', '').replace(',', '').trim();
+                if (currentPrice && currentPrice !== 'N/A') {
+                    $(this).val(currentPrice);
+                    $(this).attr('data-original', currentPrice);
+                }
+            }
+        });
+    }
+    
+    // Call the function to set defaults
+    setDefaultExecutionValues();
+    
+    // Inline Table Editing
+    let editingRows = new Set();
+    
+    // Handle inline editing
+    $('.inline-edit').on('change input', function() {
+        const row = $(this).closest('tr');
+        const tradeId = row.data('trade-id');
+        const originalValue = $(this).attr('data-original');
+        const currentValue = $(this).val();
+        
+        // Add visual feedback for changed fields
+        if (originalValue !== currentValue) {
+            $(this).addClass('changed');
+        } else {
+            $(this).removeClass('changed');
+        }
+        
+        if (!editingRows.has(tradeId)) {
+            editingRows.add(tradeId);
+            showSaveCancelButtons(tradeId);
+        }
+        
+        updateTotalValue(tradeId);
+    });
+    
+    // Handle blur event to remove changed class if value is restored
+    $('.inline-edit').on('blur', function() {
+        const originalValue = $(this).attr('data-original');
+        const currentValue = $(this).val();
+        
+        if (originalValue === currentValue) {
+            $(this).removeClass('changed');
+        }
+    });
+    
+    // Save changes
+    $('.save-changes').on('click', function() {
+        const tradeId = $(this).data('trade-id');
+        saveRowChanges(tradeId);
+    });
+    
+    // Cancel changes
+    $('.cancel-changes').on('click', function() {
+        const tradeId = $(this).data('trade-id');
+        cancelRowChanges(tradeId);
+    });
+    
+    // Execute trade button
+    $('.execute-trade').on('click', function() {
+        const tradeId = $(this).data('trade-id');
+        showExecuteTradeModal(tradeId);
+    });
+    
+    // Confirm execute trade
+    $('#confirmExecuteTrade').on('click', function() {
+        executeTrade();
+    });
+    
+    function showSaveCancelButtons(tradeId) {
+        $(`.save-changes[data-trade-id="${tradeId}"]`).show();
+        $(`.cancel-changes[data-trade-id="${tradeId}"]`).show();
+    }
+    
+    function hideSaveCancelButtons(tradeId) {
+        $(`.save-changes[data-trade-id="${tradeId}"]`).hide();
+        $(`.cancel-changes[data-trade-id="${tradeId}"]`).hide();
+        editingRows.delete(tradeId);
+    }
+    
+    function updateTotalValue(tradeId) {
+        const row = $(`tr[data-trade-id="${tradeId}"]`);
+        const quantity = parseFloat(row.find('input[data-field="quantity"]').val()) || 0;
+        const targetPrice = parseFloat(row.find('input[readonly]').val()) || 0; // Get from read-only target price field
+        const totalValue = quantity * targetPrice;
+        
+        const totalValueSpan = row.find('.total-value');
+        if (totalValue > 0) {
+            totalValueSpan.html(`₹${totalValue.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`);
+        } else {
+            totalValueSpan.html('<span class="text-muted">N/A</span>');
+        }
+    }
+    
+    function saveRowChanges(tradeId) {
+        const row = $(`tr[data-trade-id="${tradeId}"]`);
+        const formData = new FormData();
+        
+        formData.append('csrf_token', $('input[name="csrf_token"]').val());
+        formData.append('trade_id', tradeId);
+        formData.append('quantity', row.find('input[data-field="quantity"]').val());
+        formData.append('target_price', rowTargetPrice(row));
+        formData.append('actual_price', row.find('input[data-field="actual_price"]').val());
+        formData.append('executed_at', row.find('input[data-field="executed_at"]').val());
+        formData.append('status', row.find('select[data-field="status"]').val());
+        
+        fetch(INLINE_UPDATE_URL, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                hideSaveCancelButtons(tradeId);
+                // Update original values and remove changed class
+                row.find('.inline-edit').each(function() {
+                    $(this).attr('data-original', $(this).val());
+                    $(this).removeClass('changed');
+                });
+                showSuccessMessage('Trade updated successfully!');
+            } else {
+                showErrorMessage('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error saving trade:', error);
+            showErrorMessage('Error saving trade data');
+        });
+    }
+    
+    function cancelRowChanges(tradeId) {
+        const row = $(`tr[data-trade-id="${tradeId}"]`);
+        
+        // Restore original values
+        row.find('.inline-edit').each(function() {
+            $(this).val($(this).attr('data-original'));
+            $(this).removeClass('changed');
+        });
+        
+        hideSaveCancelButtons(tradeId);
+        updateTotalValue(tradeId);
+    }
+    
+    function showSuccessMessage(message) {
+        // Create a temporary success alert
+        const alert = $(`<div class="alert alert-success alert-dismissible fade show position-fixed" style="top: 20px; right: 20px; z-index: 9999;">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>`);
+        $('body').append(alert);
+        
+        setTimeout(() => {
+            alert.alert('close');
+        }, 3000);
+    }
+    
+    function showErrorMessage(message) {
+        // Create a temporary error alert
+        const alert = $(`<div class="alert alert-danger alert-dismissible fade show position-fixed" style="top: 20px; right: 20px; z-index: 9999;">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>`);
+        $('body').append(alert);
+        
+        setTimeout(() => {
+            alert.alert('close');
+        }, 5000);
+    }
+    
+    // Auto-save on Enter key
+    $('.inline-edit').on('keypress', function(e) {
+        if (e.which === 13) { // Enter key
+            const row = $(this).closest('tr');
+            const tradeId = row.data('trade-id');
+            saveRowChanges(tradeId);
+        }
+    });
+    
+    // Auto-save on status change
+    $('select[data-field="status"]').on('change', function() {
+        const row = $(this).closest('tr');
+        const tradeId = row.data('trade-id');
+        const status = $(this).val();
+        
+        // Auto-set execution date if status is executed
+        if (status === 'executed') {
+            const now = new Date();
+            const localDateTime = now.toISOString().slice(0, 16);
+            row.find('input[data-field="executed_at"]').val(localDateTime);
+        }
+    });
+
+    function showExecuteTradeModal(tradeId) {
+        const row = $(`tr[data-trade-id="${tradeId}"]`);
+        const quantity = row.find('input[data-field="quantity"]').val();
+        const targetPrice = row.find('input[data-field="target_price"]').val();
+        const currentPrice = row.find('td:eq(6)').text().replace('₹', '').replace(',', ''); // Current price column
+        const securitySymbol = row.find('td:eq(2) strong').text();
+        const securityName = row.find('td:eq(2) small').text();
+        const action = row.find('td:eq(3) .badge').text();
+        
+        // Populate modal fields
+        $('#executeTradeId').val(tradeId);
+        $('#executeQuantity').val(quantity);
+        $('#executePrice').val(currentPrice || targetPrice);
+        
+        // Update trade summary
+        const totalAmount = (parseFloat(quantity) || 0) * (parseFloat(currentPrice || targetPrice) || 0);
+        $('#executeTradeSummary').html(`
+            <p><strong>Security:</strong> ${securitySymbol} - ${securityName}</p>
+            <p><strong>Action:</strong> <span class="badge ${action === 'BUY' ? 'bg-success' : 'bg-danger'}">${action}</span></p>
+            <p><strong>Quantity:</strong> ${quantity}</p>
+            <p><strong>Price:</strong> ₹${currentPrice || targetPrice}</p>
+            <p><strong>Total Amount:</strong> ₹${totalAmount.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
+        `);
+        
+        // Show modal
+        $('#executeTradeModal').modal('show');
+    }
+    
+    function executeTrade() {
+        const formData = new FormData($('#executeTradeForm')[0]);
+        
+        fetch(EXECUTE_TRADE_URL, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                $('#executeTradeModal').modal('hide');
+                showSuccessMessage('Trade executed successfully!');
+                // Reload page to reflect changes
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            } else {
+                showErrorMessage('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error executing trade:', error);
+            showErrorMessage('Error executing trade');
+        });
+    }
+
+    // Delete recommendation
+    $(document).on('click', '.delete-recommendation', function() {
+        if (!confirm('Are you sure you want to delete this recommendation?')) return;
+        const row = $(this).closest('tr');
+        const tradeId = row.data('trade-id');
+        $.post(DELETE_REC_URL, { id: tradeId, csrf_token: $('input[name="csrf_token"]').val() }, function(response) {
+            if (response.success) {
+                row.remove();
+            } else {
+                alert('Error: ' + response.error);
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

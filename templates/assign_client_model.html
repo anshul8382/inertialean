@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Assign Models to {{ client.name }}</h2>
+        <a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="btn btn-secondary">Back to Client</a>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Select Models</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" id="modelAssignmentForm" action="{{ url_for('main.assign_client_model', client_id=client.id) }}" onsubmit="return validateAndSubmit(event)">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="asset_model_id">Asset Allocation Model</label>
+                            <select class="form-control" id="asset_model_id" name="asset_model_id">
+                                <option value="">Select Asset Model</option>
+                                {% for model in asset_models %}
+                                <option value="{{ model.id }}" {% if current_asset_model and current_asset_model.id == model.id %}selected{% endif %}>
+                                    {{ model.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="stock_model_id">Stock Allocation Model</label>
+                            <select class="form-control" id="stock_model_id" name="stock_model_id">
+                                <option value="">Select Stock Model</option>
+                                {% for model in stock_models %}
+                                <option value="{{ model.id }}" {% if current_stock_model and current_stock_model.id == model.id %}selected{% endif %}>
+                                    {{ model.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i> Select both Asset and Stock models, then click the button below to assign them.
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="fas fa-save"></i> Save Model Assignments
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if current_asset_model or current_stock_model %}
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Current Model Assignments</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Asset Allocation Model</h6>
+                    {% if current_asset_model %}
+                    <p class="text-success"><i class="fas fa-check-circle"></i> {{ current_asset_model.name }}</p>
+                    {% else %}
+                    <p class="text-muted"><i class="fas fa-times-circle"></i> No asset model assigned</p>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <h6>Stock Allocation Model</h6>
+                    {% if current_stock_model %}
+                    <p class="text-success"><i class="fas fa-check-circle"></i> {{ current_stock_model.name }}</p>
+                    {% else %}
+                    <p class="text-muted"><i class="fas fa-times-circle"></i> No stock model assigned</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function validateAndSubmit(event) {
+    event.preventDefault(); // Prevent default form submission
+    
+    const form = document.getElementById('modelAssignmentForm');
+    const assetModel = document.getElementById('asset_model_id').value;
+    const stockModel = document.getElementById('stock_model_id').value;
+    
+    console.log('Form validation started');
+    console.log('Asset Model:', assetModel);
+    console.log('Stock Model:', stockModel);
+    
+    // Validate that at least one model is selected
+    if (!assetModel && !stockModel) {
+        alert('Please select at least one model to assign.');
+        return false;
+    }
+    
+    // Log form data before submission
+    const formData = new FormData(form);
+    console.log('Form data being submitted:');
+    for (let [key, value] of formData.entries()) {
+        console.log(key + ': ' + value);
+    }
+    
+    // Show confirmation dialog
+    const confirmMessage = `Are you sure you want to assign these models?\n\nAsset Model: ${assetModel || 'None'}\nStock Model: ${stockModel || 'None'}`;
+    if (confirm(confirmMessage)) {
+        console.log('Form submission confirmed, submitting...');
+        form.submit(); // Submit the form
+        return true;
+    }
+    
+    console.log('Form submission cancelled');
+    return false;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('modelAssignmentForm');
+    const assetModelSelect = document.getElementById('asset_model_id');
+    const stockModelSelect = document.getElementById('stock_model_id');
+    
+    // Debug current values
+    console.log('Initial Asset Model:', assetModelSelect.value);
+    console.log('Initial Stock Model:', stockModelSelect.value);
+    
+    // Add change event listeners for debugging
+    assetModelSelect.addEventListener('change', function() {
+        console.log('Asset Model changed to:', this.value);
+    });
+    
+    stockModelSelect.addEventListener('change', function() {
+        console.log('Stock Model changed to:', this.value);
+    });
+    
+    // Log form action URL
+    console.log('Form action URL:', form.action);
+});
+</script>
+{% endblock %} 

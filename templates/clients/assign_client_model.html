@@ -1,0 +1,272 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Assign Models to {{ client.name }}</h2>
+        <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importAssetModelModal">
+                <i class="fas fa-file-import"></i> Create Asset Model by Import
+            </button>
+            <button type="button" class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#importSecurityModelModal">
+                <i class="fas fa-file-import"></i> Create Security Model by Import
+            </button>
+            <a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="btn btn-secondary">Back to Client</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Select Models</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" id="modelAssignmentForm" action="{{ url_for('clients.assign_client_model', client_id=client.id) }}" onsubmit="return validateAndSubmit(event)">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="asset_model_id">Asset Allocation Model</label>
+                            <select class="form-control" id="asset_model_id" name="asset_model_id">
+                                <option value="">Select Asset Model</option>
+                                {% for model in asset_models %}
+                                <option value="{{ model.id }}" {% if current_asset_model and current_asset_model.id == model.id %}selected{% endif %}>
+                                    {{ model.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="security_model_id">Stock Allocation Model (legacy)</label>
+                            <select class="form-control" id="security_model_id" name="security_model_id">
+                                <option value="">Select Stock Model</option>
+                                {% for model in security_models %}
+                                <option value="{{ model.id }}" {% if current_stock_model and current_stock_model.id == model.id %}selected{% endif %}>
+                                    {{ model.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted d-block mt-1">
+                                If you choose per-asset-class models below, you can leave this blank.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                {# Per-asset-class security distribution models #}
+                <div class="mt-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Security Distribution Models (by Asset Class)</h5>
+                    </div>
+                    <div class="alert alert-light border mt-2 mb-3">
+                        <strong>Recommended:</strong> Pick a security model for each asset class you use.
+                        If the per-asset-class table isn’t configured, selections will still be accepted but may not persist (you’ll see a flash message).
+                    </div>
+
+                    <div class="row">
+                        {% for asset_class in asset_classes_in_model %}
+                        <div class="col-md-6 mb-3">
+                            <div class="border rounded p-3 h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="fw-semibold">{{ asset_class.name }}</div>
+                                    {% if selected_security_models and selected_security_models.get(asset_class.id) %}
+                                    <span class="badge bg-success">Selected</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Optional</span>
+                                    {% endif %}
+                                </div>
+
+                                <label class="form-label mb-1" for="security_model_{{ asset_class.id }}">Security Model</label>
+                                <select class="form-control" id="security_model_{{ asset_class.id }}" name="security_model_{{ asset_class.id }}">
+                                    <option value="">Select {{ asset_class.name }} Model</option>
+                                    {% set models_for_class = security_models_by_asset_class.get(asset_class.id, []) %}
+                                    {% for model in models_for_class %}
+                                    <option value="{{ model.id }}"
+                                            {% if selected_security_models and selected_security_models.get(asset_class.id) == model.id %}selected{% endif %}>
+                                        {{ model.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+
+                                {% if models_for_class|length == 0 %}
+                                <small class="text-muted d-block mt-2">
+                                    No security models found for this asset class.
+                                </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        Select an Asset model and either a legacy Stock model or per-asset-class security models, then click Save.
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="fas fa-save"></i> Save Model Assignments
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if current_asset_model or current_stock_model %}
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="mb-0">Current Model Assignments</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Asset Allocation Model</h6>
+                    {% if current_asset_model %}
+                    <p class="text-success"><i class="fas fa-check-circle"></i> {{ current_asset_model.name }}</p>
+                    {% else %}
+                    <p class="text-muted"><i class="fas fa-times-circle"></i> No asset model assigned</p>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <h6>Stock Allocation Model</h6>
+                    {% if current_stock_model %}
+                    <p class="text-success"><i class="fas fa-check-circle"></i> {{ current_stock_model.name }}</p>
+                    {% else %}
+                    <p class="text-muted"><i class="fas fa-times-circle"></i> No stock model assigned</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function validateAndSubmit(event) {
+    event.preventDefault(); // Prevent default form submission
+    
+    const form = document.getElementById('modelAssignmentForm');
+    const assetModel = document.getElementById('asset_model_id').value;
+    const stockModel = document.getElementById('security_model_id').value;
+    
+    console.log('Form validation started');
+    console.log('Asset Model:', assetModel);
+    console.log('Stock Model:', stockModel);
+    
+    // Validate that at least one model is selected
+    if (!assetModel && !stockModel) {
+        alert('Please select at least one model to assign.');
+        return false;
+    }
+    
+    // Log form data before submission
+    const formData = new FormData(form);
+    console.log('Form data being submitted:');
+    for (let [key, value] of formData.entries()) {
+        console.log(key + ': ' + value);
+    }
+    
+    // Show confirmation dialog
+    const confirmMessage = `Are you sure you want to assign these models?\n\nAsset Model: ${assetModel || 'None'}\nStock Model: ${stockModel || 'None'}`;
+    if (confirm(confirmMessage)) {
+        console.log('Form submission confirmed, submitting...');
+        form.submit(); // Submit the form
+        return true;
+    }
+    
+    console.log('Form submission cancelled');
+    return false;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('modelAssignmentForm');
+    const assetModelSelect = document.getElementById('asset_model_id');
+    const stockModelSelect = document.getElementById('security_model_id');
+    
+    // Debug current values
+    console.log('Initial Asset Model:', assetModelSelect.value);
+    console.log('Initial Stock Model:', stockModelSelect.value);
+    
+    // Add change event listeners for debugging
+    assetModelSelect.addEventListener('change', function() {
+        console.log('Asset Model changed to:', this.value);
+    });
+    
+    stockModelSelect.addEventListener('change', function() {
+        console.log('Stock Model changed to:', this.value);
+    });
+    
+    // Log form action URL
+    console.log('Form action URL:', form.action);
+});
+</script>
+
+<!-- Import Asset Model Modal (from this client) -->
+<div class="modal fade" id="importAssetModelModal" tabindex="-1" aria-labelledby="importAssetModelModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="importAssetModelModalLabel">Create Asset Model by Import</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('main.import_asset_model_from_client') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="client_id" value="{{ client.id }}">
+                <input type="hidden" name="next" value="{{ url_for('clients.assign_client_model', client_id=client.id) }}">
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <div class="small text-muted">Client</div>
+                        <div class="fw-semibold">{{ client.name }} ({{ client.id }})</div>
+                    </div>
+                    <div class="small text-muted">
+                        This creates a new asset allocation model mimicking this client’s current asset-class distribution.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Import Security Model Modal (from this client) -->
+<div class="modal fade" id="importSecurityModelModal" tabindex="-1" aria-labelledby="importSecurityModelModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="importSecurityModelModalLabel">Create Security Model by Import</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{{ url_for('main.import_security_model_from_client') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="client_id" value="{{ client.id }}">
+                <input type="hidden" name="next" value="{{ url_for('clients.assign_client_model', client_id=client.id) }}">
+                <div class="modal-body">
+                    <div class="mb-2">
+                        <div class="small text-muted">Client</div>
+                        <div class="fw-semibold">{{ client.name }} ({{ client.id }})</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="import_security_asset_class_id" class="form-label">Asset Class</label>
+                        <select class="form-select" id="import_security_asset_class_id" name="asset_class_id" required>
+                            <option value="">Select asset class</option>
+                            {% for ac in all_asset_classes %}
+                            <option value="{{ ac.id }}">{{ ac.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="small text-muted">
+                        This creates a new security allocation model mimicking this client’s security distribution within the selected asset class.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

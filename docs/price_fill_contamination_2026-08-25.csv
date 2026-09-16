@@ -1,0 +1,291 @@
+hp_id,symbol,security_id,fill_date,fill_close,prev_date,prev_close,prev_source,next_date,next_close,next_source,vs_ref_pct,neighbors_consistent,ca_adj_confirmed,ca_note,post_fill_cas
+461941,AFFLE,60,2020-04-23,292.25,2020-03-03,1817.15,upload,2020-05-27,1546.15,upload,-82.62,True,False,post-fill CA factor=0.2 expected≈336.33; fill=292.25; implied_ref/fill=5.75; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461942,AFFLE,60,2020-04-30,286.33,2020-03-03,1817.15,upload,2020-05-27,1546.15,upload,-82.97,True,False,post-fill CA factor=0.2 expected≈336.33; fill=286.33; implied_ref/fill=5.87; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461943,AFFLE,60,2020-05-06,270.83,2020-03-03,1817.15,upload,2020-05-27,1546.15,upload,-83.89,True,False,post-fill CA factor=0.2 expected≈336.33; fill=270.83; implied_ref/fill=6.21; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461944,AFFLE,60,2020-05-07,269.13,2020-03-03,1817.15,upload,2020-05-27,1546.15,upload,-84.0,True,False,post-fill CA factor=0.2 expected≈336.33; fill=269.13; implied_ref/fill=6.25; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461945,AFFLE,60,2020-05-08,263.96,2020-03-03,1817.15,upload,2020-05-27,1546.15,upload,-84.3,True,False,post-fill CA factor=0.2 expected≈336.33; fill=263.96; implied_ref/fill=6.37; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461946,AFFLE,60,2020-05-13,264.85,2020-03-03,1817.15,upload,2020-05-27,1546.15,upload,-84.25,True,False,post-fill CA factor=0.2 expected≈336.33; fill=264.85; implied_ref/fill=6.35; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461947,AFFLE,60,2020-05-19,267.8,2020-03-03,1817.15,upload,2020-05-27,1546.15,upload,-84.08,True,False,post-fill CA factor=0.2 expected≈336.33; fill=267.80; implied_ref/fill=6.28; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461948,AFFLE,60,2021-07-13,886.11,2021-06-08,5372.95,upload,2021-09-13,4908.95,upload,-82.76,True,False,post-fill CA factor=0.2 expected≈1028.19; fill=886.11; implied_ref/fill=5.8; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461949,AFFLE,60,2021-07-23,871.49,2021-06-08,5372.95,upload,2021-09-13,4908.95,upload,-83.05,True,False,post-fill CA factor=0.2 expected≈1028.19; fill=871.49; implied_ref/fill=5.9; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461950,AFFLE,60,2021-08-04,835.59,2021-06-08,5372.95,upload,2021-09-13,4908.95,upload,-83.75,True,False,post-fill CA factor=0.2 expected≈1028.19; fill=835.59; implied_ref/fill=6.15; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461951,AFFLE,60,2021-08-10,832.69,2021-06-08,5372.95,upload,2021-09-13,4908.95,upload,-83.8,True,False,post-fill CA factor=0.2 expected≈1028.19; fill=832.69; implied_ref/fill=6.17; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461952,AFFLE,60,2021-08-12,828.2,2021-06-08,5372.95,upload,2021-09-13,4908.95,upload,-83.89,True,False,post-fill CA factor=0.2 expected≈1028.19; fill=828.20; implied_ref/fill=6.21; CAs: SPLIT 5:1@2021-10-07,SPLIT 5:1@2021-10-07
+461960,ARE&M,142,2019-01-31,744.95,,,,2025-10-28,1002.05,cron,-25.66,True,True,LIKELY adjusted (implied factor≈1.35) but no matching SPLIT/BONUS in corporate_actions,
+461961,ASAL,161,2023-01-05,359.9,,,,2025-10-28,531.7,cron,-32.31,True,True,LIKELY adjusted (implied factor≈1.48) but no matching SPLIT/BONUS in corporate_actions,
+461962,ASAL,161,2023-11-13,396.5,,,,2025-10-28,531.7,cron,-25.43,True,True,LIKELY adjusted (implied factor≈1.34) but no matching SPLIT/BONUS in corporate_actions,
+461965,ASHOKLEY,168,2019-05-01,44.78,2019-04-30,86.95,upload,2019-05-02,89.55,upload,-49.26,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-07-16,BONUS 1@2025-07-16
+461966,ASHOKLEY,168,2021-03-11,61.03,2021-03-10,123.9,upload,2021-03-12,122.05,upload,-50.37,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-07-16,BONUS 1@2025-07-16
+461970,AUBANK,191,2019-05-01,320.77,2019-04-30,644.65,upload,2019-05-02,641.55,upload,-50.12,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2022-06-09,BONUS 1@2022-06-09
+461976,AXISBANK,210,2016-09-27,541.0,,,,2025-10-28,1247.0,cron,-56.62,True,True,LIKELY adjusted (implied factor≈2.3) but no matching SPLIT/BONUS in corporate_actions,
+461977,AXISBANK,210,2016-10-04,546.6,,,,2025-10-28,1247.0,cron,-56.17,True,True,LIKELY adjusted (implied factor≈2.28) but no matching SPLIT/BONUS in corporate_actions,
+461978,AXISBANK,210,2016-10-17,519.0,,,,2025-10-28,1247.0,cron,-58.38,True,True,LIKELY adjusted (implied factor≈2.4) but no matching SPLIT/BONUS in corporate_actions,
+461979,AXISBANK,210,2016-11-18,473.45,,,,2025-10-28,1247.0,cron,-62.03,True,True,LIKELY adjusted (implied factor≈2.63) but no matching SPLIT/BONUS in corporate_actions,
+461980,AXISBANK,210,2016-12-02,459.95,,,,2025-10-28,1247.0,cron,-63.12,True,True,LIKELY adjusted (implied factor≈2.71) but no matching SPLIT/BONUS in corporate_actions,
+461981,AXISBANK,210,2017-08-16,499.5,,,,2025-10-28,1247.0,cron,-59.94,True,True,LIKELY adjusted (implied factor≈2.5) but no matching SPLIT/BONUS in corporate_actions,
+461982,AXISBANK,210,2017-08-28,510.6,,,,2025-10-28,1247.0,cron,-59.05,True,True,LIKELY adjusted (implied factor≈2.44) but no matching SPLIT/BONUS in corporate_actions,
+461983,AXISBANK,210,2017-11-07,527.15,,,,2025-10-28,1247.0,cron,-57.73,True,True,LIKELY adjusted (implied factor≈2.37) but no matching SPLIT/BONUS in corporate_actions,
+461984,AXISBANK,210,2017-11-09,540.4,,,,2025-10-28,1247.0,cron,-56.66,True,True,LIKELY adjusted (implied factor≈2.31) but no matching SPLIT/BONUS in corporate_actions,
+461985,AXISBANK,210,2019-03-01,702.4,,,,2025-10-28,1247.0,cron,-43.67,True,True,LIKELY adjusted (implied factor≈1.78) but no matching SPLIT/BONUS in corporate_actions,
+461986,AXISBANK,210,2019-04-22,755.5,,,,2025-10-28,1247.0,cron,-39.41,True,True,LIKELY adjusted (implied factor≈1.65) but no matching SPLIT/BONUS in corporate_actions,
+461987,AXISBANK,210,2019-04-26,759.9,,,,2025-10-28,1247.0,cron,-39.06,True,True,LIKELY adjusted (implied factor≈1.64) but no matching SPLIT/BONUS in corporate_actions,
+461988,AXISBANK,210,2019-05-09,731.0,,,,2025-10-28,1247.0,cron,-41.38,True,False,no post-fill dilutive CA on file,
+461989,AXISBANK,210,2019-06-11,814.8,,,,2025-10-28,1247.0,cron,-34.66,True,True,LIKELY adjusted (implied factor≈1.53) but no matching SPLIT/BONUS in corporate_actions,
+461990,AXISBANK,210,2019-08-19,685.0,,,,2025-10-28,1247.0,cron,-45.07,True,True,LIKELY adjusted (implied factor≈1.82) but no matching SPLIT/BONUS in corporate_actions,
+461991,AXISBANK,210,2019-10-01,679.15,,,,2025-10-28,1247.0,cron,-45.54,True,True,LIKELY adjusted (implied factor≈1.84) but no matching SPLIT/BONUS in corporate_actions,
+461992,AXISBANK,210,2019-11-19,747.8,,,,2025-10-28,1247.0,cron,-40.03,True,True,LIKELY adjusted (implied factor≈1.67) but no matching SPLIT/BONUS in corporate_actions,
+461993,AXISBANK,210,2019-11-21,737.4,,,,2025-10-28,1247.0,cron,-40.87,True,False,no post-fill dilutive CA on file,
+461994,AXISBANK,210,2020-02-26,729.4,,,,2025-10-28,1247.0,cron,-41.51,True,False,no post-fill dilutive CA on file,
+461995,AXISBANK,210,2021-07-01,746.45,,,,2025-10-28,1247.0,cron,-40.14,True,True,LIKELY adjusted (implied factor≈1.67) but no matching SPLIT/BONUS in corporate_actions,
+462002,BAJFINANCE,228,2019-05-01,313.18,2019-04-30,3095.95,upload,2019-05-02,3131.75,upload,-89.94,True,True,CONFIRMED adjusted: fill≈ref×0.1 from BONUS 4@2025-06-16; SPLIT 2:1@2025-06-16,BONUS 4@2025-06-16; SPLIT 2:1@2025-06-16
+462003,BAJFINANCE,228,2024-03-08,643.38,2024-03-07,6421.05,upload,2024-03-11,6433.75,upload,-89.99,True,True,CONFIRMED adjusted: fill≈ref×0.1 from BONUS 4@2025-06-16; SPLIT 2:1@2025-06-16,BONUS 4@2025-06-16; SPLIT 2:1@2025-06-16
+462004,BAJFINANCE,228,2024-04-11,722.96,2024-04-10,7230.25,upload,2024-04-12,7229.55,upload,-90.0,True,True,CONFIRMED adjusted: fill≈ref×0.1 from BONUS 4@2025-06-16; SPLIT 2:1@2025-06-16,BONUS 4@2025-06-16; SPLIT 2:1@2025-06-16
+462482,BELRISE,2157,2025-07-30,133.2,,,,2026-01-12,178.9,googlefinance,-25.54,True,True,LIKELY adjusted (implied factor≈1.34) but no matching SPLIT/BONUS in corporate_actions,
+462006,BEML,265,2025-03-13,1276.85,,,,2025-10-28,4314.0,cron,-70.4,True,False,post-fill CA factor=0.5 expected≈2157.00; fill=1276.85; implied_ref/fill=3.38; CAs: SPLIT 2:1@2025-11-03,SPLIT 2:1@2025-11-03
+462483,BERGEPAINT,2179,2021-07-01,674.17,,,,2026-01-12,509.9,googlefinance,32.22,True,False,no post-fill dilutive CA on file,
+462007,BHARTIARTL,282,2020-09-11,482.59,,,,2025-10-28,2088.0,cron,-76.89,True,True,LIKELY adjusted (implied factor≈4.33) but no matching SPLIT/BONUS in corporate_actions,
+462009,BIOCON,289,2019-06-11,268.55,,,,2025-10-28,367.35,cron,-26.9,True,True,LIKELY adjusted (implied factor≈1.37) but no matching SPLIT/BONUS in corporate_actions,
+462010,BIOCON,289,2019-07-17,262.9,,,,2025-10-28,367.35,cron,-28.43,True,True,LIKELY adjusted (implied factor≈1.4) but no matching SPLIT/BONUS in corporate_actions,
+462011,BIOCON,289,2019-08-19,216.25,,,,2025-10-28,367.35,cron,-41.13,True,False,no post-fill dilutive CA on file,
+462012,BIOCON,289,2019-10-01,222.15,,,,2025-10-28,367.35,cron,-39.53,True,True,LIKELY adjusted (implied factor≈1.65) but no matching SPLIT/BONUS in corporate_actions,
+462013,BIOCON,289,2019-11-19,258.55,,,,2025-10-28,367.35,cron,-29.62,True,True,LIKELY adjusted (implied factor≈1.42) but no matching SPLIT/BONUS in corporate_actions,
+462025,BORORENEW,311,2024-01-01,438.7,,,,2025-10-28,672.0,cron,-34.72,True,True,LIKELY adjusted (implied factor≈1.53) but no matching SPLIT/BONUS in corporate_actions,
+462026,BSE,320,2020-06-03,43.68,,,,2025-10-28,2422.9,cron,-98.2,True,False,no post-fill dilutive CA on file,
+462027,BYKE,327,2016-09-27,163.4,,,,2025-10-28,61.51,cron,165.65,True,False,no post-fill dilutive CA on file,
+462028,BYKE,327,2016-10-04,194.2,,,,2025-10-28,61.51,cron,215.72,True,False,no post-fill dilutive CA on file,
+462029,BYKE,327,2016-10-17,183.75,,,,2025-10-28,61.51,cron,198.73,True,False,no post-fill dilutive CA on file,
+462030,BYKE,327,2016-11-18,173.85,,,,2025-10-28,61.51,cron,182.64,True,False,no post-fill dilutive CA on file,
+462031,BYKE,327,2016-12-02,165.6,,,,2025-10-28,61.51,cron,169.22,True,False,no post-fill dilutive CA on file,
+462032,BYKE,327,2017-05-01,208.3,,,,2025-10-28,61.51,cron,238.64,True,False,no post-fill dilutive CA on file,
+462033,BYKE,327,2017-08-16,193.7,,,,2025-10-28,61.51,cron,214.91,True,False,no post-fill dilutive CA on file,
+462034,BYKE,327,2017-08-28,183.75,,,,2025-10-28,61.51,cron,198.73,True,False,no post-fill dilutive CA on file,
+462035,BYKE,327,2017-11-07,156.9,,,,2025-10-28,61.51,cron,155.08,True,False,no post-fill dilutive CA on file,
+462036,BYKE,327,2017-11-09,155.85,,,,2025-10-28,61.51,cron,153.37,True,False,no post-fill dilutive CA on file,
+462037,BYKE,327,2017-11-14,154.6,,,,2025-10-28,61.51,cron,151.34,True,False,no post-fill dilutive CA on file,
+462049,COLPAL,393,2021-12-17,1428.9,,,,2025-10-28,2234.2,cron,-36.04,True,True,LIKELY adjusted (implied factor≈1.56) but no matching SPLIT/BONUS in corporate_actions,
+462480,CPSEETF,2156,2020-04-07,16.22,,,,2026-01-15,94.68,cron,-82.87,True,False,no post-fill dilutive CA on file,
+462481,CPSEETF,2156,2020-06-02,17.49,,,,2026-01-15,94.68,cron,-81.53,True,True,LIKELY adjusted (implied factor≈5.41) but no matching SPLIT/BONUS in corporate_actions,
+462054,CUB,419,2025-06-13,147.15,,,,2025-10-28,239.41,cron,-38.54,True,True,LIKELY adjusted (ratio≈1.63); post-fill CA factor=0.75 expected≈179.56; fill=147.15; implied_ref/fill=1.63; CAs: BONUS 0.333333@2026-06-12,BONUS 0.333333@2026-06-12
+462056,DBCORP,437,2016-10-04,395.0,,,,2025-10-28,259.55,cron,52.19,True,False,no post-fill dilutive CA on file,
+462057,DBCORP,437,2016-12-02,361.7,,,,2025-10-28,259.55,cron,39.36,True,False,no post-fill dilutive CA on file,
+462058,DBCORP,437,2017-01-05,369.7,,,,2025-10-28,259.55,cron,42.44,True,False,no post-fill dilutive CA on file,
+462059,DBCORP,437,2017-06-01,378.6,,,,2025-10-28,259.55,cron,45.87,True,False,no post-fill dilutive CA on file,
+462060,DBCORP,437,2017-11-09,369.15,,,,2025-10-28,259.55,cron,42.23,True,False,no post-fill dilutive CA on file,
+462061,DBCORP,437,2017-11-14,369.95,,,,2025-10-28,259.55,cron,42.54,True,False,no post-fill dilutive CA on file,
+462063,DBL,439,2020-07-09,288.85,,,,2025-10-28,481.95,cron,-40.07,True,True,LIKELY adjusted (implied factor≈1.67) but no matching SPLIT/BONUS in corporate_actions,
+462064,DBL,439,2020-08-14,351.0,,,,2025-10-28,481.95,cron,-27.17,True,True,LIKELY adjusted (implied factor≈1.37) but no matching SPLIT/BONUS in corporate_actions,
+462065,DCMSHRIRAM,449,2019-05-16,544.3,,,,2025-10-28,1302.0,cron,-58.2,True,True,LIKELY adjusted (implied factor≈2.39) but no matching SPLIT/BONUS in corporate_actions,
+462066,DEEPAKNTR,457,2024-01-01,2473.9,,,,2025-10-28,1750.5,cron,41.33,True,False,no post-fill dilutive CA on file,
+462069,DIXON,488,2019-05-01,473.72,2019-04-30,2348.6,upload,2019-05-02,2368.6,upload,-79.92,True,True,CONFIRMED adjusted: fill≈ref×0.2 from SPLIT 5:1@2021-03-18,SPLIT 5:1@2021-03-18
+462071,DPWIRES,503,2017-11-07,65.19,,,,2025-10-28,239.0,cron,-72.72,True,True,LIKELY adjusted (implied factor≈3.67) but no matching SPLIT/BONUS in corporate_actions,
+462072,DPWIRES,503,2017-11-09,64.75,,,,2025-10-28,239.0,cron,-72.91,True,True,LIKELY adjusted (implied factor≈3.69) but no matching SPLIT/BONUS in corporate_actions,
+462073,ECLERX,518,2016-02-09,442.8,,,,2025-10-28,4722.9,cron,-90.62,True,True,LIKELY adjusted (implied factor≈10.7) but no matching SPLIT/BONUS in corporate_actions,
+462074,ECLERX,518,2016-09-27,498.95,,,,2025-10-28,4722.9,cron,-89.44,True,True,LIKELY adjusted (implied factor≈9.47) but no matching SPLIT/BONUS in corporate_actions,
+462075,ECLERX,518,2016-10-04,498.47,,,,2025-10-28,4722.9,cron,-89.45,True,True,LIKELY adjusted (implied factor≈9.47) but no matching SPLIT/BONUS in corporate_actions,
+462076,ECLERX,518,2016-10-17,514.2,,,,2025-10-28,4722.9,cron,-89.11,True,True,LIKELY adjusted (implied factor≈9.18) but no matching SPLIT/BONUS in corporate_actions,
+462077,ECLERX,518,2016-11-18,474.83,,,,2025-10-28,4722.9,cron,-89.95,True,True,LIKELY adjusted (implied factor≈9.95) but no matching SPLIT/BONUS in corporate_actions,
+462078,ECLERX,518,2016-12-02,504.12,,,,2025-10-28,4722.9,cron,-89.33,True,True,LIKELY adjusted (implied factor≈9.37) but no matching SPLIT/BONUS in corporate_actions,
+462079,ECLERX,518,2017-08-16,427.0,,,,2025-10-28,4722.9,cron,-90.96,True,True,LIKELY adjusted (implied factor≈11.1) but no matching SPLIT/BONUS in corporate_actions,
+462080,ECLERX,518,2017-08-28,422.8,,,,2025-10-28,4722.9,cron,-91.05,True,True,LIKELY adjusted (implied factor≈11.2) but no matching SPLIT/BONUS in corporate_actions,
+462081,ECLERX,518,2017-11-07,424.77,,,,2025-10-28,4722.9,cron,-91.01,True,True,LIKELY adjusted (implied factor≈11.1) but no matching SPLIT/BONUS in corporate_actions,
+462082,ECLERX,518,2017-11-09,430.35,,,,2025-10-28,4722.9,cron,-90.89,True,True,LIKELY adjusted (implied factor≈11) but no matching SPLIT/BONUS in corporate_actions,
+462083,ECLERX,518,2017-11-14,424.53,,,,2025-10-28,4722.9,cron,-91.01,True,True,LIKELY adjusted (implied factor≈11.1) but no matching SPLIT/BONUS in corporate_actions,
+462084,ECLERX,518,2025-09-01,2248.4,,,,2025-10-28,4722.9,cron,-52.39,True,True,LIKELY adjusted (implied factor≈2.1) but no matching SPLIT/BONUS in corporate_actions,
+462091,EVERESTIND,570,2023-11-01,1187.05,,,,2025-01-01,4644.95,upload,-74.44,True,True,LIKELY adjusted (implied factor≈3.91) but no matching SPLIT/BONUS in corporate_actions,
+462092,EVERESTIND,570,2023-12-11,1203.85,,,,2025-01-01,4644.95,upload,-74.08,True,True,LIKELY adjusted (implied factor≈3.86) but no matching SPLIT/BONUS in corporate_actions,
+462096,FEDFINA,585,2023-11-29,140.25,,,,2024-01-01,3353.95,upload,-95.82,True,False,no post-fill dilutive CA on file,
+462097,FEDFINA,585,2023-12-12,146.3,,,,2024-01-01,3353.95,upload,-95.64,True,False,no post-fill dilutive CA on file,
+462101,GODREJCP,681,2020-04-01,548.75,,,,2025-10-28,1116.4,cron,-50.85,True,True,LIKELY adjusted (implied factor≈2.03) but no matching SPLIT/BONUS in corporate_actions,
+462102,GODREJCP,681,2020-04-07,558.85,,,,2025-10-28,1116.4,cron,-49.94,True,True,LIKELY adjusted (implied factor≈2) but no matching SPLIT/BONUS in corporate_actions,
+462106,GREAVESCOT,702,2023-11-01,123.75,,,,2025-10-28,223.8,cron,-44.71,True,True,LIKELY adjusted (implied factor≈1.81) but no matching SPLIT/BONUS in corporate_actions,
+462107,GREAVESCOT,702,2024-06-10,127.75,,,,2025-10-28,223.8,cron,-42.92,True,False,no post-fill dilutive CA on file,
+462109,GVT&D,733,2025-03-13,1421.55,,,,2025-10-29,3069.0,cron,-53.68,True,True,LIKELY adjusted (implied factor≈2.16) but no matching SPLIT/BONUS in corporate_actions,
+462124,HDFCAMC,751,2019-05-01,848.78,2019-04-30,1695.05,upload,2019-05-02,1697.55,upload,-49.96,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-11-26,BONUS 1@2025-11-26
+462125,HDFCBANK,752,2019-05-01,588.95,2019-04-30,2317.45,upload,2019-05-02,2355.8,upload,-74.79,True,True,CONFIRMED adjusted: fill≈ref×0.25 from SPLIT 2:1@2019-09-19; BONUS 1@2025-08-26,SPLIT 2:1@2019-09-19; BONUS 1@2025-08-26
+462126,HDFCBANK,752,2025-04-14,932.45,2025-04-11,1806.75,upload,2025-04-15,1864.9,upload,-49.21,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-08-26,BONUS 1@2025-08-26
+462139,IDEA,819,2019-10-25,4.1,,,,2025-10-28,9.44,cron,-56.57,True,True,LIKELY adjusted (implied factor≈2.3) but no matching SPLIT/BONUS in corporate_actions,
+462140,IDEA,819,2019-11-19,6.05,,,,2025-10-28,9.44,cron,-35.91,True,True,LIKELY adjusted (implied factor≈1.56) but no matching SPLIT/BONUS in corporate_actions,
+462145,IDEA,819,2023-02-22,7.0,,,,2025-10-28,9.44,cron,-25.85,True,True,LIKELY adjusted (implied factor≈1.35) but no matching SPLIT/BONUS in corporate_actions,
+462152,INDIGO,854,2017-11-07,1208.2,,,,2025-10-28,5834.5,cron,-79.29,True,True,LIKELY adjusted (implied factor≈4.83) but no matching SPLIT/BONUS in corporate_actions,
+462153,INDIGO,854,2017-11-09,1199.35,,,,2025-10-28,5834.5,cron,-79.44,True,True,LIKELY adjusted (implied factor≈4.86) but no matching SPLIT/BONUS in corporate_actions,
+462154,INDIGO,854,2017-11-14,1167.6,,,,2025-10-28,5834.5,cron,-79.99,True,True,LIKELY adjusted (implied factor≈5) but no matching SPLIT/BONUS in corporate_actions,
+462155,INDIGO,854,2017-11-16,1166.4,,,,2025-10-28,5834.5,cron,-80.01,True,True,LIKELY adjusted (implied factor≈5) but no matching SPLIT/BONUS in corporate_actions,
+462156,INDIGO,854,2018-02-21,1274.0,,,,2025-10-28,5834.5,cron,-78.16,True,True,LIKELY adjusted (implied factor≈4.58) but no matching SPLIT/BONUS in corporate_actions,
+462157,INDIGO,854,2018-08-08,1029.25,,,,2025-10-28,5834.5,cron,-82.36,True,False,no post-fill dilutive CA on file,
+462158,INDIGO,854,2018-09-13,886.3,,,,2025-10-28,5834.5,cron,-84.81,True,False,no post-fill dilutive CA on file,
+462159,INDIGO,854,2018-09-18,861.8,,,,2025-10-28,5834.5,cron,-85.23,True,False,no post-fill dilutive CA on file,
+462160,INDIGO,854,2018-09-26,853.2,,,,2025-10-28,5834.5,cron,-85.38,True,False,no post-fill dilutive CA on file,
+462161,INDIGO,854,2020-06-29,1009.1,,,,2025-10-28,5834.5,cron,-82.7,True,False,no post-fill dilutive CA on file,
+462163,IPCALAB,893,2019-03-12,464.1,,,,2025-10-28,1291.0,cron,-64.05,True,True,LIKELY adjusted (ratio≈2.78); post-fill CA factor=0.5 expected≈645.50; fill=464.10; implied_ref/fill=2.78; CAs: SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462164,IPCALAB,893,2019-04-15,471.43,,,,2025-10-28,1291.0,cron,-63.48,True,True,LIKELY adjusted (ratio≈2.74); post-fill CA factor=0.5 expected≈645.50; fill=471.43; implied_ref/fill=2.74; CAs: SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462165,IPCALAB,893,2019-05-08,475.03,,,,2025-10-28,1291.0,cron,-63.2,True,True,LIKELY adjusted (ratio≈2.72); post-fill CA factor=0.5 expected≈645.50; fill=475.03; implied_ref/fill=2.72; CAs: SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462166,IPCALAB,893,2019-08-07,465.3,,,,2025-10-28,1291.0,cron,-63.96,True,True,LIKELY adjusted (ratio≈2.77); post-fill CA factor=0.5 expected≈645.50; fill=465.30; implied_ref/fill=2.77; CAs: SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462167,IPCALAB,893,2019-10-09,432.08,,,,2025-10-28,1291.0,cron,-66.53,True,False,post-fill CA factor=0.5 expected≈645.50; fill=432.08; implied_ref/fill=2.99; CAs: SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462168,IPCALAB,893,2019-12-09,546.63,,,,2025-10-28,1291.0,cron,-57.66,True,True,LIKELY adjusted (ratio≈2.36); post-fill CA factor=0.5 expected≈645.50; fill=546.63; implied_ref/fill=2.36; CAs: SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462169,IPCALAB,893,2020-01-08,598.48,,,,2025-10-28,1291.0,cron,-53.64,True,True,CONFIRMED adjusted: fill≈ref×0.5 from SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462170,IPCALAB,893,2020-02-06,620.23,,,,2025-10-28,1291.0,cron,-51.96,True,True,CONFIRMED adjusted: fill≈ref×0.5 from SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462171,IPCALAB,893,2020-02-24,732.8,,,,2025-10-28,1291.0,cron,-43.24,True,True,LIKELY adjusted (ratio≈1.76); post-fill CA factor=0.5 expected≈645.50; fill=732.80; implied_ref/fill=1.76; CAs: SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462172,IPCALAB,893,2020-03-02,717.08,,,,2025-10-28,1291.0,cron,-44.46,True,True,CONFIRMED adjusted: fill≈ref×0.5 from SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462173,IPCALAB,893,2020-03-03,753.05,,,,2025-10-28,1291.0,cron,-41.67,True,False,post-fill CA factor=0.5 expected≈645.50; fill=753.05; implied_ref/fill=1.71; CAs: SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462174,IPCALAB,893,2020-04-01,698.88,,,,2025-10-28,1291.0,cron,-45.87,True,True,CONFIRMED adjusted: fill≈ref×0.5 from SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462175,IPCALAB,893,2020-06-02,777.85,,,,2025-10-28,1291.0,cron,-39.75,True,True,LIKELY adjusted (ratio≈1.66); post-fill CA factor=0.5 expected≈645.50; fill=777.85; implied_ref/fill=1.66; CAs: SPLIT 2:1@2022-01-10,SPLIT 2:1@2022-01-10
+462185,IPCALAB,893,2023-01-02,836.7,,,,2025-10-28,1291.0,cron,-35.19,True,True,LIKELY adjusted (implied factor≈1.54) but no matching SPLIT/BONUS in corporate_actions,
+462186,IPCALAB,893,2023-01-04,855.75,,,,2025-10-28,1291.0,cron,-33.71,True,True,LIKELY adjusted (implied factor≈1.51) but no matching SPLIT/BONUS in corporate_actions,
+462187,IPCALAB,893,2023-03-01,807.7,,,,2025-10-28,1291.0,cron,-37.44,True,True,LIKELY adjusted (implied factor≈1.6) but no matching SPLIT/BONUS in corporate_actions,
+462188,IRB,895,2025-09-18,22.05,,,,2025-10-28,44.67,cron,-50.64,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2026-03-30,BONUS 1@2026-03-30
+462195,KAJARIACER,976,2016-02-09,467.15,,,,2025-01-15,1046.15,upload,-55.35,True,True,LIKELY adjusted (implied factor≈2.24) but no matching SPLIT/BONUS in corporate_actions,
+462196,KAJARIACER,976,2016-09-27,673.8,,,,2025-01-15,1046.15,upload,-35.59,True,True,LIKELY adjusted (implied factor≈1.55) but no matching SPLIT/BONUS in corporate_actions,
+462197,KAJARIACER,976,2016-10-04,699.35,,,,2025-01-15,1046.15,upload,-33.15,True,True,LIKELY adjusted (implied factor≈1.5) but no matching SPLIT/BONUS in corporate_actions,
+462198,KAJARIACER,976,2016-10-13,710.15,,,,2025-01-15,1046.15,upload,-32.12,True,True,LIKELY adjusted (implied factor≈1.47) but no matching SPLIT/BONUS in corporate_actions,
+462199,KAJARIACER,976,2016-10-17,729.05,,,,2025-01-15,1046.15,upload,-30.31,True,True,LIKELY adjusted (implied factor≈1.43) but no matching SPLIT/BONUS in corporate_actions,
+462200,KAJARIACER,976,2016-11-18,478.3,,,,2025-01-15,1046.15,upload,-54.28,True,True,LIKELY adjusted (implied factor≈2.19) but no matching SPLIT/BONUS in corporate_actions,
+462201,KAJARIACER,976,2016-12-02,526.75,,,,2025-01-15,1046.15,upload,-49.65,True,True,LIKELY adjusted (implied factor≈1.99) but no matching SPLIT/BONUS in corporate_actions,
+462202,KAJARIACER,976,2017-03-10,555.55,,,,2025-01-15,1046.15,upload,-46.9,True,True,LIKELY adjusted (implied factor≈1.88) but no matching SPLIT/BONUS in corporate_actions,
+462203,KAJARIACER,976,2017-04-10,625.15,,,,2025-01-15,1046.15,upload,-40.24,True,True,LIKELY adjusted (implied factor≈1.67) but no matching SPLIT/BONUS in corporate_actions,
+462204,KAJARIACER,976,2017-08-16,622.1,,,,2025-01-15,1046.15,upload,-40.53,True,False,no post-fill dilutive CA on file,
+462205,KAJARIACER,976,2017-08-28,698.55,,,,2025-01-15,1046.15,upload,-33.23,True,True,LIKELY adjusted (implied factor≈1.5) but no matching SPLIT/BONUS in corporate_actions,
+462206,KAJARIACER,976,2017-11-09,720.75,,,,2025-01-15,1046.15,upload,-31.1,True,True,LIKELY adjusted (implied factor≈1.45) but no matching SPLIT/BONUS in corporate_actions,
+462207,KAJARIACER,976,2018-07-03,465.95,,,,2025-01-15,1046.15,upload,-55.46,True,True,LIKELY adjusted (implied factor≈2.25) but no matching SPLIT/BONUS in corporate_actions,
+462208,KAJARIACER,976,2018-08-08,445.35,,,,2025-01-15,1046.15,upload,-57.43,True,True,LIKELY adjusted (implied factor≈2.35) but no matching SPLIT/BONUS in corporate_actions,
+462209,KAJARIACER,976,2018-09-13,430.05,,,,2025-01-15,1046.15,upload,-58.89,True,True,LIKELY adjusted (implied factor≈2.43) but no matching SPLIT/BONUS in corporate_actions,
+462210,KAJARIACER,976,2018-09-18,428.8,,,,2025-01-15,1046.15,upload,-59.01,True,True,LIKELY adjusted (implied factor≈2.44) but no matching SPLIT/BONUS in corporate_actions,
+462211,KAJARIACER,976,2018-09-26,398.15,,,,2025-01-15,1046.15,upload,-61.94,True,True,LIKELY adjusted (implied factor≈2.63) but no matching SPLIT/BONUS in corporate_actions,
+462213,KEI,1003,2023-01-05,1519.05,,,,2025-10-28,4069.8,cron,-62.68,True,True,LIKELY adjusted (implied factor≈2.68) but no matching SPLIT/BONUS in corporate_actions,
+462215,KESORAMIND,1006,2025-06-09,6.48,,,,2025-10-28,5.15,cron,25.83,True,False,no post-fill dilutive CA on file,
+462217,KOTAKBANK,1032,2019-05-01,281.27,2019-04-30,1386.55,upload,2019-05-02,1406.35,upload,-79.86,True,True,CONFIRMED adjusted: fill≈ref×0.2 from SPLIT 5:1@2026-01-14,SPLIT 5:1@2026-01-14
+462218,KOTAKBANK,1032,2019-08-15,299.79,2019-08-14,1491.8,upload,2019-08-16,1498.95,upload,-79.95,True,True,CONFIRMED adjusted: fill≈ref×0.2 from SPLIT 5:1@2026-01-14,SPLIT 5:1@2026-01-14
+462219,KOTAKBANK,1032,2025-11-05,416.64,2025-11-04,2096.6,upload,2025-11-06,2083.2,upload,-80.06,True,True,CONFIRMED adjusted: fill≈ref×0.2 from SPLIT 5:1@2026-01-14,SPLIT 5:1@2026-01-14
+462220,KTKBANK,1058,2021-07-01,61.65,,,,2025-10-28,183.68,cron,-66.44,True,False,no post-fill dilutive CA on file,
+462221,LALPATHLAB,1063,2019-05-01,536.55,2019-04-30,1044.3,upload,2019-05-02,1073.1,upload,-49.32,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-12-19,BONUS 1@2025-12-19
+462222,LALPATHLAB,1063,2024-04-11,1179.2,2024-04-10,2304.3,upload,2024-04-12,2358.4,upload,-49.42,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-12-19,BONUS 1@2025-12-19
+462223,LALPATHLAB,1063,2025-11-05,1554.0,2025-11-04,3153.7,upload,2025-11-06,3108.0,upload,-50.36,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-12-19,BONUS 1@2025-12-19
+462226,LT,1100,2016-11-14,913.53,2016-11-11,1388.8,upload,2016-11-15,1370.3,upload,-33.78,True,True,CONFIRMED adjusted: fill≈ref×0.6667 from BONUS 0.5@2017-07-13,BONUS 0.5@2017-07-13
+462235,LUPIN,1107,2016-10-17,1446.05,,,,2025-10-28,1932.2,cron,-25.16,True,True,LIKELY adjusted (implied factor≈1.34) but no matching SPLIT/BONUS in corporate_actions,
+462236,LUPIN,1107,2016-11-18,1417.75,,,,2025-10-28,1932.2,cron,-26.63,True,True,LIKELY adjusted (implied factor≈1.36) but no matching SPLIT/BONUS in corporate_actions,
+462238,LUPIN,1107,2017-03-10,1447.1,,,,2025-10-28,1932.2,cron,-25.11,True,True,LIKELY adjusted (implied factor≈1.34) but no matching SPLIT/BONUS in corporate_actions,
+462239,LUPIN,1107,2017-08-16,961.0,,,,2025-10-28,1932.2,cron,-50.26,True,True,LIKELY adjusted (implied factor≈2.01) but no matching SPLIT/BONUS in corporate_actions,
+462240,LUPIN,1107,2017-08-28,991.2,,,,2025-10-28,1932.2,cron,-48.7,True,True,LIKELY adjusted (implied factor≈1.95) but no matching SPLIT/BONUS in corporate_actions,
+462241,LUPIN,1107,2017-11-07,860.1,,,,2025-10-28,1932.2,cron,-55.49,True,True,LIKELY adjusted (implied factor≈2.25) but no matching SPLIT/BONUS in corporate_actions,
+462242,LUPIN,1107,2017-11-09,830.45,,,,2025-10-28,1932.2,cron,-57.02,True,True,LIKELY adjusted (implied factor≈2.33) but no matching SPLIT/BONUS in corporate_actions,
+462243,LUPIN,1107,2017-11-14,835.0,,,,2025-10-28,1932.2,cron,-56.79,True,True,LIKELY adjusted (implied factor≈2.31) but no matching SPLIT/BONUS in corporate_actions,
+462244,LUPIN,1107,2021-01-13,1067.4,,,,2025-10-28,1932.2,cron,-44.76,True,True,LIKELY adjusted (implied factor≈1.81) but no matching SPLIT/BONUS in corporate_actions,
+462247,MANAPPURAM,1140,2023-01-05,120.95,,,,2025-10-28,277.65,cron,-56.44,True,True,LIKELY adjusted (implied factor≈2.3) but no matching SPLIT/BONUS in corporate_actions,
+462248,MANAPPURAM,1140,2024-03-06,173.9,,,,2025-10-28,277.65,cron,-37.37,True,True,LIKELY adjusted (implied factor≈1.6) but no matching SPLIT/BONUS in corporate_actions,
+462249,MANORAMA,1150,2023-01-05,212.89,,,,2025-10-28,1390.0,cron,-84.68,True,False,no post-fill dilutive CA on file,
+462250,MANORAMA,1150,2024-03-06,415.24,,,,2025-10-28,1390.0,cron,-70.13,True,False,no post-fill dilutive CA on file,
+462258,MASFIN,1162,2018-09-17,188.45,,,,2024-01-01,870.95,upload,-78.36,True,True,LIKELY adjusted (ratio≈4.62); post-fill CA factor=0.3333 expected≈290.32; fill=188.45; implied_ref/fill=4.62; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462259,MASFIN,1162,2018-11-29,173.18,,,,2024-01-01,870.95,upload,-80.12,True,True,LIKELY adjusted (ratio≈5.03); post-fill CA factor=0.3333 expected≈290.32; fill=173.18; implied_ref/fill=5.03; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462260,MASFIN,1162,2020-01-01,288.27,,,,2024-01-01,870.95,upload,-66.9,True,True,CONFIRMED adjusted: fill≈ref×0.3333 from BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462261,MASFIN,1162,2020-02-24,374.13,,,,2024-01-01,870.95,upload,-57.04,True,True,LIKELY adjusted (ratio≈2.33); post-fill CA factor=0.3333 expected≈290.32; fill=374.13; implied_ref/fill=2.33; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462262,MASFIN,1162,2020-02-25,357.85,,,,2024-01-01,870.95,upload,-58.91,True,True,LIKELY adjusted (ratio≈2.43); post-fill CA factor=0.3333 expected≈290.32; fill=357.85; implied_ref/fill=2.43; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462263,MASFIN,1162,2020-02-26,369.6,,,,2024-01-01,870.95,upload,-57.56,True,True,LIKELY adjusted (ratio≈2.36); post-fill CA factor=0.3333 expected≈290.32; fill=369.60; implied_ref/fill=2.36; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462264,MASFIN,1162,2020-02-27,365.2,,,,2024-01-01,870.95,upload,-58.07,True,True,LIKELY adjusted (ratio≈2.38); post-fill CA factor=0.3333 expected≈290.32; fill=365.20; implied_ref/fill=2.38; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462265,MASFIN,1162,2020-02-28,346.58,,,,2024-01-01,870.95,upload,-60.21,True,True,LIKELY adjusted (ratio≈2.51); post-fill CA factor=0.3333 expected≈290.32; fill=346.58; implied_ref/fill=2.51; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462266,MASFIN,1162,2020-03-03,355.47,,,,2024-01-01,870.95,upload,-59.19,True,True,LIKELY adjusted (ratio≈2.45); post-fill CA factor=0.3333 expected≈290.32; fill=355.47; implied_ref/fill=2.45; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462267,MASFIN,1162,2020-03-16,338.05,,,,2024-01-01,870.95,upload,-61.19,True,True,LIKELY adjusted (ratio≈2.58); post-fill CA factor=0.3333 expected≈290.32; fill=338.05; implied_ref/fill=2.58; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462268,MASFIN,1162,2020-04-27,191.82,,,,2024-01-01,870.95,upload,-77.98,True,True,LIKELY adjusted (ratio≈4.54); post-fill CA factor=0.3333 expected≈290.32; fill=191.82; implied_ref/fill=4.54; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462269,MASFIN,1162,2020-05-06,188.93,,,,2024-01-01,870.95,upload,-78.31,True,True,LIKELY adjusted (ratio≈4.61); post-fill CA factor=0.3333 expected≈290.32; fill=188.93; implied_ref/fill=4.61; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462270,MASFIN,1162,2021-07-05,281.13,,,,2024-01-01,870.95,upload,-67.72,True,True,CONFIRMED adjusted: fill≈ref×0.3333 from BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462271,MASFIN,1162,2021-07-07,285.63,,,,2024-01-01,870.95,upload,-67.2,True,True,CONFIRMED adjusted: fill≈ref×0.3333 from BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462272,MASFIN,1162,2021-09-14,261.83,,,,2024-01-01,870.95,upload,-69.94,True,True,CONFIRMED adjusted: fill≈ref×0.3333 from BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462273,MASFIN,1162,2021-10-26,252.62,,,,2024-01-01,870.95,upload,-70.99,True,False,post-fill CA factor=0.3333 expected≈290.32; fill=252.62; implied_ref/fill=3.45; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462274,MASFIN,1162,2022-06-15,175.7,,,,2024-01-01,870.95,upload,-79.83,True,True,LIKELY adjusted (ratio≈4.96); post-fill CA factor=0.3333 expected≈290.32; fill=175.70; implied_ref/fill=4.96; CAs: BONUS 2@2024-02-22,BONUS 2@2024-02-22
+462276,MAZDOCK,1173,2020-12-15,95.53,,,,2025-10-28,2773.0,cron,-96.55,True,False,no post-fill dilutive CA on file,
+462277,MEDANTA,1180,2022-11-14,32.55,,,,2022-11-16,415.3,upload,-92.16,True,False,no post-fill dilutive CA on file,
+462280,MOTILALOFS,1225,2018-08-06,229.94,,,,2025-10-28,1085.1,cron,-78.81,True,True,LIKELY adjusted (implied factor≈4.72) but no matching SPLIT/BONUS in corporate_actions,
+462281,MOTILALOFS,1225,2019-01-09,171.55,,,,2025-10-28,1085.1,cron,-84.19,True,False,no post-fill dilutive CA on file,
+462282,MOTILALOFS,1225,2019-03-01,142.04,,,,2025-10-28,1085.1,cron,-86.91,True,False,no post-fill dilutive CA on file,
+462283,MOTILALOFS,1225,2019-11-01,173.01,,,,2025-10-28,1085.1,cron,-84.06,True,False,no post-fill dilutive CA on file,
+462284,MPHASIS,1228,2023-01-05,2013.4,,,,2025-10-28,2833.0,cron,-28.93,True,True,LIKELY adjusted (implied factor≈1.41) but no matching SPLIT/BONUS in corporate_actions,
+462286,MSTCLTD,1233,2021-03-19,305.25,,,,2025-10-28,531.85,cron,-42.61,True,False,no post-fill dilutive CA on file,
+462287,MSTCLTD,1233,2021-11-10,397.95,,,,2025-10-28,531.85,cron,-25.18,True,True,LIKELY adjusted (implied factor≈1.34) but no matching SPLIT/BONUS in corporate_actions,
+462288,MTARTECH,1235,2023-01-05,1619.05,,,,2025-10-28,2281.0,cron,-29.02,True,True,LIKELY adjusted (implied factor≈1.41) but no matching SPLIT/BONUS in corporate_actions,
+462290,MUTHOOTFIN,1247,2024-01-01,1466.0,,,,2025-10-28,3173.3,cron,-53.8,True,True,LIKELY adjusted (implied factor≈2.16) but no matching SPLIT/BONUS in corporate_actions,
+462292,NAUKRI,1264,2019-05-01,390.73,2019-04-30,1933.25,upload,2019-05-02,1953.65,upload,-79.9,True,True,CONFIRMED adjusted: fill≈ref×0.2 from SPLIT 5:1@2025-05-07,SPLIT 5:1@2025-05-07
+462293,NAUKRI,1264,2021-03-11,960.72,2021-03-10,4869.8,upload,2021-03-12,4803.6,upload,-80.14,True,True,CONFIRMED adjusted: fill≈ref×0.2 from SPLIT 5:1@2025-05-07,SPLIT 5:1@2025-05-07
+462298,NESTLEIND,1286,2021-03-11,836.12,2021-03-10,16931.45,upload,2021-03-12,16722.45,upload,-95.03,True,True,CONFIRMED adjusted: fill≈ref×0.05 from SPLIT 10:1@2024-01-05; BONUS 1@2025-08-08,SPLIT 10:1@2024-01-05; BONUS 1@2025-08-08
+462301,NMDC,1315,2016-09-27,35.43,,,,2025-10-28,74.61,cron,-52.51,True,True,LIKELY adjusted (implied factor≈2.11) but no matching SPLIT/BONUS in corporate_actions,
+462302,NMDC,1315,2016-10-04,36.95,,,,2025-10-28,74.61,cron,-50.48,True,True,LIKELY adjusted (implied factor≈2.02) but no matching SPLIT/BONUS in corporate_actions,
+462303,NMDC,1315,2016-10-17,38.47,,,,2025-10-28,74.61,cron,-48.44,True,True,LIKELY adjusted (implied factor≈1.94) but no matching SPLIT/BONUS in corporate_actions,
+462304,NMDC,1315,2016-11-18,37.95,,,,2025-10-28,74.61,cron,-49.14,True,True,LIKELY adjusted (implied factor≈1.97) but no matching SPLIT/BONUS in corporate_actions,
+462305,NMDC,1315,2016-12-02,38.8,,,,2025-10-28,74.61,cron,-48.0,True,True,LIKELY adjusted (implied factor≈1.92) but no matching SPLIT/BONUS in corporate_actions,
+462306,NMDC,1315,2017-08-16,40.38,,,,2025-10-28,74.61,cron,-45.88,True,True,LIKELY adjusted (implied factor≈1.85) but no matching SPLIT/BONUS in corporate_actions,
+462307,NMDC,1315,2017-08-28,40.8,,,,2025-10-28,74.61,cron,-45.32,True,True,LIKELY adjusted (implied factor≈1.83) but no matching SPLIT/BONUS in corporate_actions,
+462308,NMDC,1315,2018-09-06,38.55,,,,2025-10-28,74.61,cron,-48.33,True,True,LIKELY adjusted (implied factor≈1.94) but no matching SPLIT/BONUS in corporate_actions,
+462309,NMDC,1315,2018-09-18,39.68,,,,2025-10-28,74.61,cron,-46.82,True,True,LIKELY adjusted (implied factor≈1.88) but no matching SPLIT/BONUS in corporate_actions,
+462310,NMDC,1315,2018-09-26,39.08,,,,2025-10-28,74.61,cron,-47.62,True,True,LIKELY adjusted (implied factor≈1.91) but no matching SPLIT/BONUS in corporate_actions,
+462312,OSWALAGRO,1373,2025-06-16,101.71,,,,2025-10-28,73.1,cron,39.14,True,False,no post-fill dilutive CA on file,
+462315,PIDILITIND,1418,2019-05-01,614.4,2019-04-30,1234.55,upload,2019-05-02,1228.8,upload,-50.12,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-09-23,BONUS 1@2025-09-23
+462316,PIDILITIND,1418,2021-03-11,861.55,2021-03-10,1737.05,upload,2021-03-12,1723.1,upload,-50.2,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-09-23,BONUS 1@2025-09-23
+462317,PIDILITIND,1418,2024-03-08,1453.2,2024-03-07,2865.85,upload,2024-03-11,2906.4,upload,-49.65,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2025-09-23,BONUS 1@2025-09-23
+462324,RAJRATAN,1506,2023-01-05,873.15,,,,2025-10-28,387.0,cron,125.62,True,False,no post-fill dilutive CA on file,
+462325,RAJRATAN,1506,2023-06-15,834.05,,,,2025-10-28,387.0,cron,115.52,True,False,no post-fill dilutive CA on file,
+462326,RAJRATAN,1506,2024-06-05,527.45,,,,2025-10-28,387.0,cron,36.29,True,False,no post-fill dilutive CA on file,
+462330,REDTAPE,1534,2024-10-22,227.49,,,,2025-10-29,133.45,cron,70.47,True,False,no post-fill dilutive CA on file,
+462331,REDTAPE,1534,2024-12-17,211.61,,,,2025-10-29,133.45,cron,58.57,True,False,no post-fill dilutive CA on file,
+461937,RELIANCE,1,2018-09-13,620.69,2018-09-12,1252.5,upload,2018-09-14,1253.15,upload,-50.46,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2024-10-28,BONUS 1@2024-10-28
+461938,RELIANCE,1,2019-05-01,695.93,2019-04-30,1392.8,upload,2019-05-02,1405.05,upload,-50.25,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2024-10-28,BONUS 1@2024-10-28
+461939,RELIANCE,1,2019-08-15,633.0,2019-08-14,1288.25,upload,2019-08-16,1278.0,upload,-50.67,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2024-10-28,BONUS 1@2024-10-28
+461940,RELIANCE,1,2021-03-11,1068.8,2021-03-10,2181.95,upload,2021-03-12,2137.6,upload,-50.51,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2024-10-28,BONUS 1@2024-10-28
+462332,RENUKA,1544,2023-01-05,56.9,,,,2025-10-28,29.29,cron,94.26,True,False,no post-fill dilutive CA on file,
+462333,RENUKA,1544,2023-10-12,53.75,,,,2025-10-28,29.29,cron,83.51,True,False,no post-fill dilutive CA on file,
+462336,RHFL,1551,2025-06-16,7.46,2025-06-04,5.82,upload,2025-09-09,4.7,upload,41.83,True,False,no post-fill dilutive CA on file,
+462346,RVNL,1595,2023-01-05,72.05,,,,2025-10-28,327.65,cron,-78.01,True,True,LIKELY adjusted (implied factor≈4.55) but no matching SPLIT/BONUS in corporate_actions,
+462347,RVNL,1595,2023-10-23,157.75,,,,2025-10-28,327.65,cron,-51.85,True,True,LIKELY adjusted (implied factor≈2.08) but no matching SPLIT/BONUS in corporate_actions,
+462351,SOLARINDS,1755,2023-01-05,4406.45,,,,2025-10-28,13888.0,cron,-68.27,True,False,no post-fill dilutive CA on file,
+462352,SOLARINDS,1755,2024-05-22,9945.9,,,,2025-10-28,13888.0,cron,-28.38,True,True,LIKELY adjusted (implied factor≈1.4) but no matching SPLIT/BONUS in corporate_actions,
+462357,SYNGENE,1855,2019-06-11,334.8,,,,2025-01-15,820.35,upload,-59.19,True,True,LIKELY adjusted (implied factor≈2.45) but no matching SPLIT/BONUS in corporate_actions,
+462358,SYNGENE,1855,2019-08-19,307.15,,,,2025-01-15,820.35,upload,-62.56,True,True,LIKELY adjusted (implied factor≈2.67) but no matching SPLIT/BONUS in corporate_actions,
+462359,SYNGENE,1855,2019-10-01,307.7,,,,2025-01-15,820.35,upload,-62.49,True,True,LIKELY adjusted (implied factor≈2.67) but no matching SPLIT/BONUS in corporate_actions,
+462360,SYNGENE,1855,2019-11-19,325.6,,,,2025-01-15,820.35,upload,-60.31,True,True,LIKELY adjusted (implied factor≈2.52) but no matching SPLIT/BONUS in corporate_actions,
+462361,SYNGENE,1855,2019-12-10,302.2,,,,2025-01-15,820.35,upload,-63.16,True,True,LIKELY adjusted (implied factor≈2.71) but no matching SPLIT/BONUS in corporate_actions,
+462362,SYNGENE,1855,2020-01-09,309.45,,,,2025-01-15,820.35,upload,-62.28,True,True,LIKELY adjusted (implied factor≈2.65) but no matching SPLIT/BONUS in corporate_actions,
+462363,SYNGENE,1855,2020-02-26,306.9,,,,2025-01-15,820.35,upload,-62.59,True,True,LIKELY adjusted (implied factor≈2.67) but no matching SPLIT/BONUS in corporate_actions,
+462364,SYNGENE,1855,2020-08-11,492.15,,,,2025-01-15,820.35,upload,-40.01,True,True,LIKELY adjusted (implied factor≈1.67) but no matching SPLIT/BONUS in corporate_actions,
+462365,SYNGENE,1855,2020-09-03,475.2,,,,2025-01-15,820.35,upload,-42.07,True,False,no post-fill dilutive CA on file,
+462366,SYNGENE,1855,2021-03-24,522.9,,,,2025-01-15,820.35,upload,-36.26,True,True,LIKELY adjusted (implied factor≈1.57) but no matching SPLIT/BONUS in corporate_actions,
+462367,TATACONSUM,1871,2021-05-03,677.1,,,,2025-01-15,955.55,upload,-29.14,True,True,LIKELY adjusted (implied factor≈1.41) but no matching SPLIT/BONUS in corporate_actions,
+462371,TATAELXSI,1872,2018-09-06,1352.5,,,,2025-01-15,6115.75,upload,-77.88,True,True,LIKELY adjusted (implied factor≈4.52) but no matching SPLIT/BONUS in corporate_actions,
+462372,TATAELXSI,1872,2018-09-17,1365.0,,,,2025-01-15,6115.75,upload,-77.68,True,True,LIKELY adjusted (implied factor≈4.48) but no matching SPLIT/BONUS in corporate_actions,
+462373,TATAELXSI,1872,2018-10-22,998.35,,,,2025-01-15,6115.75,upload,-83.68,True,False,no post-fill dilutive CA on file,
+462374,TATAELXSI,1872,2018-11-29,1002.45,,,,2025-01-15,6115.75,upload,-83.61,True,False,no post-fill dilutive CA on file,
+462375,TATAELXSI,1872,2018-12-05,1043.75,,,,2025-01-15,6115.75,upload,-82.93,True,False,no post-fill dilutive CA on file,
+462376,TATAELXSI,1872,2018-12-26,988.6,,,,2025-01-15,6115.75,upload,-83.84,True,False,no post-fill dilutive CA on file,
+462377,TATAELXSI,1872,2019-03-06,950.1,,,,2025-01-15,6115.75,upload,-84.46,True,False,no post-fill dilutive CA on file,
+462378,TATAELXSI,1872,2019-03-12,959.7,,,,2025-01-15,6115.75,upload,-84.31,True,False,no post-fill dilutive CA on file,
+462379,TATAELXSI,1872,2019-04-15,991.85,,,,2025-01-15,6115.75,upload,-83.78,True,False,no post-fill dilutive CA on file,
+462380,TATAELXSI,1872,2019-07-08,856.9,,,,2025-01-15,6115.75,upload,-85.99,True,False,no post-fill dilutive CA on file,
+462381,TATAELXSI,1872,2019-11-25,798.3,,,,2025-01-15,6115.75,upload,-86.95,True,False,no post-fill dilutive CA on file,
+462382,TATAELXSI,1872,2020-01-01,827.85,,,,2025-01-15,6115.75,upload,-86.46,True,False,no post-fill dilutive CA on file,
+462383,TATAELXSI,1872,2020-01-08,821.35,,,,2025-01-15,6115.75,upload,-86.57,True,False,no post-fill dilutive CA on file,
+462384,TATAELXSI,1872,2020-03-16,770.7,,,,2025-01-15,6115.75,upload,-87.4,True,False,no post-fill dilutive CA on file,
+462385,TATAELXSI,1872,2020-04-27,829.15,,,,2025-01-15,6115.75,upload,-86.44,True,False,no post-fill dilutive CA on file,
+462389,TCS,1885,2016-11-14,1060.65,2016-11-11,2101.15,upload,2016-11-15,2121.3,upload,-49.76,True,True,CONFIRMED adjusted: fill≈ref×0.5 from BONUS 1@2018-05-31,BONUS 1@2018-05-31
+462398,TEJASNET,1893,2021-04-01,166.85,,,,2025-10-28,544.05,cron,-69.33,True,False,no post-fill dilutive CA on file,
+462399,TEJASNET,1893,2021-04-27,191.2,,,,2025-10-28,544.05,cron,-64.86,True,False,no post-fill dilutive CA on file,
+462402,TEJASNET,1893,2023-08-16,843.0,,,,2025-10-28,544.05,cron,54.95,True,False,no post-fill dilutive CA on file,
+462403,TEJASNET,1893,2023-12-06,818.25,,,,2025-10-28,544.05,cron,50.4,True,False,no post-fill dilutive CA on file,
+462404,THERMAX,1906,2016-02-09,800.25,,,,2025-01-15,4014.9,upload,-80.07,True,True,LIKELY adjusted (implied factor≈5.02) but no matching SPLIT/BONUS in corporate_actions,
+462405,THERMAX,1906,2016-09-27,867.35,,,,2025-01-15,4014.9,upload,-78.4,True,True,LIKELY adjusted (implied factor≈4.63) but no matching SPLIT/BONUS in corporate_actions,
+462406,THERMAX,1906,2016-10-04,889.65,,,,2025-01-15,4014.9,upload,-77.84,True,True,LIKELY adjusted (implied factor≈4.51) but no matching SPLIT/BONUS in corporate_actions,
+462407,THERMAX,1906,2016-10-17,880.6,,,,2025-01-15,4014.9,upload,-78.07,True,True,LIKELY adjusted (implied factor≈4.56) but no matching SPLIT/BONUS in corporate_actions,
+462408,THERMAX,1906,2016-11-18,833.25,,,,2025-01-15,4014.9,upload,-79.25,True,True,LIKELY adjusted (implied factor≈4.82) but no matching SPLIT/BONUS in corporate_actions,
+462409,THERMAX,1906,2016-12-02,829.6,,,,2025-01-15,4014.9,upload,-79.34,True,True,LIKELY adjusted (implied factor≈4.84) but no matching SPLIT/BONUS in corporate_actions,
+462410,THERMAX,1906,2017-04-10,986.6,,,,2025-01-15,4014.9,upload,-75.43,True,True,LIKELY adjusted (implied factor≈4.07) but no matching SPLIT/BONUS in corporate_actions,
+462411,THERMAX,1906,2017-06-12,952.6,,,,2025-01-15,4014.9,upload,-76.27,True,True,LIKELY adjusted (implied factor≈4.21) but no matching SPLIT/BONUS in corporate_actions,
+462412,THERMAX,1906,2017-08-16,882.5,,,,2025-01-15,4014.9,upload,-78.02,True,True,LIKELY adjusted (implied factor≈4.55) but no matching SPLIT/BONUS in corporate_actions,
+462413,THERMAX,1906,2017-08-28,897.6,,,,2025-01-15,4014.9,upload,-77.64,True,True,LIKELY adjusted (implied factor≈4.47) but no matching SPLIT/BONUS in corporate_actions,
+462414,THERMAX,1906,2018-03-21,1153.95,,,,2025-01-15,4014.9,upload,-71.26,True,False,no post-fill dilutive CA on file,
+462415,THERMAX,1906,2018-10-04,920.6,,,,2025-01-15,4014.9,upload,-77.07,True,True,LIKELY adjusted (implied factor≈4.36) but no matching SPLIT/BONUS in corporate_actions,
+462416,THERMAX,1906,2018-10-09,890.0,,,,2025-01-15,4014.9,upload,-77.83,True,True,LIKELY adjusted (implied factor≈4.51) but no matching SPLIT/BONUS in corporate_actions,
+462417,THERMAX,1906,2018-10-10,894.2,,,,2025-01-15,4014.9,upload,-77.73,True,True,LIKELY adjusted (implied factor≈4.49) but no matching SPLIT/BONUS in corporate_actions,
+462418,THERMAX,1906,2018-10-22,978.25,,,,2025-01-15,4014.9,upload,-75.63,True,True,LIKELY adjusted (implied factor≈4.1) but no matching SPLIT/BONUS in corporate_actions,
+462419,THERMAX,1906,2020-10-06,717.85,,,,2025-01-15,4014.9,upload,-82.12,True,True,LIKELY adjusted (implied factor≈5.59) but no matching SPLIT/BONUS in corporate_actions,
+462420,THERMAX,1906,2023-06-08,2327.55,,,,2025-01-15,4014.9,upload,-42.03,True,False,no post-fill dilutive CA on file,
+462421,THERMAX,1906,2023-06-16,2392.65,,,,2025-01-15,4014.9,upload,-40.41,True,True,LIKELY adjusted (implied factor≈1.68) but no matching SPLIT/BONUS in corporate_actions,
+462422,THERMAX,1906,2023-07-21,2469.75,,,,2025-01-15,4014.9,upload,-38.49,True,True,LIKELY adjusted (implied factor≈1.63) but no matching SPLIT/BONUS in corporate_actions,
+462477,TMPV,2142,2019-05-01,125.49,2019-04-30,214.3,upload,2019-05-02,207.3,upload,-40.47,True,True,LIKELY adjusted (implied factor≈1.68) but no matching SPLIT/BONUS in corporate_actions,
+462429,TRIDENT,1946,2024-04-24,39.9,,,,2025-10-28,28.59,cron,39.56,True,False,no post-fill dilutive CA on file,
+462430,TRIDENT,1946,2024-05-22,38.1,,,,2025-10-28,28.59,cron,33.26,True,False,no post-fill dilutive CA on file,
+462431,UNITECH,1987,2025-06-16,9.25,,,,2025-10-07,7.39,upload,25.17,True,False,no post-fill dilutive CA on file,
+462435,ZYDUSWELL,2122,2017-05-01,173.56,2017-04-28,867.35,upload,2017-05-02,867.8,upload,-79.99,True,True,CONFIRMED adjusted: fill≈ref×0.2 from SPLIT 5:1@2025-09-18,SPLIT 5:1@2025-09-18

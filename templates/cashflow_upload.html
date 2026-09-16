@@ -1,0 +1,392 @@
+{% extends 'base.html' %}
+{% from 'partials/mobile/macros.html' import maint_child_open, maint_desktop_open, maint_desktop_close %}
+
+{% block title %}Cashflow Upload{% endblock %}
+
+{% block extra_css %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<style>
+.preview-table { max-height: 400px; overflow-y: auto; }
+.error-row { background-color: #f8d7da; }
+.valid-row { background-color: #d1edff; }
+</style>
+{% endblock %}
+
+{% block content %}
+{{ maint_child_open('Cashflow upload', url_for('main.data_upload_links'), 'Upload Excel/CSV and preview before processing.') }}
+{{ maint_desktop_open('container') }}
+<div class="container">
+    <div class="d-flex align-items-center mb-3">
+        <h3 class="me-3 mb-0"><i class="fas fa-file-upload"></i> Cashflow Upload</h3>
+        <span class="text-muted">Upload Excel/CSV and preview before processing</span>
+                    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <!-- Instructions and Download Template -->
+            <div class="alert alert-info mb-3">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="mb-2"><i class="fas fa-info-circle"></i> File Format Instructions:</h6>
+                        <ul class="mb-0 small">
+                            <li><strong>Date Format:</strong> <code>1-Nov-2023</code> (DD-MMM-YYYY) or <code>01-12-2025</code> (DD-MM-YYYY). Excel date cells are read as text so <code>01-12-2025</code> in the formula bar is treated as <strong>1&nbsp;December</strong>, not US month-first.</li>
+                            <li><strong>Amount:</strong> Negative values = Investment (Money In), Positive values = Withdrawal (Money Out)</li>
+                            <li><strong>Asset Type:</strong> Must match one of the asset classes in the system</li>
+                            <li><strong>Columns:</strong> Date, Amount, asset_type (in any order)</li>
+                        </ul>
+                    </div>
+                    <div class="ms-3">
+                        <a href="{{ url_for('main.download_cashflow_template') }}" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-download"></i> Download Template
+                        </a>
+                    </div>
+                </div>
+            </div>
+            
+            <form id="cashflowUploadForm" onsubmit="return false;">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="uploadClientSelect" class="form-label">Client</label>
+                        <select id="uploadClientSelect" class="form-select" required>
+                            <option value="">Select Client</option>
+                            {% for c in clients %}
+                            <option value="{{ c.id }}">{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label for="fileInput" class="form-label">File</label>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="form-control" required />
+                        <small class="form-text text-muted">
+                            Upload Excel (.xlsx, .xls) or CSV file
+                        </small>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-primary w-100" onclick="previewFile()">
+                            <i class="fas fa-eye"></i> Preview
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <div id="apiStatusMessages" class="mt-3"></div>
+        </div>
+    </div>
+
+    <!-- Preview: always visible; empty state until first successful Preview -->
+    <div id="previewSection" class="mt-4">
+        <div id="previewEmptyState" class="alert alert-secondary mb-0">
+            <i class="fas fa-eye me-2"></i>Select a client, choose a file, then click <strong>Preview</strong> to validate rows before confirming upload.
+        </div>
+        <div id="previewResults" class="d-none">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h5 class="mb-0"><i class="fas fa-table"></i> Preview Cashflows</h5>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span id="previewStats" class="badge bg-secondary"></span>
+                        <button type="button" class="btn btn-danger btn-sm" onclick="deleteSelectedRows()" id="deleteSelectedBtn" disabled>
+                            <i class="fas fa-trash"></i> Delete Selected
+                        </button>
+                        <button type="button" class="btn btn-success btn-sm" onclick="confirmUpload()">
+                            <i class="fas fa-check"></i> Confirm Upload
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="preview-table">
+                        <table class="table table-sm table-striped">
+                            <thead class="table-dark sticky-top">
+                                <tr>
+                                    <th width="40px">
+                                        <input type="checkbox" id="selectAllPreview" onchange="toggleAllPreviewRows()">
+                                    </th>
+                                    <th>Row</th>
+                                    <th>Date</th>
+                                    <th>Amount</th>
+                                    <th>Type</th>
+                                    <th>Asset Type</th>
+                                    <th>Status</th>
+                                    <th>Error</th>
+                                </tr>
+                            </thead>
+                            <tbody id="previewTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{{ maint_desktop_close() }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+let previewData = [];
+
+function getCsrfToken() {
+    return document.querySelector('meta[name=csrf-token]')?.getAttribute('content')
+        || document.querySelector('input[name="csrf_token"]')?.value
+        || '';
+}
+
+function fetchFormPost(url, formData) {
+    const token = getCsrfToken();
+    if (token) {
+        formData.set('csrf_token', token);
+    }
+    const headers = {};
+    if (token) {
+        headers['X-CSRFToken'] = token;
+        headers['X-CSRF-Token'] = token;
+    }
+    return fetch(url, {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin',
+        headers,
+    });
+}
+
+function showAPIStatus(message, type = 'info') {
+    const alertClass = {
+        'success': 'alert-success',
+        'error': 'alert-danger',
+        'warning': 'alert-warning',
+        'info': 'alert-info'
+    }[type] || 'alert-info';
+    const statusDiv = document.getElementById('apiStatusMessages');
+    if (statusDiv) {
+        statusDiv.innerHTML = `
+            <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `;
+    }
+}
+
+async function previewFile() {
+    const clientId = document.getElementById('uploadClientSelect').value;
+    const fileInput = document.getElementById('fileInput');
+    
+    if (!clientId) {
+        showAPIStatus('Please select a client', 'error');
+        return;
+    }
+    
+    if (!fileInput.files || fileInput.files.length === 0) {
+        showAPIStatus('Please select a file', 'error');
+                    return;
+                }
+                
+    const file = fileInput.files[0];
+    const allowedTypes = ['.xlsx', '.xls', '.csv'];
+    const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+    if (!allowedTypes.includes(fileExtension)) {
+        showAPIStatus('Select Excel (.xlsx, .xls) or CSV file', 'error');
+                    return;
+                }
+
+    showAPIStatus('<i class="fas fa-spinner fa-spin"></i> Processing file...', 'info');
+    
+    const formData = new FormData();
+    formData.append('cashflow_file', file);
+    formData.append('client_id', clientId);
+
+    try {
+        const response = await fetchFormPost('/api/v1/cashflows/preview', formData);
+        const raw = await response.text();
+        let data;
+        try {
+            data = JSON.parse(raw);
+        } catch (e) {
+            showAPIStatus(`Preview failed (${response.status}): ${raw.slice(0, 200) || response.statusText}`, 'error');
+            return;
+        }
+
+        if (data.success) {
+            const errByRow = {};
+            (data.errors || []).forEach((err) => {
+                if (err.row != null) errByRow[err.row] = err.message || '';
+            });
+            previewData = data.preview_data.map((row, idx) => ({
+                ...row,
+                index: idx,
+                valid: !data.errors || !data.errors.find((err) => err.row === row.row),
+                errorMessage: errByRow[row.row] || '',
+            }));
+
+            displayPreview(data);
+            document.getElementById('previewEmptyState').classList.add('d-none');
+            document.getElementById('previewResults').classList.remove('d-none');
+            showAPIStatus(`Found ${data.valid_rows} valid cashflow(s)${data.error_rows > 0 ? `, ${data.error_rows} error(s)` : ''}`,
+                data.error_rows > 0 ? 'warning' : 'success');
+        } else {
+            showAPIStatus(`Preview failed: ${data.error || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        showAPIStatus(`Preview failed: ${error.message}`, 'error');
+    }
+}
+
+function displayPreview(data) {
+    const tbody = document.getElementById('previewTableBody');
+    tbody.innerHTML = '';
+    
+    let validCount = 0;
+    let errorCount = 0;
+    
+    previewData.forEach((row, index) => {
+        const rowClass = row.valid ? 'valid-row' : 'error-row';
+        const statusBadge = row.valid ? '<span class="badge bg-success">Valid</span>' : '<span class="badge bg-danger">Error</span>';
+        
+        const errorMsg = row.errorMessage || (data.errors ? data.errors.find((err) => err.row === row.row)?.message || '' : '');
+        const amountClass = row.amount < 0 ? 'text-success' : 'text-danger';
+        const typeDisplay = row.amount < 0 ? 'INFLOW (Investment)' : 'OUTFLOW (Withdrawal)';
+        const typeClass = row.amount < 0 ? 'badge bg-success' : 'badge bg-danger';
+        
+        tbody.innerHTML += `
+            <tr class="${rowClass}" data-index="${index}">
+                <td><input type="checkbox" class="preview-row-checkbox" onchange="updateDeleteButton()"></td>
+                <td>${row.row}</td>
+                <td>${row.date}</td>
+                <td class="${amountClass}"><strong>${row.amount_display}</strong></td>
+                <td><span class="${typeClass}">${typeDisplay}</span></td>
+                <td>${row.asset_type || 'N/A'}</td>
+                <td>${statusBadge}</td>
+                <td class="text-danger">${errorMsg}</td>
+            </tr>
+        `;
+        
+        if (row.valid) validCount++; else errorCount++;
+    });
+    
+    document.getElementById('previewStats').textContent = `Valid: ${validCount}, Errors: ${errorCount}`;
+    updateDeleteButton();
+}
+
+async function confirmUpload() {
+    const clientId = document.getElementById('uploadClientSelect').value;
+    const validCashflows = previewData.filter(r => r.valid);
+    
+    if (validCashflows.length === 0) {
+        showAPIStatus('No valid cashflows to upload', 'error');
+        return;
+    }
+    
+    const fileInput = document.getElementById('fileInput');
+    if (!fileInput.files || fileInput.files.length === 0) {
+        showAPIStatus('Please select a file', 'error');
+        return;
+    }
+    
+    showAPIStatus('<i class="fas fa-spinner fa-spin"></i> Uploading cashflows...', 'info');
+    
+    const formData = new FormData();
+    formData.append('cashflow_file', fileInput.files[0]);
+    formData.append('client_id', clientId);
+
+    try {
+        const response = await fetchFormPost('/api/v1/cashflows/upload', formData);
+        const raw = await response.text();
+        let result;
+        try {
+            result = JSON.parse(raw);
+        } catch (e) {
+            showAPIStatus(`Upload failed (${response.status}): ${raw.slice(0, 200) || response.statusText}`, 'error');
+            return;
+        }
+
+        if (result.success) {
+            showAPIStatus(`Successfully uploaded ${result.saved_rows} cashflow(s)!`, 'success');
+            document.getElementById('fileInput').value = '';
+            previewData = [];
+            document.getElementById('previewTableBody').innerHTML = '';
+            document.getElementById('previewResults').classList.add('d-none');
+            document.getElementById('previewEmptyState').classList.remove('d-none');
+
+            setTimeout(() => {
+                window.location.href = '/cashflows';
+            }, 2000);
+        } else {
+            showAPIStatus(`Upload failed: ${result.error || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        showAPIStatus(`Upload failed: ${error.message}`, 'error');
+    }
+}
+
+// Delete functionality
+function toggleAllPreviewRows() {
+    const selectAll = document.getElementById('selectAllPreview').checked;
+    document.querySelectorAll('.preview-row-checkbox').forEach(cb => {
+        cb.checked = selectAll;
+    });
+    updateDeleteButton();
+}
+
+function updateDeleteButton() {
+    const checkedCount = document.querySelectorAll('.preview-row-checkbox:checked').length;
+    document.getElementById('deleteSelectedBtn').disabled = checkedCount === 0;
+}
+
+function deleteSelectedRows() {
+    const checkedRows = document.querySelectorAll('.preview-row-checkbox:checked');
+    if (checkedRows.length === 0) return;
+    
+    if (!confirm(`Delete ${checkedRows.length} selected row(s)?`)) return;
+    
+    // Get indices of checked rows
+    const indicesToDelete = [];
+    checkedRows.forEach(cb => {
+        const row = cb.closest('tr');
+        const index = parseInt(row.getAttribute('data-index'));
+        indicesToDelete.push(index);
+    });
+    
+    // Remove from previewData (sort in descending order to avoid index shifting)
+    indicesToDelete.sort((a, b) => b - a).forEach(index => {
+        previewData.splice(index, 1);
+    });
+    
+    // Rebuild preview table
+    const tbody = document.getElementById('previewTableBody');
+    tbody.innerHTML = '';
+    
+    let validCount = 0;
+    let errorCount = 0;
+    
+    previewData.forEach((row, index) => {
+        const rowClass = row.valid ? 'valid-row' : 'error-row';
+        const statusBadge = row.valid ? '<span class="badge bg-success">Valid</span>' : '<span class="badge bg-danger">Error</span>';
+        const amountClass = row.amount < 0 ? 'text-success' : 'text-danger';
+        const typeDisplay = row.amount < 0 ? 'INFLOW (Investment)' : 'OUTFLOW (Withdrawal)';
+        const typeClass = row.amount < 0 ? 'badge bg-success' : 'badge bg-danger';
+        
+        tbody.innerHTML += `
+            <tr class="${rowClass}" data-index="${index}">
+                <td><input type="checkbox" class="preview-row-checkbox" onchange="updateDeleteButton()"></td>
+                <td>${row.row}</td>
+                <td>${row.date}</td>
+                <td class="${amountClass}"><strong>${row.amount_display}</strong></td>
+                <td><span class="${typeClass}">${typeDisplay}</span></td>
+                <td>${row.asset_type || 'N/A'}</td>
+                <td>${statusBadge}</td>
+                <td class="text-danger">${row.errorMessage || ''}</td>
+                                                </tr>
+        `;
+        
+        if (row.valid) validCount++; else errorCount++;
+    });
+    
+    document.getElementById('previewStats').textContent = `Valid: ${validCount}, Errors: ${errorCount}`;
+    updateDeleteButton();
+    if (previewData.length === 0) {
+        document.getElementById('previewResults').classList.add('d-none');
+        document.getElementById('previewEmptyState').classList.remove('d-none');
+    }
+    showAPIStatus(`Deleted ${checkedRows.length} row(s)`, 'success');
+}
+    </script>
+{% endblock %}

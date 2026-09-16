@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import rec_mobile_open, rec_mobile_close, rec_desktop_open, rec_desktop_close %}
+
+{% block title %}Recommendations for {{ client.name }}{% endblock %}
+
+{% block content %}
+{{ rec_mobile_open('Recommendations — ' ~ client.name, url_for('unified_recommendations.unified_recommendations')) }}
+<div class="im-list-stack mb-2">
+  {% for rec in recommendations|default([]) %}
+  <div class="im-list-card">
+    <div class="im-list-card__header">
+      <h2 class="im-list-card__title">{% if rec.security %}{{ rec.security.symbol }}{% else %}#{{ rec.security_id }}{% endif %}</h2>
+      <span class="im-badge im-badge--{% if rec.action == 'BUY' %}success{% elif rec.action == 'SELL' %}danger{% else %}muted{% endif %}">{{ rec.action }}</span>
+    </div>
+    <p class="im-list-card__meta">Qty {% if can_view_sensitive_client_data() %}{{ rec.quantity }}{% else %}***{% endif %} · {% if can_view_sensitive_client_data() %}₹{{ "{:,.0f}".format(rec.amount|default(0)) }}{% else %}₹***{% endif %} · {{ rec.status }}</p>
+  </div>
+  {% else %}
+  <div class="im-empty-state"><p>No recommendations</p></div>
+  {% endfor %}
+</div>
+{{ rec_mobile_close() }}
+{{ rec_desktop_open('container mt-4 im-collapsed-on-mobile') }}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Recommendations for {{ client.name }}</h1>
+        <div>
+            <a href="{{ url_for('unified_recommendations.unified_recommendations') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Recommendations
+            </a>
+        </div>
+    </div>
+
+    {% if recommendations %}
+    <div class="card shadow">
+        <div class="card-header">
+            <h5 class="card-title mb-0">All Recommendations ({{ recommendations|length }})</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Security</th>
+                            <th>Action</th>
+                            <th>Quantity</th>
+                            <th>Target Price</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rec in recommendations %}
+                        <tr>
+                            <td>
+                                {% if rec.security %}
+                                    <strong>{{ rec.security.symbol }}</strong><br>
+                                    <small class="text-muted">{{ rec.security.name }}</small>
+                                {% else %}
+                                    <span class="text-muted">Security ID: {{ rec.security_id }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if rec.action == 'BUY' %}bg-success
+                                    {% elif rec.action == 'SELL' %}bg-danger
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ rec.action|default('HOLD') }}
+                                </span>
+                            </td>
+                            <td>{% if can_view_sensitive_client_data() %}{{ rec.quantity|default(0) }}{% else %}***{% endif %}</td>
+                            <td>
+                                {% if can_view_sensitive_client_data() %}
+                                {% if rec.target_price %}
+                                    ₹{{ "%.2f"|format(rec.target_price|float) }}
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                                {% else %}
+                                    <span class="text-muted">***</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if can_view_sensitive_client_data() %}
+                                {% if rec.quantity and rec.target_price %}
+                                    ₹{{ "%.2f"|format((rec.quantity * rec.target_price)|float) }}
+                                {% else %}
+                                    <span class="text-muted">N/A</span>
+                                {% endif %}
+                                {% else %}
+                                    <span class="text-muted">***</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if rec.status == 'pending' %}bg-warning
+                                    {% elif rec.status == 'sent' or rec.status == 'accepted' %}bg-primary
+                                    {% elif rec.status == 'executed' %}bg-success
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ rec.status|title if rec.status else 'Pending' }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if rec.created_at %}
+                                    <small>{{ rec.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                {% elif rec.batch_created_at %}
+                                    <small class="text-muted">{{ rec.batch_created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                {% else %}
+                                    <small class="text-muted">N/A</small>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i> No recommendations found for this client.
+    </div>
+    {% endif %}
+{{ rec_desktop_close() }}
+{% endblock %}
+
+

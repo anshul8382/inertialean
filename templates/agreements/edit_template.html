@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Template - {{ template.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="card-title">Edit Template: {{ template.name }}</h4>
+                    <p class="card-text">Update template information and optionally upload a new file</p>
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        {{ form.hidden_tag() }}
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.name.label(class="form-label") }}
+                                    {{ form.name(class="form-control", placeholder="Enter template name") }}
+                                    {% if form.name.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.name.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    {{ form.template_type.label(class="form-label") }}
+                                    {{ form.template_type(class="form-control") }}
+                                    {% if form.template_type.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.template_type.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.description.label(class="form-label") }}
+                            {{ form.description(class="form-control", rows="3", placeholder="Enter template description") }}
+                            {% if form.description.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.description.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.template_file.label(class="form-label") }}
+                            {{ form.template_file(class="form-control", accept=".doc,.docx,.pdf,.html,.txt") }}
+                            <small class="form-text text-muted">
+                                <strong>Current file:</strong> {{ template.template_file_path.split('/')[-1] }}<br>
+                                Leave empty to keep the current file. Upload a new file to replace it.<br>
+                                Supported formats: .doc, .docx, .pdf, .html, .txt<br>
+                                Variables should be marked as &lt;&lt;variable_name&gt;&gt; in your document
+                            </small>
+                            {% if form.template_file.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.template_file.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div class="form-group">
+                            <div class="form-check">
+                                {{ form.is_active(class="form-check-input") }}
+                                {{ form.is_active.label(class="form-check-label") }}
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            {{ form.submit(class="btn btn-primary") }}
+                            <a href="{{ url_for('agreements.view_template', template_id=template.id) }}" class="btn btn-secondary">Cancel</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Current Template Info -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Current Template Information</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>File Path:</strong></td>
+                                    <td>{{ template.template_file_path }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>File Type:</strong></td>
+                                    <td>{{ template.template_type.upper() }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Created:</strong></td>
+                                    <td>{{ template.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Last Updated:</strong></td>
+                                    <td>{{ template.updated_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Current Variables:</h6>
+                            {% if template.variables %}
+                                {% set vars = template.variables|from_json %}
+                                {% if vars %}
+                                    <div class="row">
+                                        {% for var in vars %}
+                                        <div class="col-md-6 mb-2">
+                                            <span class="badge bg-light text-dark">{{ var }}</span>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <p class="text-muted">No variables detected</p>
+                                {% endif %}
+                            {% else %}
+                                <p class="text-muted">No variables detected</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Attendance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Edit Attendance</h1>
+        <a href="{{ url_for('attendance.attendance_dashboard') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Attendance Details</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="form-group mb-3">
+                            <label for="date" class="form-label">Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="date" name="date" 
+                                   value="{{ attendance.date.strftime('%Y-%m-%d') }}" required>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="attendance_type" class="form-label">Attendance Type <span class="text-danger">*</span></label>
+                            <select class="form-control" id="attendance_type" name="attendance_type" required>
+                                <option value="">Select attendance type</option>
+                                <option value="full_day" {% if attendance.attendance_type == 'full_day' %}selected{% endif %}>Full Day</option>
+                                <option value="half_day" {% if attendance.attendance_type == 'half_day' %}selected{% endif %}>Half Day</option>
+                                <option value="leave" {% if attendance.attendance_type == 'leave' %}selected{% endif %}>Leave</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="notes" class="form-label">Notes (Optional)</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3" 
+                                      placeholder="Add any additional notes...">{{ attendance.notes or '' }}</textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Update Attendance
+                            </button>
+                            <a href="{{ url_for('attendance.attendance_dashboard') }}" class="btn btn-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-info">Attendance Types</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6 class="text-success">Full Day</h6>
+                        <p class="small text-muted">Complete working day attendance</p>
+                    </div>
+                    <div class="mb-3">
+                        <h6 class="text-warning">Half Day</h6>
+                        <p class="small text-muted">Partial working day attendance</p>
+                    </div>
+                    <div class="mb-3">
+                        <h6 class="text-danger">Leave</h6>
+                        <p class="small text-muted">Official leave or absence</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

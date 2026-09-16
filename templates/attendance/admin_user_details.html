@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}{{ user.username }} - Attendance Details{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">{{ user.username }} - Attendance Details</h1>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <form method="GET" action="{{ url_for('attendance.admin_user_details', user_id=user.id) }}" class="d-flex gap-2">
+                <select name="month" class="form-control" style="width: auto;" onchange="this.form.submit()" aria-label="Month">
+                    <option value="1" {% if selected_month == 1 %}selected{% endif %}>January</option>
+                    <option value="2" {% if selected_month == 2 %}selected{% endif %}>February</option>
+                    <option value="3" {% if selected_month == 3 %}selected{% endif %}>March</option>
+                    <option value="4" {% if selected_month == 4 %}selected{% endif %}>April</option>
+                    <option value="5" {% if selected_month == 5 %}selected{% endif %}>May</option>
+                    <option value="6" {% if selected_month == 6 %}selected{% endif %}>June</option>
+                    <option value="7" {% if selected_month == 7 %}selected{% endif %}>July</option>
+                    <option value="8" {% if selected_month == 8 %}selected{% endif %}>August</option>
+                    <option value="9" {% if selected_month == 9 %}selected{% endif %}>September</option>
+                    <option value="10" {% if selected_month == 10 %}selected{% endif %}>October</option>
+                    <option value="11" {% if selected_month == 11 %}selected{% endif %}>November</option>
+                    <option value="12" {% if selected_month == 12 %}selected{% endif %}>December</option>
+                </select>
+                <select name="year" class="form-control" style="width: auto;" onchange="this.form.submit()" aria-label="Year">
+                    {% for year in year_range %}
+                    <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            <a href="{{ url_for('attendance.admin_salary_detail', user_id=user.id, year=selected_year, month=selected_month) }}" class="btn btn-success">
+                <i class="fas fa-calculator"></i> Salary detail
+            </a>
+            <a href="{{ url_for('attendance.admin_stipend_config', user_id=user.id) }}" class="btn btn-info">
+                <i class="fas fa-cog"></i> Configure Stipend
+            </a>
+            <a href="{{ url_for('attendance.admin_attendance_management', year=selected_year, month=selected_month) }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Management
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">User Information</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Username:</strong> {{ user.username }}</p>
+                    <p><strong>Email:</strong> {{ user.email }}</p>
+                    <p><strong>Role:</strong> {{ user.role }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Period:</strong> {{ month_name }}</p>
+                    <p><strong>Created:</strong> {{ user.created_at.strftime('%Y-%m-%d') }}</p>
+                    <p><strong>Last Login:</strong>
+                        {% if user.last_login %}
+                            {{ user.last_login.strftime('%Y-%m-%d %H:%M') }}
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total days</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_days }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Full days</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ full_days }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Half days</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ half_days }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Leave days</div>
+                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ leave_days }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if stipend_config %}
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-info">Current Stipend Configuration</h6>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="text-center">
+                        <h5 class="text-success">Full Day</h5>
+                        <h3>₹{{ "%.2f"|format(stipend_config.full_day_stipend) }}</h3>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center">
+                        <h5 class="text-warning">Half Day</h5>
+                        <h3>₹{{ "%.2f"|format(stipend_config.half_day_stipend) }}</h3>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center">
+                        <h5 class="text-danger">Leave</h5>
+                        <h3>₹{{ "%.2f"|format(stipend_config.leave_stipend) }}</h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Attendance Records — {{ month_name }} (date &amp; day-wise)</h6>
+        </div>
+        <div class="card-body">
+            {% if attendance_records %}
+            <div class="table-responsive">
+                <table class="table table-bordered" id="attendanceTable" data-mobile-table="scroll">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Day</th>
+                            <th>Type</th>
+                            <th>Stipend Amount</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in attendance_records %}
+                        <tr>
+                            <td>{{ record.date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ record.date.strftime('%A') }}</td>
+                            <td>
+                                {% if record.attendance_type == 'full_day' %}
+                                    <span class="badge badge-success">Full Day</span>
+                                {% elif record.attendance_type == 'half_day' %}
+                                    <span class="badge badge-warning">Half Day</span>
+                                {% else %}
+                                    <span class="badge badge-danger">Leave</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <strong class="text-success">₹{{ "%.2f"|format(record.stipend_amount) }}</strong>
+                            </td>
+                            <td>{{ record.notes or '-' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-calendar-times fa-3x text-gray-300 mb-3"></i>
+                <h5 class="text-gray-600">No attendance records for {{ month_name }}</h5>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Claims History</h6>
+        </div>
+        <div class="card-body">
+            {% if claims %}
+            <div class="table-responsive">
+                <table class="table table-bordered" id="claimsTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Amount</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                            <th>Admin Notes</th>
+                            <th>Processed Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for claim in claims %}
+                        <tr>
+                            <td>{{ claim.claim_date.strftime('%Y-%m-%d') }}</td>
+                            <td>
+                                <strong class="text-primary">₹{{ "%.2f"|format(claim.amount) }}</strong>
+                            </td>
+                            <td>{{ claim.description|truncate(50) }}</td>
+                            <td>
+                                {% if claim.status == 'pending' %}
+                                    <span class="badge badge-warning">Pending</span>
+                                {% elif claim.status == 'approved' %}
+                                    <span class="badge badge-success">Approved</span>
+                                {% else %}
+                                    <span class="badge badge-danger">Rejected</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ claim.admin_notes or '-' }}</td>
+                            <td>
+                                {% if claim.processed_at %}
+                                    {{ claim.processed_at.strftime('%Y-%m-%d %H:%M') }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-4">
+                <i class="fas fa-receipt fa-3x text-gray-300 mb-3"></i>
+                <h5 class="text-gray-600">No claims found</h5>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    $('#attendanceTable, #claimsTable').DataTable({
+        "order": [[0, "desc"]],
+        "pageLength": 25,
+        "responsive": true
+    });
+});
+</script>
+{% endblock %}

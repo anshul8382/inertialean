@@ -1,0 +1,732 @@
+{% extends "base.html" %}
+{% block title %}Equity Model vs Nifty Performance{% endblock %}
+
+{% block extra_css %}
+<!-- Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css" rel="stylesheet" />
+<style>
+    .performance-card {
+        border-left: 4px solid #007bff;
+    }
+    .outperformance-positive {
+        color: #28a745;
+        font-weight: bold;
+    }
+    .outperformance-negative {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    .metric-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+    }
+    .info-badge {
+        font-size: 0.85rem;
+        padding: 0.25rem 0.5rem;
+    }
+    #performanceChart {
+        max-height: 400px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h2><i class="fas fa-chart-line"></i> Equity Model vs Nifty Performance</h2>
+    <p class="text-muted">Track and compare equity model portfolio performance against Nifty 50 benchmark</p>
+    
+    <div class="card mb-4">
+        <div class="card-body">
+            <form id="performanceForm">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label for="modelSelect" class="form-label">Select Equity Model</label>
+                        <select id="modelSelect" class="form-select" required>
+                            <option value="">-- Select a model --</option>
+                            {% for model in models %}
+                            <option value="{{ model.id }}">{{ model.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="baseValue" class="form-label">Base Investment (₹)</label>
+                        <input type="number" id="baseValue" class="form-control" value="1000000" min="1000" step="1000" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="investmentDate" class="form-label">Investment Date</label>
+                        <input type="date" id="investmentDate" class="form-control">
+                        <small class="text-muted">Leave empty to use start date</small>
+                    </div>
+                    <div class="col-md-2">
+                        <label for="periodSelect" class="form-label">Period</label>
+                        <select id="periodSelect" class="form-select">
+                            <option value="1Y">1 Year</option>
+                            <option value="6M">6 Months</option>
+                            <option value="3M">3 Months</option>
+                            <option value="1M">1 Month</option>
+                            <option value="YTD">YTD</option>
+                            <option value="custom">Custom Range</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="row mb-3" id="customDateRange" style="display: none;">
+                    <div class="col-md-3">
+                        <label class="form-label">Date Selection Mode</label>
+                        <select id="dateModeSelect" class="form-select">
+                            <option value="range">Start & End Date</option>
+                            <option value="duration">Start Date & Duration</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3" id="startDateGroup">
+                        <label for="startDate" class="form-label">Start Date</label>
+                        <input type="date" id="startDate" class="form-control">
+                    </div>
+                    <div class="col-md-3" id="endDateGroup">
+                        <label for="endDate" class="form-label">End Date</label>
+                        <input type="date" id="endDate" class="form-control">
+                    </div>
+                    <div class="col-md-3" id="durationGroup" style="display: none;">
+                        <label for="durationValue" class="form-label">Duration</label>
+                        <div class="input-group">
+                            <input type="number" id="durationValue" class="form-control" min="1" value="365" placeholder="Days">
+                            <select id="durationUnit" class="form-select" style="max-width: 100px;">
+                                <option value="days">Days</option>
+                                <option value="weeks">Weeks</option>
+                                <option value="months">Months</option>
+                                <option value="years" selected>Years</option>
+                            </select>
+                        </div>
+                        <small class="text-muted" id="calculatedEndDate"></small>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-chart-line"></i> Generate Performance Analysis
+                    </button>
+                    <button type="button" id="viewHistoricalBtn" class="btn btn-outline-secondary" style="display: none;">
+                        <i class="fas fa-history"></i> View Historical Data
+                    </button>
+                </div>
+            </form>
+            
+            <div id="loadingIndicator" class="d-none">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <span class="ms-2">Generating analysis...</span>
+            </div>
+        </div>
+    </div>
+    
+    <div id="resultsSection" class="d-none">
+        <!-- Model Info -->
+        <div class="card mb-4" id="modelInfoCard">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h5 class="mb-1" id="modelNameDisplay">-</h5>
+                        <p class="text-muted mb-0" id="modelPeriodDisplay">-</p>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <span class="badge bg-info info-badge" id="corporateActionsBadge"></span>
+                        <span class="badge bg-secondary info-badge" id="holdingsCountBadge"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Performance Summary -->
+        <div class="row mb-4" id="summaryCards">
+            <!-- Cards will be inserted here -->
+        </div>
+        
+        <!-- Performance Chart -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Performance Comparison</h5>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="toggleChartView">
+                        <i class="fas fa-chart-line"></i> Switch to Historical View
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <canvas id="performanceChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Detailed Holdings -->
+        <div class="card mb-4" id="holdingsCard">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Model Portfolio Holdings</h5>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="toggleHoldings">
+                    <i class="fas fa-chevron-down"></i> Show Holdings
+                </button>
+            </div>
+            <div class="card-body" id="holdingsBody" style="display: none;">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover" id="holdingsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Name</th>
+                                <th>Allocation %</th>
+                                <th>Quantity</th>
+                                <th>Start Price (₹)</th>
+                                <th>Current Price (₹)</th>
+                                <th>Value (₹)</th>
+                                <th>Cost Basis (₹)</th>
+                                <th>P&L (₹)</th>
+                                <th>P&L %</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Holdings will be inserted here -->
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr id="holdingsTotal">
+                                <th colspan="6">Total</th>
+                                <th id="totalValue">-</th>
+                                <th id="totalCost">-</th>
+                                <th id="totalPnL">-</th>
+                                <th id="totalPnLPercent">-</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Additional Metrics -->
+        <div class="row mb-4" id="additionalMetrics">
+            <!-- Additional metrics cards will be inserted here -->
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<!-- Select2 JS -->
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+$(document).ready(function() {
+    // Wait for Select2 to be available
+    function initSelect2() {
+        if (typeof $ === 'undefined' || typeof $.fn === 'undefined' || typeof $.fn.select2 === 'undefined') {
+            console.warn('Select2 not loaded yet, retrying...');
+            setTimeout(initSelect2, 100);
+            return;
+        }
+        
+        // Initialize Select2 for model dropdown
+        $('#modelSelect').select2({
+            theme: 'bootstrap-5',
+            placeholder: '-- Select a model --'
+        });
+    }
+    
+    // Initialize Select2
+    initSelect2();
+    
+    // Show/hide custom date range
+    $('#periodSelect').on('change', function() {
+        if ($(this).val() === 'custom') {
+            $('#customDateRange').show();
+        } else {
+            $('#customDateRange').hide();
+        }
+    });
+    
+    // Handle date mode selection (range vs duration)
+    $('#dateModeSelect').on('change', function() {
+        const mode = $(this).val();
+        if (mode === 'range') {
+            $('#endDateGroup').show();
+            $('#durationGroup').hide();
+        } else {
+            $('#endDateGroup').hide();
+            $('#durationGroup').show();
+            updateCalculatedEndDate();
+        }
+    });
+    
+    // Update calculated end date when start date or duration changes
+    $('#startDate, #durationValue, #durationUnit').on('change input', function() {
+        if ($('#dateModeSelect').val() === 'duration') {
+            updateCalculatedEndDate();
+        }
+    });
+    
+    function updateCalculatedEndDate() {
+        const startDateStr = $('#startDate').val();
+        if (!startDateStr) {
+            $('#calculatedEndDate').text('');
+            return;
+        }
+        
+        const startDate = new Date(startDateStr);
+        const duration = parseInt($('#durationValue').val()) || 0;
+        const unit = $('#durationUnit').val();
+        
+        if (duration <= 0) {
+            $('#calculatedEndDate').text('');
+            return;
+        }
+        
+        let endDate = new Date(startDate);
+        
+        switch(unit) {
+            case 'days':
+                endDate.setDate(endDate.getDate() + duration);
+                break;
+            case 'weeks':
+                endDate.setDate(endDate.getDate() + (duration * 7));
+                break;
+            case 'months':
+                endDate.setMonth(endDate.getMonth() + duration);
+                break;
+            case 'years':
+                endDate.setFullYear(endDate.getFullYear() + duration);
+                break;
+        }
+        
+        const endDateStr = endDate.toISOString().split('T')[0];
+        $('#calculatedEndDate').text(`End Date: ${endDateStr}`);
+        $('#endDate').val(endDateStr); // Auto-fill end date field
+    }
+    
+    let performanceChart = null;
+    
+    // Form submission
+    $('#performanceForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const modelId = $('#modelSelect').val();
+        const baseValue = parseFloat($('#baseValue').val());
+        const period = $('#periodSelect').val();
+        const investmentDate = $('#investmentDate').val();
+        
+        if (!modelId) {
+            alert('Please select a model');
+            return;
+        }
+        
+        let startDate, endDate;
+        const today = new Date().toISOString().split('T')[0];
+        
+        if (period === 'custom') {
+            startDate = $('#startDate').val();
+            const dateMode = $('#dateModeSelect').val();
+            
+            if (dateMode === 'duration') {
+                // Calculate end date from start date + duration
+                if (!startDate) {
+                    alert('Please select a start date');
+                    return;
+                }
+                
+                const duration = parseInt($('#durationValue').val()) || 0;
+                const unit = $('#durationUnit').val();
+                
+                if (duration <= 0) {
+                    alert('Please enter a valid duration');
+                    return;
+                }
+                
+                const start = new Date(startDate);
+                let end = new Date(start);
+                
+                switch(unit) {
+                    case 'days':
+                        end.setDate(end.getDate() + duration);
+                        break;
+                    case 'weeks':
+                        end.setDate(end.getDate() + (duration * 7));
+                        break;
+                    case 'months':
+                        end.setMonth(end.getMonth() + duration);
+                        break;
+                    case 'years':
+                        end.setFullYear(end.getFullYear() + duration);
+                        break;
+                }
+                
+                endDate = end.toISOString().split('T')[0];
+            } else {
+                // Use start and end date directly
+                startDate = $('#startDate').val();
+                endDate = $('#endDate').val() || today;
+            }
+        } else {
+            endDate = today;
+            const end = new Date();
+            if (period === '1M') {
+                startDate = new Date(end.getFullYear(), end.getMonth() - 1, end.getDate()).toISOString().split('T')[0];
+            } else if (period === '3M') {
+                startDate = new Date(end.getFullYear(), end.getMonth() - 3, end.getDate()).toISOString().split('T')[0];
+            } else if (period === '6M') {
+                startDate = new Date(end.getFullYear(), end.getMonth() - 6, end.getDate()).toISOString().split('T')[0];
+            } else if (period === '1Y') {
+                startDate = new Date(end.getFullYear() - 1, end.getMonth(), end.getDate()).toISOString().split('T')[0];
+            } else if (period === 'YTD') {
+                startDate = new Date(end.getFullYear(), 0, 1).toISOString().split('T')[0];
+            }
+        }
+        
+        if (!startDate) {
+            alert('Please select a valid period or date range');
+            return;
+        }
+        
+        // Build API URL
+        // use_period_start=true (default): invest at period start for fair comparison (model start = base_value)
+        // use_period_start=false: use custom investment_date when provided
+        let apiUrl = `/api/v1/equity-models/${modelId}/performance/vs-nifty?start_date=${startDate}&end_date=${endDate}&base_value=${baseValue}`;
+        if (investmentDate) {
+            apiUrl += `&investment_date=${investmentDate}&use_period_start=false`;
+        } else {
+            apiUrl += `&use_period_start=true`;
+        }
+        
+        $('#loadingIndicator').removeClass('d-none');
+        $('#resultsSection').addClass('d-none');
+        
+        fetch(apiUrl)
+            .then(async (response) => {
+                const contentType = response.headers.get('content-type') || '';
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Request failed (${response.status}): ${errorText.substring(0, 120)}`);
+                }
+                if (!contentType.includes('application/json')) {
+                    const rawText = await response.text();
+                    throw new Error(`Expected JSON but received: ${rawText.substring(0, 120)}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                $('#loadingIndicator').addClass('d-none');
+                
+                if (data.success && data.data) {
+                    displayResults(data.data);
+                    $('#viewHistoricalBtn').show();
+                    $('#viewHistoricalBtn').off('click').on('click', function() {
+                        viewHistoricalData(modelId, startDate, endDate, baseValue, investmentDate);
+                    });
+                } else {
+                    $('#loadingIndicator').addClass('d-none');
+                    const errorMsg = data.message || data.data?.error || 'Failed to generate analysis';
+                    alert('Error: ' + errorMsg);
+                }
+            })
+            .catch(error => {
+                $('#loadingIndicator').addClass('d-none');
+                console.error('Error:', error);
+                alert('Error generating analysis: ' + error.message);
+            });
+    });
+    
+    function displayResults(data) {
+        $('#resultsSection').removeClass('d-none');
+        
+        // Display model info
+        $('#modelNameDisplay').text(data.model_name || 'Unknown Model');
+        $('#modelPeriodDisplay').text(`${data.start_date} to ${data.end_date}`);
+        if (data.model_portfolio.corporate_actions_applied) {
+            $('#corporateActionsBadge').text(`${data.model_portfolio.corporate_actions_applied} Corporate Actions Applied`).show();
+        } else {
+            $('#corporateActionsBadge').hide();
+        }
+        
+        // Display summary cards
+        const summaryHtml = `
+            <div class="col-md-3">
+                <div class="card performance-card h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-2">Model Return</h6>
+                        <div class="metric-value ${data.comparison.model_beat_nifty ? 'outperformance-positive' : 'outperformance-negative'}">
+                            ${data.model_portfolio.return_percent.toFixed(2)}%
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            ₹${formatNumber(data.model_portfolio.start_value)} → ₹${formatNumber(data.model_portfolio.end_value)}
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-2">Nifty Return</h6>
+                        <div class="metric-value">${data.nifty.return_percent.toFixed(2)}%</div>
+                        <small class="text-muted d-block mt-2">
+                            ₹${formatNumber(data.nifty.start_value_display != null ? data.nifty.start_value_display : data.nifty.start_value)} → ₹${formatNumber(data.nifty.end_value_display != null ? data.nifty.end_value_display : data.nifty.end_value)}
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-2">Outperformance</h6>
+                        <div class="metric-value ${data.comparison.outperformance >= 0 ? 'outperformance-positive' : 'outperformance-negative'}">
+                            ${data.comparison.outperformance >= 0 ? '+' : ''}${data.comparison.outperformance.toFixed(2)}%
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            ${data.comparison.model_beat_nifty ? 'Model outperformed' : 'Model underperformed'}
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-2">Tracking Error</h6>
+                        <div class="metric-value">${data.comparison.tracking_error.toFixed(2)}%</div>
+                        <small class="text-muted d-block mt-2">
+                            Absolute difference
+                        </small>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('#summaryCards').html(summaryHtml);
+        
+        // Create performance chart
+        const ctx = document.getElementById('performanceChart').getContext('2d');
+        if (performanceChart) {
+            performanceChart.destroy();
+        }
+        
+        performanceChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Start', 'End'],
+                datasets: [{
+                    label: 'Model Portfolio',
+                    data: [100, 100 + data.model_portfolio.return_percent],
+                    borderColor: 'rgb(0, 123, 255)',
+                    backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                    tension: 0.1,
+                    pointRadius: 6,
+                    pointHoverRadius: 8
+                }, {
+                    label: 'Nifty 50',
+                    data: [100, 100 + data.nifty.return_percent],
+                    borderColor: 'rgb(40, 167, 69)',
+                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                    tension: 0.1,
+                    pointRadius: 6,
+                    pointHoverRadius: 8
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: 'Return (%)'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.parsed.y.toFixed(2) + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Store current view mode
+        performanceChart.isHistorical = false;
+        
+        // Display holdings if available (from end portfolio)
+        displayHoldings(data);
+        
+        // Show holdings card
+        $('#holdingsCard').show();
+    }
+    
+    function displayHoldings(data) {
+        // Get holdings from the API response
+        const holdings = data.end_portfolio_holdings || [];
+        const holdingsTable = $('#holdingsTable tbody');
+        
+        if (holdings && holdings.length > 0) {
+            let totalValue = 0;
+            let totalCost = 0;
+            let totalPnL = 0;
+            
+            holdingsTable.empty();
+            holdings.forEach(holding => {
+                const value = parseFloat(holding.current_value || 0);
+                const cost = parseFloat(holding.cost_basis || holding.investment_value || 0);
+                const pnl = value - cost;
+                const pnlPercent = cost > 0 ? (pnl / cost * 100) : 0;
+                
+                totalValue += value;
+                totalCost += cost;
+                totalPnL += pnl;
+                
+                // Use start_price from start portfolio when available (explicit start_date prices)
+                const startPrice = parseFloat(holding.start_price ?? holding.investment_price ?? 0);
+                const currentPrice = parseFloat(holding.current_price || holding.price || 0);
+                const row = `
+                    <tr>
+                        <td><strong>${holding.symbol || '-'}</strong></td>
+                        <td>${holding.name || '-'}</td>
+                        <td>${parseFloat(holding.allocation_percent || 0).toFixed(2)}%</td>
+                        <td>${parseFloat(holding.quantity || 0).toFixed(2)}</td>
+                        <td>₹${formatNumber(startPrice)}</td>
+                        <td>₹${formatNumber(currentPrice)}</td>
+                        <td>₹${formatNumber(value)}</td>
+                        <td>₹${formatNumber(cost)}</td>
+                        <td class="${pnl >= 0 ? 'text-success' : 'text-danger'}">₹${formatNumber(pnl)}</td>
+                        <td class="${pnlPercent >= 0 ? 'text-success' : 'text-danger'}">${pnlPercent.toFixed(2)}%</td>
+                    </tr>
+                `;
+                holdingsTable.append(row);
+            });
+            
+            // Update totals
+            const totalPnLPercent = totalCost > 0 ? (totalPnL / totalCost * 100) : 0;
+            $('#totalValue').text('₹' + formatNumber(totalValue));
+            $('#totalCost').text('₹' + formatNumber(totalCost));
+            $('#totalPnL').html(`<span class="${totalPnL >= 0 ? 'text-success' : 'text-danger'}">₹${formatNumber(totalPnL)}</span>`);
+            $('#totalPnLPercent').html(`<span class="${totalPnLPercent >= 0 ? 'text-success' : 'text-danger'}">${totalPnLPercent.toFixed(2)}%</span>`);
+            
+            $('#holdingsCountBadge').text(`${holdings.length} Holdings`).show();
+        } else {
+            holdingsTable.html('<tr><td colspan="10" class="text-center text-muted">No holdings data available</td></tr>');
+        }
+    }
+    
+    function formatNumber(num) {
+        if (num === null || num === undefined) return '-';
+        return parseFloat(num).toLocaleString('en-IN', {maximumFractionDigits: 0});
+    }
+    
+    // Toggle holdings visibility
+    $('#toggleHoldings').on('click', function() {
+        const holdingsBody = $('#holdingsBody');
+        const isVisible = holdingsBody.is(':visible');
+        holdingsBody.slideToggle();
+        $(this).find('i').toggleClass('fa-chevron-down fa-chevron-up');
+        $(this).find('i').parent().text(isVisible ? 'Show Holdings' : 'Hide Holdings');
+    });
+    
+    // Toggle chart view
+    let isHistoricalView = false;
+    $('#toggleChartView').on('click', function() {
+        // This will be handled when historical data is loaded
+        if (!isHistoricalView) {
+            $(this).html('<i class="fas fa-chart-bar"></i> Switch to Simple View');
+        } else {
+            $(this).html('<i class="fas fa-chart-line"></i> Switch to Historical View');
+        }
+    });
+    
+    function viewHistoricalData(modelId, startDate, endDate, baseValue, investmentDate) {
+        let apiUrl = `/api/v1/equity-models/${modelId}/performance/vs-nifty/historical?start_date=${startDate}&end_date=${endDate}&base_value=${baseValue}&frequency=weekly`;
+        if (investmentDate) {
+            apiUrl += `&investment_date=${investmentDate}`;
+        }
+        
+        fetch(apiUrl)
+            .then(async (response) => {
+                const contentType = response.headers.get('content-type') || '';
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Request failed (${response.status}): ${errorText.substring(0, 120)}`);
+                }
+                if (!contentType.includes('application/json')) {
+                    const rawText = await response.text();
+                    throw new Error(`Expected JSON but received: ${rawText.substring(0, 120)}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success && data.data && data.data.data) {
+                    displayHistoricalChart(data.data.data);
+                } else {
+                    alert('Error loading historical data');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error loading historical data: ' + error.message);
+            });
+    }
+    
+    function displayHistoricalChart(historicalData) {
+        const labels = historicalData.map(d => d.date);
+        const modelReturns = historicalData.map(d => d.portfolio_return);
+        const niftyReturns = historicalData.map(d => d.nifty_return);
+        
+        const ctx = document.getElementById('performanceChart').getContext('2d');
+        if (performanceChart) {
+            performanceChart.destroy();
+        }
+        
+        performanceChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Model Portfolio Return',
+                    data: modelReturns,
+                    borderColor: 'rgb(0, 123, 255)',
+                    backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                    tension: 0.1
+                }, {
+                    label: 'Nifty 50 Return',
+                    data: niftyReturns,
+                    borderColor: 'rgb(40, 167, 69)',
+                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Return (%)'
+                        }
+                    },
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}
+

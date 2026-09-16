@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Capital Gains Report{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<style>
+    .capital-gains-card { margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+    .capital-gains-card .card-header {
+        background: linear-gradient(135deg, #1a472a 0%, #2d5a3d 100%);
+        color: white;
+        font-weight: 600;
+    }
+    .filter-form .form-control { max-width: 320px; }
+    .gain-stcg { color: #e74c3c; }
+    .gain-ltcg { color: #27ae60; }
+    .table-responsive { overflow-x: auto; }
+    .client-section { margin-bottom: 0.25rem; }
+    .client-section .client-header { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+    .summary-row { font-weight: 600; background-color: #f8f9fa; }
+    .accordion-button:not(.collapsed) { background: linear-gradient(135deg, #1a472a 0%, #2d5a3d 100%); color: white; }
+    .accordion-button:not(.collapsed)::after { filter: brightness(0) invert(1); }
+    .accordion-button.collapsed { background: #f8f9fa; color: #1a472a; }
+    .capital-gains-accordion .accordion-item { border: 1px solid rgba(0,0,0,.125); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-coins"></i> Capital Gains Report
+        </h1>
+        <span class="badge bg-secondary">FY {{ fy_start.strftime('%d %b %Y') }} – {{ fy_end.strftime('%d %b %Y') }}</span>
+    </div>
+
+    <div class="card capital-gains-card">
+        <div class="card-header py-3">
+            <i class="fas fa-filter"></i> Filters
+        </div>
+        <div class="card-body">
+            <form method="get" action="{{ url_for('main.capital_gains_report') }}" class="filter-form row g-3 align-items-end">
+                <div class="col-auto">
+                    <label for="client_name" class="form-label">Client name</label>
+                    <input type="text" class="form-control" id="client_name" name="client_name"
+                           value="{{ client_name_filter }}" placeholder="Partial match">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Apply
+                    </button>
+                    <a href="{{ url_for('main.capital_gains_report') }}" class="btn btn-outline-secondary">Clear</a>
+                </div>
+            </form>
+            <p class="text-muted small mt-2 mb-0">
+                <strong>Sells</strong> in this FY (1 Apr {{ fy_start.year }} – 31 Mar {{ fy_end.year }}) with gain on <strong>FIFO</strong>.
+                <strong>STCG/LTCG</strong> uses each security’s asset class <code>tax_ltcg_minimum_months</code> (calendar-month rule: LTCG only after that many full months from buy — e.g. <strong>Gold</strong> class is <strong>24 months</strong> when seeded per Section 1).
+                Debt / fixed-income rulesets (<code>debt</code>, <code>debt_mf</code>, <code>debt_etf</code>, <code>listed_bonds</code>, <code>unlisted_bonds</code>) and Bharat Bond–style tickers (e.g. <code>EBBETF*</code>) are <strong>excluded</strong> from this report.
+            </p>
+        </div>
+    </div>
+
+    {% if clients %}
+    <div class="accordion capital-gains-accordion" id="capitalGainsByClient">
+        {% for client in clients %}
+        <div class="accordion-item client-section">
+            <h2 class="accordion-header">
+                <button class="accordion-button {% if not loop.first %}collapsed{% endif %}" type="button" data-bs-toggle="collapse" data-bs-target="#client-{{ client.client_id }}" aria-expanded="{{ 'true' if loop.first else 'false' }}" aria-controls="client-{{ client.client_id }}">
+                    <span class="me-3"><i class="fas fa-user"></i> {{ client.client_name }}</span>
+                    <span class="ms-auto me-2">
+                        <span class="badge bg-danger me-2">STCG: ₹{{ "%.2f"|format(client.total_stcg) }}</span>
+                        <span class="badge bg-success me-2">LTCG: ₹{{ "%.2f"|format(client.total_ltcg) }}</span>
+                        <span class="badge bg-dark">Total: ₹{{ "%.2f"|format(client.total_gain) }}</span>
+                    </span>
+                </button>
+            </h2>
+            <div id="client-{{ client.client_id }}" class="accordion-collapse collapse {% if loop.first %}show{% endif %}" data-bs-parent="#capitalGainsByClient">
+                <div class="accordion-body p-0">
+                    <div class="table-responsive p-3">
+                        <table class="table table-bordered table-hover table-sm client-table" width="100%" data-client-id="{{ client.client_id }}">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Security</th>
+                                    <th>Symbol</th>
+                                    <th>Sell date</th>
+                                    <th>Purchase date</th>
+                                    <th class="text-end">Holding days</th>
+                                    <th class="text-end">Qty</th>
+                                    <th class="text-end">Sell price</th>
+                                    <th class="text-end">Sale value</th>
+                                    <th class="text-end">Cost basis</th>
+                                    <th class="text-end">Gain</th>
+                                    <th>Type</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for line in client.sell_lines %}
+                                <tr>
+                                    <td>{{ line.security_name }}</td>
+                                    <td><code>{{ line.security_symbol }}</code></td>
+                                    <td>{{ line.sell_date.strftime('%d-%b-%Y') }}</td>
+                                    <td>{{ line.purchase_date.strftime('%d-%b-%Y') }}</td>
+                                    <td class="text-end">{{ line.holding_days }}</td>
+                                    <td class="text-end">{{ "%.4g"|format(line.quantity) }}</td>
+                                    <td class="text-end">{{ "%.2f"|format(line.sell_price) }}</td>
+                                    <td class="text-end">₹{{ "%.2f"|format(line.sale_value) }}</td>
+                                    <td class="text-end">₹{{ "%.2f"|format(line.cost_basis) }}</td>
+                                    <td class="text-end {% if line.gain_type == 'STCG' %}gain-stcg{% else %}gain-ltcg{% endif %}">₹{{ "%.2f"|format(line.gain) }}</td>
+                                    <td><span class="badge {% if line.gain_type == 'STCG' %}bg-danger{% else %}bg-success{% endif %}">{{ line.gain_type }}</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="summary-row">
+                                <tr>
+                                    <td colspan="9" class="text-end">Total STCG</td>
+                                    <td class="text-end gain-stcg">₹{{ "%.2f"|format(client.total_stcg) }}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td colspan="9" class="text-end">Total LTCG</td>
+                                    <td class="text-end gain-ltcg">₹{{ "%.2f"|format(client.total_ltcg) }}</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td colspan="9" class="text-end">Total gain</td>
+                                    <td class="text-end">₹{{ "%.2f"|format(client.total_gain) }}</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card capital-gains-card">
+        <div class="card-body">
+            <p class="text-muted mb-0">No sell transactions in this financial year for the selected filter(s). Try clearing the client name filter.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script>
+(function() {
+    function initClientTable(el) {
+        if (!el.querySelector('tbody tr')) return;
+        if ($.fn.DataTable && $.fn.DataTable.isDataTable(el)) return;
+        $(el).DataTable({
+            order: [[2, 'asc'], [3, 'asc']],
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']]
+        });
+    }
+    document.querySelectorAll('.client-table').forEach(initClientTable);
+    document.getElementById('capitalGainsByClient') && document.getElementById('capitalGainsByClient').addEventListener('shown.bs.collapse', function(e) {
+        var body = e.target;
+        var tbl = body && body.querySelector('.client-table');
+        if (tbl && $.fn.DataTable && $.fn.DataTable.isDataTable(tbl)) {
+            $(tbl).DataTable().columns.adjust();
+        }
+    });
+})();
+</script>
+{% endblock %}

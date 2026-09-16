@@ -1,0 +1,1791 @@
+{% extends "base.html" %}
+
+{% block title %}Transactions{% endblock %}
+
+{% block extra_css %}
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<!-- DataTables CSS -->
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
+
+<style>
+    .bulk-actions {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .bulk-actions.hidden {
+        display: none;
+    }
+    
+    .select-all-container {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .checkbox-cell {
+        width: 40px;
+        text-align: center;
+    }
+    
+    .filters-section {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Transactions' %}
+  {% set mobile_back_url = url_for('main.dashboard') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <p class="text-muted small">Filter by client, stock, type, and date. Totals show net buys and sells for the current filter.</p>
+  <a href="#txn-filter-form" class="im-settings-link im-scroll-to-desktop"><i class="fas fa-filter"></i><span>Jump to filters</span><i class="fas fa-chevron-down text-muted"></i></a>
+</div>
+<div class="im-desktop-only container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h1 class="h3 mb-0" style="color: #495057;">Transactions</h1>
+        <div class="mobile-action-stack">
+            <button class="btn me-2" id="addTransactionBtn" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                <i class="fas fa-plus"></i> Add Transaction
+            </button>
+        </div>
+    </div>
+
+    <div class="card card-app mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Filters</h5>
+        </div>
+        <div class="card-body">
+            <form method="GET" class="row g-3 filter-bar" id="txn-filter-form">
+                <div class="col-md-3">
+                    <label for="client-select" class="form-label">Client</label>
+                    <select class="form-select" id="client-select" name="client_id">
+                        <option value="">Select a client</option>
+                        {% for client in clients %}
+                            <option value="{{ client.id }}" {% if selected_client_id and selected_client_id == client.id %}selected{% endif %}>
+                                {{ client.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="security-filter" class="form-label">Stock</label>
+                    <select class="form-select" id="security-filter" name="security_id" disabled>
+                        <option value="">All stocks</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="type-filter" class="form-label">Type</label>
+                    <select class="form-select" id="type-filter" name="transaction_type">
+                        <option value="">All types</option>
+                        <option value="BUY">Buy</option>
+                        <option value="SELL">Sell</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="start_date" class="form-label">Start date</label>
+                    <input type="date" class="form-control" id="start_date" name="date_from">
+                </div>
+                <div class="col-md-2">
+                    <label for="end_date" class="form-label">End date</label>
+                    <input type="date" class="form-control" id="end_date" name="date_to">
+                </div>
+                <div class="col-12 d-flex flex-wrap gap-2 mobile-action-stack">
+                    <button type="submit" class="btn btn-secondary" id="apply-filters">
+                        <i class="fas fa-filter"></i> Filter
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" id="clear-selection">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="trade-summary" class="row g-3 mb-4 d-none" aria-live="polite">
+        <div class="col-md-4">
+            <div class="card card-app h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Buys</div>
+                    <div class="fs-4 text-success text-num" id="summary-buy-amount">₹0</div>
+                    <div class="small text-muted" id="summary-buy-count">0 trades</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card card-app h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Sells</div>
+                    <div class="fs-4 text-danger text-num" id="summary-sell-amount">₹0</div>
+                    <div class="small text-muted" id="summary-sell-count">0 trades</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card card-app h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Net (buys − sells)</div>
+                    <div class="fs-4 text-num" id="summary-net-amount">₹0</div>
+                    <div class="small text-muted" id="summary-net-hint">Filtered set</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Messages -->
+    <div id="error-messages" class="mb-3"></div>
+
+    <!-- Transaction Management Form (Initially Hidden) -->
+    <div class="card mb-3 d-none" id="transactionForm">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">Add Transaction</h6>
+            <button type="button" class="btn-close" id="closeTransactionForm" aria-label="Close transaction form"></button>
+        </div>
+        <div class="card-body">
+            <!-- Transaction Options -->
+            <div class="mb-3">
+                <div class="d-flex gap-2 mb-3 flex-wrap align-items-center">
+                    <button type="button" class="btn btn-outline-secondary" id="showManualEntry">
+                        <i class="fas fa-plus"></i> Manual Entry
+                    </button>
+                    <span class="text-muted small">
+                        Bulk trade / MProfit / cashflow / client uploads:
+                        <a href="{{ url_for('main.trade_upload') }}">Maintenance</a> menu.
+                    </span>
+                </div>
+                
+                <div id="fileUploadForm" class="d-none">
+                    <div class="alert alert-info mb-0">
+                        Use <strong>Maintenance</strong> in the top navigation for file-based trade and related uploads.
+                    </div>
+                </div>
+                
+                <!-- Manual Entry Form (Initially Hidden) -->
+                <div id="manualEntryForm" class="d-none">
+                    <form id="transactionFormData">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <label class="form-label">Client</label>
+                                <select class="form-control" id="clientSelect" required>
+                                    <option value="">Select Client</option>
+                                    {% for client in clients %}
+                                        <option value="{{ client.id }}">{{ client.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">Security</label>
+                                <select class="form-control" id="securitySelect" required>
+                                    <option value="">Select Security</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Type</label>
+                                <select class="form-control" id="transactionType" required>
+                                    <option value="BUY">BUY</option>
+                                    <option value="SELL">SELL</option>
+                                    <option value="DIVIDEND">DIVIDEND</option>
+                                    <option value="SPLIT">SPLIT</option>
+                                    <option value="BONUS">BONUS</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Quantity</label>
+                                <input type="number" class="form-control" id="quantity" step="0.01" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">Price</label>
+                                <input type="number" class="form-control" id="price" step="0.01" required>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-3">
+                                <label class="form-label">Date</label>
+                                <input type="date" class="form-control" id="transactionDate" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Notes (Optional)</label>
+                                <input type="text" class="form-control" id="notes" placeholder="Transaction notes">
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <button type="submit" class="btn btn-success me-2">
+                                    <i class="fas fa-save"></i> Create Transaction
+                                </button>
+                                <button type="button" class="btn btn-secondary" id="cancelManualEntry">
+                                    <i class="fas fa-times"></i> Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Status Messages -->
+    <div id="apiStatusMessages" class="mb-3"></div>
+
+    <!-- Bulk Actions Panel -->
+    <div class="bulk-actions hidden" id="bulkActions">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <div class="select-all-container">
+                    <input type="checkbox" id="selectAll" class="form-check-input">
+                    <label for="selectAll" class="form-check-label">
+                        <strong>Select All</strong>
+                    </label>
+                    <span class="text-muted ms-2">(<span id="selectedCount">0</span> selected)</span>
+                </div>
+            </div>
+            <div class="col-md-6 text-end">
+                <button type="button" class="btn btn-danger" id="bulkDeleteBtn" disabled>
+                    <i class="fas fa-trash"></i> Delete Selected (<span id="deleteCount">0</span>)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-app table-striped table-hover" id="transactionsTable" data-mobile-table="scroll" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th class="checkbox-cell" scope="col">
+                                <input type="checkbox" id="headerCheckbox" class="form-check-input" aria-label="Select all transactions">
+                            </th>
+                            <th scope="col">ID</th>
+                            <th scope="col">Client</th>
+                            <th scope="col">Stock</th>
+                            <th scope="col">Asset Class</th>
+                            <th scope="col">Type</th>
+                            <th scope="col" class="text-num">Quantity</th>
+                            <th scope="col" class="text-num">Price</th>
+                            <th scope="col" class="text-num">Total Amount</th>
+                            <th scope="col">Date</th>
+                            <th scope="col">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transaction in transactions %}
+                        <tr>
+                            <td class="checkbox-cell">
+                                <input type="checkbox" class="form-check-input transaction-checkbox" value="{{ transaction.id }}">
+                            </td>
+                            <td>{{ transaction.id }}</td>
+                            <td>{{ transaction.client_name or (transaction.client.name if transaction.client is defined) }}</td>
+                            <td>{{ transaction.security_symbol or transaction.security_name or (transaction.security.symbol if transaction.security is defined) }}</td>
+                            <td>
+                                <span class="badge {{ 'bg-success' if transaction.type == 'BUY' else 'bg-danger' }}">
+                                    {{ transaction.type }}
+                                </span>
+                            </td>
+                            <td>{{ transaction.quantity }}</td>
+                            <td>₹{{ "%.2f"|format(transaction.price) }}</td>
+                            <td>₹{{ "%.2f"|format(transaction.amount) }}</td>
+                            <td>
+                                {% if transaction.transaction_date %}
+                                    {{ transaction.transaction_date|ist_datetime }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <a href="{{ url_for('main.edit_transaction', transaction_id=transaction.id) }}" 
+                                       class="btn btn-sm btn-primary">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <button type="button" 
+                                            class="btn btn-sm btn-danger" 
+                                            onclick="confirmDelete({{ transaction.id }})">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete this transaction? This will also update the holdings and cashflows.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="deleteForm" method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bulk Delete Confirmation Modal -->
+<div class="modal fade" id="bulkDeleteModal" tabindex="-1" aria-labelledby="bulkDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="bulkDeleteModalLabel">Confirm Bulk Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to delete <strong><span id="modalDeleteCount">0</span> transactions</strong>?</p>
+                <p class="text-warning"><small>This will also update the holdings and cashflows for all selected transactions.</small></p>
+                <p class="text-danger"><small>This action cannot be undone.</small></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="bulkDeleteForm" method="POST" action="{{ url_for('main.bulk_delete_transactions') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="transaction_ids" id="transactionIds">
+                    <button type="submit" class="btn btn-danger">Delete Selected</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transaction Preview Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1" role="dialog" aria-labelledby="previewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="previewModalLabel">
+                    <i class="fas fa-eye"></i> Transaction Preview
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="alert alert-success">
+                            <i class="fas fa-check-circle"></i> 
+                            <strong id="validCount">0</strong> Valid Transactions
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle"></i> 
+                            <strong id="errorCount">0</strong> Problematic Rows
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="table table-bordered table-hover" id="previewTable">
+                        <thead class="thead-dark">
+                            <tr>
+                                <th width="5%">#</th>
+                                <th width="15%">Date</th>
+                                <th width="10%">Type</th>
+                                <th width="20%">Stock</th>
+                                <th width="15%">Quantity</th>
+                                <th width="15%">Price</th>
+                                <th width="20%">Status</th>
+                                <th width="10%">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="previewTableBody">
+                            <!-- Preview rows will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-success" id="processValidBtn" disabled>
+                    <i class="fas fa-upload"></i> Process Valid Transactions
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Row Modal -->
+<div class="modal fade" id="editRowModal" tabindex="-1" role="dialog" aria-labelledby="editRowModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editRowModalLabel">
+                    <i class="fas fa-edit"></i> Edit Transaction Row
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="editRowForm">
+                    <input type="hidden" id="editRowIndex">
+                    <div class="form-group">
+                        <label for="editDate">Date</label>
+                        <input type="text" class="form-control" id="editDate" placeholder="DD-MMM-YYYY">
+                    </div>
+                    <div class="form-group">
+                        <label for="editType">Type</label>
+                        <select class="form-control" id="editType">
+                            <option value="BUY">BUY</option>
+                            <option value="SELL">SELL</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editStock">Stock Symbol</label>
+                        <input type="text" class="form-control" id="editStock" placeholder="e.g., RELIANCE">
+                    </div>
+                    <div class="form-group">
+                        <label for="editQuantity">Quantity</label>
+                        <input type="number" class="form-control" id="editQuantity" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label for="editPrice">Price per Unit</label>
+                        <input type="number" class="form-control" id="editPrice" step="0.01">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveEditBtn">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- DataTables JavaScript -->
+<script type="text/javascript" src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+
+<script>
+function confirmDelete(transactionId) {
+    const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    const form = document.getElementById('deleteForm');
+    form.action = `/transaction/${transactionId}/delete`;
+    modal.show();
+}
+
+$(document).ready(function() {
+    // Initialize DataTable for Transactions
+    console.log('Initializing DataTable for transactions table...');
+    const transactionsTable = $('#transactionsTable').DataTable({
+        "order": [[9, "desc"]], // Sort by Date by default (descending) - updated index for new column
+        "pageLength": 25,
+        "searching": true,
+        "ordering": true,
+        "info": true,
+        "lengthChange": true,
+        "data": [], // Start with empty data
+        "dom": 'Bfrtip', // Add buttons to the layout
+        "buttons": [
+            {
+                extend: 'excelHtml5',
+                text: '<i class="fas fa-file-excel"></i> Download Excel',
+                className: 'btn btn-success',
+                exportOptions: {
+                    columns: [1, 2, 3, 4, 5, 6, 7, 8, 9], // Export all columns except checkbox (0) and actions (10)
+                    format: {
+                        body: function (data, row, column, node) {
+                            // column parameter is the index in the exported columns array
+                            // 0=ID, 1=Client, 2=Stock, 3=Asset Class, 4=Type, 5=Quantity, 6=Price, 7=Total, 8=Date
+                            
+                            // Get the actual table column index (add 1 because we're skipping checkbox column 0)
+                            const tableColumnIndex = column + 1;
+                            
+                            // Try to get data from the node (actual DOM element) first
+                            let cellValue = '';
+                            if (node && node.length > 0) {
+                                cellValue = $(node[0]).text().trim();
+                            } else if (node) {
+                                cellValue = $(node).text().trim();
+                            }
+                            
+                            // If node extraction didn't work, try the data parameter
+                            if (!cellValue && data) {
+                                if (typeof data === 'string') {
+                                    if (data.includes('<')) {
+                                        cellValue = $(data).text().trim();
+                                    } else {
+                                        cellValue = data.trim();
+                                    }
+                                } else {
+                                    cellValue = String(data).trim();
+                                }
+                            }
+                            
+                            // Handle Type column (index 4) - remove badge HTML
+                            if (column === 4) {
+                                return cellValue || '';
+                            }
+                            
+                            // Handle Date column (index 8) - extract date from data-order attribute
+                            if (column === 8) {
+                                let dateValue = '';
+                                if (node && node.length > 0) {
+                                    dateValue = $(node[0]).attr('data-order') || $(node[0]).find('span').attr('data-order') || '';
+                                } else if (node) {
+                                    dateValue = $(node).attr('data-order') || $(node).find('span').attr('data-order') || '';
+                                }
+                                
+                                if (dateValue) {
+                                    try {
+                                        const date = new Date(dateValue);
+                                        // Format as DD/MM/YYYY
+                                        const day = String(date.getDate()).padStart(2, '0');
+                                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                                        const year = date.getFullYear();
+                                        return `${day}/${month}/${year}`;
+                                    } catch (e) {
+                                        return cellValue || '';
+                                    }
+                                }
+                                return cellValue || '';
+                            }
+                            
+                            // Handle Price and Total Amount columns (index 6 and 7) - remove ₹ symbol but keep number
+                            if (column === 6 || column === 7) {
+                                // Remove ₹ symbol, commas, and whitespace, keep numbers and decimal point
+                                const numericValue = cellValue.replace(/[₹,\s]/g, '').trim();
+                                return numericValue || '';
+                            }
+                            
+                            // For all other columns (ID, Client, Stock, Asset Class, Quantity) - return text content
+                            return cellValue || '';
+                        }
+                    }
+                },
+                filename: function() {
+                    const clientName = $('#client-select option:selected').text() || 'All';
+                    const date = new Date().toISOString().split('T')[0];
+                    return `Transactions_${clientName.replace(/[^a-z0-9]/gi, '_')}_${date}`;
+                }
+            }
+        ],
+        "columnDefs": [
+            {
+                "targets": [0], // Checkbox column
+                "orderable": false,
+                "searchable": false
+            },
+            {
+                "targets": [1], // ID column
+                "orderable": true,
+                "searchable": true
+            },
+            {
+                "targets": [2], // Client column
+                "orderable": true,
+                "searchable": true
+            },
+            {
+                "targets": [3], // Stock column
+                "orderable": true,
+                "searchable": true
+            },
+            {
+                "targets": [4], // Asset Class column
+                "orderable": true,
+                "searchable": true
+            },
+            {
+                "targets": [5], // Type column
+                "orderable": true,
+                "searchable": true
+            },
+            {
+                "targets": [6], // Quantity column
+                "orderable": true,
+                "searchable": false
+            },
+            {
+                "targets": [7], // Price column
+                "orderable": true,
+                "searchable": false
+            },
+            {
+                "targets": [8], // Total Amount column
+                "orderable": true,
+                "searchable": false
+            },
+            {
+                "targets": [9], // Date column
+                "orderable": true,
+                "searchable": true,
+                "type": "date", // Tell DataTable this is a date column
+                "render": function(data, type, row) {
+                    if (type === 'sort' || type === 'type') {
+                        // Extract ISO date from data-order attribute for sorting
+                        if (typeof data === 'string') {
+                            const match = data.match(/data-order="([^"]+)"/);
+                            if (match && match[1]) {
+                                return match[1]; // Return ISO date string for sorting
+                            }
+                        }
+                        return data;
+                    }
+                    return data; // Return HTML for display
+                }
+            },
+            {
+                "targets": [10], // Actions column
+                "orderable": false,
+                "searchable": false
+            }
+        ],
+        "language": {
+            "search": "Search transactions:",
+            "lengthMenu": "Show _MENU_ transactions per page",
+            "info": "Showing _START_ to _END_ of _TOTAL_ transactions",
+            "emptyTable": "No transactions match the current filters. Select a client or clear filters."
+        }
+    });
+    console.log('DataTable initialized successfully');
+
+    // Persist and restore search filter across reloads
+    const SEARCH_KEY = 'transactions_search';
+    const savedSearch = localStorage.getItem(SEARCH_KEY);
+    if (savedSearch) {
+        transactionsTable.search(savedSearch).draw(false);
+    }
+    transactionsTable.on('search.dt', function() {
+        localStorage.setItem(SEARCH_KEY, transactionsTable.search());
+    });
+
+    // Bulk actions functionality
+    // Helper to get all checkboxes for rows matching current filter (across all pages)
+    function getFilteredCheckboxes() {
+        return $(transactionsTable.rows({ search: 'applied' }).nodes()).find('.transaction-checkbox');
+    }
+    
+    const headerCheckbox = $('#headerCheckbox');
+    const selectAllCheckbox = $('#selectAll');
+    const bulkActions = $('#bulkActions');
+    const selectedCount = $('#selectedCount');
+    const deleteCount = $('#deleteCount');
+    const bulkDeleteBtn = $('#bulkDeleteBtn');
+    const modalDeleteCount = $('#modalDeleteCount');
+    const transactionIds = $('#transactionIds');
+
+    // Function to update counts and visibility
+    function updateBulkActions() {
+        const checkboxes = getFilteredCheckboxes();
+        const checkedBoxes = checkboxes.filter(':checked');
+        const count = checkedBoxes.length;
+        
+        selectedCount.text(count);
+        deleteCount.text(count);
+        modalDeleteCount.text(count);
+        
+        if (count > 0) {
+            bulkActions.removeClass('hidden');
+            bulkDeleteBtn.prop('disabled', false);
+        } else {
+            bulkActions.addClass('hidden');
+            bulkDeleteBtn.prop('disabled', true);
+        }
+        
+        // Update header checkbox state relative to filtered rows
+        if (count === 0) {
+            headerCheckbox.prop('indeterminate', false).prop('checked', false);
+        } else if (count === checkboxes.length) {
+            headerCheckbox.prop('indeterminate', false).prop('checked', true);
+        } else {
+            headerCheckbox.prop('indeterminate', true);
+        }
+    }
+
+    // Individual checkbox change (delegate to handle all pages)
+    $(document).on('change', '.transaction-checkbox', updateBulkActions);
+
+    // Header checkbox (select all in table for all filtered rows)
+    headerCheckbox.on('change', function() {
+        const isChecked = $(this).prop('checked');
+        getFilteredCheckboxes().prop('checked', isChecked);
+        selectAllCheckbox.prop('checked', isChecked);
+        updateBulkActions();
+    });
+
+    // Select all checkbox (in bulk actions panel) acts on all filtered rows
+    selectAllCheckbox.on('change', function() {
+        const isChecked = $(this).prop('checked');
+        getFilteredCheckboxes().prop('checked', isChecked);
+        headerCheckbox.prop('indeterminate', false).prop('checked', isChecked);
+        updateBulkActions();
+    });
+
+    // Bulk delete button click (preserve current filter)
+    bulkDeleteBtn.on('click', function() {
+        const currentSearch = transactionsTable.search();
+        const checkedBoxes = getFilteredCheckboxes().filter(':checked');
+        const ids = checkedBoxes.map(function() { return this.value; }).get().join(',');
+        
+        transactionIds.val(ids);
+        $('#bulkDeleteModal').data('currentSearch', currentSearch).modal('show');
+    });
+
+    // Re-apply preserved filter after modal closes (useful when delete completes via modal)
+    $('#bulkDeleteModal').on('hidden.bs.modal', function() {
+        const saved = $(this).data('currentSearch');
+        if (saved !== undefined) {
+            transactionsTable.search(saved).draw(false);
+        }
+    });
+
+    // Intercept bulk delete form submit to use V2 API
+    $('#bulkDeleteForm').on('submit', async function(e) {
+        e.preventDefault();
+        
+        const currentSearch = transactionsTable.search();
+        // Recompute selected IDs from current filtered table to avoid stale hidden input
+        const idsArr = $(transactionsTable.rows({ search: 'applied' }).nodes())
+            .find('.transaction-checkbox:checked')
+            .map(function() { return parseInt(this.value); })
+            .get();
+        const clientId = $('#client-select').val();
+        
+        if (!clientId) {
+            showAPIStatus('Please select a client first', 'error');
+            return;
+        }
+        if (!idsArr.length) {
+            showAPIStatus('No transactions selected for deletion', 'error');
+            return;
+        }
+        
+        try {
+            const res = await fetch(`/api/v2/transactions/${clientId}/transactions/bulk-delete`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': $('meta[name=csrf-token]').attr('content')
+                },
+                body: JSON.stringify({ transaction_ids: idsArr })
+            });
+            
+            // Safely parse JSON; fallback to text when server returns HTML error pages
+            const rawText = await res.text();
+            let result;
+            try {
+                result = JSON.parse(rawText);
+            } catch (e) {
+                result = {
+                    success: false,
+                    message: `Server returned ${res.status} ${res.statusText}`,
+                    details: rawText
+                };
+            }
+            
+            if (result.success) {
+                // Close modal
+                const modalInstance = bootstrap.Modal.getInstance(document.getElementById('bulkDeleteModal'));
+                if (modalInstance) modalInstance.hide();
+                
+                // Refresh the transactions table for the current client
+                const clientId = $('#client-select').val();
+                if (clientId) {
+                    loadClientTransactions(clientId);
+                }
+                
+                const deletedCount = (result.data && result.data.deleted_count) ? result.data.deleted_count : idsArr.length;
+                const notFound = (result.data && result.data.not_found_ids) ? result.data.not_found_ids.length : 0;
+                const withCA = (result.data && result.data.securities_with_ca) ? result.data.securities_with_ca.length : 0;
+                const withoutCA = (result.data && result.data.securities_without_ca) ? result.data.securities_without_ca.length : 0;
+                
+                let message = `Deleted ${deletedCount} transaction(s) using V2 smart delete`;
+                if (withCA > 0 || withoutCA > 0) {
+                    message += ` (${withCA} CA securities, ${withoutCA} non-CA securities)`;
+                }
+                if (notFound > 0) {
+                    message += `. ${notFound} transaction(s) not found.`;
+                }
+                showAPIStatus(message, 'success');
+                updateBulkActions();
+            } else {
+                let errorMsg = `Delete failed: ${result.message}`;
+                if (result.details) {
+                    errorMsg += '<br><br><small style="font-size: 0.85em; opacity: 0.8;">' + 
+                               result.details.replace(/\n/g, '<br>') + '</small>';
+                }
+                showAPIStatus(errorMsg, 'error');
+            }
+        } catch (err) {
+            let errorMsg = `Delete failed: ${err.message}`;
+            if (err.details) {
+                errorMsg += '<br><br><small style="font-size: 0.85em; opacity: 0.8;">' + 
+                           err.details.replace(/\n/g, '<br>') + '</small>';
+            }
+            showAPIStatus(errorMsg, 'error');
+        }
+    });
+
+    // Keep bulk actions state updated on table draw/search
+    transactionsTable.on('draw.dt search.dt', function() {
+        headerCheckbox.prop('indeterminate', false).prop('checked', false);
+        updateBulkActions();
+    });
+
+    // Initialize
+    updateBulkActions();
+    
+    // ============================================================================
+    // CLIENT SELECTION, FILTERS, AND AJAX LOADING (V2)
+    // ============================================================================
+
+    let dateFilterTimer = null;
+    let restoringFilters = false;
+
+    function formatInrAmount(value) {
+        const n = Number(value) || 0;
+        const abs = Math.abs(n);
+        const sign = n < 0 ? '-' : '';
+        if (abs >= 10000000) {
+            return sign + '₹' + (abs / 10000000).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + ' Cr';
+        }
+        if (abs >= 100000) {
+            return sign + '₹' + (abs / 100000).toLocaleString('en-IN', { maximumFractionDigits: 1 }) + ' Lakh';
+        }
+        return sign + '₹' + Math.round(abs).toLocaleString('en-IN');
+    }
+
+    function formatTradeCount(count, label) {
+        const n = Number(count) || 0;
+        return n + (n === 1 ? ' ' + label : ' ' + label + 's');
+    }
+
+    function buildV2ListUrl(clientId) {
+        const params = new URLSearchParams();
+        params.set('per_page', '10000');
+        params.set('page', '1');
+        const type = $('#type-filter').val();
+        if (type) params.set('transaction_type', type);
+        const securityId = $('#security-filter').val();
+        if (securityId) params.set('security_id', securityId);
+        const dateFrom = $('#start_date').val();
+        if (dateFrom) params.set('date_from', dateFrom);
+        const dateTo = $('#end_date').val();
+        if (dateTo) params.set('date_to', dateTo);
+        return `/api/v2/transactions/${clientId}/transactions?${params.toString()}`;
+    }
+
+    function syncFilterUrl() {
+        const params = new URLSearchParams();
+        const clientId = $('#client-select').val();
+        if (clientId) params.set('client_id', clientId);
+        const type = $('#type-filter').val();
+        if (type) params.set('transaction_type', type);
+        const securityId = $('#security-filter').val();
+        if (securityId) params.set('security_id', securityId);
+        const dateFrom = $('#start_date').val();
+        if (dateFrom) params.set('date_from', dateFrom);
+        const dateTo = $('#end_date').val();
+        if (dateTo) params.set('date_to', dateTo);
+        const qs = params.toString();
+        const next = qs ? `/transactions?${qs}` : '/transactions';
+        if (`${window.location.pathname}${window.location.search}` !== next) {
+            history.replaceState(null, '', next);
+        }
+    }
+
+    function resetStockFilter() {
+        const select = $('#security-filter');
+        select.empty().append($('<option>', { value: '', text: 'All stocks' }));
+        select.val('');
+        select.prop('disabled', true);
+    }
+
+    function loadTradedSecurities(clientId, selectedId) {
+        const select = $('#security-filter');
+        select.prop('disabled', true);
+        return $.ajax({
+            url: `/api/v2/transactions/${clientId}/traded-securities`,
+            method: 'GET'
+        }).done(function(response) {
+            const securities = (response && response.success && response.data && response.data.securities) || [];
+            select.empty().append($('<option>', { value: '', text: 'All stocks' }));
+            securities.forEach(function(s) {
+                const symbol = s.symbol || '';
+                const name = s.name || '';
+                const label = name && name !== symbol ? `${symbol} — ${name}` : (symbol || name || `Security ${s.id}`);
+                select.append($('<option>', { value: String(s.id), text: label }));
+            });
+            if (selectedId && select.find(`option[value="${selectedId}"]`).length) {
+                select.val(String(selectedId));
+            }
+            select.prop('disabled', false);
+        }).fail(function() {
+            select.empty().append($('<option>', { value: '', text: 'All stocks' }));
+            select.prop('disabled', false);
+        });
+    }
+
+    function renderTradeSummary(summary) {
+        const box = $('#trade-summary');
+        if (!summary) {
+            box.addClass('d-none');
+            return;
+        }
+        const net = Number(summary.net_amount) || 0;
+        $('#summary-buy-amount').text(formatInrAmount(summary.buy_amount));
+        $('#summary-buy-count').text(formatTradeCount(summary.buy_count, 'buy'));
+        $('#summary-sell-amount').text(formatInrAmount(summary.sell_amount));
+        $('#summary-sell-count').text(formatTradeCount(summary.sell_count, 'sell'));
+        $('#summary-net-amount')
+            .text(formatInrAmount(summary.net_amount))
+            .toggleClass('text-success', net > 0)
+            .toggleClass('text-danger', net < 0)
+            .toggleClass('text-muted', net === 0);
+        const other = Number(summary.other_count) || 0;
+        const hint = other > 0
+            ? `Filtered set · ${other} other trade${other === 1 ? '' : 's'} excluded from totals`
+            : 'Filtered set';
+        $('#summary-net-hint').text(hint);
+        box.removeClass('d-none');
+    }
+
+    function applyFilters() {
+        const clientId = $('#client-select').val();
+        syncFilterUrl();
+        if (clientId) {
+            loadClientTransactions(clientId);
+        } else {
+            clearTransactionsTable();
+        }
+    }
+
+    $('#client-select').change(function() {
+        if (restoringFilters) return;
+        const clientId = $(this).val();
+        resetStockFilter();
+        if (!clientId) {
+            applyFilters();
+            return;
+        }
+        loadTradedSecurities(clientId).always(function() {
+            applyFilters();
+        });
+    });
+
+    $('#security-filter, #type-filter').change(function() {
+        if (restoringFilters) return;
+        applyFilters();
+    });
+
+    $('#start_date, #end_date').on('change input', function() {
+        if (restoringFilters) return;
+        clearTimeout(dateFilterTimer);
+        dateFilterTimer = setTimeout(applyFilters, 400);
+    });
+
+    $('#txn-filter-form').on('submit', function(e) {
+        e.preventDefault();
+        applyFilters();
+    });
+
+    $('#clear-selection').click(function() {
+        restoringFilters = true;
+        $('#client-select').val('');
+        $('#type-filter').val('');
+        $('#start_date').val('');
+        $('#end_date').val('');
+        resetStockFilter();
+        restoringFilters = false;
+        applyFilters();
+    });
+
+    function restoreFiltersFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        restoringFilters = true;
+        if (params.get('transaction_type')) {
+            $('#type-filter').val(params.get('transaction_type'));
+        }
+        if (params.get('date_from')) {
+            $('#start_date').val(params.get('date_from'));
+        }
+        if (params.get('date_to')) {
+            $('#end_date').val(params.get('date_to'));
+        }
+        const preClient = $('#client-select').val() || params.get('client_id') || '';
+        const preSecurity = params.get('security_id') || '';
+        restoringFilters = false;
+        if (!preClient) {
+            return;
+        }
+        if (preClient && $('#client-select').val() !== preClient) {
+            $('#client-select').val(preClient);
+        }
+        loadTradedSecurities(preClient, preSecurity).always(function() {
+            loadClientTransactions(preClient);
+        });
+    }
+
+    restoreFiltersFromUrl();
+    
+    // Load transactions for selected client (V2 list + summary)
+    function loadClientTransactions(clientId) {
+        showLoadingMessage('Loading transactions...');
+        
+        $.ajax({
+            url: buildV2ListUrl(clientId),
+            method: 'GET',
+            success: function(response) {
+                if (response.success) {
+                    const transactions = response.data.transactions || [];
+                    const pagination = response.data.pagination || {};
+                    displayTransactions(transactions);
+                    renderTradeSummary(response.data.summary);
+                    if (pagination.total && transactions.length && pagination.total > transactions.length) {
+                        showInfo(`Showing ${transactions.length} of ${pagination.total} transactions. Totals include all ${pagination.total}.`);
+                    } else {
+                        hideErrorMessages();
+                    }
+                } else {
+                    renderTradeSummary(null);
+                    showError('Failed to load transactions: ' + response.message);
+                }
+            },
+            error: function(xhr) {
+                renderTradeSummary(null);
+                let errorMessage = 'Error loading transactions';
+                try {
+                    const errorResponse = JSON.parse(xhr.responseText);
+                    errorMessage = errorResponse.message || errorMessage;
+                } catch (e) {
+                    if (xhr.status === 404) {
+                        errorMessage = 'Client not found';
+                    } else if (xhr.status === 403) {
+                        errorMessage = 'Access denied';
+                    } else if (xhr.status === 500) {
+                        errorMessage = 'Server error occurred';
+                    }
+                }
+                showError(errorMessage);
+            }
+        });
+    }
+    
+    // Display transactions in DataTable
+    function displayTransactions(transactions) {
+        const tableData = transactions.map(transaction => {
+            // Format date for display, but keep ISO string for sorting
+            let dateDisplay = 'N/A';
+            let dateOrder = '';
+            if (transaction.transaction_date) {
+                const dateObj = new Date(transaction.transaction_date);
+                dateDisplay = dateObj.toLocaleDateString();
+                dateOrder = transaction.transaction_date; // Use ISO string from API for proper date sorting
+            }
+            
+            return [
+                `<input type="checkbox" class="form-check-input transaction-checkbox" value="${transaction.id}">`,
+                transaction.id,
+                transaction.client_name || 'Unknown',
+                transaction.security_symbol || transaction.security_name || 'Unknown',
+                transaction.asset_class || 'Unknown',
+                `<span class="badge ${transaction.type === 'BUY' ? 'bg-success' : 'bg-danger'}">${transaction.type}</span>`,
+                transaction.quantity,
+                `₹${parseFloat(transaction.price).toFixed(2)}`,
+                `₹${(parseFloat(transaction.quantity) * parseFloat(transaction.price)).toFixed(2)}`,
+                `<span data-order="${dateOrder}">${dateDisplay}</span>`, // Add data-order attribute for proper date sorting
+                `<div class="btn-group" role="group">
+                    <a href="/transaction/${transaction.id}/edit" class="btn btn-sm btn-primary">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="confirmDelete(${transaction.id})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>`
+            ];
+        });
+        
+        transactionsTable.clear().rows.add(tableData).draw();
+        updateBulkActions();
+    }
+    
+    // Clear transactions table
+    function clearTransactionsTable() {
+        transactionsTable.clear().draw();
+        updateBulkActions();
+        hideErrorMessages();
+        renderTradeSummary(null);
+    }
+    
+    // Show loading message
+    function showLoadingMessage(message) {
+        $('#error-messages').html(`
+            <div class="alert alert-info">
+                <i class="fas fa-spinner fa-spin"></i> ${message}
+            </div>
+        `);
+    }
+    
+    // Show error message
+    function showError(message) {
+        $('#error-messages').html(`
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-triangle"></i> ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `);
+    }
+    
+    // Show info message
+    function showInfo(message) {
+        $('#error-messages').html(`
+            <div class="alert alert-info alert-dismissible fade show" role="alert">
+                <i class="fas fa-info-circle"></i> ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `);
+    }
+    
+    // Hide error messages
+    function hideErrorMessages() {
+        $('#error-messages').empty();
+    }
+    
+    // ============================================================================
+    // TRANSACTION API INTEGRATION
+    // ============================================================================
+    
+    // Show API status message
+    function showAPIStatus(message, type = 'info') {
+        const alertClass = {
+            'success': 'alert-success',
+            'error': 'alert-danger',
+            'warning': 'alert-warning',
+            'info': 'alert-info'
+        }[type] || 'alert-info';
+        
+        const statusDiv = $('#apiStatusMessages');
+        statusDiv.html(`
+            <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            statusDiv.find('.alert').alert('close');
+        }, 5000);
+    }
+    
+    function showEnhancedErrorDetails(errorData) {
+        const statusDiv = $('#apiStatusMessages');
+        let errorHtml = `
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <h5><i class="fas fa-exclamation-triangle"></i> File Upload Failed</h5>
+                <p><strong>${errorData.message}</strong></p>
+        `;
+        
+        if (errorData.data && errorData.data.validation_errors) {
+            errorHtml += '<div class="mt-3"><h6>Detailed Error Information:</h6>';
+            
+            // Group errors by type
+            const errorsByType = {};
+            errorData.data.validation_errors.forEach(error => {
+                if (!errorsByType[error.type]) {
+                    errorsByType[error.type] = [];
+                }
+                errorsByType[error.type].push(error);
+            });
+            
+            // Display file structure errors first
+            if (errorsByType.file_structure) {
+                errorHtml += '<div class="mb-3"><h6 class="text-danger">📁 File Structure Issues:</h6>';
+                errorsByType.file_structure.forEach(error => {
+                    errorHtml += `
+                        <div class="alert alert-warning mb-2">
+                            <strong>Column Headers:</strong> ${error.message}<br>
+                            <small class="text-muted">💡 ${error.suggestion}</small>
+                        </div>
+                    `;
+                });
+                errorHtml += '</div>';
+            }
+            
+            // Display row validation errors
+            if (errorsByType.row_validation) {
+                errorHtml += '<div class="mb-3"><h6 class="text-danger">📋 Row Validation Issues:</h6>';
+                errorHtml += '<div style="max-height: 300px; overflow-y: auto;">';
+                
+                // Sort by row number
+                errorsByType.row_validation.sort((a, b) => a.row - b.row);
+                
+                errorsByType.row_validation.forEach(error => {
+                    errorHtml += `
+                        <div class="alert alert-light border-start border-danger border-3 mb-2">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <strong>Row ${error.row}:</strong> ${error.message}<br>
+                                    <small class="text-muted">💡 ${error.suggestion}</small>
+                                </div>
+                                <span class="badge bg-danger ms-2">Row ${error.row}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+                errorHtml += '</div></div>';
+            }
+            
+            // Display general errors
+            if (errorsByType.general) {
+                errorHtml += '<div class="mb-3"><h6 class="text-danger">⚠️ General Issues:</h6>';
+                errorsByType.general.forEach(error => {
+                    errorHtml += `
+                        <div class="alert alert-warning mb-2">
+                            ${error.message}<br>
+                            <small class="text-muted">💡 ${error.suggestion}</small>
+                        </div>
+                    `;
+                });
+                errorHtml += '</div>';
+            }
+            
+            // Show summary
+            if (errorData.data.summary) {
+                const summary = errorData.data.summary;
+                errorHtml += `
+                    <div class="alert alert-info">
+                        <h6>📊 Summary:</h6>
+                        <ul class="mb-0">
+                            <li>Total rows in file: ${summary.total_rows}</li>
+                            <li>Valid transactions: ${summary.valid_count}</li>
+                            <li>Errors found: ${summary.error_count}</li>
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            errorHtml += '</div>';
+        }
+        
+        errorHtml += `
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `;
+        
+        statusDiv.html(errorHtml);
+    }
+    
+    function showPreviewMessage(message) {
+        const statusDiv = $('#apiStatusMessages');
+        statusDiv.html(`
+            <div class="alert alert-warning alert-dismissible fade show" role="alert" id="previewAlert">
+                <i class="fas fa-exclamation-triangle"></i>
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        `);
+        // No auto-dismiss for preview messages - user needs to interact with the button
+        console.log('Preview message shown, button should be visible');
+    }
+    
+    // Load securities for API form
+    function loadAPISecurities() {
+        // This would typically come from a securities API
+        // For now, we'll use a simple approach
+        const securities = [
+            {id: 1, name: 'Apple Inc.', symbol: 'AAPL'},
+            {id: 2, name: 'Microsoft Corp.', symbol: 'MSFT'},
+            {id: 3, name: 'Google LLC', symbol: 'GOOGL'},
+            {id: 4, name: 'Amazon.com Inc.', symbol: 'AMZN'},
+            {id: 5, name: 'Tesla Inc.', symbol: 'TSLA'},
+            {id: 6, name: 'Reliance Industries', symbol: 'RELIANCE'},
+            {id: 7, name: 'TCS Ltd.', symbol: 'TCS'},
+            {id: 8, name: 'Infosys Ltd.', symbol: 'INFY'},
+            {id: 9, name: 'HDFC Bank', symbol: 'HDFCBANK'},
+            {id: 10, name: 'ICICI Bank', symbol: 'ICICIBANK'}
+        ];
+        
+        const select = $('#securitySelect');
+        select.empty().append('<option value="">Select Security</option>');
+        
+        securities.forEach(security => {
+            select.append(`<option value="${security.id}">${security.symbol} - ${security.name}</option>`);
+        });
+    }
+    
+    // Load securities for manual entry form
+    function loadSecurities() {
+        const select = $('#securitySelect');
+        select.empty().append('<option value="">Loading securities...</option>');
+        
+        // Try to load from the securities API
+        $.ajax({
+            url: '/recommended_trades/api/securities',
+            method: 'GET',
+            success: function(securities) {
+                select.empty().append('<option value="">Select Security</option>');
+                
+                if (securities && securities.length > 0) {
+                    securities.forEach(security => {
+                        select.append(`<option value="${security.id}">${security.symbol} - ${security.name}</option>`);
+                    });
+                } else {
+                    // Fallback to hardcoded securities if API fails
+                    loadAPISecurities();
+                }
+            },
+            error: function() {
+                // Fallback to hardcoded securities if API fails
+                console.log('Securities API failed, using fallback data');
+                loadAPISecurities();
+            }
+        });
+    }
+    
+    // Show transaction form
+    function showTransactionForm() {
+        $('#transactionForm').removeClass('d-none');
+        $('#fileUploadForm').addClass('d-none');
+        $('#manualEntryForm').addClass('d-none');
+        showAPIStatus('Choose between file upload or manual entry for transactions.', 'info');
+    }
+    
+    // Show file upload form
+    function showFileUploadForm() {
+        $('#fileUploadForm').removeClass('d-none');
+        $('#manualEntryForm').addClass('d-none');
+        showAPIStatus('File upload ready. Select client and file to upload transactions.', 'info');
+    }
+    
+    // Show manual entry form
+    function showManualEntryForm() {
+        $('#manualEntryForm').removeClass('d-none');
+        $('#fileUploadForm').addClass('d-none');
+        $('#transactionDate').val(new Date().toISOString().split('T')[0]); // Today's date
+        loadSecurities();
+        showAPIStatus('Manual entry form ready. Select client and security to create a new transaction.', 'info');
+    }
+    
+    // Hide transaction form
+    function hideTransactionForm() {
+        $('#transactionForm').addClass('d-none');
+        $('#fileUploadForm').addClass('d-none');
+        $('#manualEntryForm').addClass('d-none');
+        // Clear forms
+        $('#clientSelect').val('');
+        $('#securitySelect').val('');
+        $('#transactionType').val('BUY');
+        $('#quantity').val('');
+        $('#price').val('');
+        $('#notes').val('');
+        $('#uploadClientSelect').val('');
+        $('#fileInput').val('');
+    }
+    
+    // Upload file via API
+    function uploadFileViaAPI() {
+        // Redirect to dedicated trade upload page to avoid URI too long errors
+        window.location.href = "{{ url_for('main.trade_upload') }}";
+        return;
+        const fileInput = $('#fileInput')[0];
+        
+        if (!clientId) {
+            showAPIStatus('Please select a client', 'error');
+            return;
+        }
+        
+        if (!fileInput.files || fileInput.files.length === 0) {
+            showAPIStatus('Please select a file to upload', 'error');
+            return;
+        }
+        
+        const file = fileInput.files[0];
+        
+        // Validate file type
+        const allowedTypes = ['.xlsx', '.xls', '.csv'];
+        const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+        if (!allowedTypes.includes(fileExtension)) {
+            showAPIStatus('Please select an Excel (.xlsx, .xls) or CSV file', 'error');
+            return;
+        }
+        
+        // Validate file size (10MB limit)
+        if (file.size > 10 * 1024 * 1024) {
+            showAPIStatus('File size too large. Maximum 10MB allowed.', 'error');
+            return;
+        }
+        
+        showAPIStatus('<i class="fas fa-spinner fa-spin"></i> Uploading file via API...', 'info');
+        
+        // Create FormData for file upload
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('client_id', clientId);
+        
+        $.ajax({
+            url: `/api/v1/clients/${clientId}/transactions/preview`,
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            headers: {
+                'X-CSRFToken': $('meta[name=csrf-token]').attr('content')
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Check if this is a preview response (V2 preview mode)
+                    console.log('Response data:', response.data);
+                    if (response.data && (response.data.problematic_rows || response.data.valid_transactions)) {
+                        // Store preview data globally for manual redirect
+                        window.lastPreviewData = response.data;
+                        
+                        // V2 Preview mode - show message with manual redirect button
+                        let previewMessage = response.message;
+                        
+                        if (response.data.errors && response.data.errors.length > 0) {
+                            previewMessage += '<br><br><strong>📋 Detailed Errors:</strong><ul style="max-height: 200px; overflow-y: auto;">';
+                            response.data.errors.forEach(error => {
+                                previewMessage += `<li style="margin: 5px 0; padding: 3px; background: #ffe6e6; border-left: 3px solid #ff4444;">${error}</li>`;
+                            });
+                            previewMessage += '</ul>';
+                        }
+                        
+                        if (response.data.valid_transactions && response.data.valid_transactions.length > 0) {
+                            previewMessage += `<br><strong>✅ Valid transactions:</strong> ${response.data.valid_transactions.length}`;
+                        }
+                        
+                        if (response.data.problematic_rows && response.data.problematic_rows.length > 0) {
+                            previewMessage += `<br><strong>❌ Problematic rows:</strong> ${response.data.problematic_rows.length}`;
+                        }
+                        
+                        previewMessage += `<br><br><div style="text-align: center; margin: 20px 0;">
+                            <button class="btn btn-primary btn-lg" onclick="redirectToPreview()" style="font-size: 16px; padding: 12px 24px;">
+                                <i class="fas fa-eye"></i> View Interactive Preview
+                            </button>
+                        </div>`;
+                        
+                        // Show preview message without auto-dismiss
+                        showPreviewMessage(previewMessage);
+                        
+                        // Add a separate prominent button below the status area
+                        setTimeout(() => {
+                            const statusContainer = $('#apiStatusMessages').parent();
+                            if (statusContainer.length) {
+                                statusContainer.append(`
+                                    <div class="alert alert-info text-center" style="margin-top: 10px;">
+                                        <strong>📋 File uploaded with validation issues</strong><br>
+                                        <button class="btn btn-primary btn-lg mt-2" onclick="redirectToPreview()">
+                                            <i class="fas fa-eye"></i> View Interactive Preview
+                                        </button>
+                                    </div>
+                                `);
+                            }
+                        }, 100);
+                        
+                        // Add button directly to the page as a fallback
+                        setTimeout(() => {
+                            const fileUploadForm = $('#fileUploadForm');
+                            if (fileUploadForm.length) {
+                                fileUploadForm.append(`
+                                    <div class="alert alert-success text-center" style="margin-top: 20px;">
+                                        <h5><i class="fas fa-check-circle"></i> File Uploaded Successfully!</h5>
+                                        <p>Found ${response.data.valid_transactions ? response.data.valid_transactions.length : 0} valid transactions and ${response.data.problematic_rows ? response.data.problematic_rows.length : 0} problematic rows.</p>
+                                        <button class="btn btn-primary btn-lg" onclick="redirectToPreview()">
+                                            <i class="fas fa-eye"></i> View Interactive Preview
+                                        </button>
+                                    </div>
+                                `);
+                            }
+                        }, 200);
+                    } else {
+                        // V2 API processes transactions directly, no preview needed
+                        showAPIStatus(`✅ Success! ${response.message}. Processed ${response.data.processed_count} transactions using V2 backend.`, 'success');
+                        // Refresh the transactions table
+                        setTimeout(function() {
+                            window.location.reload();
+                        }, 2000);
+                    }
+                } else {
+                    // Enhanced error display
+                    let errorMessage = response.message;
+                    
+                    if (response.details && response.details.validation_errors && response.details.validation_errors.length > 0) {
+                        errorMessage += '<br><br><strong>📋 Detailed Errors:</strong><ul style="max-height: 200px; overflow-y: auto;">';
+                        response.details.validation_errors.forEach(error => {
+                            errorMessage += `<li style="margin: 5px 0; padding: 3px; background: #ffe6e6; border-left: 3px solid #ff4444;">${error}</li>`;
+                        });
+                        errorMessage += '</ul>';
+                        
+                        if (response.details.total_errors > response.details.validation_errors.length) {
+                            errorMessage += `<br><em style="color: #666;">... and ${response.details.total_errors - response.details.validation_errors.length} more errors</em>`;
+                        }
+                    }
+                    
+                    if (response.details && response.details.required_columns) {
+                        errorMessage += '<br><br><strong>📝 Required columns:</strong><br>';
+                        errorMessage += '<code style="background: #f0f0f0; padding: 2px 4px; margin: 2px;">' + response.details.required_columns.join('</code>, <code style="background: #f0f0f0; padding: 2px 4px; margin: 2px;">') + '</code>';
+                    }
+                    
+                    if (response.details && response.details.found_columns) {
+                        errorMessage += '<br><br><strong>📊 Found columns:</strong><br>';
+                        errorMessage += '<code style="background: #e6f3ff; padding: 2px 4px; margin: 2px;">' + response.details.found_columns.join('</code>, <code style="background: #e6f3ff; padding: 2px 4px; margin: 2px;">') + '</code>';
+                    }
+                    
+                    if (response.details && response.details.file_name) {
+                        errorMessage += `<br><br><strong>📁 File:</strong> ${response.details.file_name}`;
+                    }
+                    
+                    if (response.details && response.details.total_rows) {
+                        errorMessage += `<br><strong>📊 Total rows:</strong> ${response.details.total_rows}`;
+                    }
+                    
+                    showAPIStatus(errorMessage, 'error');
+                }
+            },
+            error: function(xhr) {
+                console.error('Upload error:', xhr.responseText);
+                
+                // Try to parse the error response
+                let errorData = null;
+                try {
+                    if (xhr.responseJSON) {
+                        errorData = xhr.responseJSON;
+                    } else if (xhr.responseText) {
+                        errorData = JSON.parse(xhr.responseText);
+                    }
+                } catch (e) {
+                    console.error('Error parsing response:', e);
+                }
+                
+                // If we have enhanced error data, show detailed errors
+                if (errorData && errorData.data && errorData.data.validation_errors) {
+                    showEnhancedErrorDetails(errorData);
+                } else {
+                    // Fallback to simple error message
+                    let errorMessage = '❌ Failed to upload file';
+                    if (errorData && errorData.message) {
+                        errorMessage = `❌ ${errorData.message}`;
+                    } else if (xhr.status === 401) {
+                        errorMessage = '❌ Authentication required';
+                    } else if (xhr.status === 400) {
+                        errorMessage = '❌ Invalid file format or data';
+                    } else {
+                        errorMessage = `❌ Server error (${xhr.status}): ${xhr.statusText}`;
+                    }
+                    showAPIStatus(errorMessage, 'error');
+                }
+            }
+        });
+    }
+    
+    // Create transaction via API
+    function createTransaction() {
+        const clientId = parseInt($('#clientSelect').val());
+        const transactionData = {
+            security_id: parseInt($('#securitySelect').val()),
+            type: $('#transactionType').val(),
+            quantity: parseFloat($('#quantity').val()),
+            price: parseFloat($('#price').val()),
+            transaction_date: $('#transactionDate').val(),
+            notes: $('#notes').val()
+        };
+        
+        // Validate required fields
+        if (!clientId) {
+            showAPIStatus('Please select a client', 'error');
+            return;
+        }
+        
+        if (!transactionData.security_id) {
+            showAPIStatus('Please select a security', 'error');
+            return;
+        }
+        
+        if (!transactionData.quantity || transactionData.quantity <= 0) {
+            showAPIStatus('Please enter a valid quantity', 'error');
+            return;
+        }
+        
+        if (!transactionData.price || transactionData.price < 0) {
+            showAPIStatus('Please enter a valid price', 'error');
+            return;
+        }
+        
+        if (!transactionData.transaction_date) {
+            showAPIStatus('Please select a transaction date', 'error');
+            return;
+        }
+        
+        showAPIStatus('<i class="fas fa-spinner fa-spin"></i> Creating transaction via API...', 'info');
+        
+        $.ajax({
+            url: `/api/v2/transactions/${clientId}/transactions`,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(transactionData),
+            headers: {
+                'X-CSRFToken': $('meta[name=csrf-token]').attr('content')
+            },
+            success: function(response) {
+                if (response.success) {
+                    showAPIStatus(`Transaction created successfully (V2)! Holdings and cashflows updated for client ${clientId}.`, 'success');
+                    hideAPITransactionForm();
+                    const currentClientId = $('#client-select').val();
+                    if (currentClientId) {
+                        const selectedStock = $('#security-filter').val();
+                        loadTradedSecurities(currentClientId, selectedStock).always(function() {
+                            loadClientTransactions(currentClientId);
+                        });
+                    }
+                } else {
+                    showAPIStatus('Failed to create transaction: ' + response.message, 'error');
+                }
+            },
+            error: function(xhr) {
+                let errorMessage = 'Failed to create transaction';
+                try {
+                    const errorResponse = JSON.parse(xhr.responseText);
+                    errorMessage = errorResponse.message || errorMessage;
+                } catch (e) {
+                    if (xhr.status === 401) {
+                        errorMessage = 'Authentication required';
+                    } else if (xhr.status === 400) {
+                        errorMessage = 'Invalid transaction data';
+                    }
+                }
+                showAPIStatus(errorMessage, 'error');
+            }
+        });
+    }
+    
+    // Delete transaction via API
+    function deleteTransactionAPI(transactionId, clientId) {
+        if (!confirm('Are you sure you want to delete this transaction? This will also update the holdings and cashflows.')) {
+            return;
+        }
+        
+        showAPIStatus('<i class="fas fa-spinner fa-spin"></i> Deleting transaction via API...', 'info');
+        
+        $.ajax({
+            url: `/api/v2/transactions/${clientId}/transactions/${transactionId}`,
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': $('meta[name=csrf-token]').attr('content')
+            },
+            success: function(response) {
+                if (response.success) {
+                    showAPIStatus('Transaction deleted successfully (V2)! Holdings and cashflows recalculated.', 'success');
+                    // Refresh the transactions table for the current client
+                    const clientId = $('#client-select').val();
+                    if (clientId) {
+                        loadClientTransactions(clientId);
+                    }
+                } else {
+                    showAPIStatus('Failed to delete transaction: ' + response.message, 'error');
+                }
+            },
+            error: function(xhr) {
+                let errorMessage = 'Failed to delete transaction';
+                try {
+                    const errorResponse = JSON.parse(xhr.responseText);
+                    errorMessage = errorResponse.message || errorMessage;
+                    if (errorResponse.details) {
+                        errorMessage += '<br><br><small style="font-size: 0.85em; opacity: 0.8;">' + 
+                                       errorResponse.details.replace(/\n/g, '<br>') + '</small>';
+                    }
+                } catch (e) {
+                    if (xhr.status === 401) {
+                        errorMessage = 'Authentication required';
+                    }
+                }
+                showAPIStatus(errorMessage, 'error');
+            }
+        });
+    }
+    
+    // Event handlers
+    $('#addTransactionBtn').click(function() {
+        showTransactionForm();
+    });
+    
+    $('#showFileUpload').click(function() {
+        showFileUploadForm();
+    });
+    
+    $('#showManualEntry').click(function() {
+        showManualEntryForm();
+    });
+    
+    $('#closeTransactionForm, #cancelManualEntry, #cancelFileUpload').click(function() {
+        hideTransactionForm();
+    });
+    
+    $('#transactionFormData').submit(function(e) {
+        e.preventDefault();
+        createTransaction();
+    });
+    
+    $('#fileUploadFormData').submit(function(e) {
+        e.preventDefault();
+        uploadFileViaAPI();
+    });
+    
+    // Override the existing confirmDelete function to use API
+    window.confirmDelete = function(transactionId) {
+        const clientId = $('#client-select').val();
+        
+        if (clientId) {
+            deleteTransactionAPI(transactionId, clientId);
+        } else {
+            showError('Please select a client first');
+        }
+    };
+    
+    // Bind submit handler to file upload form
+    $('#fileUploadFormData').on('submit', function(e) {
+        e.preventDefault();
+        uploadFileViaAPI();
+    });
+    
+    // Show initial message
+    showAPIStatus('Select a client from the dropdown to view their transactions. Use "Add Transaction" button to create new transactions.', 'info');
+});
+
+// Function to redirect to preview page
+function redirectToPreview() {
+    const clientId = $('#uploadClientSelect').val();
+    if (clientId) {
+        // Avoid placing large preview payloads in the URL to prevent 414 errors
+        window.location.href = "{{ url_for('main.trade_upload') }}";
+    } else {
+        showAPIStatus('Please select a client first.', 'error');
+    }
+}
+</script>
+{% endblock %} 

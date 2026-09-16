@@ -1,0 +1,494 @@
+{% extends "base.html" %}
+
+{% block title %}Mark Monthly Attendance{% endblock %}
+
+{% block extra_css %}
+<style>
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+        margin-top: 20px;
+    }
+    
+    .calendar-header {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+        margin-bottom: 10px;
+        font-weight: bold;
+        text-align: center;
+    }
+    
+    .calendar-day {
+        border: 2px solid #dee2e6;
+        border-radius: 4px;
+        padding: 8px;
+        min-height: 100px;
+        background-color: #fff;
+        position: relative;
+        cursor: pointer;
+    }
+    
+    .calendar-day.empty {
+        border: none;
+        background-color: transparent;
+        cursor: default;
+    }
+    
+    .calendar-day.weekend {
+        background-color: #f8f9fa;
+    }
+    
+    .calendar-day.today {
+        border-color: #007bff;
+        background-color: #e7f3ff;
+    }
+    
+    .calendar-day.future {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    .day-number {
+        font-weight: bold;
+        font-size: 14px;
+        margin-bottom: 8px;
+        color: #495057;
+    }
+    
+    .attendance-buttons {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    
+    .attendance-btn {
+        padding: 4px 8px;
+        font-size: 11px;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        cursor: pointer;
+        background-color: #fff;
+        transition: all 0.2s;
+        text-align: center;
+    }
+    
+    .attendance-btn:hover:not(.disabled) {
+        transform: scale(1.05);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .attendance-btn.active.full-day {
+        background-color: #28a745;
+        color: white;
+        border-color: #28a745;
+    }
+    
+    .attendance-btn.active.half-day {
+        background-color: #ffc107;
+        color: #000;
+        border-color: #ffc107;
+    }
+    
+    .attendance-btn.active.leave {
+        background-color: #dc3545;
+        color: white;
+        border-color: #dc3545;
+    }
+    
+    .attendance-btn.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    .bulk-actions {
+        background-color: #f8f9fa;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    
+    .existing-badge {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        font-size: 9px;
+        padding: 2px 4px;
+        border-radius: 2px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Mark Attendance for {{ month_name }}</h1>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('attendance.mark_attendance') }}" class="btn btn-info">
+                <i class="fas fa-plus"></i> Mark Single Day
+            </a>
+            <a href="{{ url_for('attendance.attendance_dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Month/Year Selector -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('attendance.mark_attendance_month') }}" class="row align-items-end">
+                <div class="col-md-4">
+                    <label for="month" class="form-label">Month</label>
+                    <select class="form-control" id="month" name="month" onchange="this.form.submit()">
+                        <option value="1" {% if selected_month == 1 %}selected{% endif %}>January</option>
+                        <option value="2" {% if selected_month == 2 %}selected{% endif %}>February</option>
+                        <option value="3" {% if selected_month == 3 %}selected{% endif %}>March</option>
+                        <option value="4" {% if selected_month == 4 %}selected{% endif %}>April</option>
+                        <option value="5" {% if selected_month == 5 %}selected{% endif %}>May</option>
+                        <option value="6" {% if selected_month == 6 %}selected{% endif %}>June</option>
+                        <option value="7" {% if selected_month == 7 %}selected{% endif %}>July</option>
+                        <option value="8" {% if selected_month == 8 %}selected{% endif %}>August</option>
+                        <option value="9" {% if selected_month == 9 %}selected{% endif %}>September</option>
+                        <option value="10" {% if selected_month == 10 %}selected{% endif %}>October</option>
+                        <option value="11" {% if selected_month == 11 %}selected{% endif %}>November</option>
+                        <option value="12" {% if selected_month == 12 %}selected{% endif %}>December</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="year" class="form-label">Year</label>
+                    <select class="form-control" id="year" name="year" onchange="this.form.submit()">
+                        {% for year in year_range %}
+                        <option value="{{ year }}" {% if selected_year == year %}selected{% endif %}>{{ year }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Monthly Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #28a745;">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #28a745;">
+                                Full Days
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="summary-full-days">{{ full_days_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x" style="color: #28a745;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #ffc107;">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #ffc107;">
+                                Half Days
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="summary-half-days">{{ half_days_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x" style="color: #ffc107;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #dc3545;">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #dc3545;">
+                                Leave Days
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="summary-leave-days">{{ leave_days_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-times-circle fa-2x" style="color: #dc3545;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #007bff;">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: #007bff;">
+                                Total Days
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="summary-total-days">{{ total_days_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar fa-2x" style="color: #007bff;"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Actions -->
+    <div class="bulk-actions">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <strong>Quick Actions:</strong>
+                <button type="button" class="btn btn-sm btn-success ml-2" onclick="bulkSetWeekdays('full_day')">
+                    <i class="fas fa-check"></i> Full Day (Weekdays)
+                </button>
+                <button type="button" class="btn btn-sm btn-warning ml-1" onclick="bulkSetWeekdays('half_day')">
+                    <i class="fas fa-clock"></i> Half Day (Weekdays)
+                </button>
+                <button type="button" class="btn btn-sm btn-danger ml-1" onclick="bulkSetWeekdays('leave')">
+                    <i class="fas fa-times"></i> Leave (Weekdays)
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary ml-1" onclick="clearAll()">
+                    <i class="fas fa-eraser"></i> Clear All
+                </button>
+            </div>
+            <div class="col-md-4 text-right">
+                <small class="text-muted">
+                    <span class="badge badge-success">Full Day</span>
+                    <span class="badge badge-warning">Half Day</span>
+                    <span class="badge badge-danger">Leave</span>
+                    <span class="badge badge-light">Blank = Skip</span>
+                </small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendar Form -->
+    <form method="POST" id="attendanceForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="year" value="{{ selected_year }}">
+        <input type="hidden" name="month" value="{{ selected_month }}">
+        
+        <div class="card shadow">
+            <div class="card-body">
+                <!-- Calendar Header -->
+                <div class="calendar-header">
+                    <div>Mon</div>
+                    <div>Tue</div>
+                    <div>Wed</div>
+                    <div>Thu</div>
+                    <div>Fri</div>
+                    <div>Sat</div>
+                    <div>Sun</div>
+                </div>
+                
+                <!-- Calendar Grid -->
+                <div class="calendar-grid">
+                    {% for day_data in calendar_data %}
+                        {% if day_data is none %}
+                            <div class="calendar-day empty"></div>
+                        {% else %}
+                            {% set date_str = day_data.date.strftime('%Y-%m-%d') %}
+                            {% set existing = day_data.existing %}
+                            {% set current_value = existing.attendance_type if existing else '' %}
+                            
+                            <div class="calendar-day {% if day_data.is_weekend %}weekend{% endif %} {% if day_data.is_today %}today{% endif %} {% if day_data.is_future %}future{% endif %}">
+                                {% if existing %}
+                                    <span class="badge badge-info existing-badge">Exists</span>
+                                {% endif %}
+                                
+                                <div class="day-number">
+                                    {{ day_data.day }}
+                                    {% if day_data.is_today %}
+                                        <small class="text-primary">(Today)</small>
+                                    {% endif %}
+                                </div>
+                                
+                                <input type="hidden" name="attendance_{{ date_str }}" id="attendance_{{ date_str }}" value="{{ current_value }}">
+                                
+                                <div class="attendance-buttons">
+                                    <button type="button" 
+                                            class="attendance-btn full-day {% if current_value == 'full_day' %}active{% endif %} {% if day_data.is_future %}disabled{% endif %}"
+                                            onclick="setAttendance('{{ date_str }}', 'full_day', this)"
+                                            {% if day_data.is_future %}disabled{% endif %}>
+                                        Full
+                                    </button>
+                                    <button type="button" 
+                                            class="attendance-btn half-day {% if current_value == 'half_day' %}active{% endif %} {% if day_data.is_future %}disabled{% endif %}"
+                                            onclick="setAttendance('{{ date_str }}', 'half_day', this)"
+                                            {% if day_data.is_future %}disabled{% endif %}>
+                                        Half
+                                    </button>
+                                    <button type="button" 
+                                            class="attendance-btn leave {% if current_value == 'leave' %}active{% endif %} {% if day_data.is_future %}disabled{% endif %}"
+                                            onclick="setAttendance('{{ date_str }}', 'leave', this)"
+                                            {% if day_data.is_future %}disabled{% endif %}>
+                                        Leave
+                                    </button>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-4 text-center">
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="fas fa-save"></i> Save Attendance
+            </button>
+            <a href="{{ url_for('attendance.attendance_dashboard') }}" class="btn btn-secondary btn-lg">
+                Cancel
+            </a>
+        </div>
+    </form>
+</div>
+
+<script>
+function setAttendance(dateStr, type, button) {
+    const input = document.getElementById('attendance_' + dateStr);
+    const dayDiv = button.closest('.calendar-day');
+    const buttons = dayDiv.querySelectorAll('.attendance-btn');
+    
+    // Get old value before changing
+    const oldValue = input.value;
+    
+    // Remove active class from all buttons
+    buttons.forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    if (input.value === type) {
+        // If clicking the same button, clear it
+        input.value = '';
+        button.classList.remove('active');
+        updateSummary(oldValue, ''); // Remove from summary
+    } else {
+        // Set the new value
+        input.value = type;
+        button.classList.add('active');
+        updateSummary(oldValue, type); // Update summary
+    }
+}
+
+function updateSummary(oldValue, newValue) {
+    // Update full days
+    const fullDaysEl = document.getElementById('summary-full-days');
+    let fullDays = parseInt(fullDaysEl.textContent) || 0;
+    if (oldValue === 'full_day') fullDays--;
+    if (newValue === 'full_day') fullDays++;
+    fullDaysEl.textContent = Math.max(0, fullDays);
+    
+    // Update half days
+    const halfDaysEl = document.getElementById('summary-half-days');
+    let halfDays = parseInt(halfDaysEl.textContent) || 0;
+    if (oldValue === 'half_day') halfDays--;
+    if (newValue === 'half_day') halfDays++;
+    halfDaysEl.textContent = Math.max(0, halfDays);
+    
+    // Update leave days
+    const leaveDaysEl = document.getElementById('summary-leave-days');
+    let leaveDays = parseInt(leaveDaysEl.textContent) || 0;
+    if (oldValue === 'leave') leaveDays--;
+    if (newValue === 'leave') leaveDays++;
+    leaveDaysEl.textContent = Math.max(0, leaveDays);
+    
+    // Update total days
+    const totalDaysEl = document.getElementById('summary-total-days');
+    let totalDays = parseInt(totalDaysEl.textContent) || 0;
+    if (oldValue && !newValue) totalDays--; // Removed attendance
+    if (!oldValue && newValue) totalDays++; // Added attendance
+    totalDaysEl.textContent = Math.max(0, totalDays);
+}
+
+function bulkSetWeekdays(type) {
+    const inputs = document.querySelectorAll('[id^="attendance_"]');
+    let updatedCount = 0;
+    
+    inputs.forEach(input => {
+        const dateStr = input.id.replace('attendance_', '');
+        const date = new Date(dateStr + 'T00:00:00'); // Prevent timezone issues
+        const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+        
+        // Only set weekdays (Monday-Friday: 1-5)
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+            const dayDiv = input.closest('.calendar-day');
+            if (dayDiv && !dayDiv.classList.contains('future')) {
+                const oldValue = input.value;
+                input.value = type;
+                updatedCount++;
+                
+                // Update button states
+                const buttons = dayDiv.querySelectorAll('.attendance-btn');
+                buttons.forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.classList.contains('full-day') && type === 'full_day') {
+                        btn.classList.add('active');
+                    } else if (btn.classList.contains('half-day') && type === 'half_day') {
+                        btn.classList.add('active');
+                    } else if (btn.classList.contains('leave') && type === 'leave') {
+                        btn.classList.add('active');
+                    }
+                });
+                
+                // Update summary for each change
+                updateSummary(oldValue, type);
+            }
+        }
+    });
+    
+    // Refresh summary after bulk update
+    refreshSummary();
+}
+
+function refreshSummary() {
+    const inputs = document.querySelectorAll('[id^="attendance_"]');
+    let fullDays = 0, halfDays = 0, leaveDays = 0, totalDays = 0;
+    
+    inputs.forEach(input => {
+        const value = input.value;
+        if (value === 'full_day') {
+            fullDays++;
+            totalDays++;
+        } else if (value === 'half_day') {
+            halfDays++;
+            totalDays++;
+        } else if (value === 'leave') {
+            leaveDays++;
+            totalDays++;
+        }
+    });
+    
+    document.getElementById('summary-full-days').textContent = fullDays;
+    document.getElementById('summary-half-days').textContent = halfDays;
+    document.getElementById('summary-leave-days').textContent = leaveDays;
+    document.getElementById('summary-total-days').textContent = totalDays;
+}
+
+function clearAll() {
+    if (confirm('Clear all attendance selections?')) {
+        const inputs = document.querySelectorAll('[id^="attendance_"]');
+        inputs.forEach(input => {
+            input.value = '';
+            const dayDiv = input.closest('.calendar-day');
+            const buttons = dayDiv.querySelectorAll('.attendance-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+        });
+        refreshSummary();
+    }
+}
+
+// Initialize summary on page load
+document.addEventListener('DOMContentLoaded', function() {
+    refreshSummary();
+});
+</script>
+{% endblock %}

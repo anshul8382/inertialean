@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}Update Prices from Google Sheets{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Update Prices from Google Sheets</h3>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-group">
+                            <label for="spreadsheet_key">Google Sheets Key:</label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="spreadsheet_key" 
+                                   name="spreadsheet_key" 
+                                   value="1Cd-TYldviG1HHMVo8coAjj-zzcu_nAr64slRZsFFmgM"
+                                   placeholder="Enter Google Sheets key" 
+                                   required>
+                            <small class="form-text text-muted">
+                                The spreadsheet should have a worksheet named "Prices" with columns: Symbol, Price
+                            </small>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-info">Update Prices</button>
+                        <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+                    </form>
+                    
+                    <hr>
+                    
+                    <div class="alert alert-info">
+                        <h5>Expected Spreadsheet Format:</h5>
+                        <p>Your Google Sheets should have the following columns in the "Prices" worksheet:</p>
+                        <ul>
+                            <li><strong>Symbol:</strong> Stock symbol (e.g., TCS, INFY, RELIANCE)</li>
+                            <li><strong>Price:</strong> Current stock price</li>
+                        </ul>
+                        <p><strong>Note:</strong> Only stocks that exist in the database will be updated.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,118 @@
+{% if calendar_year_xirr.error and not calendar_year_xirr.rows %}
+<div class="alert alert-warning small">{{ calendar_year_xirr.error }}</div>
+{% elif not calendar_year_xirr.rows %}
+<p class="text-muted small mb-0">No calendar years with portfolio activity found.</p>
+{% else %}
+{% if calendar_year_xirr.first_activity_date %}
+<p class="text-muted small mb-3">
+    Valid years from {{ calendar_year_xirr.first_activity_date }} ·
+    dummy dates excluded:
+    {{ calendar_year_xirr.dummy_cashflows_excluded or 0 }} cashflow(s),
+    {{ calendar_year_xirr.dummy_transactions_excluded or 0 }} trade(s)
+</p>
+{% endif %}
+<div class="alert alert-light border small mb-3">
+    <strong>Cashflow convention:</strong>
+    opening portfolio value and buys/investments are negative cashflows;
+    sells/withdrawals and ending portfolio value are positive cashflows.
+</div>
+<div class="table-responsive">
+    <table class="table table-sm table-striped align-middle mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>Year</th>
+                <th>Period</th>
+                <th class="text-end">Start Value</th>
+                <th class="text-end">End Value</th>
+                <th class="text-end">Portfolio XIRR</th>
+                <th class="text-end">Nifty XIRR</th>
+                <th class="text-end">Portfolio vs Nifty</th>
+                <th class="text-end">Cashflows</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in calendar_year_xirr.rows %}
+            {% set detail_id = 'calendarXirrDetails' ~ row.year %}
+            <tr>
+                <td>
+                    <strong>{{ row.year }}</strong>
+                    {% if row.is_ytd %}<span class="badge bg-info ms-1">YTD</span>{% endif %}
+                </td>
+                <td class="small text-muted">{{ row.start_date }} → {{ row.end_date }}</td>
+                <td class="text-end">₹{{ "{:,.0f}".format(row.start_value|float) }}</td>
+                <td class="text-end">₹{{ "{:,.0f}".format(row.end_value|float) }}</td>
+                <td class="text-end {% if row.portfolio_xirr_percent >= 0 %}text-success{% else %}text-danger{% endif %}">
+                    {{ "%.2f"|format(row.portfolio_xirr_percent|float) }}%
+                </td>
+                <td class="text-end {% if row.nifty_xirr_percent >= 0 %}text-success{% else %}text-danger{% endif %}">
+                    {{ "%.2f"|format(row.nifty_xirr_percent|float) }}%
+                </td>
+                <td class="text-end {% if row.outperformance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                    {{ "%.2f"|format(row.outperformance|float) }}%
+                </td>
+                <td class="text-end">
+                    {{ row.period_cashflows_count }}
+                    {% if row.benchmark_skipped_cashflows %}
+                    <span class="badge bg-warning text-dark ms-1">{{ row.benchmark_skipped_cashflows }} skipped</span>
+                    {% endif %}
+                </td>
+                <td class="text-end">
+                    <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#{{ detail_id }}" aria-expanded="false">
+                        Verify
+                    </button>
+                </td>
+            </tr>
+            <tr class="collapse" id="{{ detail_id }}">
+                <td colspan="9" class="bg-light">
+                    <div class="p-2">
+                        <h6 class="fw-bold mb-2">Date-wise XIRR cashflow schedule for {{ row.year }}</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Description</th>
+                                        <th>Direction</th>
+                                        <th class="text-end">Signed Amount</th>
+                                        <th class="text-end">Nifty Close</th>
+                                        <th>Nifty Price Date</th>
+                                        <th class="text-end">Nifty Units Δ</th>
+                                        <th class="text-end">Nifty Units After</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for step in row.verification_rows %}
+                                    <tr>
+                                        <td>{{ step.date }}</td>
+                                        <td>{{ step.description }}</td>
+                                        <td>
+                                            {% if step.xirr_treatment == 'negative' %}
+                                            <span class="badge bg-success">Inflow to portfolio</span>
+                                            {% else %}
+                                            <span class="badge bg-primary">Outflow from portfolio</span>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-end {% if step.signed_amount < 0 %}text-success{% else %}text-primary{% endif %}">
+                                            ₹{{ "{:,.2f}".format(step.signed_amount|float) }}
+                                        </td>
+                                        <td class="text-end">{% if step.benchmark_price %}₹{{ "{:,.2f}".format(step.benchmark_price|float) }}{% else %}—{% endif %}</td>
+                                        <td>{{ step.benchmark_price_date or '—' }}</td>
+                                        <td class="text-end">{% if step.benchmark_units_change is defined and step.benchmark_units_change is not none %}{{ "%.6f"|format(step.benchmark_units_change|float) }}{% else %}—{% endif %}</td>
+                                        <td class="text-end">{% if step.benchmark_units_after is defined and step.benchmark_units_after is not none %}{{ "%.6f"|format(step.benchmark_units_after|float) }}{% else %}—{% endif %}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            These rows are the exact date-wise cashflows used for portfolio XIRR. Nifty XIRR uses the same signed schedule with simulated Nifty units.
+                        </small>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}

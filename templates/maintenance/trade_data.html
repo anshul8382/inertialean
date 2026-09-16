@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link %}
+
+{% block title %}Maintenance — Trade data{% endblock %}
+
+{% block content %}
+{{ maint_hub_open('Trade data', 'Transactions, cashflows, prices, and related reports.', url_for('main.data_upload_links')) }}
+  {{ maint_link('fa-exchange-alt', 'All transactions', url_for('main.transactions')) }}
+  {{ maint_link('fa-money-bill-wave', 'Cashflows', url_for('main.list_cashflows')) }}
+  {{ maint_link('fa-chart-line', 'View historical prices', url_for('historical_prices.view_historical_prices')) }}
+  {% if config.get('NAV_CORPORATE_ACTIONS_ENABLED') %}
+  {{ maint_link('fa-sitemap', 'Corporate actions', url_for('corporate_actions.list_actions')) }}
+  {% endif %}
+  {% if current_user.can_access_holdings_report %}
+  {{ maint_link('fa-chart-pie', 'Holdings report', url_for('main.holdings_report')) }}
+  {% endif %}
+  {% include 'partials/mobile/record_trade_details_mobile.html' %}
+{{ maint_hub_close() }}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0"><i class="fas fa-exchange-alt text-primary"></i> Trade data</h1>
+        <a href="{{ url_for('main.data_upload_links') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-upload"></i> Data upload
+        </a>
+    </div>
+    <p class="text-muted mb-4">Transactions, cashflows, prices, and related reports.</p>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('main.transactions') }}">
+                        <i class="fas fa-exchange-alt d-block mb-2 fa-lg"></i> All transactions
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('main.list_cashflows') }}">
+                        <i class="fas fa-money-bill-wave d-block mb-2 fa-lg"></i> Cashflows
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('historical_prices.view_historical_prices') }}">
+                        <i class="fas fa-chart-line d-block mb-2 fa-lg"></i> View historical prices
+                    </a>
+                </div>
+                {% if config.get('NAV_CORPORATE_ACTIONS_ENABLED') %}
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('corporate_actions.list_actions') }}">
+                        <i class="fas fa-sitemap d-block mb-2 fa-lg"></i> Corporate actions
+                    </a>
+                </div>
+                {% endif %}
+                {% if current_user.can_access_holdings_report %}
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100 py-3" href="{{ url_for('main.holdings_report') }}">
+                        <i class="fas fa-chart-pie d-block mb-2 fa-lg"></i> Holdings report
+                    </a>
+                </div>
+                {% endif %}
+                {% include "maintenance/_record_trade_details_card.html" %}
+            </div>
+        </div>
+    </div>
+{{ maint_desktop_close() }}
+{% endblock %}

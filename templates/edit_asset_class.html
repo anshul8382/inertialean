@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Edit Asset Class</h2>
+    <form method="POST" action="{{ url_for('main.edit_asset_class', asset_class_id=asset_class.id) }}">
+        {{ form.hidden_tag() }}
+        <div class="form-group">
+            {{ form.name.label(class="form-label") }}
+            {{ form.name(class="form-control") }}
+            {% if form.name.errors %}
+                {% for error in form.name.errors %}<span class="text-danger">{{ error }}</span>{% endfor %}
+            {% endif %}
+        </div>
+        <div class="form-group mt-3">
+            {{ form.description.label(class="form-label") }}
+            {{ form.description(class="form-control", rows=3) }}
+        </div>
+        <hr class="my-4">
+        <h5 class="mb-3">Tax (capital gains / tax optimiser)</h5>
+        <div class="row g-3">
+            <div class="col-md-4">
+                {{ form.tax_ruleset.label(class="form-label") }}
+                {{ form.tax_ruleset(class="form-control") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.tax_stcg_rate.label(class="form-label") }}
+                {{ form.tax_stcg_rate(class="form-control", step="0.0001") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.tax_ltcg_rate.label(class="form-label") }}
+                {{ form.tax_ltcg_rate(class="form-control", step="0.0001") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.tax_ltcg_exemption_limit.label(class="form-label") }}
+                {{ form.tax_ltcg_exemption_limit(class="form-control", step="1") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.tax_ltcg_minimum_months.label(class="form-label") }}
+                {{ form.tax_ltcg_minimum_months(class="form-control") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.tax_ltcg_eligibility_mode.label(class="form-label") }}
+                {{ form.tax_ltcg_eligibility_mode(class="form-select") }}
+            </div>
+            <div class="col-md-4">
+                {{ form.tax_ltcg_holding_days.label(class="form-label") }}
+                {{ form.tax_ltcg_holding_days(class="form-control") }}
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <div class="form-check">
+                    {{ form.tax_rules_active(class="form-check-input") }}
+                    {{ form.tax_rules_active.label(class="form-check-label") }}
+                </div>
+            </div>
+            <div class="col-12">
+                {{ form.tax_notes.label(class="form-label") }}
+                {{ form.tax_notes(class="form-control", rows=3) }}
+            </div>
+        </div>
+        <div class="mt-4">
+            {{ form.submit(class="btn btn-primary") }}
+            <a href="{{ url_for('main.list_asset_classes') }}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

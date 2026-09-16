@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Add Security</h2>
+        <a href="{{ url_for('main.securities') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Securities
+        </a>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="symbol" class="form-label">Symbol</label>
+                        <input type="text" class="form-control" id="symbol" name="symbol" required>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="name" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="asset_class_id" class="form-label">Asset Class</label>
+                        <select class="form-select" id="asset_class_id" name="asset_class_id" required>
+                            <option value="">Select Asset Class</option>
+                            {% for asset_class in asset_classes %}
+                            <option value="{{ asset_class.id }}">{{ asset_class.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="security_type" class="form-label">Security Type</label>
+                        <select class="form-select" id="security_type" name="security_type" required>
+                            <option value="">Select Type</option>
+                            <option value="STOCK">Stock</option>
+                            <option value="ETF">ETF</option>
+                            <option value="MUTUAL_FUND">Mutual Fund</option>
+                            <option value="BOND">Bond</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="current_price" class="form-label">Current Price</label>
+                        <div class="input-group">
+                            <span class="input-group-text">₹</span>
+                            <input type="number" class="form-control" id="current_price" name="current_price" 
+                                   step="0.01" min="0">
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6 mb-3">
+                        <label for="refresh_interval" class="form-label">Refresh Interval (seconds)</label>
+                        <select class="form-select" id="refresh_interval" name="refresh_interval" required>
+                            <option value="300">5 minutes</option>
+                            <option value="900">15 minutes</option>
+                            <option value="1800">30 minutes</option>
+                            <option value="3600">1 hour</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label for="meta_data" class="form-label">Additional Information (JSON)</label>
+                    <textarea class="form-control" id="meta_data" name="meta_data" rows="3" 
+                              placeholder='{"notes": "Your notes here", "source": "Data source", "other_info": "Any other information"}'></textarea>
+                    <small class="form-text text-muted">Enter additional information in JSON format. Example: {"notes": "Your notes here"}</small>
+                </div>
+
+                <div class="d-flex justify-content-end">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Security
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const metaDataInput = document.getElementById('meta_data');
+    
+    // Validate JSON on input
+    metaDataInput.addEventListener('input', function() {
+        const value = this.value.trim();
+        if (value) {
+            try {
+                JSON.parse(value);
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            } catch (e) {
+                this.classList.remove('is-valid');
+                this.classList.add('is-invalid');
+            }
+        } else {
+            this.classList.remove('is-valid', 'is-invalid');
+        }
+    });
+});
+</script>
+{% endblock %} 

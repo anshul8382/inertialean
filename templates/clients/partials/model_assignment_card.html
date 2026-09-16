@@ -1,0 +1,56 @@
+{# Extracted for functional testing + reuse. #}
+<div class="card shadow h-100">
+  <div class="card-header py-3">
+    <h6 class="m-0 font-weight-bold text-primary">Model Assignment</h6>
+  </div>
+  <div class="card-body">
+    <div class="mb-3">
+      <h6 class="font-weight-bold">Asset Model</h6>
+      <p class="asset-model-name">
+        {% if model_assignment and model_assignment.asset_model %}
+          {{ model_assignment.asset_model.name }}
+        {% else %}
+          <span class="text-muted">Not assigned</span>
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="mb-3">
+      <h6 class="font-weight-bold">Security Model</h6>
+      <p class="security-model-name">
+        {% if equity_security_model %}
+          {{ equity_security_model.name }}
+        {% elif model_assignment and model_assignment.stock_model %}
+          {{ model_assignment.stock_model.name }}
+        {% else %}
+          <span class="text-muted">Not assigned</span>
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="mb-3">
+      <h6 class="font-weight-bold">Assignment Date</h6>
+      <p class="assignment-date">
+        {% if model_assignment and model_assignment.assigned_at %}
+          {{ model_assignment.assigned_at.strftime('%Y-%m-%d') }}
+        {% else %}
+          <span class="text-muted">Not assigned</span>
+        {% endif %}
+      </p>
+    </div>
+
+    <div class="text-center">
+      <a
+        href="{{ url_for('clients.assign_client_model', client_id=client.id) }}"
+        class="btn btn-sm btn-primary"
+      >
+        <i class="fas fa-cog"></i>
+        {% if model_assignment and model_assignment.asset_model %}
+          Update Models
+        {% else %}
+          Assign Models
+        {% endif %}
+      </a>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Agent Detail{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="page-title-box">
+        <div class="page-title-right">
+          <ol class="breadcrumb m-0">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('agents_dashboard.dashboard') }}">Agents</a></li>
+            <li class="breadcrumb-item active">{{ agent_info.display_name }}</li>
+          </ol>
+        </div>
+        <h4 class="page-title"><i class="fas fa-robot me-2"></i>{{ agent_info.display_name }}</h4>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-3">
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-body">
+          <p class="text-muted mb-2">{{ agent_info.description }}</p>
+          <div class="d-flex gap-2">
+            {% if agent_info.dashboard_url %}
+              <a class="btn btn-primary" href="{{ agent_info.dashboard_url }}"><i class="fas fa-chart-line me-1"></i>Open dashboard</a>
+            {% endif %}
+            <a class="btn btn-outline-secondary" href="{{ url_for('agents_dashboard.agent_feedback', agent_name=agent_name, next=request.path) }}">
+              <i class="fas fa-comment-dots me-1"></i>Give feedback
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header"><h4 class="header-title mb-0">Recent runs</h4></div>
+        <div class="card-body p-0">
+          {% if runs %}
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead>
+                <tr><th>Run</th><th>Mode</th><th>Status</th><th>Issues</th></tr>
+              </thead>
+              <tbody>
+                {% for r in runs %}
+                <tr>
+                  <td><small class="font-monospace">{{ r.run_id }}</small></td>
+                  <td>{{ r.run_mode }}</td>
+                  <td>{{ r.status }}</td>
+                  <td>{{ r.issues_found }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+            <div class="text-center py-4"><small class="text-muted">No runs yet</small></div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card">
+        <div class="card-header"><h4 class="header-title mb-0">Recent open issues</h4></div>
+        <div class="card-body">
+          {% if issues %}
+            {% for i in issues %}
+              <div class="border-bottom py-2">
+                <span class="badge bg-{{ 'danger' if i.severity=='critical' else 'warning' if i.severity=='warning' else 'info' }}">{{ i.severity }}</span>
+                <span class="ms-2">{{ i.message }}</span>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="text-center py-4"><small class="text-muted">No open issues</small></div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,320 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Recommendations for {{ client.name }}</h2>
+        <div>
+            <form method="POST" action="{{ url_for('main.send_recommendations_email', client_id=client.id) }}" class="d-inline">
+                {{ csrf_token() }}
+                <input type="hidden" name="amount" value="{{ investment_amount }}">
+                <button type="submit" class="btn btn-primary">Send Email</button>
+            </form>
+            <a href="{{ url_for('clients.client_details', client_id=client.id) }}" class="btn btn-secondary">Back to Portfolio</a>
+        </div>
+    </div>
+
+    <!-- Portfolio Summary -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Current Portfolio Value</h5>
+                    <h3>₹{{ "%.2f"|format(total_value) }}</h3>
+                </div>
+            </div>
+        </div>
+        {% if investment_amount > 0 %}
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">New Investment</h5>
+                    <h3>₹{{ "%.2f"|format(investment_amount) }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Value After Investment</h5>
+                    <h3>₹{{ "%.2f"|format(total_value_after_investment) }}</h3>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Asset Allocation Recommendations -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Asset Allocation Recommendations</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Asset Class</th>
+                            <th>Current Value</th>
+                            <th>Current %</th>
+                            <th>Target %</th>
+                            <th>Difference</th>
+                            <th>Action</th>
+                            <th>New Weight</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rec in recommendations if rec.type == 'asset' %}
+                        <tr data-type="asset">
+                            <td>{{ rec.asset_class }}</td>
+                            <td>₹{{ "%.2f"|format(rec.current_value) }}</td>
+                            <td>{{ "%.2f"|format(rec.current_allocation) }}%</td>
+                            <td>{{ "%.2f"|format(rec.target_allocation) }}%</td>
+                            <td>{{ "%.2f"|format(rec.difference) }}%</td>
+                            <td class="{{ 'text-success' if rec.action == 'BUY' else 'text-danger' }}">{{ rec.action }}</td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm weight-input" 
+                                       data-type="asset" 
+                                       data-id="{{ rec.asset_class }}"
+                                       value="{{ rec.target_allocation }}"
+                                       step="0.01" min="0" max="100">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock Recommendations -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Stock Recommendations</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Name</th>
+                            <th>Current Price</th>
+                            <th>Current Quantity</th>
+                            <th>Current Value</th>
+                            <th>Current %</th>
+                            <th>Target %</th>
+                            <th>Action</th>
+                            <th>Quantity</th>
+                            <th>New Weight</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rec in recommendations if rec.type == 'stock' %}
+                        <tr data-type="stock" data-id="{{ rec.id }}">
+                            <td>{{ rec.symbol }}</td>
+                            <td>{{ rec.name }}</td>
+                            <td>₹{{ "%.2f"|format(rec.current_price) }}</td>
+                            <td>{{ rec.current_quantity }}</td>
+                            <td>₹{{ "%.2f"|format(rec.current_value) }}</td>
+                            <td>{{ "%.2f"|format(rec.current_allocation) }}%</td>
+                            <td>{{ "%.2f"|format(rec.target_allocation) }}%</td>
+                            <td class="{{ 'text-success' if rec.action == 'BUY' else 'text-danger' }}">{{ rec.action }}</td>
+                            <td>
+                                <input type="number" 
+                                       class="form-control form-control-sm quantity-input" 
+                                       data-type="stock" 
+                                       data-id="{{ rec.id }}"
+                                       data-current-quantity="{{ rec.current_quantity }}"
+                                       value="{{ rec.quantity if rec.action == 'BUY' else rec.current_quantity }}"
+                                       min="0"
+                                       step="1"
+                                       onclick="this.select()"
+                                       onfocus="this.select()"
+                                       onkeyup="updateQuantity(this)"
+                                       onchange="updateQuantity(this)">
+                            </td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm weight-input" 
+                                       data-type="stock" 
+                                       data-id="{{ rec.id }}"
+                                       value="{{ rec.target_allocation }}"
+                                       step="0.01" min="0" max="100">
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-info">
+                            <td colspan="4"><strong>Total</strong></td>
+                            <td id="totalCurrentValue">₹0.00</td>
+                            <td id="totalCurrentPercentage">0.00%</td>
+                            <td id="totalTargetPercentage">100.00%</td>
+                            <td></td>
+                            <td id="totalQuantity">0</td>
+                            <td id="totalNewWeight">100.00%</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Make these variables global so they can be accessed by all functions
+const totalValue = parseFloat('{{ total_value }}');
+const investmentAmount = parseFloat('{{ investment_amount }}');
+const totalValueAfterInvestment = totalValue + investmentAmount;
+
+function updateTotals() {
+    let totalCurrentValue = 0;
+    let totalCurrentPercentage = 0;
+    let totalTargetPercentage = 0;
+    let totalQuantity = 0;
+    let totalNewWeight = 0;
+
+    // Calculate totals from all rows
+    document.querySelectorAll('tr[data-type="stock"]').forEach(row => {
+        const currentValue = parseFloat(row.querySelector('td:nth-child(5)').textContent.replace('₹', '')) || 0;
+        const currentPercentage = parseFloat(row.querySelector('td:nth-child(6)').textContent) || 0;
+        const targetPercentage = parseFloat(row.querySelector('td:nth-child(7)').textContent) || 0;
+        const quantity = parseInt(row.querySelector('.quantity-input').value) || 0;
+        const newWeight = parseFloat(row.querySelector('.weight-input').value) || 0;
+
+        totalCurrentValue += currentValue;
+        totalCurrentPercentage += currentPercentage;
+        totalTargetPercentage += targetPercentage;
+        totalQuantity += quantity;
+        totalNewWeight += newWeight;
+    });
+
+    // Update totals row
+    document.getElementById('totalCurrentValue').textContent = '₹' + totalCurrentValue.toFixed(2);
+    document.getElementById('totalCurrentPercentage').textContent = totalCurrentPercentage.toFixed(2) + '%';
+    document.getElementById('totalTargetPercentage').textContent = totalTargetPercentage.toFixed(2) + '%';
+    document.getElementById('totalQuantity').textContent = totalQuantity;
+    document.getElementById('totalNewWeight').textContent = totalNewWeight.toFixed(2) + '%';
+}
+
+function updateQuantity(input) {
+    const row = input.closest('tr');
+    const currentPrice = parseFloat(row.querySelector('td:nth-child(3)').textContent.replace('₹', ''));
+    const quantity = parseInt(input.value) || 0;
+    const currentQuantity = parseInt(input.dataset.currentQuantity) || 0;
+    const value = quantity * currentPrice;
+    
+    // Calculate new weight based on total value after investment
+    // For SELL, calculate weight based on remaining value
+    let weight;
+    if (quantity < currentQuantity) {
+        // For SELL, weight should be based on the remaining value
+        const remainingValue = value;
+        weight = (remainingValue / totalValueAfterInvestment) * 100;
+    } else {
+        // For BUY, weight is based on the new total value
+        weight = (value / totalValueAfterInvestment) * 100;
+    }
+    
+    // Update weight input
+    const weightInput = row.querySelector('.weight-input');
+    if (weightInput) {
+        weightInput.value = weight.toFixed(2);
+    }
+
+    // Update action
+    const actionCell = row.querySelector('td:nth-child(8)');
+    if (quantity > currentQuantity) {
+        actionCell.textContent = 'BUY';
+        actionCell.className = 'text-success';
+    } else if (quantity < currentQuantity) {
+        actionCell.textContent = 'SELL';
+        actionCell.className = 'text-danger';
+    }
+
+    // Update current value and percentage
+    const currentValueCell = row.querySelector('td:nth-child(5)');
+    if (currentValueCell) {
+        // For SELL, show negative value
+        const displayValue = quantity < currentQuantity ? -value : value;
+        currentValueCell.textContent = '₹' + displayValue.toFixed(2);
+    }
+
+    const currentPercentageCell = row.querySelector('td:nth-child(6)');
+    if (currentPercentageCell) {
+        currentPercentageCell.textContent = weight.toFixed(2) + '%';
+    }
+
+    // Update totals
+    updateTotals();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    function updateRecommendations() {
+        const weightInputs = document.querySelectorAll('.weight-input');
+        const quantityInputs = document.querySelectorAll('.quantity-input');
+        
+        // Update quantities based on weights
+        weightInputs.forEach(input => {
+            if (input.dataset.type === 'stock') {
+                const row = input.closest('tr');
+                const currentPrice = parseFloat(row.querySelector('td:nth-child(3)').textContent.replace('₹', ''));
+                const weight = parseFloat(input.value) || 0;
+                const targetValue = (totalValueAfterInvestment * weight / 100);
+                const quantity = Math.round(targetValue / currentPrice);
+                
+                // Find corresponding quantity input
+                const quantityInput = row.querySelector('.quantity-input');
+                if (quantityInput) {
+                    const currentQuantity = parseInt(quantityInput.dataset.currentQuantity) || 0;
+                    if (row.querySelector('td:nth-child(8)').textContent === 'BUY') {
+                        quantityInput.value = quantity;
+                    } else {
+                        quantityInput.value = currentQuantity;
+                    }
+                }
+            }
+        });
+
+        // Update weights based on quantities
+        quantityInputs.forEach(input => {
+            updateQuantity(input);
+        });
+
+        // Update asset class weights
+        const assetRows = document.querySelectorAll('tr[data-type="asset"]');
+        assetRows.forEach(row => {
+            const weightInput = row.querySelector('.weight-input');
+            if (weightInput) {
+                const weight = parseFloat(weightInput.value) || 0;
+                const value = (totalValueAfterInvestment * weight / 100);
+                const difference = value - parseFloat(row.querySelector('td:nth-child(2)').textContent.replace('₹', ''));
+                row.querySelector('td:nth-child(5)').textContent = difference.toFixed(2) + '%';
+                row.querySelector('td:nth-child(6)').textContent = difference > 0 ? 'BUY' : 'SELL';
+                row.querySelector('td:nth-child(6)').className = difference > 0 ? 'text-success' : 'text-danger';
+            }
+        });
+
+        // Update totals
+        updateTotals();
+    }
+
+    // Add event listeners for weight inputs
+    document.querySelectorAll('.weight-input').forEach(input => {
+        input.addEventListener('input', function(e) {
+            e.stopPropagation();
+            updateRecommendations();
+        });
+        
+        input.addEventListener('change', function(e) {
+            e.stopPropagation();
+            updateRecommendations();
+        });
+    });
+
+    // Initial update
+    updateRecommendations();
+});
+</script>
+{% endblock %} 

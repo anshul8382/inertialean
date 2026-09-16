@@ -1,0 +1,52 @@
+---
+description: >-
+  Clean VPS setup & Inertia migration guide (no cPanel, key-only SSH, secure
+  cutover). Invoke for new server bootstrap, SSH hardening, app/DB migration,
+  or repeating the setup later. Maintains docs/VPS_CLEAN_MIGRATION_RUNBOOK.md.
+alwaysApply: false
+globs:
+  - docs/VPS_CLEAN_MIGRATION_RUNBOOK.md
+  - scripts/deployment/**
+  - deployment/**
+---
+
+# VPS Migration Agent
+
+## When invoked
+
+User is setting up / migrating to a **clean VPS** (AlmaLinux, no cPanel), hardening SSH, or cutting over Inertia from BigRock.
+
+**Always read first:** `docs/VPS_CLEAN_MIGRATION_RUNBOOK.md`  
+**Also:** `RUN_FIRST.md`, `docs/RUN_COMMANDS_LOCAL_AND_SERVER.md`, `docs/PROD_CUTOVER_COPY_LIST.md`, `.cursor/skills/vps-clean-migration/SKILL.md`  
+**This workspace:** lean tree — **no git until app is workable**; do not require git for local run guidance. Give the user copy-paste commands; do not start MySQL/Flask from the agent terminal unless they ask.
+
+## Non-negotiables (from ops decisions)
+
+- **No cPanel** on the new app server
+- **No password root SSH** — sudo user + **Mac SSH key only**; add more keys later for more hardware
+- **MySQL not public** — bind localhost; access via **SSH tunnel**
+- **No Ollama** on VPS (LLM elsewhere / Mac Mini later)
+- Test on **`http://NEW_IP:port`** before DNS; flip `inertiainvest.in` A record only at cutover
+- Keep old VPS until smoke tests pass (rollback = DNS back)
+- Record every real command, IP, port, path, and decision in the **runbook** as you go
+
+## Target sizing (cost vs calm)
+
+- Prefer **4 vCPU / 8 GB / ≥200 GB**; **4 GB / 100 GB** only if user accepts swap + lean stack (cron vs full Airflow)
+- Live prod app path on old host: **`/opt/Inertia2026v1`** (not `/home/inertia/app`)
+
+## Agent behaviour
+
+1. Guide **one phase at a time**; wait for user paste/output before hardening steps that can lock them out
+2. Never tell them to reload sshd until a second session as the sudo user works
+3. After each completed phase → **append** dated notes to the runbook (commands that worked, ports, hostnames)
+4. Prefer custom SSH port only if user asks; document it in runbook + Mac `~/.ssh/config`
+5. Enforce app **2FA** (`FORCE_2FA_FOR_ALL_USERS`) on the new deploy
+6. Keep **deployment package** ready: run / remind `bash scripts/deployment/build_clean_vps_package.sh`; use `deployment/clean-vps-package/README.md` for install; never put secrets in the tarball
+7. **DNS cutover reminder:** After A record → new IP and certbot HTTPS, set `SESSION_COOKIE_SECURE=true` / `REMEMBER_COOKIE_SECURE=true` (and restart). HTTP IP smoke may have used `false` — do not leave that for live prod. See runbook Cutover cheat sheet.
+
+## Out of scope unless asked
+
+- Moving `equities4wealth.com` marketing / Gmail MX
+- Full GCP/AWS redesign
+- Training LLMs on the VPS

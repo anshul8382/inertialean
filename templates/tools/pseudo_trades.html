@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block title %}Pseudo trades{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="mb-3">
+    <a href="{{ back_hub }}" class="small text-muted text-decoration-none">← Investment Intelligence</a>
+    <h2 class="mt-1 mb-0"><i class="fas fa-flask text-primary"></i> Pseudo trades</h2>
+    <p class="text-muted mb-0 small">
+      Model one or more <strong>hypothetical sells</strong> with FIFO-matched STCG/LTCG — nothing is written to transactions or holdings.
+      Use <strong>Add trade</strong> for multiple rows; your entries stay after you calculate so you can edit or remove rows.
+      Debt / fixed-income (<code>debt</code>, <code>debt_mf</code>, <code>debt_etf</code>, <code>listed_bonds</code>, <code>unlisted_bonds</code>) and Bharat Bond–style tickers (e.g. <code>EBBETF*</code>) are excluded.
+    </p>
+  </div>
+
+  {% if error %}
+  <div class="alert alert-danger">{{ error }}</div>
+  {% endif %}
+
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-2"><strong>1 · Client</strong></div>
+    <div class="card-body">
+      <form method="get" action="{{ url_for('pseudo_trades.pseudo_trades_page') }}" class="row g-2 align-items-end">
+        <div class="col-md-6">
+          <label class="form-label small mb-0" for="pickClient">Client</label>
+          <select class="form-select" id="pickClient" name="client_id" required>
+            <option value="">— Select —</option>
+            {% for c in clients %}
+            <option value="{{ c.id }}" {% if selected_client_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-auto">
+          <button type="submit" class="btn btn-outline-primary">Load holdings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% if selected_client_id and holdings %}
+  <div class="card shadow-sm mb-4">
+    <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <strong>2 · Hypothetical sells</strong>
+      <button type="button" class="btn btn-sm btn-outline-success" id="pseudoAddRow" title="Add another trade row">
+        <i class="fas fa-plus"></i> Add trade
+      </button>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{{ url_for('pseudo_trades.pseudo_trades_page') }}" id="pseudoTradesForm" class="mb-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <input type="hidden" name="action" value="calculate"/>
+        <input type="hidden" name="client_id" value="{{ selected_client_id }}"/>
+        <input type="hidden" name="trades_json" id="pseudoTradesJson" value=""/>
+
+        <div id="pseudoTradeRows"></div>
+
+        <div class="mt-3">
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-calculator"></i> Calculate STCG / LTCG (all rows)
+          </button>
+        </div>
+      </form>
+      <p class="text-muted small mb-0 mt-3">
+        Same FIFO engine as the capital gains report through each row’s sell date. FY “before / after” is per row when dates differ.
+      </p>
+    </div>
+  </div>
+  {% elif selected_client_id %}
+  <div class="alert alert-secondary">
+    {% if raw_holdings_count and raw_holdings_count > 0 %}
+    This client has holdings, but none are eligible here: debt / fixed-income (tax rulesets <code>debt</code>, <code>debt_mf</code>, <code>debt_etf</code>, <code>listed_bonds</code>, <code>unlisted_bonds</code>; plus Bharat Bond–style tickers) are excluded from STCG/LTCG in this tool.
+    {% else %}
+    No holdings with quantity &gt; 0 for this client.
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if row_results %}
+  <div class="mb-4">
+    <h3 class="h5 mb-3"><i class="fas fa-chart-bar text-success"></i> Results</h3>
+
+    {% if multi_trade_summary %}
+    {% set mt = multi_trade_summary %}
+    <div class="card shadow-sm border-primary mb-4">
+      <div class="card-header bg-primary text-white py-2">
+        <strong><i class="fas fa-layer-group me-1"></i> All trades combined</strong>
+        <span class="small fw-normal ms-2">{{ mt.fy_label }} · {{ mt.trade_count }} successful row(s) · earliest sell {{ mt.earliest_sell_date }}</span>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th></th>
+                <th class="text-end">STCG ₹</th>
+                <th class="text-end">LTCG ₹</th>
+                <th class="text-end">Total gain ₹</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Before <span class="text-muted small">(FY realised prior to earliest sell date above)</span></td>
+                <td class="text-end">{{ "%.2f"|format(mt.before_stcg) }}</td>
+                <td class="text-end">{{ "%.2f"|format(mt.before_ltcg) }}</td>
+                <td class="text-end">{{ "%.2f"|format(mt.before_total) }}</td>
+              </tr>
+              <tr>
+                <td>Hypothetical <span class="text-muted small">(sum of all successful trades)</span></td>
+                <td class="text-end text-danger">{{ "%.2f"|format(mt.hypo_stcg) }}</td>
+                <td class="text-end text-success">{{ "%.2f"|format(mt.hypo_ltcg) }}</td>
+                <td class="text-end">{{ "%.2f"|format(mt.hypo_total) }}</td>
+              </tr>
+              <tr class="table-secondary fw-semibold">
+                <td>After <span class="text-muted small fw-normal">(before + combined hypothetical)</span></td>
+                <td class="text-end">{{ "%.2f"|format(mt.after_stcg) }}</td>
+                <td class="text-end">{{ "%.2f"|format(mt.after_ltcg) }}</td>
+                <td class="text-end">{{ "%.2f"|format(mt.after_total) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small text-muted mb-0 mt-2">{{ mt.note }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {% for rr in row_results %}
+    <div class="card shadow-sm mb-3 {% if rr.ok %}border-success{% else %}border-warning{% endif %}">
+      <div class="card-header py-2 {% if rr.ok %}bg-success text-white{% else %}bg-warning text-dark{% endif %}">
+        <strong>Trade {{ rr.index + 1 }}</strong>
+        {% if rr.ok %}
+        <span class="ms-2 small fw-normal">{{ rr.result.security_symbol or ('#' ~ rr.result.security_id) }} · {{ rr.result.quantity }} @ ₹{{ "%.4f"|format(rr.result.sell_price_per_unit) }} on {{ rr.result.sell_date }}</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if not rr.ok %}
+        <div class="alert alert-warning mb-0">{{ rr.error }}</div>
+        {% else %}
+        {% set result = rr.result %}
+        <p class="mb-2">
+          <span class="badge bg-danger me-1">STCG ₹{{ "%.2f"|format(result.total_stcg) }}</span>
+          <span class="badge bg-success me-1">LTCG ₹{{ "%.2f"|format(result.total_ltcg) }}</span>
+          <span class="badge bg-dark">Total gain ₹{{ "%.2f"|format(result.total_gain) }}</span>
+          <span class="text-muted small ms-2">Sale value ₹{{ "%.2f"|format(result.sale_value) }}</span>
+        </p>
+        {% if result.fy_before_after %}
+        {% set fy = result.fy_before_after %}
+        <div class="table-responsive mb-3">
+          <table class="table table-sm table-bordered align-middle mb-0">
+            <caption class="text-muted small caption-top">
+              <strong>{{ fy.fy_label }}</strong> ({{ fy.fy_start }} – {{ fy.fy_end }})
+            </caption>
+            <thead class="table-light">
+              <tr>
+                <th></th>
+                <th class="text-end">STCG ₹</th>
+                <th class="text-end">LTCG ₹</th>
+                <th class="text-end">Total gain ₹</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Before hypothetical</td>
+                <td class="text-end">{{ "%.2f"|format(fy.before_stcg) }}</td>
+                <td class="text-end">{{ "%.2f"|format(fy.before_ltcg) }}</td>
+                <td class="text-end">{{ "%.2f"|format(fy.before_total_gain) }}</td>
+              </tr>
+              <tr>
+                <td>This hypothetical trade</td>
+                <td class="text-end text-danger">{{ "%.2f"|format(fy.hypo_stcg) }}</td>
+                <td class="text-end text-success">{{ "%.2f"|format(fy.hypo_ltcg) }}</td>
+                <td class="text-end">{{ "%.2f"|format(fy.hypo_total_gain) }}</td>
+              </tr>
+              <tr class="table-secondary fw-semibold">
+                <td>After</td>
+                <td class="text-end">{{ "%.2f"|format(fy.after_stcg) }}</td>
+                <td class="text-end">{{ "%.2f"|format(fy.after_ltcg) }}</td>
+                <td class="text-end">{{ "%.2f"|format(fy.after_total_gain) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small text-muted mb-3">{{ fy.note }}</p>
+        {% endif %}
+        {% if result.ltcg_rule_label %}
+        <p class="small text-muted mb-3">{{ result.ltcg_rule_label }}</p>
+        {% endif %}
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th>#</th>
+                <th>Matched buy</th>
+                <th class="text-end">Qty</th>
+                <th class="text-end">Cost basis ₹</th>
+                <th class="text-end">Sale ₹</th>
+                <th class="text-end">Gain ₹</th>
+                <th>Type</th>
+                <th class="text-end">Days</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for s in result.fifo_slices %}
+              <tr>
+                <td>{{ s.slice }}</td>
+                <td>{{ s.matched_acquisition_date }}</td>
+                <td class="text-end">{{ "%.4f"|format(s.quantity) }}</td>
+                <td class="text-end">{{ "%.2f"|format(s.cost_basis) }}</td>
+                <td class="text-end">{{ "%.2f"|format(s.sale_value) }}</td>
+                <td class="text-end">{{ "%.2f"|format(s.gain) }}</td>
+                <td>{{ s.gain_type }}</td>
+                <td class="text-end">{{ s.holding_days }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+            {% set st = result.stcg_totals|default({}) %}
+            {% set lt = result.ltcg_totals|default({}) %}
+            <tfoot class="table-light">
+              <tr class="fw-semibold">
+                <td colspan="2" class="text-end text-danger">STCG total</td>
+                <td class="text-end">{{ "%.4f"|format(st.quantity|default(0)) }}</td>
+                <td class="text-end">{{ "%.2f"|format(st.cost_basis|default(0)) }}</td>
+                <td class="text-end">{{ "%.2f"|format(st.sale_value|default(0)) }}</td>
+                <td class="text-end">{{ "%.2f"|format(st.gain|default(0)) }}</td>
+                <td>STCG</td>
+                <td class="text-end">—</td>
+              </tr>
+              <tr class="fw-semibold">
+                <td colspan="2" class="text-end text-success">LTCG total</td>
+                <td class="text-end">{{ "%.4f"|format(lt.quantity|default(0)) }}</td>
+                <td class="text-end">{{ "%.2f"|format(lt.cost_basis|default(0)) }}</td>
+                <td class="text-end">{{ "%.2f"|format(lt.sale_value|default(0)) }}</td>
+                <td class="text-end">{{ "%.2f"|format(lt.gain|default(0)) }}</td>
+                <td>LTCG</td>
+                <td class="text-end">—</td>
+              </tr>
+              <tr class="fw-bold border-top border-2">
+                <td colspan="2" class="text-end">All slices</td>
+                <td class="text-end">{{ "%.4f"|format(result.quantity) }}</td>
+                <td class="text-end">{{ "%.2f"|format((st.cost_basis|default(0)) + (lt.cost_basis|default(0))) }}</td>
+                <td class="text-end">{{ "%.2f"|format(result.sale_value) }}</td>
+                <td class="text-end">{{ "%.2f"|format(result.total_gain) }}</td>
+                <td colspan="2" class="text-muted small">Combined</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <p class="small text-muted mt-3 mb-0">{{ result.disclaimer }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% if selected_client_id and holdings %}
+{# Custom app tojson returns a str; without |safe Jinja escapes " to &quot; and JSON.parse breaks. #}
+<script type="application/json" id="pseudoHoldingsData">{{ holdings_options|tojson_safe }}</script>
+<script type="application/json" id="pseudoInitialTrades">{{ trade_rows|tojson_safe }}</script>
+<script>
+(function () {
+  const defaultSellDate = '{{ today_iso }}';
+  let holdings = [];
+  let initialTrades = [];
+  try {
+    holdings = JSON.parse((document.getElementById('pseudoHoldingsData').textContent || '[]').trim());
+    if (!Array.isArray(holdings)) holdings = [];
+  } catch (e) {
+    console.error('pseudo-trades: holdings JSON', e);
+    holdings = [];
+  }
+  try {
+    initialTrades = JSON.parse((document.getElementById('pseudoInitialTrades').textContent || '[]').trim());
+    if (!Array.isArray(initialTrades)) initialTrades = [];
+  } catch (e) {
+    console.error('pseudo-trades: initial trades JSON', e);
+    initialTrades = [];
+  }
+  const mount = document.getElementById('pseudoTradeRows');
+  const form = document.getElementById('pseudoTradesForm');
+  const jsonInput = document.getElementById('pseudoTradesJson');
+  const addBtn = document.getElementById('pseudoAddRow');
+  if (!mount || !form || !jsonInput || !addBtn) return;
+
+  function buildSecuritySelect(value) {
+    const sel = document.createElement('select');
+    sel.className = 'form-select form-select-sm pseudo-sec-sel';
+    sel.innerHTML = '<option value="">— Security —</option>';
+    holdings.forEach(function (h) {
+      const o = document.createElement('option');
+      o.value = String(h.security_id);
+      o.textContent = h.label;
+      if (h.default_price != null) o.dataset.price = String(h.default_price);
+      if (String(h.security_id) === String(value || '')) o.selected = true;
+      sel.appendChild(o);
+    });
+    return sel;
+  }
+
+  function wireRow(rowEl) {
+    const sel = rowEl.querySelector('.pseudo-sec-sel');
+    const priceInp = rowEl.querySelector('.pseudo-price-inp');
+    if (!sel || !priceInp) return;
+    sel.addEventListener('change', function () {
+      const opt = sel.options[sel.selectedIndex];
+      const p = opt && opt.dataset && opt.dataset.price;
+      if (p !== undefined && p !== '') priceInp.value = p;
+    });
+    const rm = rowEl.querySelector('.pseudo-remove-row');
+    if (rm) rm.addEventListener('click', function () {
+      const all = mount.querySelectorAll('.pseudo-trade-row');
+      if (all.length <= 1) {
+        sel.value = '';
+        const q = rowEl.querySelector('.pseudo-qty-inp');
+        if (q) q.value = '';
+        priceInp.value = '';
+        return;
+      }
+      rowEl.remove();
+      refreshRowLabels();
+    });
+  }
+
+  function addRow(data) {
+    const d = data || { security_id: '', quantity: '', price: '', sell_date: defaultSellDate };
+    const row = document.createElement('div');
+    row.className = 'pseudo-trade-row border rounded p-3 mb-2 bg-body-secondary bg-opacity-25';
+    row.innerHTML =
+      '<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">' +
+        '<span class="small text-muted fw-semibold pseudo-row-label">Trade</span>' +
+        '<button type="button" class="btn btn-sm btn-outline-danger pseudo-remove-row">Remove</button>' +
+      '</div>' +
+      '<div class="row g-2 align-items-end">' +
+        '<div class="col-lg-4 col-md-6 pseudo-sec-wrap"></div>' +
+        '<div class="col-lg-2 col-md-3">' +
+          '<label class="form-label small mb-0">Qty</label>' +
+          '<input type="text" class="form-control form-control-sm pseudo-qty-inp" placeholder="e.g. 10" value=""/>' +
+        '</div>' +
+        '<div class="col-lg-2 col-md-3">' +
+          '<label class="form-label small mb-0">Price ₹</label>' +
+          '<input type="text" class="form-control form-control-sm pseudo-price-inp" placeholder="Quote" value=""/>' +
+        '</div>' +
+        '<div class="col-lg-3 col-md-6">' +
+          '<label class="form-label small mb-0">Sell date</label>' +
+          '<input type="date" class="form-control form-control-sm pseudo-date-inp" value=""/>' +
+        '</div>' +
+      '</div>';
+    row.querySelector('.pseudo-sec-wrap').appendChild(buildSecuritySelect(d.security_id));
+    row.querySelector('.pseudo-qty-inp').value = d.quantity || '';
+    row.querySelector('.pseudo-price-inp').value = d.price || '';
+    row.querySelector('.pseudo-date-inp').value = d.sell_date || defaultSellDate;
+    mount.appendChild(row);
+    wireRow(row);
+    refreshRowLabels();
+    if (d.security_id && !String(d.price || '').trim() && row.querySelector('.pseudo-sec-sel')) {
+      row.querySelector('.pseudo-sec-sel').dispatchEvent(new Event('change'));
+    }
+  }
+
+  function refreshRowLabels() {
+    mount.querySelectorAll('.pseudo-trade-row').forEach(function (el, i) {
+      const lab = el.querySelector('.pseudo-row-label');
+      if (lab) lab.textContent = 'Trade ' + (i + 1);
+    });
+  }
+
+  function collectTrades() {
+    return Array.from(mount.querySelectorAll('.pseudo-trade-row')).map(function (row) {
+      const sel = row.querySelector('.pseudo-sec-sel');
+      const q = row.querySelector('.pseudo-qty-inp');
+      const p = row.querySelector('.pseudo-price-inp');
+      const d = row.querySelector('.pseudo-date-inp');
+      return {
+        security_id: sel ? sel.value : '',
+        quantity: q ? q.value.trim() : '',
+        price: p ? p.value.trim() : '',
+        sell_date: (d && d.value) ? d.value : defaultSellDate
+      };
+    });
+  }
+
+  (initialTrades.length ? initialTrades : [{ security_id: '', quantity: '', price: '', sell_date: defaultSellDate }]).forEach(addRow);
+
+  addBtn.addEventListener('click', function () {
+    const last = mount.querySelector('.pseudo-trade-row:last-child .pseudo-date-inp');
+    const sd = last && last.value ? last.value : defaultSellDate;
+    addRow({ security_id: '', quantity: '', price: '', sell_date: sd });
+  });
+
+  form.addEventListener('submit', function (e) {
+    try {
+      const rows = collectTrades();
+      jsonInput.value = JSON.stringify(rows);
+    } catch (err) {
+      e.preventDefault();
+      alert('Could not prepare trade data for submit. Please refresh the page. (' + (err && err.message ? err.message : err) + ')');
+    }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

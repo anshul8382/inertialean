@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% from "agreements/_billing_rates_widget.html" import billing_rates_widget %}
+
+{% block title %}Update Agreement Details{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1>Update Agreement Details</h1>
+            <p class="text-muted">
+                {% if client %}
+                    Client: <strong>{{ client.name }}</strong>
+                {% else %}
+                    Lead: <strong>{{ lead.name }}</strong>
+                {% endif %}
+            </p>
+        </div>
+        <a href="{{ url_for('agreements.view_agreement', agreement_id=agreement.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Agreement
+        </a>
+    </div>
+
+    <!-- Warning Alert -->
+    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+        <h5 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> Important Warning</h5>
+        <p class="mb-2">
+            <strong>Changes to agreement details will affect billing calculations!</strong>
+        </p>
+        <ul class="mb-0">
+            <li>Modifying <strong>Asset Types</strong> will recreate billing rate structures for the new asset types</li>
+            <li>Changing <strong>Advisory Model</strong> will affect how fees are calculated</li>
+            <li>Any existing billing rates for removed asset types will be deleted</li>
+        </ul>
+        <hr>
+        <p class="mb-0">
+            <i class="fas fa-info-circle"></i> Please review your changes carefully before saving.
+        </p>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8 mx-auto">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-edit"></i> Agreement Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="updateForm" enctype="multipart/form-data">
+                        {{ form.hidden_tag() }}
+                        
+                        <!-- Asset Types -->
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold">
+                                {{ form.asset_types.label }} <span class="text-danger">*</span>
+                                <i class="fas fa-info-circle text-muted" 
+                                   data-bs-toggle="tooltip" 
+                                   title="Changing asset types will update billing rate structures"></i>
+                            </label>
+                            {{ form.asset_types(class="form-control select2-multiple", multiple=True, size=10) }}
+                            {% if form.asset_types.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.asset_types.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">Hold Ctrl/Cmd to select multiple asset types</small>
+                        </div>
+
+                        <!-- Advisory Model -->
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold">
+                                {{ form.advisory_model.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.advisory_model(id="advisory_model", class="form-select") }}
+                            {% if form.advisory_model.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.advisory_model.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Billing calendar -->
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label fw-bold">{{ form.billing_frequency.label }}</label>
+                                    {{ form.billing_frequency(class="form-select") }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label fw-bold">{{ form.billing_start_date.label }}</label>
+                                    {{ form.billing_start_date(class="form-control", type="date") }}
+                                    <small class="text-muted">Changing this updates the billing schedule going forward.</small>
+                                    {% if form.billing_start_date.errors %}
+                                        <div class="text-danger">{% for e in form.billing_start_date.errors %}<small>{{ e }}</small>{% endfor %}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Billing period configuration -->
+                        <div class="row mb-4" id="billingPeriodConfig">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label class="form-label fw-bold">{{ form.period_start_month.label }}</label>
+                                    {{ form.period_start_month(class="form-select") }}
+                                    <small class="text-muted">First month of every billing cycle (e.g. April = Apr–Sep / Oct–Mar for half-yearly).</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6" id="valuationDateRuleGroup">
+                                <div class="form-group">
+                                    <label class="form-label fw-bold">{{ form.valuation_date_rule.label }}</label>
+                                    {{ form.valuation_date_rule(class="form-select") }}
+                                    <small class="text-muted">
+                                        <strong>Pre-paid:</strong> value before period starts ·
+                                        <strong>Post-paid:</strong> value after period ends
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Special Note -->
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold">{{ form.special_note.label }}</label>
+                            {{ form.special_note(class="form-control", rows=4) }}
+                            {% if form.special_note.errors %}
+                                <div class="text-danger">
+                                    {% for error in form.special_note.errors %}
+                                        <small>{{ error }}</small>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <small class="form-text text-muted">
+                              Human-readable notes only (client-specific clauses). Fee rates are auto-generated into
+                              <code>&lt;&lt;billing_fee_schedule&gt;&gt;</code> on save — do not duplicate rates here.
+                            </small>
+                        </div>
+
+                        {% if billing_fee_schedule_preview %}
+                        <div class="alert alert-secondary small mb-4">
+                          <strong>Current fee schedule text</strong> (used in agreement templates):
+                          <pre class="mb-0 mt-1" style="white-space: pre-wrap;">{{ billing_fee_schedule_preview }}</pre>
+                        </div>
+                        {% endif %}
+
+                        <!-- Status -->
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold">{{ form.status.label }}</label>
+                            {{ form.status(class="form-select") }}
+                        </div>
+
+                        <!-- Dates -->
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group mb-4">
+                                    <label class="form-label fw-bold">{{ form.sent_date.label }}</label>
+                                    {{ form.sent_date(class="form-control") }}
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group mb-4">
+                                    <label class="form-label fw-bold">{{ form.signed_date.label }}</label>
+                                    {{ form.signed_date(class="form-control") }}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Notes -->
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold">{{ form.notes.label }}</label>
+                            {{ form.notes(class="form-control", rows=3) }}
+                            <small class="form-text text-muted">Internal notes about this agreement</small>
+                        </div>
+
+                        <!-- Billing configuration -->
+                        {{ billing_rates_widget(form.asset_types.choices, existing_slabs if existing_slabs is defined else {}, fixed_fee_config if fixed_fee_config is defined else {}, billing_structure_config if billing_structure_config is defined else {}, transition_config if transition_config is defined else {}) }}
+
+                        <!-- Agreement PDF upload (optional) -->
+                        <div class="form-group mb-4">
+                            <label class="form-label fw-bold">Upload signed agreement PDF (optional)</label>
+                            <input type="file" name="agreement_pdf" class="form-control" accept="application/pdf">
+                            {% if agreement.generated_pdf_path %}
+                                <small class="form-text text-muted d-block mt-1">
+                                    Current PDF is on file. Uploading will replace it.
+                                </small>
+                            {% else %}
+                                <small class="form-text text-muted d-block mt-1">
+                                    Uploading here will attach the PDF to this agreement.
+                                </small>
+                            {% endif %}
+                        </div>
+
+                        <!-- Confirmation Checkbox -->
+                        <div class="form-check mb-4">
+                            <input class="form-check-input" type="checkbox" id="confirmChanges" required>
+                            <label class="form-check-label text-danger fw-bold" for="confirmChanges">
+                                I understand that these changes will affect billing calculations and rates
+                            </label>
+                        </div>
+
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary" id="submitBtn" disabled>
+                                <i class="fas fa-save"></i> Update Agreement Details
+                            </button>
+                            <a href="{{ url_for('agreements.view_agreement', agreement_id=agreement.id) }}" class="btn btn-secondary">
+                                <i class="fas fa-times"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Enable submit button only when confirmation is checked
+document.getElementById('confirmChanges').addEventListener('change', function() {
+    document.getElementById('submitBtn').disabled = !this.checked;
+});
+
+// Add confirmation dialog before submitting
+document.getElementById('updateForm').addEventListener('submit', function(e) {
+    if (!confirm('Are you sure you want to update these agreement details? This will affect billing rates and calculations.')) {
+        e.preventDefault();
+    }
+});
+
+// Initialize tooltips
+var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+    return new bootstrap.Tooltip(tooltipTriggerEl)
+});
+
+// Highlight changed fields
+document.querySelectorAll('select, input, textarea').forEach(function(element) {
+    element.addEventListener('change', function() {
+        this.classList.add('border-warning');
+        this.classList.add('border-2');
+    });
+});
+
+</script>
+
+{% endblock %}
+

@@ -1,0 +1,857 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+{# ── Mobile dashboard ── #}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Home' %}
+  {% include 'partials/mobile/app_header.html' %}
+
+  <section class="im-mobile-section">
+    <h2 class="im-mobile-section__title">Overview</h2>
+    <div class="im-metric-grid">
+      <a href="{{ url_for('main.clients') }}" class="im-metric-tile im-metric-tile--success">
+        <p class="im-metric-tile__label">Clients</p>
+        <p class="im-metric-tile__value">{{ clients|length }}</p>
+      </a>
+      <a href="{{ url_for('main.clients') }}" class="im-metric-tile im-metric-tile--accent">
+        <p class="im-metric-tile__label">Total AUA</p>
+        <p class="im-metric-tile__value">₹{{ "{:,.0f}".format(total_aua|float) if total_aua else "0" }}</p>
+      </a>
+      <a href="{{ url_for('main.clients') }}" class="im-metric-tile im-metric-tile--success">
+        <p class="im-metric-tile__label">Equity AUA</p>
+        <p class="im-metric-tile__value">₹{{ "{:,.0f}".format(equity_aua|float) if equity_aua else "0" }}</p>
+      </a>
+      <a href="{{ url_for('main.list_monthly_investments') }}" class="im-metric-tile im-metric-tile--warning">
+        <p class="im-metric-tile__label">Pending invoices</p>
+        <p class="im-metric-tile__value">₹{{ "{:,.0f}".format(pending_invoices_amount|float) if pending_invoices_amount else "0" }}</p>
+      </a>
+    </div>
+  </section>
+
+  <section class="im-mobile-section">
+    <h2 class="im-mobile-section__title">Reviews & ops</h2>
+    <div class="im-metric-grid">
+      <a href="{{ url_for('enhanced_review.period_analysis_v2') }}" class="im-metric-tile im-metric-tile--accent">
+        <p class="im-metric-tile__label">Pending reviews</p>
+        <p class="im-metric-tile__value">{{ pending_reviews_count|default(0) }}</p>
+      </a>
+      <a href="{{ url_for('enhanced_review.period_analysis_v2') }}" class="im-metric-tile im-metric-tile--danger">
+        <p class="im-metric-tile__label">Delayed reviews</p>
+        <p class="im-metric-tile__value">{{ delayed_reviews_count|default(0) }}</p>
+      </a>
+      {% if config.get('NAV_TASKS_ENABLED') %}
+      <a href="{{ url_for('tasks.list_tasks') }}" class="im-metric-tile im-metric-tile--wide im-metric-tile--accent">
+        <p class="im-metric-tile__label">Ops tasks</p>
+        <p class="im-metric-tile__value"><i class="fas fa-clipboard-list"></i> Open task list</p>
+        <p class="im-metric-tile__sub">Tap to manage assignments</p>
+      </a>
+      {% endif %}
+    </div>
+  </section>
+</div>
+
+<div class="im-desktop-only im-collapsed-on-mobile container-fluid">
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0" style="color: #495057;">Dashboard</h1>
+    </div>
+
+    <!-- Content Row -->
+    <div class="row">
+        <!-- Total Clients Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #4a7c59;">
+                <div class="card-body">
+                    <h5 class="card-title">Total Clients</h5>
+                    <p class="card-text display-4">{{ clients|length }}</p>
+                    <a href="{{ url_for('main.clients') }}" class="text-white">View Details <i class="fas fa-arrow-right"></i></a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total AUA Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #4a7c59;">
+                <div class="card-body">
+                    <h5 class="card-title">Total AUA</h5>
+                    <p class="card-text display-4">₹{{ "{:,.0f}".format(total_aua|float) if total_aua else "0" }}</p>
+                    <small class="text-muted">Assets Under Management</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Equity AUA Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #6bb06b;">
+                <div class="card-body">
+                    <h5 class="card-title">Equity AUA</h5>
+                    <p class="card-text display-4">₹{{ "{:,.0f}".format(equity_aua|float) if equity_aua else "0" }}</p>
+                    <small class="text-muted">Equity Assets Under Management</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Invoices Amount Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #ffc107;">
+                <div class="card-body">
+                    <h5 class="card-title">Pending Invoices Amount</h5>
+                    <p class="card-text display-4">₹{{ "{:,.0f}".format(pending_invoices_amount|float) if pending_invoices_amount else "0" }}</p>
+                    <small class="text-muted">Draft & Sent Invoices</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Second Row -->
+    <div class="row">
+        <!-- Pending Reviews Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #17a2b8;">
+                <div class="card-body">
+                    <h5 class="card-title">Pending Reviews</h5>
+                    <p class="card-text display-4">{{ pending_reviews_count|default(0) }}</p>
+                    <a href="{{ url_for('enhanced_review.period_analysis_v2') }}" class="text-white">View Details <i class="fas fa-arrow-right"></i></a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delayed Reviews Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card shadow h-100 py-2" style="border-left: 4px solid #dc3545;">
+                <div class="card-body">
+                    <h5 class="card-title">Delayed Reviews</h5>
+                    <p class="card-text display-4">{{ delayed_reviews_count|default(0) }}</p>
+                    <a href="{{ url_for('enhanced_review.period_analysis_v2') }}" class="text-white">View Details <i class="fas fa-arrow-right"></i></a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Practice Analytics Card (managers or users with permission) -->
+        {% if current_user.is_admin or current_user.is_manager or (has_route_access is defined and has_route_access('main.practice_analytics')) %}
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{{ url_for('main.practice_analytics') }}" class="text-decoration-none">
+                <div class="card shadow h-100 py-2 hover-shadow" style="border-left: 4px solid #6f42c1;">
+                    <div class="card-body">
+                        <h5 class="card-title text-dark"><i class="fas fa-chart-pie"></i> Practice Analytics</h5>
+                        <p class="card-text display-6 text-dark">{{ total_clients|default(0) }}</p>
+                        <small class="text-muted">Total clients</small>
+                        <span class="d-block mt-1 text-primary">View full dashboard <i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+
+    <!-- Alert System Row -->
+    <div class="row">
+        <!-- Total Alerts Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{{ url_for('alerts.list_alerts') }}" class="text-decoration-none">
+                <div class="card border-left-danger shadow h-100 py-2 hover-shadow">
+                    <div class="card-body">
+                        <h5 class="card-title text-dark">System Alerts</h5>
+                        <p class="card-text display-4 text-dark">{{ total_alerts }}</p>
+                        <small class="click-instruction">Click to view details</small>
+                        <span class="text-danger">View All Alerts <i class="fas fa-arrow-right"></i></span>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Critical Alerts Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{{ url_for('alerts.list_alerts', severity='critical') }}" class="text-decoration-none">
+                <div class="card border-left-danger shadow h-100 py-2 hover-shadow">
+                    <div class="card-body">
+                        <h5 class="card-title text-dark">Critical Alerts</h5>
+                        <p class="card-text display-4 text-danger">{{ critical_alerts }}</p>
+                        <small class="click-instruction">Click to view details</small>
+                        <span class="text-danger">View Critical <i class="fas fa-exclamation-triangle"></i></span>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Warning Alerts Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{{ url_for('alerts.list_alerts', severity='warning') }}" class="text-decoration-none">
+                <div class="card border-left-warning shadow h-100 py-2 hover-shadow">
+                    <div class="card-body">
+                        <h5 class="card-title text-dark">Warning Alerts</h5>
+                        <p class="card-text display-4 text-warning">{{ warning_alerts }}</p>
+                        <small class="click-instruction">Click to view details</small>
+                        <span class="text-warning">View Warnings <i class="fas fa-exclamation-circle"></i></span>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Lead Follow-up Alerts Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{{ url_for('leads.list_leads', status='follow_up') }}" class="text-decoration-none">
+                <div class="card border-left-warning shadow h-100 py-2 hover-shadow">
+                    <div class="card-body">
+                        <h5 class="card-title text-dark">Lead Follow-ups</h5>
+                        <p class="card-text display-4 text-dark">{{ lead_followup_alerts|length }}</p>
+                        <small class="click-instruction">Click to view details</small>
+                        <span class="text-primary">View Leads <i class="fas fa-user-plus"></i></span>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Alert Management Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <h5 class="card-title">Alert Management</h5>
+                    <p class="card-text">SLA Monitoring</p>
+                    <a href="{{ url_for('alerts.alert_dashboard') }}" class="text-white">Manage Alerts <i class="fas fa-cog"></i></a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Service Tickets Row -->
+    <div class="row">
+        <!-- Open Tickets Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{{ url_for('tickets.list_tickets', status='open') }}" class="text-decoration-none">
+                <div class="card border-left-primary shadow h-100 py-2 hover-shadow">
+                    <div class="card-body">
+                        <h5 class="card-title text-dark">Open Tickets</h5>
+                        <p class="card-text display-4 text-primary">{{ open_tickets|length if open_tickets else 0 }}</p>
+                        <small class="click-instruction">Click to view details</small>
+                        <span class="text-primary">View Tickets <i class="fas fa-ticket-alt"></i></span>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Critical Tickets Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <a href="{{ url_for('tickets.list_tickets', priority='critical') }}" class="text-decoration-none">
+                <div class="card border-left-danger shadow h-100 py-2 hover-shadow">
+                    <div class="card-body">
+                        <h5 class="card-title text-dark">Critical Tickets</h5>
+                        <p class="card-text display-4 text-danger">{{ critical_tickets }}</p>
+                        <small class="click-instruction">Click to view details</small>
+                        <span class="text-danger">View Critical <i class="fas fa-exclamation-triangle"></i></span>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Service Tickets Section -->
+        <div class="col-xl-6 col-md-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">Recent Service Tickets</h6>
+                    <a href="{{ url_for('tickets.list_tickets') }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-list"></i> View All
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if open_tickets %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Ticket #</th>
+                                    <th>Client</th>
+                                    <th>Title</th>
+                                    <th>Priority</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for ticket in open_tickets[:5] %}
+                                <tr>
+                                    <td><strong>{{ ticket.ticket_number }}</strong></td>
+                                    <td>{{ ticket.client.name }}</td>
+                                    <td>{{ ticket.title|truncate(30) }}</td>
+                                    <td>
+                                        <span class="badge {% if ticket.priority == 'critical' %}bg-danger{% elif ticket.priority == 'high' %}bg-warning{% elif ticket.priority == 'medium' %}bg-info{% else %}bg-secondary{% endif %}">
+                                            {{ ticket.priority|title }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if ticket.status == 'open' %}bg-primary{% elif ticket.status == 'in_progress' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                            {{ ticket.status|replace('_', ' ')|title }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('tickets.view_ticket', ticket_id=ticket.id) }}" class="btn btn-sm btn-info">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No open tickets.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row">
+        <div class="col-lg-3 col-md-6 mb-4">
+            <a href="{{ url_for('main.clients') }}" class="btn btn-block" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                <i class="fas fa-users"></i> Manage Clients
+            </a>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <a href="{{ url_for('main.securities') }}" class="btn btn-block" style="background-color: #a8e6a8; border-color: #a8e6a8; color: white;">
+                <i class="fas fa-chart-line"></i> Manage Stocks
+            </a>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <a href="{{ url_for('main.transactions') }}" class="btn btn-block" style="background-color: #4a7c59; border-color: #4a7c59; color: white;">
+                <i class="fas fa-exchange-alt"></i> Manage Transactions
+            </a>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <a href="{{ url_for('main.recommendations') }}" class="btn btn-warning btn-block">
+                <i class="fas fa-lightbulb"></i> Manage Recommendations
+            </a>
+        </div>
+    </div>
+
+    <!-- Alert Quick Actions -->
+    <div class="row">
+        <div class="col-lg-3 col-md-6 mb-4">
+            <a href="{{ url_for('alerts.alert_dashboard') }}" class="btn btn-danger btn-block">
+                <i class="fas fa-bell"></i> Alert Dashboard
+            </a>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <a href="{{ url_for('main.generate_alerts') }}" class="btn btn-block" style="background-color: #6bb06b; border-color: #6bb06b; color: white;">
+                <i class="fas fa-sync"></i> Generate Alerts
+            </a>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <a href="{{ url_for('alerts.list_alerts') }}" class="btn btn-danger btn-block">
+                <i class="fas fa-exclamation-triangle"></i> Critical Alerts
+            </a>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-4">
+            <a href="{{ url_for('alerts.list_alerts') }}" class="btn btn-warning btn-block">
+                <i class="fas fa-exclamation-circle"></i> Warning Alerts
+            </a>
+        </div>
+    </div>
+
+    <!-- Upcoming Meetings -->
+    <div class="row">
+        <div class="col-xl-6 col-md-12 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Upcoming Meetings</h6>
+                </div>
+                <div class="card-body">
+                    {% if upcoming_meetings %}
+                        {% for meeting in upcoming_meetings %}
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">{{ meeting.client.name }}</h6>
+                                    <small class="text-muted">{{ meeting.meeting_date.strftime('%Y-%m-%d %H:%M') }}</small>
+                                    <p class="small mb-0">{{ meeting.notes }}</p>
+                                </div>
+                                {% if meeting.client %}
+                                    <a href="{{ url_for('clients.client_details', client_id=meeting.client.id) }}" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                {% elif meeting.lead and meeting.lead.id %}
+                                    <a href="{{ url_for('leads.view_lead', lead_id=meeting.lead.id) }}" class="btn btn-sm btn-secondary">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No upcoming meetings.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Investment Workflow Alerts -->
+        <div class="col-xl-6 col-md-12 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-info">Investment Workflow Alerts</h6>
+                    <a href="{{ url_for('main.list_monthly_investments') }}" class="btn btn-info btn-sm">
+                        <i class="fas fa-calendar-week"></i> Monthly investments
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if investment_workflow_alerts %}
+                        {% for alert in investment_workflow_alerts %}
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">{{ alert.title }}</h6>
+                                    <small class="text-muted">{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</small>
+                                    <p class="small mb-0">{{ alert.description|truncate(100) }}</p>
+                                </div>
+                                <span class="badge badge-{{ 'danger' if alert.severity == 'critical' else 'warning' if alert.severity == 'warning' else 'info' }}">
+                                    {{ alert.severity|title }}
+                                </span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted">No investment workflow alerts.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lead Follow-up Alerts -->
+    {% if lead_followup_alerts %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-warning">Lead Follow-up Alerts</h6>
+                    <a href="{{ url_for('leads.list_leads') }}" class="btn btn-warning btn-sm">
+                        <i class="fas fa-list"></i> View All Leads
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>Lead</th>
+                                    <th>Follow-up Date</th>
+                                    <th>Notes</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in lead_followup_alerts %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ alert.title }}</strong>
+                                        {% if alert.lead and alert.lead.name %}
+                                        <br><small class="text-muted">{{ alert.lead.name }} - {{ alert.lead.phone or 'No phone' }}</small>
+                                        {% else %}
+                                        <br><small class="text-muted">Lead not found</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if alert.followup_date %}
+                                            {{ alert.followup_date.strftime('%Y-%m-%d %H:%M') }}
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ alert.description|truncate(100) }}</td>
+                                    <td>
+                                        <span class="badge badge-{{ 'danger' if alert.severity == 'critical' else 'warning' if alert.severity == 'warning' else 'info' }}">
+                                            {{ alert.severity|title }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if alert.lead and alert.lead.id %}
+                                        <a href="{{ url_for('leads.view_lead', lead_id=alert.lead.id) }}" class="btn btn-primary btn-sm">
+                                            <i class="fas fa-eye"></i> View Lead
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">No lead</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Performance Alerts -->
+    {% if performance_alerts %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-danger">Performance Alerts - Underperforming Nifty</h6>
+                    <a href="{{ url_for('main.clients') }}" class="btn btn-danger btn-sm">
+                        <i class="fas fa-chart-line"></i> View Clients
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Alert Date</th>
+                                    <th>Performance Issue</th>
+                                    <th>Severity</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in performance_alerts %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ alert.title }}</strong>
+                                        {% if alert.client and alert.client.name %}
+                                        <br><small class="text-muted">{{ alert.client.name }} - {{ alert.client.email|display_email or 'No email' }}</small>
+                                        {% else %}
+                                        <br><small class="text-muted">Client not found</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>{{ alert.description|truncate(100) }}</td>
+                                    <td>
+                                        <span class="badge badge-{{ 'danger' if alert.severity == 'critical' else 'warning' if alert.severity == 'warning' else 'info' }}">
+                                            {{ alert.severity|title }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if alert.client and alert.client.id %}
+                                        <a href="{{ url_for('clients.client_details', client_id=alert.client.id) }}" class="btn btn-primary btn-sm">
+                                            <i class="fas fa-eye"></i> View Client
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">No client</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recommendation Alerts -->
+    {% if recommendation_alerts %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-warning">Recommendation Alerts - No Recent Recommendations</h6>
+                    <a href="{{ url_for('main.recommendations') }}" class="btn btn-warning btn-sm">
+                        <i class="fas fa-lightbulb"></i> View Recommendations
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Alert Date</th>
+                                    <th>Recommendation Issue</th>
+                                    <th>Severity</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in recommendation_alerts %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ alert.title }}</strong>
+                                        {% if alert.client and alert.client.name %}
+                                        <br><small class="text-muted">{{ alert.client.name }} - {{ alert.client.email|display_email or 'No email' }}</small>
+                                        {% else %}
+                                        <br><small class="text-muted">Client not found</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                    <td>{{ alert.description|truncate(100) }}</td>
+                                    <td>
+                                        <span class="badge badge-{{ 'danger' if alert.severity == 'critical' else 'warning' if alert.severity == 'warning' else 'info' }}">
+                                            {{ alert.severity|title }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if alert.client and alert.client.id %}
+                                        <a href="{{ url_for('clients.client_details', client_id=alert.client.id) }}" class="btn btn-primary btn-sm">
+                                            <i class="fas fa-eye"></i> View Client
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">No client</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Review Alerts -->
+    {% if review_overdue_alerts or review_upcoming_alerts %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-danger">Review Alerts</h6>
+                    <a href="{{ url_for('enhanced_review.period_analysis_v2') }}" class="btn btn-danger btn-sm">
+                        <i class="fas fa-history"></i> Period analysis (V2)
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if review_overdue_alerts %}
+                    <h6 class="font-weight-bold text-danger mb-3">
+                        <i class="fas fa-exclamation-triangle"></i> Overdue Reviews ({{ review_overdue_alerts|length }})
+                    </h6>
+                    <div class="table-responsive mb-4">
+                        <table class="table table-bordered table-hover" width="100%" cellspacing="0">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Alert Details</th>
+                                    <th>Days Overdue</th>
+                                    <th>Severity</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in review_overdue_alerts %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ alert.title.replace('Review Overdue: ', '') }}</strong>
+                                        {% if alert.client and alert.client.name %}
+                                        <br><small class="text-muted">{{ alert.client.name }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small>{{ alert.description|truncate(80) }}</small>
+                                    </td>
+                                    <td style="color: #333 !important;">
+                                        {% if alert.current_delay %}
+                                            <span class="badge bg-danger text-white">{{ (alert.current_delay / 24)|int }} days</span>
+                                        {% elif alert.description and 'days overdue' in alert.description %}
+                                            {% set desc_parts = alert.description.split('days overdue') %}
+                                            {% if desc_parts|length > 0 %}
+                                                {% set before_days = desc_parts[0] %}
+                                                {% set number_match = before_days.split('is ')[1] if 'is ' in before_days else '' %}
+                                                {% if number_match %}
+                                                    <span class="badge bg-danger text-white">{{ number_match.strip() }} days</span>
+                                                {% else %}
+                                                    <span class="text-dark">N/A</span>
+                                                {% endif %}
+                                            {% else %}
+                                                <span class="text-dark">N/A</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-dark">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td style="color: #333 !important;">
+                                        <span class="badge bg-{{ 'danger' if alert.severity == 'critical' else 'warning' if alert.severity == 'warning' else 'info' }} text-{{ 'white' if alert.severity == 'critical' or alert.severity == 'info' else 'dark' }}">
+                                            {{ alert.severity|title }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if alert.client and alert.client.id %}
+                                        <a href="{{ url_for('clients.client_details', client_id=alert.client.id) }}" class="btn btn-primary btn-sm">
+                                            <i class="fas fa-eye"></i> View Client
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">No client</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if review_upcoming_alerts %}
+                    <h6 class="font-weight-bold text-warning mb-3">
+                        <i class="fas fa-clock"></i> Upcoming Reviews ({{ review_upcoming_alerts|length }})
+                    </h6>
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover" width="100%" cellspacing="0">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Alert Details</th>
+                                    <th>Days Until Due</th>
+                                    <th>Severity</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for alert in review_upcoming_alerts %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ alert.title.replace('Review Due Soon: ', '') }}</strong>
+                                        {% if alert.client and alert.client.name %}
+                                        <br><small class="text-muted">{{ alert.client.name }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small>{{ alert.description|truncate(80) }}</small>
+                                    </td>
+                                    <td>
+                                        {% if alert.description %}
+                                            {% if 'due in ' in alert.description %}
+                                                {% set days_part = alert.description.split('due in ')[1] %}
+                                                {% set days = days_part.split(' days')[0] if ' days' in days_part else days_part.split(' day')[0] %}
+                                                <span class="badge badge-warning">{{ days }} day{{ 's' if days != '1' else '' }}</span>
+                                            {% else %}
+                                                <span class="text-muted">N/A</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-{{ 'danger' if alert.severity == 'critical' else 'warning' if alert.severity == 'warning' else 'info' }}">
+                                            {{ alert.severity|title }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if alert.client and alert.client.id %}
+                                        <a href="{{ url_for('clients.client_details', client_id=alert.client.id) }}" class="btn btn-primary btn-sm">
+                                            <i class="fas fa-eye"></i> View Client
+                                        </a>
+                                        {% else %}
+                                        <span class="text-muted">No client</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block styles %}
+<style>
+    .hover-shadow {
+        transition: all 0.3s ease;
+        cursor: pointer !important;
+    }
+    
+    .hover-shadow:hover {
+        transform: translateY(-5px) !important;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.25) !important;
+        border: 2px solid #007bff !important;
+    }
+    
+    .clickable-card {
+        text-decoration: none !important;
+        cursor: pointer !important;
+    }
+    
+    .clickable-card:hover .card-body {
+        background-color: rgba(0, 123, 255, 0.05) !important;
+    }
+    
+    /* Make sure the entire card area is clickable */
+    .hover-shadow a {
+        display: block;
+        width: 100%;
+        height: 100%;
+        text-decoration: none !important;
+        color: inherit !important;
+    }
+    
+    /* Make the click instruction text very visible */
+    .click-instruction {
+        background-color: #e3f2fd !important;
+        color: #1976d2 !important;
+        padding: 2px 6px !important;
+        border-radius: 3px !important;
+        font-size: 0.75rem !important;
+        font-weight: bold !important;
+        display: inline-block !important;
+        margin: 2px 0 !important;
+    }
+    
+    /* Ensure Review Alerts table cells have visible text */
+    .table tbody td {
+        color: #333 !important;
+    }
+    
+    /* Ensure badges have proper contrast */
+    .badge {
+        font-weight: bold;
+    }
+    
+    .badge.bg-danger {
+        background-color: #dc3545 !important;
+        color: #ffffff !important;
+    }
+    
+    .badge.bg-warning {
+        background-color: #ffc107 !important;
+        color: #000000 !important;
+    }
+    
+    .badge.bg-info {
+        background-color: #17a2b8 !important;
+        color: #ffffff !important;
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Performance Chart
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: {{ performance_labels|tojson }},
+            datasets: [{
+                label: 'Portfolio Performance',
+                data: {{ performance_data|tojson }},
+                borderColor: 'rgb(75, 192, 192)',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+</script>
+{% endblock %} 

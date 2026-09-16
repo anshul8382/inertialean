@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Alert Orchestrator{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="page-title-box">
+        <div class="page-title-right">
+          <ol class="breadcrumb m-0">
+            <li class="breadcrumb-item"><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('agents_dashboard.dashboard') }}">Agents</a></li>
+            <li class="breadcrumb-item active">Orchestrator</li>
+          </ol>
+        </div>
+        <h4 class="page-title"><i class="fas fa-project-diagram me-2"></i>Alert Orchestrator</h4>
+      </div>
+    </div>
+  </div>
+
+  <div class="row mb-3">
+    <div class="col-md-4">
+      <div class="card widget-flat border-info border-start border-3">
+        <div class="card-body">
+          <div class="float-end"><i class="fas fa-link text-info fa-2x"></i></div>
+          <h5 class="text-muted fw-normal mt-0">Open issues (unlinked)</h5>
+          <h3 class="mt-3 mb-1 text-info">{{ unlinked_count }}</h3>
+          <small class="text-muted">Issues with no orchestrator alert yet</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card widget-flat border-success border-start border-3">
+        <div class="card-body">
+          <div class="float-end"><i class="fas fa-history text-success fa-2x"></i></div>
+          <h5 class="text-muted fw-normal mt-0">Last run</h5>
+          <h6 class="mt-3 mb-1">
+            {% if last_run %}{{ last_run.started_at.strftime('%b %d, %H:%M') }}{% else %}Never{% endif %}
+          </h6>
+          <small class="text-muted">{% if last_run %}{{ last_run.status }}{% endif %}</small>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card widget-flat border-primary border-start border-3">
+        <div class="card-body">
+          <div class="float-end"><i class="fas fa-play text-primary fa-2x"></i></div>
+          <h5 class="text-muted fw-normal mt-0">Run orchestrator</h5>
+          <div class="mt-3">
+            <form action="{{ url_for('orchestrator.run_orchestrator') }}" method="POST">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-primary" type="submit" {% if not alerts_available %}disabled{% endif %}>
+                <i class="fas fa-bolt me-1"></i> Run now
+              </button>
+            </form>
+          </div>
+          {% if not alerts_available %}
+          <small class="text-danger d-block mt-2">Alert system not available</small>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-header">
+          <h4 class="header-title mb-0">Clients with open issues</h4>
+        </div>
+        <div class="card-body p-0">
+          {% if open_clients %}
+          <div class="table-responsive">
+            <table class="table table-hover mb-0">
+              <thead>
+                <tr>
+                  <th>Client</th>
+                  <th>Issues</th>
+                  <th>Critical</th>
+                  <th>Unlinked</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in open_clients %}
+                <tr>
+                  <td>{{ row.client_name }}</td>
+                  <td><span class="badge bg-secondary">{{ row.issue_count }}</span></td>
+                  <td>
+                    <span class="badge bg-{{ 'danger' if row.critical_count and row.critical_count > 0 else 'light text-dark' }}">
+                      {{ row.critical_count or 0 }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="badge bg-{{ 'info' if row.unlinked_count and row.unlinked_count > 0 else 'light text-dark' }}">
+                      {{ row.unlinked_count or 0 }}
+                    </span>
+                  </td>
+                  <td class="text-end">
+                    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('orchestrator.client_detail', client_id=row.client_id) }}">
+                      View
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="text-center py-5">
+            <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+            <h5>No open issues</h5>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-5">
+      <div class="card">
+        <div class="card-header">
+          <h4 class="header-title mb-0">Recent orchestrated alerts (7d)</h4>
+        </div>
+        <div class="card-body p-0">
+          {% if recent_alerts %}
+            {% for a in recent_alerts %}
+            <div class="border-bottom p-3">
+              <div class="d-flex justify-content-between">
+                <div>
+                  <strong>#{{ a.id }}</strong> {{ a.title }}
+                  <div class="text-muted small">{{ a.created_at.strftime('%b %d, %H:%M') if a.created_at else '' }}</div>
+                </div>
+                <span class="badge bg-{{ 'danger' if a.severity=='critical' else 'warning' if a.severity=='warning' else 'info' }}">{{ a.severity }}</span>
+              </div>
+              <div class="mt-2">
+                <a class="btn btn-sm btn-outline-primary" href="{{ url_for('orchestrator.client_detail', client_id=a.client_id) }}">Client summary</a>
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('alerts.view_alert', alert_id=a.id) }}">View alert</a>
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#fb{{ a.id }}">
+                  Give feedback
+                </button>
+              </div>
+              <div class="collapse mt-2" id="fb{{ a.id }}">
+                <form action="{{ url_for('orchestrator.submit_feedback') }}" method="POST">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="alert_id" value="{{ a.id }}">
+                  <input type="hidden" name="client_id" value="{{ a.client_id }}">
+                  <input type="hidden" name="logic_documentation" value="{{ a.description|e }}">
+                  <div class="mb-2">
+                    <select class="form-select form-select-sm" name="feedback_type" required>
+                      <option value="">Select feedback type</option>
+                      <option value="useful">Useful</option>
+                      <option value="false_positive">False positive</option>
+                      <option value="logic_incorrect">Logic incorrect</option>
+                      <option value="should_have_alerted">Should have alerted (missed)</option>
+                    </select>
+                  </div>
+                  <div class="mb-2">
+                    <textarea class="form-control form-control-sm" name="feedback_text" rows="2" placeholder="What was right/wrong?"></textarea>
+                  </div>
+                  <div class="mb-2">
+                    <textarea class="form-control form-control-sm" name="suggested_improvement" rows="2" placeholder="How should we improve the logic?"></textarea>
+                  </div>
+                  <button class="btn btn-sm btn-primary" type="submit">Submit</button>
+                </form>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+          <div class="text-center py-4">
+            <small class="text-muted">No orchestrated alerts yet</small>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card mt-3">
+        <div class="card-header">
+          <h4 class="header-title mb-0">Recent feedback</h4>
+        </div>
+        <div class="card-body p-0">
+          {% if recent_feedback %}
+            {% for fb in recent_feedback %}
+            <div class="border-bottom p-2">
+              <div class="d-flex justify-content-between">
+                <span class="badge bg-light text-dark">{{ fb.feedback_type }}</span>
+                <small class="text-muted">{{ fb.created_at.strftime('%b %d') if fb.created_at else '' }}</small>
+              </div>
+              <div class="small mt-1">{{ fb.feedback_text or '' }}</div>
+            </div>
+            {% endfor %}
+          {% else %}
+          <div class="text-center py-3">
+            <small class="text-muted">No feedback yet</small>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

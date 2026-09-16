@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Invoice{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="fas fa-file-invoice-dollar"></i> Generate invoice</h1>
+    <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('main.maintenance_billing') }}" class="btn btn-outline-primary">
+        <i class="fas fa-file-invoice-dollar"></i> Billing hub
+      </a>
+      <a href="{{ url_for('invoices.list_invoices') }}" class="btn btn-secondary">
+        <i class="fas fa-arrow-left"></i> Back to invoices
+      </a>
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-header">
+      <strong>Agreement + billing date</strong>
+    </div>
+    <div class="card-body">
+      <form method="POST" class="row g-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="col-md-8">
+          <label for="agreement_id" class="form-label">Agreement</label>
+          <select class="form-select" id="agreement_id" name="agreement_id" required>
+            <option value="" selected disabled>Select an agreement…</option>
+            {% for ag in agreements %}
+              <option value="{{ ag.id }}">
+                {{ ag.lead.client.name if ag.lead and ag.lead.client else 'Unknown client' }} — Agreement #{{ ag.id }} ({{ ag.status or 'draft' }})
+              </option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Invoice amount is calculated from the agreement’s billing rates + current portfolio value.</div>
+        </div>
+
+        <div class="col-md-4">
+          <label for="billing_date" class="form-label">Billing date (optional)</label>
+          <input type="date" class="form-control" id="billing_date" name="billing_date" />
+          <div class="form-text">Leave blank to use today.</div>
+        </div>
+
+        <div class="col-12">
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-bolt"></i> Generate draft invoice
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

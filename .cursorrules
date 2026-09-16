@@ -1,0 +1,80 @@
+# Inertia Investment Management System - Coding Context
+
+## Architecture Overview
+
+- **Stack**: Flask + SQLAlchemy, MySQL, Bootstrap frontend
+- **Entry point**: `main.py` → `create_app()`, Gunicorn in production
+- **Blueprints**: Registered in `main.py`; routes in `routes/`, APIs in `api/v1/`, `api/v2/`
+
+## Directory Structure
+
+| Path | Purpose |
+|------|---------|
+| `routes/` | Flask route handlers (UI, forms, redirects) |
+| `api/v1/`, `api/v2/` | REST API blueprints |
+| `services/` | Business logic; use instead of routes for complex logic |
+| `agents/` | Data-integrity & workflow agents (BaseAgent subclasses) |
+| `models.py`, `models/` | SQLAlchemy models |
+| `migrations/` | DB migrations (run manually) |
+| `airflow/dags/` | Airflow DAGs for scheduled jobs |
+| `templates/` | Jinja2 templates |
+| `docs/` | Project documentation |
+| `_deprecated/` | Legacy code; avoid adding dependencies on it |
+
+## Conventions
+
+### Business Logic
+- Put business logic in **services**, not in route handlers
+- Services are in `services/` (e.g. `task_assignment_service.py`, `price_service.py`)
+- Routes should call services and handle HTTP/redirects only
+
+### Agents (agents/)
+- All agents subclass `BaseAgent` and implement `run_checks(client_id, **kwargs)` as a generator
+- Agents yield `DataIntegrityIssue` objects; do NOT create alerts directly
+- Register new agents in `agents/__init__.py`
+- Agent runs are logged via `AgentRun`; use `start_run()`, `complete_run()`
+
+### Task Assignment
+- `TaskAssignmentRule`: rule_type in (`workflow_stage`, `issue_category`, `review_status`), match_value varies
+- Workflow stages: FUNDS, RECOS, NOTIFY, EXEC, UPDATE, COMPLETED
+- Review statuses: initiated, sent, meeting, closed
+- Use `apply_review_assignment(workflow)` when creating/updating ReviewWorkflow
+- Use `create_ops_task_from_issue()` / `create_ops_task_from_review_workflow()` to create OpsTasks for /tasks/
+- Admin UI: `/admin/task-assignment-rules`
+
+### Database
+- Prefer `db.session` for writes; commit in route/service, not in models
+- Migrations are Python scripts in `migrations/`; run with `python migrations/<file>.py`
+- Models: `models.py` (large) + `models/` package
+
+### Templates
+- Extend `base.html` or `base_clean.html`
+- CSRF: `{{ csrf_token() }}` in forms
+- Flash messages: `get_flashed_messages(with_categories=true)`
+
+### API
+- Versioned: `/api/v1/`, `/api/v2/`
+- Use `@login_required`, `require_advisor_or_manager` etc. for auth
+- Return `jsonify({...})` for JSON APIs
+
+## Key Domain Concepts
+
+- **Client**: Portfolio owner; has advisor_id, planning_synopsis, review schedules
+- **Workflow**: Monthly investment workflow; stages RECOS→FUNDS→NOTIFY→UPDATE→EXEC→COMPLETED
+- **ReviewWorkflow**: Client review (initiated/sent/meeting/closed); has assigned_to
+- **OpsTask**: Task in /tasks/; links to DataIntegrityIssue or ReviewWorkflow
+- **DataIntegrityIssue**: Agent-created issue; has assigned_to, check_category, severity
+
+## Avoid
+
+- Adding logic to `routes/main.py` without extracting to services (file is very large)
+- Using `ai_models` from `_deprecated/` without verifying it resolves; AI features may be disabled
+- Direct DB queries in routes; prefer services
+- Hardcoding user IDs; use TaskAssignmentRule for assignments
+
+## Quick Reference
+
+- Run migrations: `python migrations/<script>.py`
+- Seed task rules: `python migrations/seed_task_assignment_rules.py`
+- Backfill task assignment: Admin → Task Assignment Rules → Run Backfill
+- Relevant docs: `docs/AGENTS_PROD_CHECK.md`, `docs/COMPREHENSIVE_DOCUMENTATION.md`

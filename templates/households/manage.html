@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block title %}Manage {{ group.name }}{% endblock %}
+{% block content %}
+<div class="container mt-4" style="max-width: 800px;">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('households.household_details', group_id=group.id) }}">{{ group.name }}</a></li>
+      <li class="breadcrumb-item active">Members</li>
+    </ol>
+  </nav>
+  <h1 class="h2 mb-3">Manage members</h1>
+
+  <div class="card card-app mb-4">
+    <div class="card-header">Rename</div>
+    <div class="card-body">
+      <form method="POST" class="row g-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="rename">
+        <div class="col-md-8">
+          <label class="form-label" for="name">Name</label>
+          <input class="form-control" id="name" name="name" value="{{ group.name }}" required>
+        </div>
+        <div class="col-md-4">
+          <button type="submit" class="btn btn-primary">Save name</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card card-app mb-4">
+    <div class="card-header">Current members</div>
+    <div class="card-body">
+      <ul class="list-group list-group-flush">
+        {% for m in members %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <a href="{{ url_for('clients.client_details', client_id=m.client_id) }}">{{ m.client.name if m.client else m.client_id }}</a>
+            <span class="badge bg-light text-dark border ms-1">{{ m.role|title }}</span>
+          </div>
+          {% if m.client_id != group.primary_client_id %}
+          <form method="POST" class="d-inline" onsubmit="return confirm('Remove this member from the household?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="remove">
+            <input type="hidden" name="client_id" value="{{ m.client_id }}">
+            <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+          </form>
+          {% else %}
+          <span class="text-muted small">Primary</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <div class="card card-app mb-4">
+    <div class="card-header">Add member</div>
+    <div class="card-body">
+      <form method="POST" class="row g-2 align-items-end" id="addMemberForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="add">
+        <input type="hidden" name="client_id" id="client_id" required>
+        <div class="col-md-6">
+          <label class="form-label" for="memberSearch">Search client</label>
+          <div class="position-relative">
+            <input class="form-control" type="search" id="memberSearch" autocomplete="off"
+                   placeholder="Type at least 2 letters…" aria-label="Search client to add">
+            <div id="memberResults" class="list-group position-absolute w-100 shadow" style="top: 100%; z-index: 20; display: none; max-height: 280px; overflow-y: auto;"></div>
+          </div>
+          <div class="form-text" id="memberHint">Search and click a name to select.</div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="role">Role</label>
+          <select class="form-select" id="role" name="role">
+            {% for r in roles if r != 'primary' %}
+            <option value="{{ r }}">{{ r|title }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <button type="submit" class="btn btn-primary">Add</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const excludeIds = {{ exclude_client_ids|default([])|tojson }};
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text == null ? '' : String(text);
+    return div.innerHTML;
+  }
+
+  const inputEl = document.getElementById('memberSearch');
+  const resultsEl = document.getElementById('memberResults');
+  const hiddenId = document.getElementById('client_id');
+  const hint = document.getElementById('memberHint');
+  let timer = null;
+
+  function run() {
+    const q = inputEl.value.trim();
+    if (q.length < 2) {
+      resultsEl.style.display = 'none';
+      resultsEl.innerHTML = '';
+      return;
+    }
+    resultsEl.innerHTML = '<div class="list-group-item text-muted">Searching…</div>';
+    resultsEl.style.display = 'block';
+    fetch('/clients-v2/api/?' + new URLSearchParams({ search: q, per_page: 20 }))
+      .then(function (r) { return r.json(); })
+      .then(function (payload) {
+        let rows = (payload && payload.success && payload.data) ? payload.data : [];
+        rows = rows.filter(function (c) { return excludeIds.indexOf(c.id) === -1; });
+        rows.sort(function (a, b) {
+          return String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+        });
+        if (!rows.length) {
+          resultsEl.innerHTML = '<div class="list-group-item text-muted">No matching clients</div>';
+          return;
+        }
+        resultsEl.innerHTML = rows.map(function (c) {
+          return '<button type="button" class="list-group-item list-group-item-action hh-pick" data-id="' + c.id + '" data-name="' + escapeHtml(c.name) + '">' +
+            '<strong>' + escapeHtml(c.name) + '</strong>' +
+            (c.email ? '<div class="small text-muted">' + escapeHtml(c.email) + '</div>' : '') +
+            '</button>';
+        }).join('');
+      })
+      .catch(function () {
+        resultsEl.innerHTML = '<div class="list-group-item text-danger">Could not search clients.</div>';
+      });
+  }
+
+  inputEl.addEventListener('input', function () {
+    hiddenId.value = '';
+    hint.textContent = 'Search and click a name to select.';
+    clearTimeout(timer);
+    timer = setTimeout(run, 250);
+  });
+  resultsEl.addEventListener('click', function (e) {
+    const btn = e.target.closest('.hh-pick');
+    if (!btn) return;
+    hiddenId.value = btn.getAttribute('data-id');
+    inputEl.value = btn.getAttribute('data-name');
+    hint.textContent = 'Selected: ' + btn.getAttribute('data-name');
+    resultsEl.style.display = 'none';
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('#memberSearch') && !e.target.closest('#memberResults')) {
+      resultsEl.style.display = 'none';
+    }
+  });
+  document.getElementById('addMemberForm').addEventListener('submit', function (e) {
+    if (!hiddenId.value) {
+      e.preventDefault();
+      alert('Search and select a client first.');
+    }
+  });
+})();
+</script>
+{% endblock %}

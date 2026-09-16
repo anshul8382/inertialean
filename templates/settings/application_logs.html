@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Application logs{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+      <a href="{{ url_for('settings.system_info') }}" class="small text-muted text-decoration-none">← System information</a>
+      <h1 class="h4 mb-0 mt-1">Application logs</h1>
+      <p class="text-muted small mb-0">Files under <code>{{ logs_dir }}</code></p>
+    </div>
+  </div>
+
+  {% if not entries %}
+  <div class="alert alert-secondary">No log files found in this directory.</div>
+  {% else %}
+  <div class="table-responsive">
+    <table class="table table-sm table-striped align-middle">
+      <thead>
+        <tr>
+          <th>File</th>
+          <th class="text-end">Size</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr>
+          <td><code>{{ e.name }}</code></td>
+          <td class="text-end text-muted small">
+            {% if e.size_bytes is not none %}
+              {% if e.size_bytes < 1024 %}{{ e.size_bytes }} B
+              {% elif e.size_bytes < 1048576 %}{{ (e.size_bytes / 1024)|round(1) }} KB
+              {% else %}{{ (e.size_bytes / 1048576)|round(2) }} MB
+              {% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td class="text-end">
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('settings.application_log_tail', file=e.name) }}">View tail</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

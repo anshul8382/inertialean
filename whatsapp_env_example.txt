@@ -1,0 +1,40 @@
+# WhatsApp Business API Configuration
+# Copy this to your .env file and update with your actual values
+
+# WhatsApp API Credentials (Get these from Meta Business Manager)
+WHATSAPP_API_URL=https://graph.facebook.com/v22.0
+WHATSAPP_ACCESS_TOKEN=your_access_token_here
+WHATSAPP_PHONE_NUMBER_ID=950513184811659
+WHATSAPP_VERIFY_TOKEN=your_verify_token_here
+WHATSAPP_TEMPLATE_LANGUAGE=en_US
+
+# Webhook URL (update with your actual domain)
+WHATSAPP_WEBHOOK_URL=https://inertiainvest.in/api/v1/whatsapp/webhook
+
+# Meta WhatsApp Cloud API — Groups (optional; use Graph version that supports Groups, e.g. v22+)
+# After enabling, subscribe to group_* webhook fields in Meta Developer Console for the same callback URL.
+WHATSAPP_GROUPS_ENABLED=true
+# Default when creating groups via API later: auto_approve | approval_required
+WHATSAPP_GROUPS_DEFAULT_JOIN_APPROVAL=auto_approve
+
+# Notification Settings
+ENABLE_PORTFOLIO_ALERTS=true
+ENABLE_TRANSACTION_NOTIFICATIONS=true
+ENABLE_PERFORMANCE_UPDATES=true
+ENABLE_PRICE_ALERTS=true
+
+# Alert Thresholds
+DEFAULT_PRICE_ALERT_THRESHOLD=5
+MAX_ALERTS_PER_DAY=10
+
+# Rate Limiting
+RATE_LIMIT_MESSAGES_PER_MINUTE=60
+RATE_LIMIT_MESSAGES_PER_HOUR=1000
+
+# Retry Settings
+MAX_RETRY_ATTEMPTS=3
+RETRY_DELAY_SECONDS=60
+
+# Logging
+LOG_WHATSAPP_MESSAGES=true
+WHATSAPP_LOG_LEVEL=INFO

@@ -1,0 +1,600 @@
+====================================================================================================
+CORPORATE ACTION DUPLICATE ANALYSIS REPORT
+====================================================================================================
+
+Generated: 2025-11-16
+Total duplicate groups: 17
+====================================================================================================
+
+
+====================================================================================================
+GROUP: PIDILITIND - Pidilite Industries Limited
+Date: 2025-09-23
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 10
+    Type: SPLIT
+    Ratio: 2.000000
+    Description: SPLIT - ratio 2.00
+    Source: MIGRATED
+    Active: True
+    Created: 2025-10-19 02:05
+
+  Entry 2:
+    ID: 1705
+    Type: BONUS
+    Ratio: 1.000000
+    Description: Bonus 1:1
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+⚠️  REVIEW REQUIRED: Split and Bonus on same date (unusual)
+   → Verify if both actions actually occurred on this date
+   → Check if one entry is incorrect
+ℹ️  MIXED SOURCES: Entries from different sources (MIGRATED, FILE_UPLOAD)
+   → FILE_UPLOAD entries are likely more recent/accurate
+   → Consider deactivating MIGRATED entries if they duplicate FILE_UPLOAD
+
+
+====================================================================================================
+GROUP: HDFCBANK - HDFC Bank Limited
+Date: 2025-08-26
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 4
+    Type: SPLIT
+    Ratio: 2.000000
+    Description: SPLIT - ratio 2.00
+    Source: MIGRATED
+    Active: False
+    Created: 2025-10-19 02:05
+
+  Entry 2:
+    ID: 1699
+    Type: BONUS
+    Ratio: 1.000000
+    Description: Bonus 1:1
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+⚠️  INACTIVE ENTRIES FOUND: 1 inactive entry/entries
+   → REVIEW: Entry ID 4 (inactive but no active match found)
+
+⚠️  REVIEW REQUIRED: Split and Bonus on same date (unusual)
+   → Verify if both actions actually occurred on this date
+   → Check if one entry is incorrect
+ℹ️  MIXED SOURCES: Entries from different sources (MIGRATED, FILE_UPLOAD)
+   → FILE_UPLOAD entries are likely more recent/accurate
+   → Consider deactivating MIGRATED entries if they duplicate FILE_UPLOAD
+
+
+====================================================================================================
+GROUP: BAJFINANCE - Bajaj Finance Limited
+Date: 2025-06-16
+Number of entries: 3
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 2
+    Type: SPLIT
+    Ratio: 10.000000
+    Description: SPLIT - ratio 5.00
+    Source: MIGRATED
+    Active: False
+    Created: 2025-10-19 02:05
+
+  Entry 2:
+    ID: 1643
+    Type: BONUS
+    Ratio: 0.250000
+    Description: Bonus 4:1
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 3:
+    ID: 1644
+    Type: DIVIDEND
+    Ratio: 2.000000
+    Description: Face Value Split (Sub-Division) - From Rs 2/- Per ShaRs To Rs 1/- Per ShaRs
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+⚠️  INACTIVE ENTRIES FOUND: 1 inactive entry/entries
+   → REVIEW: Entry ID 2 (inactive but no active match found)
+
+⚠️  WRONG ACTION TYPE: Entry ID 1644
+   → Current: DIVIDEND, Should be: SPLIT
+   → Description indicates face value split, not dividend
+   → ACTION: Update action_type from DIVIDEND to SPLIT
+
+✓ LEGITIMATE: Bonus and Dividend on same date (common corporate action)
+   → Keep all entries - these are separate actions
+ℹ️  MIXED SOURCES: Entries from different sources (MIGRATED, FILE_UPLOAD)
+   → FILE_UPLOAD entries are likely more recent/accurate
+   → Consider deactivating MIGRATED entries if they duplicate FILE_UPLOAD
+
+
+====================================================================================================
+GROUP: NAUKRI - Info Edge (India) Limited
+Date: 2025-05-07
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 1
+    Type: SPLIT
+    Ratio: 5.000000
+    Description: SPLIT - ratio 5.00
+    Source: MIGRATED
+    Active: True
+    Created: 2025-10-19 02:05
+
+  Entry 2:
+    ID: 1622
+    Type: DIVIDEND
+    Ratio: 10.000000
+    Description: Face Value Split (Sub-Division) - From Rs 10/- Per ShaRs To Rs 2/- Per ShaRs
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+⚠️  WRONG ACTION TYPE: Entry ID 1622
+   → Current: DIVIDEND, Should be: SPLIT
+   → Description indicates face value split, not dividend
+   → ACTION: Update action_type from DIVIDEND to SPLIT
+
+⚠️  POTENTIAL ISSUE: Entry ID 1622 marked as DIVIDEND but description suggests SPLIT
+   → Verify if this should be SPLIT type instead
+ℹ️  MIXED SOURCES: Entries from different sources (MIGRATED, FILE_UPLOAD)
+   → FILE_UPLOAD entries are likely more recent/accurate
+   → Consider deactivating MIGRATED entries if they duplicate FILE_UPLOAD
+
+
+====================================================================================================
+GROUP: NESTLEIND - Nestle India Limited
+Date: 2024-01-05
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 13
+    Type: SPLIT
+    Ratio: 10.000000
+    Description: N/A
+    Source: MANUAL
+    Active: True
+    Created: 2025-10-21 19:20
+
+  Entry 2:
+    ID: 1486
+    Type: DIVIDEND
+    Ratio: 10.000000
+    Description: Face Value Split (Sub-Division) - From Rs10/- Per ShaRs To Rs 1/- Per ShaRs
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+⚠️  WRONG ACTION TYPE: Entry ID 1486
+   → Current: DIVIDEND, Should be: SPLIT
+   → Description indicates face value split, not dividend
+   → ACTION: Update action_type from DIVIDEND to SPLIT
+
+⚠️  POTENTIAL ISSUE: Entry ID 1486 marked as DIVIDEND but description suggests SPLIT
+   → Verify if this should be SPLIT type instead
+ℹ️  MIXED SOURCES: Entries from different sources (FILE_UPLOAD, MANUAL)
+
+
+====================================================================================================
+GROUP: TCS - Tata Consultancy Services Limited
+Date: 2018-05-31
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 911
+    Type: DIVIDEND
+    Ratio: 29.000000
+    Description: Bonus 1:1 /Dividend- Rs 29 Per ShaRs
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 912
+    Type: BONUS
+    Ratio: 1.000000
+    Description: Bonus 1:1 /Dividend- Rs 29 Per ShaRs
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+✓ LEGITIMATE: Bonus and Dividend on same date (common corporate action)
+   → Keep all entries - these are separate actions
+
+
+====================================================================================================
+GROUP: BAJFINANCE - Bajaj Finance Limited
+Date: 2016-09-08
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 777
+    Type: DIVIDEND
+    Ratio: 10.000000
+    Description: Bonus 1:1/Face Value Split (Sub-Division) - From Rs 10/- Per ShaRs To Rs 2/- Per ShaRs
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 778
+    Type: BONUS
+    Ratio: 1.000000
+    Description: Bonus 1:1/Face Value Split (Sub-Division) - From Rs 10/- Per ShaRs To Rs 2/- Per ShaRs
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+⚠️  WRONG ACTION TYPE: Entry ID 777
+   → Current: DIVIDEND, Should be: SPLIT
+   → Description indicates face value split, not dividend
+   → ACTION: Update action_type from DIVIDEND to SPLIT
+
+✓ LEGITIMATE: Bonus and Dividend on same date (common corporate action)
+   → Keep all entries - these are separate actions
+
+
+====================================================================================================
+GROUP: MOTHERSON - Samvardhana Motherson International Limited
+Date: 2015-07-23
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 676
+    Type: DIVIDEND
+    Ratio: 3.000000
+    Description: Annual General Meeting / Dividend - Rs 3/- Per ShaRs And Bonus 1:2
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 677
+    Type: BONUS
+    Ratio: 2.000000
+    Description: Annual General Meeting / Dividend - Rs 3/- Per ShaRs And Bonus 1:2
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+✓ LEGITIMATE: Bonus and Dividend on same date (common corporate action)
+   → Keep all entries - these are separate actions
+
+
+====================================================================================================
+GROUP: INFY - Infosys Limited
+Date: 2015-06-15
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 660
+    Type: DIVIDEND
+    Ratio: 29.500000
+    Description: Annual General Meeting/ Dividend - Rs 29.50/- Per ShaRs And Bonus 1:1
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 661
+    Type: BONUS
+    Ratio: 1.000000
+    Description: Annual General Meeting/ Dividend - Rs 29.50/- Per ShaRs And Bonus 1:1
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+✓ LEGITIMATE: Bonus and Dividend on same date (common corporate action)
+   → Keep all entries - these are separate actions
+
+
+====================================================================================================
+GROUP: NAUKRI - Info Edge (India) Limited
+Date: 2012-06-22
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 442
+    Type: DIVIDEND
+    Ratio: 1.000000
+    Description: Annual General Meeting/Dividend-Rs.1/- Per ShaRs/Bonus 1:1
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 443
+    Type: BONUS
+    Ratio: 1.000000
+    Description: Annual General Meeting/Dividend-Rs.1/- Per ShaRs/Bonus 1:1
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+✓ LEGITIMATE: Bonus and Dividend on same date (common corporate action)
+   → Keep all entries - these are separate actions
+
+
+====================================================================================================
+GROUP: TITAN - Titan Company Limited
+Date: 2011-06-23
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 369
+    Type: DIVIDEND
+    Ratio: 10.000000
+    Description: Bonus 1:1 / Face Value Split From Rs.10/- To Rs.1/-
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 370
+    Type: BONUS
+    Ratio: 1.000000
+    Description: Bonus 1:1 / Face Value Split From Rs.10/- To Rs.1/-
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+⚠️  WRONG ACTION TYPE: Entry ID 369
+   → Current: DIVIDEND, Should be: SPLIT
+   → Description indicates face value split, not dividend
+   → ACTION: Update action_type from DIVIDEND to SPLIT
+
+✓ LEGITIMATE: Bonus and Dividend on same date (common corporate action)
+   → Keep all entries - these are separate actions
+
+
+====================================================================================================
+GROUP: WIPRO - Wipro Limited
+Date: 2010-06-15
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 292
+    Type: DIVIDEND
+    Ratio: 6.000000
+    Description: Bonus 2:3 And Final Dividend Rs.6/- Per ShaRs
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 293
+    Type: BONUS
+    Ratio: 1.500000
+    Description: Bonus 2:3 And Final Dividend Rs.6/- Per ShaRs
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+✓ LEGITIMATE: Bonus and Dividend on same date (common corporate action)
+   → Keep all entries - these are separate actions
+
+
+====================================================================================================
+GROUP: TCS - Tata Consultancy Services Limited
+Date: 2009-06-16
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 225
+    Type: DIVIDEND
+    Ratio: 5.000000
+    Description: Bonus 1:1 / Div-Rs.5 Per Sh
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 226
+    Type: BONUS
+    Ratio: 1.000000
+    Description: Bonus 1:1 / Div-Rs.5 Per Sh
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+✓ LEGITIMATE: Bonus and Dividend on same date (common corporate action)
+   → Keep all entries - these are separate actions
+
+
+====================================================================================================
+GROUP: EICHERMOT - Eicher Motors Limited
+Date: 2007-03-16
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 97
+    Type: DIVIDEND
+    Ratio: 0.400000
+    Description: Div Int-40% + Spl-250%   Purpose Rsvised
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 98
+    Type: SPLIT
+    Ratio: 3.500000
+    Description: Div Int-40% + Spl-250%   Purpose Rsvised
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+✓ LEGITIMATE: Split and Dividend on same date (possible)
+   → Keep all entries if both actions occurred
+
+
+====================================================================================================
+GROUP: TCS - Tata Consultancy Services Limited
+Date: 2006-07-28
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 68
+    Type: DIVIDEND
+    Ratio: 3.000000
+    Description: Intdiv-Rs 3persh/Bonus1:1
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 69
+    Type: BONUS
+    Ratio: 1.000000
+    Description: Intdiv-Rs 3persh/Bonus1:1
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+✓ LEGITIMATE: Bonus and Dividend on same date (common corporate action)
+   → Keep all entries - these are separate actions
+
+
+====================================================================================================
+GROUP: ASIANPAINT - Asian Paints Limited
+Date: 2006-06-15
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 53
+    Type: DIVIDEND
+    Ratio: 0.550000
+    Description: Agm/Div Fin-55% + Spl-25%
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 54
+    Type: SPLIT
+    Ratio: 1.250000
+    Description: Agm/Div Fin-55% + Spl-25%
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+✓ LEGITIMATE: Split and Dividend on same date (possible)
+   → Keep all entries if both actions occurred
+
+
+====================================================================================================
+GROUP: TMPV - TMPV (Historical - Merged/Delisted)
+Date: 2005-06-23
+Number of entries: 2
+----------------------------------------------------------------------------------------------------
+
+  Entry 1:
+    ID: 21
+    Type: DIVIDEND
+    Ratio: 2.000000
+    Description: Div Fin-100% + Spl-25%
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+  Entry 2:
+    ID: 22
+    Type: SPLIT
+    Ratio: 1.250000
+    Description: Div Fin-100% + Spl-25%
+    Source: FILE_UPLOAD
+    Active: True
+    Created: 2025-11-15 16:12
+
+----------------------------------------------------------------------------------------------------
+ANALYSIS & RECOMMENDATIONS:
+----------------------------------------------------------------------------------------------------
+✓ LEGITIMATE: Split and Dividend on same date (possible)
+   → Keep all entries if both actions occurred
+
+
+====================================================================================================
+SUMMARY & ACTION ITEMS
+====================================================================================================
+
+1. Review all groups marked as 'REVIEW REQUIRED'
+2. Deactivate or delete entries marked as 'LIKELY DUPLICATE'
+3. Correct action types for entries marked as 'WRONG TYPE'
+4. Verify legitimate multiple actions are correctly configured
+====================================================================================================

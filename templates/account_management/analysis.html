@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+
+{% block title %}Statement analysis by head{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
+        <div>
+            <h1 class="mb-0"><i class="fas fa-chart-pie"></i> Analysis by classification</h1>
+            {% if selected_head_id %}
+            <p class="text-primary small mb-0 mt-1">
+                <i class="fas fa-filter"></i> Filtered to one head:
+                <strong>{{ head_trend.head_name if head_trend else '—' }}</strong>
+                {% if is_custom_range %}
+                <a href="{{ url_for('account_management.analysis', date_from=date_from.isoformat(), date_to=date_to.isoformat()) }}" class="ms-2">Clear filter</a>
+                {% else %}
+                <a href="{{ url_for('account_management.analysis', preset=active_preset) }}" class="ms-2">Clear filter</a>
+                {% endif %}
+            </p>
+            {% endif %}
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="{{ url_for('account_management.dashboard') }}" class="btn btn-outline-secondary btn-sm">Dashboard</a>
+            <a class="btn btn-success btn-sm" href="{{ export_download_url }}">
+                <i class="fas fa-file-csv"></i> Download CSV (this period)
+            </a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header py-2">
+            <span class="fw-semibold">Time range</span>
+            <p class="small text-muted mb-0 mt-1">{{ period_label }}</p>
+        </div>
+        <div class="card-body py-3">
+            {% set period_picker_endpoint = 'account_management.analysis' %}
+            {% set period_picker_form_action = url_for('account_management.analysis') %}
+            {% set period_picker_active = active_preset %}
+            {% set period_picker_is_custom = is_custom_range %}
+            {% set period_picker_date_from = date_from %}
+            {% set period_picker_date_to = date_to %}
+            {% set period_picker_variant = 'primary' %}
+            {% set period_picker_show_label = false %}
+            {% include 'account_management/_period_range_picker.html' %}
+        </div>
+    </div>
+
+    {% if head_options %}
+    <div class="card mb-4 border-primary">
+        <div class="card-header py-2 bg-primary text-white">
+            <span class="fw-semibold"><i class="fas fa-filter me-1"></i> Filter by classification head</span>
+        </div>
+        <div class="card-body py-3">
+            <p class="text-muted small mb-2">Focus on one head to see month-by-month credits vs debits and summary numbers for that label only.</p>
+            <form method="get" class="row g-2 align-items-center">
+                {% if is_custom_range %}
+                <input type="hidden" name="date_from" value="{{ date_from.isoformat() }}">
+                <input type="hidden" name="date_to" value="{{ date_to.isoformat() }}">
+                {% else %}
+                <input type="hidden" name="preset" value="{{ active_preset }}">
+                {% endif %}
+                <div class="col-md-6 col-lg-5">
+                    <label class="form-label small mb-0" for="head_filter_select">Head</label>
+                    <select class="form-select form-select-sm" id="head_filter_select" name="head_id" onchange="this.form.submit()">
+                        <option value="" {% if not selected_head_id %}selected{% endif %}>All heads (overview)</option>
+                        {% for h in head_options %}
+                        <option value="{{ h.id }}" {% if selected_head_id == h.id %}selected{% endif %}>{{ h.name }} ({{ h.head_type or '—' }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto align-self-end">
+                    <noscript><button type="submit" class="btn btn-primary btn-sm">Apply</button></noscript>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if analysis.transaction_count == 0 %}
+    <div class="alert alert-info">No transactions in this period. Upload statements or choose a different range.</div>
+    {% else %}
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-success h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Total credits (deposits)</div>
+                    <div class="h4 text-success mb-0">{{ "%.2f"|format(analysis.total_credit) }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-danger h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Total debits (withdrawals)</div>
+                    <div class="h4 text-danger mb-0">{{ "%.2f"|format(analysis.total_debit) }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-secondary h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Net (credit − debit)</div>
+                    <div class="h4 mb-0 {{ 'text-success' if analysis.net >= 0 else 'text-danger' }}">{{ "%.2f"|format(analysis.net) }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="text-muted small">Transactions</div>
+                    <div class="h4 mb-0">{{ analysis.transaction_count }}</div>
+                    <div class="small text-muted mt-1">
+                        Unclassified lines:
+                        {{ analysis.unclassified_credit_count + analysis.unclassified_debit_count }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if head_trend and head_trend.has_data %}
+    <div class="card mb-4 border-info">
+        <div class="card-header bg-info text-dark py-2">
+            <i class="fas fa-chart-line me-1"></i> How this head moves month to month
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-2">
+                <strong>{{ head_trend.head_name }}</strong> — credits (deposits) vs debits (withdrawals) per calendar month.
+                Period totals: credit {{ "%.2f"|format(head_trend.period_credit_total) }}, debit {{ "%.2f"|format(head_trend.period_debit_total) }}, {{ head_trend.txn_count }} line(s).
+            </p>
+            <div style="height: 380px; position: relative;">
+                <canvas id="headTrendLineChart"></canvas>
+            </div>
+        </div>
+    </div>
+    {% elif selected_head_id and head_trend and not head_trend.has_data %}
+    <div class="alert alert-warning mb-4 small">No classified activity for this head in the selected period.</div>
+    {% endif %}
+
+    {% if month_expense_chart.has_data and not selected_head_id %}
+    <div class="card mb-4">
+        <div class="card-header bg-dark text-white py-2">
+            <i class="fas fa-chart-bar me-1"></i> Month-wise expenses (debits) by head
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-2">Stacked bars: each month’s total withdrawals split by classification. Same period as above.</p>
+            <div style="height: 420px; position: relative;">
+                <canvas id="monthlyExpenseByHeadChart"></canvas>
+            </div>
+        </div>
+    </div>
+    {% elif not selected_head_id and analysis.total_debit > 0 and not month_expense_chart.has_data %}
+    <div class="alert alert-light border small text-muted mb-4">
+        Month-wise expense chart needs at least one month in the selected range with debit transactions.
+    </div>
+    {% endif %}
+
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white py-2">
+                    <i class="fas fa-arrow-down me-1"></i> Credits by head
+                </div>
+                <div class="card-body">
+                    {% if analysis.total_credit > 0 %}
+                    <div style="max-height: 260px;" class="mb-3"><canvas id="creditByHeadChart"></canvas></div>
+                    {% endif %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Head</th>
+                                    <th class="text-end">#</th>
+                                    <th class="text-end">Amount</th>
+                                    <th class="text-end">% of credits</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in analysis.credit_by_head %}
+                                <tr>
+                                    <td><span class="badge bg-success me-1">{{ row.head_type or 'credit' }}</span> {{ row.name }}</td>
+                                    <td class="text-end">{{ row.count }}</td>
+                                    <td class="text-end text-success">{{ "%.2f"|format(row.total) }}</td>
+                                    <td class="text-end text-muted">{% if analysis.total_credit > 0 %}{{ "%.1f"|format(100 * row.total / analysis.total_credit) }}%{% else %}–{% endif %}</td>
+                                </tr>
+                                {% endfor %}
+                                {% if analysis.unclassified_credit_total > 0 %}
+                                <tr class="table-warning">
+                                    <td><em>Unclassified</em></td>
+                                    <td class="text-end">{{ analysis.unclassified_credit_count }}</td>
+                                    <td class="text-end">{{ "%.2f"|format(analysis.unclassified_credit_total) }}</td>
+                                    <td class="text-end text-muted">{% if analysis.total_credit > 0 %}{{ "%.1f"|format(100 * analysis.unclassified_credit_total / analysis.total_credit) }}%{% else %}–{% endif %}</td>
+                                </tr>
+                                {% endif %}
+                                {% if not analysis.credit_by_head and analysis.unclassified_credit_total == 0 %}
+                                <tr><td colspan="4" class="text-muted">No credit transactions in period.</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header bg-danger text-white py-2">
+                    <i class="fas fa-arrow-up me-1"></i> Debits by head
+                </div>
+                <div class="card-body">
+                    {% if analysis.total_debit > 0 %}
+                    <div style="max-height: 260px;" class="mb-3"><canvas id="debitByHeadChart"></canvas></div>
+                    {% endif %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Head</th>
+                                    <th class="text-end">#</th>
+                                    <th class="text-end">Amount</th>
+                                    <th class="text-end">% of debits</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in analysis.debit_by_head %}
+                                <tr>
+                                    <td><span class="badge bg-danger me-1">{{ row.head_type or 'debit' }}</span> {{ row.name }}</td>
+                                    <td class="text-end">{{ row.count }}</td>
+                                    <td class="text-end text-danger">{{ "%.2f"|format(row.total) }}</td>
+                                    <td class="text-end text-muted">{% if analysis.total_debit > 0 %}{{ "%.1f"|format(100 * row.total / analysis.total_debit) }}%{% else %}–{% endif %}</td>
+                                </tr>
+                                {% endfor %}
+                                {% if analysis.unclassified_debit_total > 0 %}
+                                <tr class="table-warning">
+                                    <td><em>Unclassified</em></td>
+                                    <td class="text-end">{{ analysis.unclassified_debit_count }}</td>
+                                    <td class="text-end">{{ "%.2f"|format(analysis.unclassified_debit_total) }}</td>
+                                    <td class="text-end text-muted">{% if analysis.total_debit > 0 %}{{ "%.1f"|format(100 * analysis.unclassified_debit_total / analysis.total_debit) }}%{% else %}–{% endif %}</td>
+                                </tr>
+                                {% endif %}
+                                {% if not analysis.debit_by_head and analysis.unclassified_debit_total == 0 %}
+                                <tr><td colspan="4" class="text-muted">No debit transactions in period.</td></tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if analysis.transaction_count > 0 %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const greenColors = ['#198754', '#20c997', '#28a745', '#48d597', '#5cb85c', '#7dcea0', '#2ecc71', '#58d68d'];
+    const redColors = ['#dc3545', '#e35d6a', '#c82333', '#bd2130', '#a71d2a', '#e74c3c', '#ec7063', '#f1948a'];
+
+    function pieChart(canvasId, labels, data, colors) {
+        const el = document.getElementById(canvasId);
+        if (!el || !data.length || data.reduce((a,b) => a+b, 0) <= 0) return;
+        const bg = labels.map((_, i) => colors[i % colors.length]);
+        new Chart(el.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{ data: data, backgroundColor: bg, borderWidth: 1 }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
+                                const v = ctx.raw;
+                                const pct = total ? (v * 100 / total).toFixed(1) : 0;
+                                return ctx.label + ': ' + v.toLocaleString('en-IN', {minimumFractionDigits: 2}) + ' (' + pct + '%)';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    pieChart('creditByHeadChart', {{ credit_chart_labels|tojson }}, {{ credit_chart_values|tojson }}, greenColors);
+    pieChart('debitByHeadChart', {{ debit_chart_labels|tojson }}, {{ debit_chart_values|tojson }}, redColors);
+
+    const monthStacked = {{ month_expense_chart|tojson }};
+    const ctxMonth = document.getElementById('monthlyExpenseByHeadChart');
+    if (monthStacked && monthStacked.has_data && ctxMonth && monthStacked.datasets && monthStacked.datasets.length) {
+        new Chart(ctxMonth.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: monthStacked.month_labels,
+                datasets: monthStacked.datasets.map(function(ds) {
+                    return {
+                        label: ds.label,
+                        data: ds.data,
+                        backgroundColor: ds.backgroundColor,
+                        borderWidth: 0
+                    };
+                })
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { stacked: true, grid: { display: false } },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(v) { return Number(v).toLocaleString('en-IN'); }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: { position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            footer: function(items) {
+                                if (!items.length) return '';
+                                var s = 0;
+                                items.forEach(function(i) { s += (i.parsed && typeof i.parsed.y === 'number') ? i.parsed.y : 0; });
+                                return 'Month total: ' + s.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    const headTrend = {% if head_trend %}{{ head_trend|tojson }}{% else %}null{% endif %};
+    const ctxTrend = document.getElementById('headTrendLineChart');
+    if (headTrend && headTrend.has_data && ctxTrend) {
+        new Chart(ctxTrend.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: headTrend.month_labels,
+                datasets: [
+                    {
+                        label: 'Credits (deposits)',
+                        data: headTrend.credit_data,
+                        borderColor: '#198754',
+                        backgroundColor: 'rgba(25,135,84,0.15)',
+                        tension: 0.2,
+                        fill: false
+                    },
+                    {
+                        label: 'Debits (withdrawals)',
+                        data: headTrend.debit_data,
+                        borderColor: '#dc3545',
+                        backgroundColor: 'rgba(220,53,69,0.15)',
+                        tension: 0.2,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { callback: function(v) { return Number(v).toLocaleString('en-IN'); } }
+                    }
+                },
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+    }
+});
+</script>
+{% endif %}
+{{ super() }}
+{% endblock %}

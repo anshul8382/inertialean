@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Share Review - {{ review.client.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h4 class="mb-0">Share Review with {{ review.client.name }}</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('review.share_review', review_id=review.id) }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <h5>Select Sections to Share</h5>
+                                <p class="text-muted">Choose which sections of the review to include in the client version.</p>
+                                
+                                {% if review.review_data and review.review_data.sections %}
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-3">
+                                                <input class="form-check-input" type="checkbox" id="performance" name="sections" value="performance" checked>
+                                                <label class="form-check-label" for="performance">
+                                                    <i class="fas fa-chart-line text-primary"></i> Performance Analysis
+                                                </label>
+                                                <small class="form-text text-muted d-block">
+                                                    Portfolio returns, benchmark comparison, and performance metrics
+                                                </small>
+                                            </div>
+                                            
+                                            <div class="form-check mb-3">
+                                                <input class="form-check-input" type="checkbox" id="allocation" name="sections" value="allocation" checked>
+                                                <label class="form-check-label" for="allocation">
+                                                    <i class="fas fa-pie-chart text-success"></i> Asset Allocation
+                                                </label>
+                                                <small class="form-text text-muted d-block">
+                                                    Current portfolio allocation and drift analysis
+                                                </small>
+                                            </div>
+                                            
+                                            <div class="form-check mb-3">
+                                                <input class="form-check-input" type="checkbox" id="securities" name="sections" value="securities">
+                                                <label class="form-check-label" for="securities">
+                                                    <i class="fas fa-star text-warning"></i> Security Performance
+                                                </label>
+                                                <small class="form-text text-muted d-block">
+                                                    Best and worst performing securities
+                                                </small>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-6">
+                                            <div class="form-check mb-3">
+                                                <input class="form-check-input" type="checkbox" id="transactions" name="sections" value="transactions">
+                                                <label class="form-check-label" for="transactions">
+                                                    <i class="fas fa-exchange-alt text-info"></i> Transaction Analysis
+                                                </label>
+                                                <small class="form-text text-muted d-block">
+                                                    Transaction summary and significant changes
+                                                </small>
+                                            </div>
+                                            
+                                            <div class="form-check mb-3">
+                                                <input class="form-check-input" type="checkbox" id="recommendations" name="sections" value="recommendations">
+                                                <label class="form-check-label" for="recommendations">
+                                                    <i class="fas fa-lightbulb text-warning"></i> Recommendations
+                                                </label>
+                                                <small class="form-text text-muted d-block">
+                                                    Actionable recommendations and suggestions
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    <div class="alert alert-warning">
+                                        <i class="fas fa-exclamation-triangle"></i> No review data available to share.
+                                    </div>
+                                {% endif %}
+                            </div>
+                            
+                            <div class="col-md-4">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6>Delivery Options</h6>
+                                        <div class="form-group">
+                                            <label for="delivery_method">Delivery Method</label>
+                                            <select class="form-control" id="delivery_method" name="delivery_method">
+                                                <option value="email">Email</option>
+                                                <option value="download">Download Link</option>
+                                            </select>
+                                        </div>
+                                        
+                                        <div class="alert alert-info">
+                                            <h6><i class="fas fa-info-circle"></i> Sharing Guidelines</h6>
+                                            <ul class="mb-0 small">
+                                                <li>Only selected sections will be included</li>
+                                                <li>Client will receive a professional formatted report</li>
+                                                <li>You can track delivery status</li>
+                                                <li>Client access is secure and time-limited</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-4">
+                            <div class="col-12">
+                                <div class="form-group">
+                                    <button type="submit" class="btn btn-success" id="shareBtn">
+                                        <i class="fas fa-share"></i> Share Review
+                                    </button>
+                                    <a href="{{ url_for('review.review_detail', review_id=review.id) }}" class="btn btn-secondary">
+                                        <i class="fas fa-times"></i> Cancel
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const shareBtn = document.getElementById('shareBtn');
+    const checkboxes = document.querySelectorAll('input[name="sections"]');
+    
+    // Enable/disable share button based on selections
+    function updateShareButton() {
+        const checkedCount = document.querySelectorAll('input[name="sections"]:checked').length;
+        shareBtn.disabled = checkedCount === 0;
+        
+        if (checkedCount === 0) {
+            shareBtn.innerHTML = '<i class="fas fa-share"></i> Select at least one section';
+        } else {
+            shareBtn.innerHTML = '<i class="fas fa-share"></i> Share Review';
+        }
+    }
+    
+    // Add event listeners
+    checkboxes.forEach(function(checkbox) {
+        checkbox.addEventListener('change', updateShareButton);
+    });
+    
+    // Initial state
+    updateShareButton();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+
+{% block title %}Alert List{% endblock %}
+
+{% block extra_css %}
+<!-- DataTables CSS -->
+<link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/dataTables.bootstrap5.min.css">
+{% endblock %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Alerts' %}
+  {% set mobile_back_url = url_for('alerts.alert_dashboard') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <div class="im-metric-grid mb-3">
+    <div class="im-metric-tile"><span class="im-metric-tile__label">Critical</span><span class="im-metric-tile__value">{{ alerts|selectattr('severity', 'equalto', 'critical')|list|length }}</span></div>
+    <div class="im-metric-tile"><span class="im-metric-tile__label">Warning</span><span class="im-metric-tile__value">{{ alerts|selectattr('severity', 'equalto', 'warning')|list|length }}</span></div>
+    <div class="im-metric-tile"><span class="im-metric-tile__label">Info</span><span class="im-metric-tile__value">{{ alerts|selectattr('severity', 'equalto', 'info')|list|length }}</span></div>
+  </div>
+  <input type="search" class="im-mobile-search mb-2" placeholder="Search alerts…" data-im-mobile-filter="imMobileAlertsList" aria-label="Search alerts">
+  <div class="im-list-stack" id="imMobileAlertsList">
+    {% for alert in alerts|default([]) %}
+    <a href="{{ url_for('alerts.view_alert', alert_id=alert.id) }}" class="im-list-card" data-im-search="{{ (alert.client.name if alert.client else '')|lower }} {{ alert.severity }} {{ alert.alert_type }}">
+      <div class="im-list-card__header">
+        <h2 class="im-list-card__title">{{ alert.client.name if alert.client else 'System' }}</h2>
+        <span class="im-badge im-badge--{% if alert.severity == 'critical' %}danger{% elif alert.severity == 'warning' %}warning{% else %}info{% endif %}">{{ alert.severity|title }}</span>
+      </div>
+      <p class="im-list-card__meta">{{ alert.alert_type|replace('_', ' ')|title }} · {{ alert.status|title }} · {{ alert.created_at.strftime('%d %b %H:%M') if alert.created_at else '' }}</p>
+      <p class="im-list-card__desc small text-muted mb-0">{{ alert.description[:120] }}{% if alert.description and alert.description|length > 120 %}…{% endif %}</p>
+    </a>
+    {% else %}
+    <div class="im-empty-state"><p>No alerts</p></div>
+    {% endfor %}
+  </div>
+  <p class="text-muted small mt-2">Filters and bulk actions in the desktop table below.</p>
+</div>
+<div class="im-desktop-only im-collapsed-on-mobile container-fluid">
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">System Alerts</h1>
+        <a href="{{ url_for('alerts.alert_dashboard') }}" class="btn btn-primary btn-sm">
+            <i class="fas fa-chart-bar"></i> Alert Dashboard
+        </a>
+    </div>
+
+    <!-- Alert Statistics -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Critical Alerts</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ alerts|selectattr('severity', 'equalto', 'critical')|list|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Warning Alerts</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ alerts|selectattr('severity', 'equalto', 'warning')|list|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-circle fa-2x text-warning"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Info Alerts</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ alerts|selectattr('severity', 'equalto', 'info')|list|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-info-circle fa-2x text-info"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Total Alerts</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ alerts|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-bell fa-2x text-success"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">Filter Alerts</h6>
+        </div>
+        <div class="card-body">
+            <form method="GET" action="{{ url_for('alerts.list_alerts') }}" class="row">
+                <div class="col-md-2">
+                    <label for="client_id">Client:</label>
+                    <select name="client_id" id="client_id" class="form-control">
+                        <option value="">All Clients</option>
+                        {% for client in clients %}
+                            <option value="{{ client.id }}" {% if selected_client_id == client.id %}selected{% endif %}>
+                                {{ client.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="severity">Severity:</label>
+                    <select name="severity" id="severity" class="form-control">
+                        <option value="">All Severities</option>
+                        <option value="critical" {% if selected_severity == 'critical' %}selected{% endif %}>Critical</option>
+                        <option value="warning" {% if selected_severity == 'warning' %}selected{% endif %}>Warning</option>
+                        <option value="info" {% if selected_severity == 'info' %}selected{% endif %}>Info</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="alert_type">Alert Type:</label>
+                    <select name="alert_type" id="alert_type" class="form-control">
+                        <option value="">All Types</option>
+                        <option value="workflow_sla" {% if selected_alert_type == 'workflow_sla' %}selected{% endif %}>Workflow SLA</option>
+                        <option value="recommendation" {% if selected_alert_type == 'recommendation' %}selected{% endif %}>Recommendation</option>
+                        <option value="communication" {% if selected_alert_type == 'communication' %}selected{% endif %}>Communication</option>
+                        <option value="portfolio" {% if selected_alert_type == 'portfolio' %}selected{% endif %}>Portfolio</option>
+                        <option value="system" {% if selected_alert_type == 'system' %}selected{% endif %}>System</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="status">Status:</label>
+                    <select name="status" id="status" class="form-control">
+                        <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All Statuses</option>
+                        <option value="active" {% if selected_status == 'active' or not selected_status %}selected{% endif %}>Active</option>
+                        <option value="resolved" {% if selected_status == 'resolved' %}selected{% endif %}>Resolved</option>
+                        <option value="acknowledged" {% if selected_status == 'acknowledged' %}selected{% endif %}>Acknowledged</option>
+                        <option value="snoozed" {% if selected_status == 'snoozed' %}selected{% endif %}>Snoozed</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label>&nbsp;</label>
+                    <div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-filter"></i> Filter
+                        </button>
+                        <a href="{{ url_for('alerts.list_alerts') }}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Clear
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Alert List -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                {% if selected_status == 'all' %}
+                    All Alerts
+                {% elif selected_status == 'resolved' %}
+                    Resolved Alerts
+                {% elif selected_status == 'acknowledged' %}
+                    Acknowledged Alerts
+                {% elif selected_status == 'snoozed' %}
+                    Snoozed Alerts
+                {% else %}
+                    Active Alerts
+                {% endif %}
+            </h6>
+        </div>
+        <div class="card-body">
+            {% if alerts %}
+                <div class="table-responsive">
+                    <table class="table table-bordered" id="alertsTable" width="100%" cellspacing="0">
+                        <thead>
+                            <tr>
+                                <th style="width: 80px;">Severity</th>
+                                <th style="width: 100px;">Type</th>
+                                <th style="width: 150px;">Client</th>
+                                <th style="width: 500px;">Notes</th>
+                                <th style="width: 200px;">Description</th>
+                                <th style="width: 120px;">Created</th>
+                                <th style="width: 100px;">Status</th>
+                                <th style="width: 120px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for alert in alerts %}
+                            <tr>
+                                <td>
+                                    {% if alert.severity == 'critical' %}
+                                        <span class="badge bg-danger text-white">Critical</span>
+                                    {% elif alert.severity == 'warning' %}
+                                        <span class="badge bg-warning text-dark">Warning</span>
+                                    {% else %}
+                                        <span class="badge bg-info text-dark">Info</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ alert.alert_type|title }}</td>
+                                <td>
+                                    {% if alert.client_id %}
+                                        {% if alert.client %}
+                                            <a href="{{ url_for('clients.client_details', client_id=alert.client.id) }}" class="text-primary">
+                                                {{ alert.client.name }}
+                                            </a>
+                                        {% else %}
+                                            {# Client relationship not loaded - try to access it to trigger lazy load #}
+                                            {% set _ = alert.client %}
+                                            {% if alert.client and alert.client.name %}
+                                                <a href="{{ url_for('clients.client_details', client_id=alert.client.id) }}" class="text-primary">
+                                                    {{ alert.client.name }}
+                                                </a>
+                                            {% else %}
+                                                <span class="text-muted">Client ID: {{ alert.client_id }}</span>
+                                            {% endif %}
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="text-muted">N/A</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if alert.formatted_notes %}
+                                        <div style="max-width: 500px; word-wrap: break-word; font-size: 0.8em; max-height: 200px; overflow-y: auto; white-space: pre-wrap; line-height: 1.5; padding: 8px; background-color: #f8f9fa; border-radius: 4px; font-family: 'Courier New', monospace; border: 1px solid #dee2e6;">
+                                            {{ alert.formatted_notes }}
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted">No notes yet</span>
+                                    {% endif %}
+                                </td>
+                                <td style="max-width: 200px;">{{ alert.description[:80] }}{% if alert.description|length > 80 %}...{% endif %}</td>
+                                <td>{{ alert.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    {% if alert.status == 'active' %}
+                                        <span class="badge bg-primary text-white">Active</span>
+                                    {% elif alert.status == 'acknowledged' %}
+                                        <span class="badge bg-warning text-dark">Acknowledged</span>
+                                    {% elif alert.status == 'snoozed' %}
+                                        <span class="badge bg-secondary text-white">Snoozed</span>
+                                    {% elif alert.status == 'resolved' %}
+                                        <span class="badge bg-success text-white">Resolved</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <a href="{{ url_for('alerts.view_alert', alert_id=alert.id) }}" class="btn btn-sm btn-primary">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                        {% if alert.status == 'active' or alert.status == 'acknowledged' %}
+                                            {% if alert.status == 'active' %}
+                                                <button type="button" class="btn btn-sm btn-warning" onclick="acknowledgeAlert({{ alert.id }})">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                            {% endif %}
+                                            <button type="button" class="btn btn-sm btn-success" onclick="resolveAlert({{ alert.id }})">
+                                                <i class="fas fa-check-double"></i>
+                                            </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                    <h4>No Active Alerts</h4>
+                    <p class="text-muted">All systems are running smoothly!</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- DataTables JavaScript -->
+<script type="text/javascript" src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
+<script type="text/javascript" src="https://cdn.datatables.net/1.13.7/js/dataTables.bootstrap5.min.js"></script>
+<script>
+function acknowledgeAlert(alertId) {
+    fetch(`/alerts/${alertId}/acknowledge`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error acknowledging alert: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error acknowledging alert');
+    });
+}
+
+function resolveAlert(alertId) {
+    const notes = prompt('Please enter resolution notes:');
+    if (notes !== null) {
+        fetch(`/alerts/${alertId}/resolve`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+            },
+            body: JSON.stringify({notes: notes})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error resolving alert: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error resolving alert');
+        });
+    }
+}
+
+$(document).ready(function() {
+    $('#alertsTable').DataTable({
+        "order": [[5, "desc"]], // Sort by created date descending (column index 5)
+        "pageLength": 25,
+        "ordering": true, // Enable column sorting (all columns are sortable by default)
+        "searching": true, // Enable search
+        "info": true, // Show table information
+        "lengthChange": true, // Show page length dropdown
+        "language": {
+            "search": "Search alerts:",
+            "lengthMenu": "Show _MENU_ alerts per page",
+            "info": "Showing _START_ to _END_ of _TOTAL_ alerts",
+            "infoEmpty": "No alerts available",
+            "infoFiltered": "(filtered from _MAX_ total alerts)",
+            "emptyTable": "No alerts found",
+            "zeroRecords": "No matching alerts found"
+        }
+    });
+});
+</script>
+{% endblock %}

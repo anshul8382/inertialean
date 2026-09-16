@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block title %}Service Architecture Readiness - Real-time Analysis{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h1><i class="fas fa-layer-group"></i> Service Architecture Readiness</h1>
+            <p class="text-muted">Real-time analysis of service adoption vs direct database access</p>
+            {% if error %}
+            <div class="alert alert-danger">
+                <h4><i class="fas fa-exclamation-triangle"></i> Error Loading Data</h4>
+                <p>{{ error }}</p>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <small><i class="fas fa-clock"></i> Last updated: {{ last_updated.strftime('%Y-%m-%d %H:%M:%S') }}</small>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not error %}
+    <!-- Real-time Statistics -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Total Services</h5>
+                    <h2>{{ summary.total_services }}</h2>
+                    <p class="mb-0">Analyzed</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Complete</h5>
+                    <h2>{{ summary.complete_services }}</h2>
+                    <p class="mb-0">{{ (summary.complete_services / summary.total_services * 100) | round(1) }}%</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Partial</h5>
+                    <h2>{{ summary.partial_services }}</h2>
+                    <p class="mb-0">{{ (summary.partial_services / summary.total_services * 100) | round(1) }}%</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Overall Adoption</h5>
+                    <h2>{{ summary.overall_adoption }}%</h2>
+                    <p class="mb-0">Average</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Service Details -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h4 class="mb-0"><i class="fas fa-cogs"></i> Service Analysis</h4>
+                </div>
+                <div class="card-body">
+                    {% for service_name, status in service_status.items() %}
+                    <div class="alert alert-{{ 'success' if status.status == 'Complete' else 'warning' if status.status == 'Partial' else 'danger' }}">
+                        <h5>
+                            <i class="fas fa-{{ 'check-circle' if status.status == 'Complete' else 'exclamation-triangle' if status.status == 'Partial' else 'times-circle' }}"></i> 
+                            {{ service_name }} - {{ status.status }}
+                            <span class="badge bg-{{ 'success' if status.status == 'Complete' else 'warning' if status.status == 'Partial' else 'danger' }}">{{ status.category }}</span>
+                        </h5>
+                        <p><strong>Adoption: {{ status.adoption_percentage }}%</strong></p>
+                        <p><strong>Service Usage:</strong> {{ status.service_usage }} files</p>
+                        <p><strong>Direct DB Usage:</strong> {{ status.direct_db_usage }} files</p>
+                        <p><small><i class="fas fa-file-code"></i> Service file: <code>{{ status.service_file }}</code></small></p>
+                        
+                        {% if status.files_using_service %}
+                        <p><strong>✅ Using Service:</strong></p>
+                        <ul>
+                            {% for file in status.files_using_service %}
+                            <li><code>{{ file }}</code></li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                        
+                        {% if status.files_using_direct_db %}
+                        <p><strong>❌ Still Using Direct DB:</strong></p>
+                        <ul>
+                            {% for file in status.files_using_direct_db %}
+                            <li><code>{{ file }}</code></li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Missing Services -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h4 class="mb-0"><i class="fas fa-exclamation-circle"></i> Missing Services ({{ missing_services|length }})</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">These services should exist but are not yet implemented:</p>
+                    <div class="row">
+                        {% for service_name, details in missing_services.items() %}
+                        <div class="col-md-6 mb-3">
+                            <div class="card border-danger">
+                                <div class="card-body">
+                                    <h5 class="card-title">
+                                        {{ service_name }}
+                                        <span class="badge bg-{{ 'danger' if details.priority == 'High' else 'warning' if details.priority == 'Medium' else 'secondary' }}">
+                                            {{ details.priority }}
+                                        </span>
+                                    </h5>
+                                    <p class="card-text"><strong>Category:</strong> {{ details.category }}</p>
+                                    <p class="card-text"><strong>Reason:</strong> {{ details.reason }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary by Category -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h4 class="mb-0"><i class="fas fa-list"></i> Services by Category</h4>
+                </div>
+                <div class="card-body">
+                    {% set categories = service_status.values() | map(attribute='category') | list | unique | list %}
+                    {% for category in categories %}
+                    <h5>{{ category }}</h5>
+                    <ul>
+                        {% for service_name, status in service_status.items() %}
+                        {% if status.category == category %}
+                        <li>
+                            <strong>{{ service_name }}</strong> - 
+                            <span class="badge bg-{{ 'success' if status.status == 'Complete' else 'warning' if status.status == 'Partial' else 'danger' }}">
+                                {{ status.status }} ({{ status.adoption_percentage }}%)
+                            </span>
+                        </li>
+                        {% endif %}
+                        {% endfor %}
+                    </ul>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

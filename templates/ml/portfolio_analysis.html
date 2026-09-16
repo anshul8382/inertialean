@@ -1,0 +1,417 @@
+{% extends "base.html" %}
+
+{% block title %}Portfolio ML Analysis - {{ client.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h1 class="h3 mb-0">
+                        <i class="fas fa-chart-pie text-primary"></i>
+                        Portfolio ML Analysis
+                    </h1>
+                    <p class="text-muted mb-0">
+                        AI-powered insights for {{ client.name }}'s portfolio
+                    </p>
+                </div>
+                <div>
+                    <a href="{{ url_for('ml.get_ml_recommendations', review_id=review.id) }}" 
+                       class="btn btn-outline-primary me-2">
+                        <i class="fas fa-brain"></i> Full ML Report
+                    </a>
+                    <a href="{{ url_for('review.review_detail', review_id=review.id) }}" 
+                       class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Review
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if ml_data %}
+    <!-- Portfolio Overview -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-user"></i> Client Overview
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Client Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Name:</strong></td>
+                                    <td>{{ client.name }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Email:</strong></td>
+                                    <td>{{ client.email|display_email or 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phone:</strong></td>
+                                    <td>{{ client.phone|display_phone or 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Risk Profile:</strong></td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if client.risk_profile == 'conservative' else 'warning' if client.risk_profile == 'moderate' else 'danger' }}">
+                                            {{ client.risk_profile|title or 'Not Set' }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Review Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Review Type:</strong></td>
+                                    <td>{{ review.review_type|title }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Period:</strong></td>
+                                    <td>{{ review.start_date.strftime('%b %d, %Y') if review.start_date else 'N/A' }} - {{ review.end_date.strftime('%b %d, %Y') if review.end_date else 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Completed:</strong></td>
+                                    <td>{{ review.completed_at.strftime('%b %d, %Y') if review.completed_at else 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Status:</strong></td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if review.status == 'completed' else 'warning' if review.status == 'generating' else 'secondary' }}">
+                                            {{ review.status|title }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-tachometer-alt"></i> ML Scores
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Risk Score</label>
+                        <div class="progress mb-2">
+                            <div class="progress-bar bg-{{ 'success' if (ml_data.risk_metrics.overall_risk_score or 0) <= 3 else 'warning' if (ml_data.risk_metrics.overall_risk_score or 0) <= 7 else 'danger' }}" 
+                                 role="progressbar" 
+                                 style="width: {{ (ml_data.risk_metrics.overall_risk_score or 0) * 10 }}%">
+                                {{ "%.1f"|format(ml_data.risk_metrics.overall_risk_score or 0) }}/10
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Performance Score</label>
+                        <div class="progress mb-2">
+                            <div class="progress-bar bg-{{ 'success' if (ml_data.performance_metrics.overall_score or 0) >= 7 else 'warning' if (ml_data.performance_metrics.overall_score or 0) >= 4 else 'danger' }}" 
+                                 role="progressbar" 
+                                 style="width: {{ (ml_data.performance_metrics.overall_score or 0) * 10 }}%">
+                                {{ "%.1f"|format(ml_data.performance_metrics.overall_score or 0) }}/10
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Recommendations</label>
+                        <div class="d-flex justify-content-between">
+                            <span class="badge bg-info">{{ ml_data.recommendations|length or 0 }} Total</span>
+                            <span class="badge bg-danger">{{ ml_data.recommendations|selectattr('priority', 'equalto', 'high')|list|length or 0 }} High Priority</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Risk Metrics -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-shield-alt"></i> Key Risk Metrics
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 text-center mb-3">
+                            <div class="card border-light">
+                                <div class="card-body">
+                                    <h4 class="text-{{ 'success' if (ml_data.risk_metrics.var_95 or 0) <= 5 else 'warning' if (ml_data.risk_metrics.var_95 or 0) <= 10 else 'danger' }}">
+                                        {{ "%.2f"|format(ml_data.risk_metrics.var_95 or 0) }}%
+                                    </h4>
+                                    <p class="text-muted mb-0">VaR (95%)</p>
+                                    <small class="text-muted">Value at Risk</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-center mb-3">
+                            <div class="card border-light">
+                                <div class="card-body">
+                                    <h4 class="text-{{ 'success' if (ml_data.risk_metrics.volatility or 0) <= 15 else 'warning' if (ml_data.risk_metrics.volatility or 0) <= 25 else 'danger' }}">
+                                        {{ "%.2f"|format(ml_data.risk_metrics.volatility or 0) }}%
+                                    </h4>
+                                    <p class="text-muted mb-0">Volatility</p>
+                                    <small class="text-muted">Annualized</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-center mb-3">
+                            <div class="card border-light">
+                                <div class="card-body">
+                                    <h4 class="text-{{ 'success' if (ml_data.risk_metrics.beta or 0) <= 1 else 'warning' if (ml_data.risk_metrics.beta or 0) <= 1.5 else 'danger' }}">
+                                        {{ "%.2f"|format(ml_data.risk_metrics.beta or 0) }}
+                                    </h4>
+                                    <p class="text-muted mb-0">Beta</p>
+                                    <small class="text-muted">Market Sensitivity</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 text-center mb-3">
+                            <div class="card border-light">
+                                <div class="card-body">
+                                    <h4 class="text-{{ 'success' if (ml_data.risk_metrics.sharpe_ratio or 0) >= 1 else 'warning' if (ml_data.risk_metrics.sharpe_ratio or 0) >= 0.5 else 'danger' }}">
+                                        {{ "%.2f"|format(ml_data.risk_metrics.sharpe_ratio or 0) }}
+                                    </h4>
+                                    <p class="text-muted mb-0">Sharpe Ratio</p>
+                                    <small class="text-muted">Risk-Adjusted Return</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Recommendations -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-lightbulb"></i> Top Recommendations
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if ml_data.recommendations %}
+                        {% set high_priority = ml_data.recommendations|selectattr('priority', 'equalto', 'high')|list %}
+                        {% set medium_priority = ml_data.recommendations|selectattr('priority', 'equalto', 'medium')|list %}
+                        
+                        {% if high_priority %}
+                        <h6 class="text-danger mb-3">
+                            <i class="fas fa-exclamation-triangle"></i> High Priority Actions
+                        </h6>
+                        <div class="row mb-4">
+                            {% for recommendation in high_priority[:3] %}
+                            <div class="col-md-4 mb-3">
+                                <div class="card border-danger">
+                                    <div class="card-header bg-danger text-white">
+                                        <h6 class="mb-0">{{ recommendation.category|title }}</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="card-text">{{ recommendation.description }}</p>
+                                        {% if recommendation.actions %}
+                                        <div class="mt-2">
+                                            <strong>Actions:</strong>
+                                            <ul class="list-unstyled mt-1">
+                                                {% for action in recommendation.actions[:2] %}
+                                                <li><i class="fas fa-arrow-right text-danger"></i> {{ action }}</li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if medium_priority %}
+                        <h6 class="text-warning mb-3">
+                            <i class="fas fa-info-circle"></i> Medium Priority Suggestions
+                        </h6>
+                        <div class="row">
+                            {% for recommendation in medium_priority[:3] %}
+                            <div class="col-md-4 mb-3">
+                                <div class="card border-warning">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h6 class="mb-0">{{ recommendation.category|title }}</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="card-text">{{ recommendation.description }}</p>
+                                        {% if recommendation.actions %}
+                                        <div class="mt-2">
+                                            <strong>Actions:</strong>
+                                            <ul class="list-unstyled mt-1">
+                                                {% for action in recommendation.actions[:2] %}
+                                                <li><i class="fas fa-arrow-right text-warning"></i> {{ action }}</li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        
+                        <div class="text-center mt-4">
+                            <a href="{{ url_for('ml.get_ml_recommendations', review_id=review.id) }}" 
+                               class="btn btn-primary">
+                                <i class="fas fa-list"></i> View All {{ ml_data.recommendations|length }} Recommendations
+                            </a>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                            <h5>No Specific Recommendations</h5>
+                            <p class="text-muted">Your portfolio appears to be well-balanced based on current analysis.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Summary -->
+    {% if ml_data.performance_metrics %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-chart-line"></i> Performance Summary
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Return Metrics</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Total Return:</strong></td>
+                                    <td class="text-{{ 'success' if (ml_data.performance_metrics.total_return or 0) > 0 else 'danger' }}">
+                                        {{ "%.2f"|format(ml_data.performance_metrics.total_return or 0) }}%
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Benchmark Return:</strong></td>
+                                    <td>{{ "%.2f"|format(ml_data.performance_metrics.benchmark_return or 0) }}%</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Excess Return:</strong></td>
+                                    <td class="text-{{ 'success' if (ml_data.performance_metrics.excess_return or 0) > 0 else 'danger' }}">
+                                        {{ "%.2f"|format(ml_data.performance_metrics.excess_return or 0) }}%
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Information Ratio:</strong></td>
+                                    <td>{{ "%.2f"|format(ml_data.performance_metrics.information_ratio or 0) }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Performance Assessment</h6>
+                            <div class="mb-3">
+                                <p class="text-muted">
+                                    {% set perf_score = ml_data.performance_metrics.overall_score or 0 %}
+                                    {% if perf_score >= 7 %}
+                                        <i class="fas fa-star text-warning"></i>
+                                        <strong>Excellent Performance:</strong> Your portfolio is outperforming benchmarks consistently.
+                                    {% elif perf_score >= 4 %}
+                                        <i class="fas fa-thumbs-up text-info"></i>
+                                        <strong>Good Performance:</strong> Your portfolio is meeting or slightly exceeding benchmarks.
+                                    {% else %}
+                                        <i class="fas fa-exclamation-circle text-warning"></i>
+                                        <strong>Below Average:</strong> Your portfolio is underperforming relative to benchmarks.
+                                    {% endif %}
+                                </p>
+                            </div>
+                            
+                            <div class="alert alert-info">
+                                <h6><i class="fas fa-info-circle"></i> Performance Insights</h6>
+                                <ul class="mb-0">
+                                    <li>Based on historical data analysis</li>
+                                    <li>Compared against relevant benchmarks</li>
+                                    <li>Considers risk-adjusted returns</li>
+                                    <li>Updated with latest market conditions</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <!-- No ML Data Available -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-brain fa-3x text-muted mb-3"></i>
+                    <h4>ML Analysis Not Available</h4>
+                    <p class="text-muted mb-4">
+                        Machine learning analysis has not been generated for this client's portfolio yet.
+                    </p>
+                    <button class="btn btn-primary" onclick="generateMLAnalysis()">
+                        <i class="fas fa-magic"></i> Generate ML Analysis
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function generateMLAnalysis() {
+    // Show loading state
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    button.disabled = true;
+    
+    // Make API call to generate ML analysis
+    fetch(`/api/ml/recommendations/{{ review.id }}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Reload page to show new ML data
+                window.location.reload();
+            } else {
+                alert('Error generating ML analysis: ' + data.error);
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error generating ML analysis');
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
+}
+</script>
+{% endblock %}

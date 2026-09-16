@@ -1,0 +1,571 @@
+{% extends "base.html" %}
+
+{% block title %}Deployment Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-code-branch"></i> Deployment Management
+        </h1>
+        <button class="btn btn-primary" onclick="refreshStatus()">
+            <i class="fas fa-sync-alt"></i> Refresh Status
+        </button>
+    </div>
+
+    {% if not status.is_test_env %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle"></i> 
+        <strong>Note:</strong> This interface is designed for the test environment. 
+        You are currently viewing it from: <code>{{ status.current_dir }}</code>
+    </div>
+    {% endif %}
+
+    <!-- Environment Status Cards -->
+    <div class="row mb-4">
+        <!-- Production Environment -->
+        <div class="col-xl-6 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100">
+                <div class="card-header bg-primary text-white">
+                    <h6 class="m-0 font-weight-bold">
+                        <i class="fas fa-server"></i> Production Environment
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small class="text-muted">Directory:</small>
+                            <p class="mb-2"><code>/home/inertia/app</code></p>
+                            
+                            <small class="text-muted">Port:</small>
+                            <p class="mb-2">5000</p>
+                            
+                            <small class="text-muted">Database:</small>
+                            <p class="mb-2">inertia_app2025</p>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted">Status:</small>
+                            <p class="mb-2">
+                                <span class="badge badge-{{ 'success' if status.prod_dir_exists else 'danger' }}">
+                                    Directory: {{ '✓' if status.prod_dir_exists else '✗' }}
+                                </span>
+                            </p>
+                            <p class="mb-2">
+                                <span class="badge badge-{{ 'success' if status.prod_port_active else 'warning' }}">
+                                    Server: {{ 'Running' if status.prod_port_active else 'Stopped' }}
+                                </span>
+                            </p>
+                            <p class="mb-2">
+                                <span class="badge badge-{{ 'success' if status.prod_db_accessible else 'danger' }}">
+                                    Database: {{ 'Accessible' if status.prod_db_accessible else 'Not Accessible' }}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                    {% if git_status.prod_has_git %}
+                    <hr>
+                    <small class="text-muted">Git:</small>
+                    <p class="mb-1">
+                        <span class="badge badge-info">Branch: {{ git_status.prod_branch or 'Unknown' }}</span>
+                        {% if git_status.prod_has_changes %}
+                        <span class="badge badge-warning">Uncommitted changes</span>
+                        {% endif %}
+                    </p>
+                    {% if git_status.prod_remote %}
+                    <small class="text-muted">Remote: <code>{{ git_status.prod_remote }}</code></small>
+                    {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Environment -->
+        <div class="col-xl-6 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100">
+                <div class="card-header bg-info text-white">
+                    <h6 class="m-0 font-weight-bold">
+                        <i class="fas fa-flask"></i> Test Environment
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small class="text-muted">Directory:</small>
+                            <p class="mb-2"><code>/home/inertia/app_test</code></p>
+                            
+                            <small class="text-muted">Port:</small>
+                            <p class="mb-2">5002</p>
+                            
+                            <small class="text-muted">Database:</small>
+                            <p class="mb-2">inertia_app2025_test</p>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted">Status:</small>
+                            <p class="mb-2">
+                                <span class="badge badge-{{ 'success' if status.test_dir_exists else 'warning' }}">
+                                    Directory: {{ '✓' if status.test_dir_exists else '✗ (Not Setup)' }}
+                                </span>
+                            </p>
+                            <p class="mb-2">
+                                <span class="badge badge-{{ 'success' if status.test_port_active else 'warning' }}">
+                                    Server: {{ 'Running' if status.test_port_active else 'Stopped' }}
+                                </span>
+                            </p>
+                            <p class="mb-2">
+                                <span class="badge badge-{{ 'success' if status.test_db_accessible else 'danger' }}">
+                                    Database: {{ 'Accessible' if status.test_db_accessible else 'Not Accessible' }}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                    {% if git_status.test_has_git %}
+                    <hr>
+                    <small class="text-muted">Git:</small>
+                    <p class="mb-1">
+                        <span class="badge badge-info">Branch: {{ git_status.test_branch or 'Unknown' }}</span>
+                        {% if git_status.test_has_changes %}
+                        <span class="badge badge-warning">Uncommitted changes</span>
+                        {% endif %}
+                    </p>
+                    {% if git_status.test_remote %}
+                    <small class="text-muted">Remote: <code>{{ git_status.test_remote }}</code></small>
+                    {% endif %}
+                    {% endif %}
+                    {% if not status.test_dir_exists %}
+                    <div class="mt-3">
+                        <button class="btn btn-sm btn-info" onclick="setupTestDirectory()">
+                            <i class="fas fa-plus"></i> Setup Test Directory
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Migration Interface -->
+    {% if status.test_dir_exists %}
+    <div class="row">
+        <!-- File Selector -->
+        <div class="col-xl-4 col-lg-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-folder-open"></i> Test Files
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="input-group mb-3">
+                        <input type="text" class="form-control" id="fileSearch" placeholder="Search files...">
+                        <div class="input-group-append">
+                            <button class="btn btn-outline-secondary" onclick="searchFiles()">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="fileTree" style="max-height: 500px; overflow-y: auto;">
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-spinner fa-spin"></i> Loading...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Migration Actions -->
+        <div class="col-xl-8 col-lg-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-success">
+                        <i class="fas fa-arrow-right"></i> Migrate to Production
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <!-- Selected Files -->
+                    <div class="mb-3">
+                        <label class="font-weight-bold">Selected Files:</label>
+                        <div id="selectedFiles" class="border rounded p-3" style="min-height: 100px; max-height: 200px; overflow-y: auto; background-color: #f8f9fa;">
+                            <p class="text-muted mb-0">No files selected. Select files from the tree above.</p>
+                        </div>
+                    </div>
+
+                    <!-- Commit Message -->
+                    <div class="mb-3">
+                        <label for="commitMessage" class="font-weight-bold">Commit Message (Optional):</label>
+                        <textarea class="form-control" id="commitMessage" rows="3" 
+                                  placeholder="Describe what's being migrated (e.g., 'Add new recommendation feature')..."></textarea>
+                    </div>
+
+                    <!-- Migration Options -->
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="createBackup" checked disabled>
+                            <label class="form-check-label" for="createBackup">
+                                Create backup before migration (always enabled)
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="pushToRemote">
+                            <label class="form-check-label" for="pushToRemote">
+                                Push to remote repository after migration
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="createTag">
+                            <label class="form-check-label" for="createTag">
+                                Create git tag for this release
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-success" onclick="executeMigration()" id="migrateBtn">
+                            <i class="fas fa-rocket"></i> Migrate to Production
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearSelection()">
+                            <i class="fas fa-times"></i> Clear Selection
+                        </button>
+                        <button class="btn btn-info" onclick="compareSelected()">
+                            <i class="fas fa-code-branch"></i> Compare Files
+                        </button>
+                    </div>
+
+                    <!-- Migration Progress -->
+                    <div id="migrationProgress" class="mt-4" style="display: none;">
+                        <div class="progress">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" style="width: 100%"></div>
+                        </div>
+                        <p class="text-center mt-2 mb-0">
+                            <i class="fas fa-spinner fa-spin"></i> Migrating files...
+                        </p>
+                    </div>
+
+                    <!-- Migration Result -->
+                    <div id="migrationResult" class="mt-4" style="display: none;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Migration History -->
+    <div class="row">
+        <div class="col-xl-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-secondary">
+                        <i class="fas fa-history"></i> Recent Migrations
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if migration_history %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Log File</th>
+                                    <th>Size</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for migration in migration_history %}
+                                <tr>
+                                    <td>{{ migration.date }}</td>
+                                    <td><code>{{ migration.file }}</code></td>
+                                    <td>{{ migration.size }} bytes</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No migration history found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Backups -->
+        <div class="col-xl-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-warning">
+                        <i class="fas fa-archive"></i> Recent Backups
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if backups %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Backup File</th>
+                                    <th>Size</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for backup in backups %}
+                                <tr>
+                                    <td>{{ backup.date }}</td>
+                                    <td><code>{{ backup.file }}</code></td>
+                                    <td>{{ backup.size_mb }} MB</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No backups found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedFiles = [];
+
+// Load file tree
+function loadFileTree(path = '') {
+    fetch(`{{ url_for('main.api_file_tree') }}?path=${encodeURIComponent(path)}`)
+        .then(response => response.json())
+        .then(data => {
+            renderFileTree(data.tree, document.getElementById('fileTree'));
+        })
+        .catch(error => {
+            document.getElementById('fileTree').innerHTML = 
+                '<div class="alert alert-danger">Error loading file tree: ' + error.message + '</div>';
+        });
+}
+
+// Render file tree
+function renderFileTree(tree, container) {
+    if (tree.length === 0) {
+        container.innerHTML = '<p class="text-muted">No files found</p>';
+        return;
+    }
+    
+    let html = '<ul class="list-group list-group-flush" style="font-size: 0.9em;">';
+    tree.forEach(item => {
+        html += '<li class="list-group-item py-2">';
+        if (item.type === 'directory') {
+            html += `<i class="fas fa-folder text-warning"></i> `;
+            html += `<a href="#" onclick="loadFileTree('${item.path}'); return false;" class="text-decoration-none">${item.name}</a>`;
+        } else {
+            html += `<i class="fas fa-file text-primary"></i> `;
+            html += `<label class="mb-0">`;
+            html += `<input type="checkbox" class="file-checkbox mr-2" value="${item.path}" `;
+            html += `onchange="toggleFileSelection('${item.path}', this.checked)"> `;
+            html += `${item.name} <small class="text-muted">(${(item.size / 1024).toFixed(2)} KB)</small></label>`;
+        }
+        html += '</li>';
+    });
+    html += '</ul>';
+    container.innerHTML = html;
+}
+
+// Toggle file selection
+function toggleFileSelection(filePath, checked) {
+    if (checked) {
+        if (!selectedFiles.includes(filePath)) {
+            selectedFiles.push(filePath);
+        }
+    } else {
+        selectedFiles = selectedFiles.filter(f => f !== filePath);
+    }
+    updateSelectedFilesDisplay();
+}
+
+// Update selected files display
+function updateSelectedFilesDisplay() {
+    const container = document.getElementById('selectedFiles');
+    if (selectedFiles.length === 0) {
+        container.innerHTML = '<p class="text-muted mb-0">No files selected. Select files from the tree above.</p>';
+        return;
+    }
+    
+    let html = '<div class="d-flex flex-wrap gap-2">';
+    selectedFiles.forEach(file => {
+        const fileName = file.split('/').pop();
+        html += `<span class="badge badge-primary p-2">${fileName} `;
+        html += `<button type="button" class="badge badge-light ml-1" style="cursor: pointer;" `;
+        html += `onclick="removeFile('${file}')" title="Remove">×</button></span>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+// Remove file from selection
+function removeFile(filePath) {
+    selectedFiles = selectedFiles.filter(f => f !== filePath);
+    // Uncheck checkbox
+    document.querySelectorAll('.file-checkbox').forEach(cb => {
+        if (cb.value === filePath) {
+            cb.checked = false;
+        }
+    });
+    updateSelectedFilesDisplay();
+}
+
+// Clear selection
+function clearSelection() {
+    selectedFiles = [];
+    document.querySelectorAll('.file-checkbox').forEach(cb => cb.checked = false);
+    updateSelectedFilesDisplay();
+}
+
+// Execute migration
+function executeMigration() {
+    if (selectedFiles.length === 0) {
+        alert('Please select at least one file to migrate.');
+        return;
+    }
+    
+    if (!confirm(`Are you sure you want to migrate ${selectedFiles.length} file(s) to production?\n\nThis will:\n- Create backups\n- Copy files from test to production\n- Commit changes to git\n- Optionally push to remote`)) {
+        return;
+    }
+    
+    const commitMessage = document.getElementById('commitMessage').value;
+    const pushToRemote = document.getElementById('pushToRemote').checked;
+    const createTag = document.getElementById('createTag').checked;
+    
+    const progressDiv = document.getElementById('migrationProgress');
+    const resultDiv = document.getElementById('migrationResult');
+    const migrateBtn = document.getElementById('migrateBtn');
+    
+    progressDiv.style.display = 'block';
+    resultDiv.style.display = 'none';
+    migrateBtn.disabled = true;
+    
+    fetch('{{ url_for("main.api_migrate_test_to_prod") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            files: selectedFiles,
+            commit_message: commitMessage,
+            push_to_remote: pushToRemote,
+            create_tag: createTag
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressDiv.style.display = 'none';
+        resultDiv.style.display = 'block';
+        migrateBtn.disabled = false;
+        
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <h5><i class="fas fa-check-circle"></i> Migration Successful!</h5>
+                    <pre style="max-height: 300px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px;">${data.output || data.message}</pre>
+                    <p class="mb-0 mt-2"><strong>Next steps:</strong></p>
+                    <ul>
+                        <li>Review changes in production</li>
+                        <li>Restart production server: <code>sudo systemctl restart inertia-app.service</code></li>
+                        <li>Monitor logs and test functionality</li>
+                    </ul>
+                </div>
+            `;
+            selectedFiles = [];
+            clearSelection();
+            // Reload page after 3 seconds
+            setTimeout(() => location.reload(), 3000);
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <h5><i class="fas fa-exclamation-circle"></i> Migration Failed</h5>
+                    <pre style="max-height: 300px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 4px;">${data.error || data.output || 'Unknown error'}</pre>
+                </div>
+            `;
+        }
+    })
+    .catch(error => {
+        progressDiv.style.display = 'none';
+        resultDiv.style.display = 'block';
+        migrateBtn.disabled = false;
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-circle"></i> Error</h5>
+                <p>${error.message}</p>
+            </div>
+        `;
+    });
+}
+
+// Compare files
+function compareSelected() {
+    if (selectedFiles.length === 0) {
+        alert('Please select files to compare.');
+        return;
+    }
+    
+    // Show comparison modal or alert
+    alert('File comparison feature:\n\nSelected files:\n' + selectedFiles.join('\n') + '\n\nUse git diff in terminal for detailed comparison.');
+}
+
+// Setup test directory
+function setupTestDirectory() {
+    if (!confirm('This will create the test directory by copying from production. Continue?')) {
+        return;
+    }
+    
+    fetch('{{ url_for("main.api_setup_test_directory") }}', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Test directory setup completed!\n\nPlease wait a moment and refresh the page.');
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error') + '\n\nOutput: ' + (data.output || ''));
+        }
+    })
+    .catch(error => {
+        alert('Error: ' + error.message);
+    });
+}
+
+// Search files
+function searchFiles() {
+    const searchTerm = document.getElementById('fileSearch').value.toLowerCase();
+    document.querySelectorAll('.file-checkbox').forEach(cb => {
+        const label = cb.parentElement;
+        const text = label.textContent.toLowerCase();
+        if (text.includes(searchTerm)) {
+            label.parentElement.style.display = '';
+        } else {
+            label.parentElement.style.display = 'none';
+        }
+    });
+}
+
+// Refresh status
+function refreshStatus() {
+    location.reload();
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    {% if status.test_dir_exists %}
+    loadFileTree();
+    {% endif %}
+    
+    // Enter key for search
+    document.getElementById('fileSearch')?.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            searchFiles();
+        }
+    });
+});
+</script>
+{% endblock %}
+

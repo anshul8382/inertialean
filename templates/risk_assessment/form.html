@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Risk Assessment — Inertia</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/mobile-layout.css') }}" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #1a2332;
+            --muted: #5a6570;
+            --accent: #1f497d;
+            --surface: #f7f8fa;
+        }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Calibri, system-ui, sans-serif;
+            color: var(--ink);
+            background:
+                radial-gradient(ellipse 80% 50% at 10% -10%, #d6e4f5 0%, transparent 55%),
+                linear-gradient(180deg, #eef2f6 0%, var(--surface) 40%, #e8edf2 100%);
+            min-height: 100vh;
+        }
+        .ra-wrap { max-width: 720px; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
+        .ra-logo {
+            display: block;
+            height: clamp(40px, 8vw, 56px);
+            width: auto;
+            margin: 0 0 1rem;
+        }
+        .ra-lead { color: var(--muted); margin-bottom: 1.5rem; }
+        .ra-card {
+            background: rgba(255,255,255,0.92);
+            border: 1px solid #dde3ea;
+            border-radius: 12px;
+            padding: 1.25rem 1.25rem 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .ra-card h2 {
+            font-size: 1.05rem;
+            color: var(--accent);
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+        }
+        .form-check { margin-bottom: 0.45rem; }
+        .hp-field { position: absolute; left: -9999px; height: 0; overflow: hidden; }
+        .btn-ra {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+            font-weight: 600;
+            padding: 0.65rem 1.4rem;
+        }
+        .btn-ra:hover { background: #16365c; color: #fff; }
+    </style>
+</head>
+<body>
+<div class="ra-wrap">
+    <img class="ra-logo"
+         src="{{ url_for('static', filename='images/inertia-logo.png') }}"
+         alt="Inertia — Equities For Wealth"
+         width="220"
+         height="56">
+    <p class="ra-lead">Risk assessment questionnaire — about 5 minutes. Your answers help us recommend an appropriate allocation.</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert alert-{{ 'danger' if category == 'error' else category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="post" action="{{ url_for('risk_assessment.risk_assessment_form') }}" novalidate>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="lead_token" value="{{ lead_token or '' }}">
+        <div class="hp-field" aria-hidden="true">
+            <label>Company website <input type="text" name="company_website" tabindex="-1" autocomplete="off"></label>
+        </div>
+
+        <div class="ra-card">
+            <h2>Your details</h2>
+            <div class="mb-3">
+                <label class="form-label" for="name">Your name *</label>
+                <input class="form-control" id="name" name="name" required
+                       value="{{ prefill_name }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label" for="email">Email *</label>
+                <input class="form-control" type="email" id="email" name="email" required
+                       value="{{ prefill_email }}">
+            </div>
+        </div>
+
+        <div class="ra-card">
+            <h2>1. I plan to begin withdrawing money from my investments in: *</h2>
+            {% for opt in options.withdraw_begin %}
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="withdraw_begin" id="wb{{ loop.index }}" value="{{ opt }}" required>
+                <label class="form-check-label" for="wb{{ loop.index }}">{{ opt }}</label>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="ra-card">
+            <h2>2. Once I begin withdrawing funds, I plan to spend all of the funds in: *</h2>
+            {% for opt in options.spend_down %}
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="spend_down" id="sd{{ loop.index }}" value="{{ opt }}" required>
+                <label class="form-check-label" for="sd{{ loop.index }}">{{ opt }}</label>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="ra-card">
+            <h2>3. I would describe my knowledge of investments as: *</h2>
+            {% for opt in options.knowledge %}
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="knowledge" id="kn{{ loop.index }}" value="{{ opt }}" required>
+                <label class="form-check-label" for="kn{{ loop.index }}">{{ opt }}</label>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="ra-card">
+            <h2>4. When I invest my money, I am: *</h2>
+            {% for opt in options.attitude %}
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="attitude" id="at{{ loop.index }}" value="{{ opt }}" required>
+                <label class="form-check-label" for="at{{ loop.index }}">{{ opt }}</label>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="ra-card">
+            <h2>5. Select the investments you currently own: *</h2>
+            {% for opt in options.holdings %}
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="holdings" id="ho{{ loop.index }}" value="{{ opt }}">
+                <label class="form-check-label" for="ho{{ loop.index }}">{{ opt }}</label>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="ra-card">
+            <h2>6. Market drop scenario (−25% in three months). What would you do? *</h2>
+            {% for opt in options.crash %}
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="crash" id="cr{{ loop.index }}" value="{{ opt }}" required>
+                <label class="form-check-label" for="cr{{ loop.index }}">{{ opt }}</label>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="ra-card">
+            <h2>7. Which range of possible annual outcomes is most acceptable to you? *</h2>
+            <p class="small text-muted">Hypothetical plans A–E from most conservative to most aggressive (Schwab-style).</p>
+            {% for val, label in options.chart %}
+            <div class="form-check">
+                <input class="form-check-input" type="radio" name="chart" id="ch{{ loop.index }}" value="{{ val }}" required>
+                <label class="form-check-label" for="ch{{ loop.index }}">{{ label }}</label>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="ra-card">
+            <h2>Share details of your current investments</h2>
+            <textarea class="form-control mb-3" name="investments_narrative" rows="3"
+                      placeholder="Optional — brokers, AUM, goals, constraints"></textarea>
+        </div>
+
+        <button type="submit" class="btn btn-ra w-100 w-sm-auto">Submit assessment</button>
+    </form>
+</div>
+</body>
+</html>

@@ -1,0 +1,409 @@
+{% extends "base.html" %}
+
+{% block title %}Classify Transactions - {{ statement.account_name or 'Statement' }}{% endblock %}
+
+{% block content %}
+<div id="txn-classify-root" class="container-fluid mt-4"
+     data-save-url="{{ url_for('account_management.transactions_save', statement_id=statement.id) }}"
+     data-filter-total="{{ total }}">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1><i class="fas fa-tags"></i> Classify Transactions</h1>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="badge bg-secondary" id="filter-total-badge">{{ total }} transaction(s)</span>
+            {% if suggested_heads %}
+            <span class="badge bg-info text-dark" title="Pre-filled from previously posted similar descriptions">{{ suggested_heads|length }} suggested</span>
+            {% endif %}
+            <button type="button" class="btn btn-primary js-txn-save">
+                <i class="fas fa-save"></i> Save
+            </button>
+            <form method="post" action="{{ url_for('account_management.auto_classify_statement', statement_id=statement.id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-primary" title="Write heads from previously posted similar descriptions for this statement">
+                    <i class="fas fa-magic"></i> Apply history suggestions
+                </button>
+            </form>
+            <form method="post" action="{{ url_for('account_management.resanitize_descriptions', statement_id=statement.id) }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-primary" title="Re-run description sanitization to fix UPI UPI UPI">Re-sanitize Descriptions</button>
+            </form>
+            <a href="{{ url_for('account_management.statement_detail', statement_id=statement.id) }}" class="btn btn-outline-secondary">View Summary</a>
+            <a href="{{ url_for('account_management.dashboard') }}" class="btn btn-secondary">Dashboard</a>
+        </div>
+    </div>
+    <p class="text-muted">
+        Assign each transaction to a credit or debit head (includes <strong>Withdrawal from FD</strong>, <strong>Investment in FD</strong>, <strong>Cloud Expenses</strong>).
+        Unclassified rows are pre-filled when a similar description was posted before — review and click <strong>Save</strong>.
+    </p>
+
+    {% if total_credit or total_debit or headwise_totals %}
+    <div class="row mb-4">
+        {% if total_credit or total_debit %}
+        <div class="col-md-4 col-lg-3">
+            <div class="card">
+                <div class="card-header py-2">
+                    <i class="fas fa-chart-pie me-1"></i> Credit vs Debit
+                </div>
+                <div class="card-body p-2 text-center">
+                    <div style="height: 200px;"><canvas id="creditDebitChart"></canvas></div>
+                    <div class="mt-2 small text-muted">
+                        <span class="text-success">Credit: {{ "%.2f"|format(total_credit) }}</span>
+                        <span class="mx-1">|</span>
+                        <span class="text-danger">Debit: {{ "%.2f"|format(total_debit) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        <div class="col-md-8 col-lg-6">
+            <div class="card">
+                <div class="card-header py-2">
+                    <i class="fas fa-list-alt me-1"></i> Headwise Totals
+                </div>
+                <div class="card-body p-0">
+                    {% if headwise_totals %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Head</th>
+                                    <th>Type</th>
+                                    <th class="text-end">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in headwise_totals %}
+                                <tr>
+                                    <td>{{ row.name }}</td>
+                                    <td><span class="badge {{ 'bg-success' if row.head_type == 'credit' else 'bg-danger' }}">{{ row.head_type|capitalize }}</span></td>
+                                    <td class="text-end {{ 'text-success' if row.head_type == 'credit' else 'text-danger' }}">{{ "%.2f"|format(row.total) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <td colspan="2" class="fw-bold">Grand Total (classified)</td>
+                                    <td class="text-end fw-bold">{{ "%.2f"|format(headwise_totals|sum(attribute='total')) }}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0 p-3 small">No transactions classified yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="mb-3 d-flex flex-wrap align-items-center gap-2">
+        <span class="text-muted">Filter:</span>
+        <div class="btn-group btn-group-sm" role="group">
+            <a href="{{ classify_url(statement.id, tx_type=none_val, status=filter_status) }}" class="btn {{ 'btn-primary' if not filter_type else 'btn-outline-secondary' }}">All</a>
+            <a href="{{ classify_url(statement.id, tx_type='credit', status=filter_status) }}" class="btn {{ 'btn-success' if filter_type == 'credit' else 'btn-outline-secondary' }}">Credit</a>
+            <a href="{{ classify_url(statement.id, tx_type='debit', status=filter_status) }}" class="btn {{ 'btn-danger' if filter_type == 'debit' else 'btn-outline-secondary' }}">Debit</a>
+        </div>
+        <span class="text-muted mx-1">|</span>
+        <div class="btn-group btn-group-sm" role="group">
+            <a href="{{ classify_url(statement.id, tx_type=filter_type, status=none_val) }}" class="btn {{ 'btn-primary' if not filter_status else 'btn-outline-secondary' }}">All</a>
+            <a href="{{ classify_url(statement.id, tx_type=filter_type, status='classified') }}" class="btn {{ 'btn-primary' if filter_status == 'classified' else 'btn-outline-secondary' }}">Classified</a>
+            <a href="{{ classify_url(statement.id, tx_type=filter_type, status='unclassified') }}" class="btn {{ 'btn-warning' if filter_status == 'unclassified' else 'btn-outline-secondary' }}">Unclassified</a>
+        </div>
+    </div>
+
+    <div id="txn-save-feedback" class="alert d-none mb-3" role="alert"></div>
+
+    <div class="card" id="txn-classify-card">
+        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2 py-2">
+            <span class="small text-muted mb-0">Mark rows for deletion (hidden until you Save). Use <strong>Save</strong> to write changes to the database.</span>
+            <button type="button" id="stage-bulk-delete" class="btn btn-sm btn-outline-danger" disabled>
+                <i class="fas fa-trash-alt"></i> Delete selected
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="txn-classify-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width:2.5rem;" title="Select rows">
+                                <input type="checkbox" class="form-check-input" id="select-all-txn" aria-label="Select all on this page">
+                            </th>
+                            <th>Date</th>
+                            <th>Description (sanitized)</th>
+                            <th>Withdrawal</th>
+                            <th>Deposit</th>
+                            <th>Head</th>
+                            <th class="text-end text-nowrap">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in transactions %}
+                        {% set suggested_id = suggested_heads.get(t.id) if suggested_heads else none %}
+                        {% set selected_head_id = t.income_expense_head_id if t.income_expense_head_id else suggested_id %}
+                        {% set is_suggestion = (not t.income_expense_head_id) and suggested_id %}
+                        <tr data-txn-id="{{ t.id }}" {% if is_suggestion %}class="table-info"{% endif %}>
+                            <td class="text-center align-middle">
+                                <input type="checkbox" class="form-check-input txn-select-cb" value="{{ t.id }}" aria-label="Select transaction">
+                            </td>
+                            <td>{{ t.transaction_date.strftime('%d %b %Y') if t.transaction_date else '-' }}</td>
+                            <td>
+                                {% set desc = t.description_sanitized or t.description or '-' %}
+                                {% set full_desc = t.description or '' %}
+                                <small title="{{ full_desc[:200] }}{% if full_desc|length > 200 %}...{% endif %}">{{ desc[:80] }}{% if desc|length > 80 %}...{% endif %}</small>
+                                {% if is_suggestion %}
+                                <div class="small text-info"><i class="fas fa-magic"></i> From previous posting</div>
+                                {% endif %}
+                            </td>
+                            <td class="text-danger">{% if t.withdrawal_amount and t.withdrawal_amount|float > 0 %}{{ "%.2f"|format(t.withdrawal_amount|float) }}{% else %}-{% endif %}</td>
+                            <td class="text-success">{% if t.deposit_amount and t.deposit_amount|float > 0 %}{{ "%.2f"|format(t.deposit_amount|float) }}{% else %}-{% endif %}</td>
+                            <td>
+                                <select class="form-select form-select-sm head-select" style="min-width: 160px;" aria-label="Classification head{% if is_suggestion %} (suggested from history){% endif %}">
+                                    <option value="">-- Select --</option>
+                                    <optgroup label="Credit">
+                                        {% for h in credit_heads %}
+                                        <option value="{{ h.id }}" {{ 'selected' if selected_head_id == h.id else '' }}>{{ h.name }}{% if is_suggestion and suggested_id == h.id %} (suggested){% endif %}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                    <optgroup label="Debit">
+                                        {% for h in debit_heads %}
+                                        <option value="{{ h.id }}" {{ 'selected' if selected_head_id == h.id else '' }}>{{ h.name }}{% if is_suggestion and suggested_id == h.id %} (suggested){% endif %}</option>
+                                        {% endfor %}
+                                    </optgroup>
+                                </select>
+                            </td>
+                            <td class="text-end">
+                                <button type="button" class="btn btn-sm btn-outline-danger btn-stage-delete-txn" data-txn-id="{{ t.id }}" title="Mark row for delete"><i class="fas fa-trash-alt"></i></button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+            <button type="button" class="btn btn-primary js-txn-save"><i class="fas fa-save"></i> Save</button>
+            {% if pagination and pagination.pages > 1 %}
+            <nav>
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+                        <a class="page-link" href="{{ classify_url(statement.id, page=pagination.prev_num, tx_type=filter_type, status=filter_status) if pagination.has_prev else '#' }}">Prev</a>
+                    </li>
+                    <li class="page-item disabled"><span class="page-link">Page {{ pagination.page }} of {{ pagination.pages }}</span></li>
+                    <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+                        <a class="page-link" href="{{ classify_url(statement.id, page=pagination.next_num, tx_type=filter_type, status=filter_status) if pagination.has_next else '#' }}">Next</a>
+                    </li>
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var root = document.getElementById('txn-classify-root');
+    if (!root) return;
+    var saveUrl = root.getAttribute('data-save-url');
+    var pendingDeleteIds = new Set();
+    var filterTotal = parseInt(root.getAttribute('data-filter-total') || '0', 10) || 0;
+
+    function csrfToken() {
+        var m = document.querySelector('meta[name="csrf-token"]');
+        return m ? m.getAttribute('content') : '';
+    }
+    function showFeedback(isError, msg) {
+        var el = document.getElementById('txn-save-feedback');
+        if (!el) return;
+        el.className = 'alert mb-3 ' + (isError ? 'alert-danger' : 'alert-success');
+        el.textContent = msg;
+        el.classList.remove('d-none');
+    }
+    function hideFeedback() {
+        var el = document.getElementById('txn-save-feedback');
+        if (el) el.classList.add('d-none');
+    }
+    function syncBulkBtn() {
+        var btn = document.getElementById('stage-bulk-delete');
+        if (!btn) return;
+        var n = 0;
+        root.querySelectorAll('.txn-select-cb:checked').forEach(function() { n++; });
+        btn.disabled = n === 0;
+        btn.innerHTML = n ? '<i class="fas fa-trash-alt"></i> Delete selected (' + n + ')' : '<i class="fas fa-trash-alt"></i> Delete selected';
+    }
+    function syncSelectAll() {
+        var sa = document.getElementById('select-all-txn');
+        if (!sa) return;
+        var boxes = root.querySelectorAll('tbody tr[data-txn-id]:not(.txn-row-pending-delete) .txn-select-cb');
+        var n = 0, len = 0;
+        boxes.forEach(function(cb) {
+            len++;
+            if (cb.checked) n++;
+        });
+        sa.checked = len > 0 && n === len;
+        sa.indeterminate = n > 0 && n < len;
+    }
+    function stageDeleteTxnId(id) {
+        if (pendingDeleteIds.has(id)) return;
+        pendingDeleteIds.add(id);
+        var tr = root.querySelector('tbody tr[data-txn-id="' + id + '"]');
+        if (tr) {
+            tr.classList.add('txn-row-pending-delete', 'd-none');
+            tr.querySelectorAll('.txn-select-cb').forEach(function(cb) { cb.checked = false; });
+        }
+        syncBulkBtn();
+        syncSelectAll();
+    }
+    function collectHeadsPayload() {
+        var heads = {};
+        root.querySelectorAll('tbody tr[data-txn-id]:not(.txn-row-pending-delete) select.head-select').forEach(function(sel) {
+            var tr = sel.closest('tr');
+            if (!tr || tr.classList.contains('txn-row-pending-delete')) return;
+            var tid = tr.getAttribute('data-txn-id');
+            if (!tid) return;
+            if (sel.value === '') {
+                heads[tid] = null;
+            } else {
+                var hv = parseInt(sel.value, 10);
+                if (!isNaN(hv)) heads[tid] = hv;
+            }
+        });
+        return heads;
+    }
+    function save() {
+        hideFeedback();
+        var del = Array.from(pendingDeleteIds);
+        var heads = collectHeadsPayload();
+        if (del.length === 0 && Object.keys(heads).length === 0) {
+            showFeedback(false, 'Nothing to save.');
+            return;
+        }
+        var btns = document.querySelectorAll('.js-txn-save');
+        btns.forEach(function(b) { b.disabled = true; });
+        fetch(saveUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken(),
+            },
+            body: JSON.stringify({ delete_ids: del, heads: heads }),
+        })
+        .then(function(r) {
+            return r.json().then(function(j) { return { ok: r.ok, json: j }; });
+        })
+        .then(function(res) {
+            if (!res.ok || !res.json.success) {
+                showFeedback(true, (res.json && res.json.error) || 'Save failed.');
+                return;
+            }
+            var d = res.json.deleted || 0;
+            var hu = res.json.heads_updated || 0;
+            del.forEach(function(id) {
+                var tr = root.querySelector('tbody tr[data-txn-id="' + id + '"]');
+                if (tr) tr.remove();
+            });
+            pendingDeleteIds.clear();
+            filterTotal = Math.max(0, filterTotal - d);
+            var badge = document.getElementById('filter-total-badge');
+            if (badge) badge.textContent = filterTotal + ' transaction(s)';
+            root.setAttribute('data-filter-total', String(filterTotal));
+            var parts = [];
+            if (d) parts.push(d + ' deleted');
+            if (hu) parts.push(hu + ' classification(s) updated');
+            if (!parts.length) parts.push('No changes applied');
+            showFeedback(false, parts.join(', ') + '.');
+            syncBulkBtn();
+            syncSelectAll();
+        })
+        .catch(function() { showFeedback(true, 'Network error.'); })
+        .finally(function() {
+            document.querySelectorAll('.js-txn-save').forEach(function(b) { b.disabled = false; });
+        });
+    }
+
+    root.addEventListener('click', function(e) {
+        var delBtn = e.target.closest('.btn-stage-delete-txn');
+        if (delBtn) {
+            var id = parseInt(delBtn.getAttribute('data-txn-id'), 10);
+            if (!isNaN(id)) stageDeleteTxnId(id);
+        }
+    });
+    var bulkDel = document.getElementById('stage-bulk-delete');
+    if (bulkDel) {
+        bulkDel.addEventListener('click', function() {
+            root.querySelectorAll('.txn-select-cb:checked').forEach(function(cb) {
+                var id = parseInt(cb.value, 10);
+                if (!isNaN(id)) stageDeleteTxnId(id);
+            });
+            root.querySelectorAll('.txn-select-cb').forEach(function(cb) { cb.checked = false; });
+            var sa = document.getElementById('select-all-txn');
+            if (sa) { sa.checked = false; sa.indeterminate = false; }
+            syncBulkBtn();
+        });
+    }
+    root.addEventListener('change', function(e) {
+        if (e.target && e.target.classList.contains('txn-select-cb')) {
+            syncBulkBtn();
+            syncSelectAll();
+        }
+    });
+    var selectAll = document.getElementById('select-all-txn');
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            var on = this.checked;
+            root.querySelectorAll('tbody tr[data-txn-id]:not(.txn-row-pending-delete) .txn-select-cb').forEach(function(cb) { cb.checked = on; });
+            syncBulkBtn();
+        });
+    }
+    document.querySelectorAll('.js-txn-save').forEach(function(b) { b.addEventListener('click', save); });
+    syncBulkBtn();
+});
+</script>
+{% if total_credit or total_debit %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const ctx = document.getElementById('creditDebitChart');
+    if (!ctx) return;
+    const credit = {{ total_credit or 0 }};
+    const debit = {{ total_debit or 0 }};
+    const labels = [];
+    const data = [];
+    const colors = [];
+    if (credit > 0) { labels.push('Credit'); data.push(credit); colors.push('#28a745'); }
+    if (debit > 0) { labels.push('Debit'); data.push(debit); colors.push('#dc3545'); }
+    if (data.length === 0) return;
+    new Chart(ctx.getContext('2d'), {
+        type: 'pie',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors,
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            const v = ctx.raw;
+                            const pct = ctx.dataset.data.reduce((a,b)=>a+b,0) ? (v * 100 / ctx.dataset.data.reduce((a,b)=>a+b,0)).toFixed(1) : 0;
+                            return ctx.label + ': ' + v.toLocaleString('en-IN', {minimumFractionDigits: 2}) + ' (' + pct + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+{% endif %}
+{{ super() }}
+{% endblock %}

@@ -1,0 +1,1382 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_career %}Career application{% else %}Lead Details{% endif %}{% endblock %}
+
+{% block content %}
+{% set can_manage_finance = current_user.is_admin or current_user.is_manager %}
+<!-- Add these at the top of the content block -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.bundle.min.js"></script>
+
+
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">{% if is_career %}Career application{% else %}Lead Details{% endif %}</h1>
+        <div>
+            <a href="{{ url_for('leads.edit_lead', lead_id=lead.id) }}" class="btn btn-primary">
+                <i class="fas fa-edit"></i> Edit{% if is_career %} application{% else %} Lead{% endif %}
+            </a>
+            <button type="button" class="btn btn-success" data-toggle="modal" data-target="#updateWorkflowModal">
+                <i class="fas fa-exchange-alt"></i> Update status
+            </button>
+            {% if not is_career and (not onboarding or not onboarding.fully_converted) %}
+                {% if convert_blocked_reason %}
+            <a href="#onboarding-hub" class="btn btn-outline-success" title="{{ convert_blocked_reason }}">
+                <i class="fas fa-file-contract"></i> Complete onboarding to convert
+            </a>
+                {% else %}
+            <a href="{{ url_for('leads.convert_lead', lead_id=lead.id) }}" class="btn btn-success">
+                <i class="fas fa-user-plus"></i> Convert to Client
+            </a>
+                {% endif %}
+            {% endif %}
+            {% if lead.client_id %}
+            <a href="{{ url_for('clients.client_details', client_id=lead.client_id) }}" class="btn btn-info">
+                <i class="fas fa-user"></i> View Client{% if onboarding and not onboarding.fully_converted %} (shell){% endif %}
+            </a>
+            {% endif %}
+            {% if not is_career %}
+            <a href="{{ url_for('agreements.lead_agreements', lead_id=lead.id) }}" class="btn btn-warning">
+                <i class="fas fa-file-contract"></i> Agreements
+            </a>
+            {% endif %}
+            <a href="{{ url_for('leads.list_leads', category='career' if is_career else 'sales') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to {% if is_career %}career applications{% else %}Leads{% endif %}
+            </a>
+        </div>
+    </div>
+
+    {% if onboarding and not is_career %}
+    <style>
+      .ob-hub .ob-next {
+        border-left: 4px solid #0d6efd;
+        background: #f8fbff;
+      }
+      .ob-hub .ob-stepper {
+        display: flex;
+        gap: 0.35rem;
+        overflow-x: auto;
+        padding-bottom: 0.35rem;
+        -webkit-overflow-scrolling: touch;
+      }
+      .ob-hub .ob-step {
+        min-width: 7.5rem;
+        max-width: 9rem;
+        flex: 1 0 auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.35rem;
+        padding: 0.5rem 0.45rem;
+        background: #fff;
+        text-align: center;
+        font-size: 0.75rem;
+        line-height: 1.25;
+      }
+      .ob-hub .ob-step.done {
+        border-color: #198754;
+        background: #f0fff6;
+        color: #0f5132;
+      }
+      .ob-hub .ob-step.current {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.2);
+        background: #eef5ff;
+        font-weight: 600;
+      }
+      .ob-hub .ob-step.upcoming {
+        opacity: 0.65;
+      }
+      .ob-hub .ob-step-num {
+        display: inline-block;
+        width: 1.35rem;
+        height: 1.35rem;
+        line-height: 1.35rem;
+        border-radius: 50%;
+        background: #e9ecef;
+        margin-bottom: 0.2rem;
+        font-size: 0.7rem;
+      }
+      .ob-hub .ob-step.done .ob-step-num { background: #198754; color: #fff; }
+      .ob-hub .ob-step.current .ob-step-num { background: #0d6efd; color: #fff; }
+      .ob-hub .ob-panel {
+        border: 1px solid #e9ecef;
+        border-radius: 0.35rem;
+        padding: 0.85rem 1rem;
+        height: 100%;
+        background: #fff;
+      }
+      .ob-hub .ob-panel.current-panel {
+        border-color: #0d6efd;
+        background: #f8fbff;
+      }
+      .ob-hub .ob-panel.done-panel { opacity: 0.85; }
+      .ob-hub .ob-progress {
+        height: 0.45rem;
+        background: #e9ecef;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .ob-hub .ob-progress > span {
+        display: block;
+        height: 100%;
+        background: #198754;
+      }
+      @media (max-width: 767.98px) {
+        .ob-hub .ob-step { min-width: 6.5rem; }
+      }
+    </style>
+    <div class="card shadow mb-4 ob-hub" id="onboarding-hub">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center flex-wrap">
+            <div>
+                <h6 class="m-0 font-weight-bold text-primary">Client onboarding workflow</h6>
+                <span class="small text-muted">{{ onboarding.progress.label }} · lead status: {{ onboarding.lead_status or '—' }}</span>
+            </div>
+            <div class="small text-muted" style="min-width: 140px;">
+                <div class="ob-progress mb-1" role="progressbar" aria-valuenow="{{ onboarding.progress.percent }}" aria-valuemin="0" aria-valuemax="100" aria-label="Onboarding progress">
+                    <span style="width: {{ onboarding.progress.percent }}%;"></span>
+                </div>
+                {{ onboarding.progress.percent }}%
+            </div>
+        </div>
+        <div class="card-body">
+            {# --- Where you are / what next --- #}
+            {% set na = onboarding.next_action %}
+            <div class="ob-next rounded p-3 mb-3">
+                {% if onboarding.fully_converted %}
+                <div class="small text-success font-weight-bold text-uppercase mb-1">Completed</div>
+                <h5 class="mb-1">{{ na.title }}</h5>
+                <p class="mb-2 text-muted">{{ na.description }}</p>
+                {% if na.primary_url and na.primary_label %}
+                <a class="btn btn-success" href="{{ na.primary_url }}">{{ na.primary_label }}</a>
+                {% endif %}
+                {% else %}
+                <div class="small text-primary font-weight-bold text-uppercase mb-1">
+                    You are here · Step {{ na.step_index }} of {{ onboarding.progress.total }} — {{ na.step_label }}
+                </div>
+                <h5 class="mb-1">Next: {{ na.title }}</h5>
+                <p class="mb-2 text-muted">{{ na.description }}</p>
+                {% if na.blocked_reason %}
+                <div class="alert alert-warning py-2 small mb-2">{{ na.blocked_reason }}</div>
+                {% endif %}
+                <div class="d-flex flex-wrap align-items-center" style="gap: 0.4rem;">
+                    {% if na.primary_kind == 'modal' and na.primary_modal and na.primary_label %}
+                    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="{{ na.primary_modal }}">{{ na.primary_label }}</button>
+                    {% elif na.primary_kind == 'form' and na.primary_form_action and na.primary_label %}
+                    <form method="post" action="{{ na.primary_form_action }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {% for fk, fv in (na.primary_form_fields or {}).items() %}
+                        <input type="hidden" name="{{ fk }}" value="{{ fv }}">
+                        {% endfor %}
+                        <button type="submit" class="btn btn-primary">{{ na.primary_label }}</button>
+                    </form>
+                    {% elif na.primary_url and na.primary_label %}
+                    <a class="btn btn-primary" href="{{ na.primary_url }}">{{ na.primary_label }}</a>
+                    {% endif %}
+                    {% for sec in na.secondary or [] %}
+                        {% if sec.kind == 'form' and sec.form_action %}
+                        <form method="post" action="{{ sec.form_action }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-outline-secondary">{{ sec.label }}</button>
+                        </form>
+                        {% elif sec.url %}
+                        <a class="btn btn-outline-secondary" href="{{ sec.url }}" {% if sec.external %}target="_blank" rel="noopener"{% endif %}>{{ sec.label }}</a>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
+            {# --- Path overview --- #}
+            <div class="ob-stepper mb-4" role="list" aria-label="Onboarding steps">
+                {% for step in onboarding.steps %}
+                <a class="ob-step {{ step.state }} text-decoration-none text-reset" href="#onboarding-step-{{ step.key }}" role="listitem" title="{{ step.how }}">
+                    <div class="ob-step-num">{% if step.state == 'done' %}✓{% else %}{{ step.index }}{% endif %}</div>
+                    <div>{{ step.label }}</div>
+                    <div class="text-muted" style="font-size: 0.68rem;">
+                        {% if step.state == 'current' %}Now{% elif step.state == 'done' %}Done{% else %}Next{% endif %}
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+
+            {# --- Step details (order: contact → meeting → risk → proposal → KYC → agreement → invoice → payment → convert) --- #}
+            {% set sb = onboarding.steps_by_key %}
+            <div class="row">
+                <div class="col-md-6 mb-3" id="onboarding-step-contact">
+                    <div class="ob-panel {% if onboarding.current_step.key == 'contact' %}current-panel{% elif sb.contact.done %}done-panel{% endif %}">
+                    <h6 class="text-primary">{{ sb.contact.index }}. Contact {% if sb.contact.done %}<span class="badge badge-success">Done</span>{% elif onboarding.current_step.key == 'contact' %}<span class="badge badge-primary">Now</span>{% endif %}</h6>
+                    <p class="small text-muted mb-1">{{ sb.contact.how }}</p>
+                    <p class="small mb-2"><strong>Status:</strong> {{ sb.contact.detail }}</p>
+                    <p class="small text-muted mb-1">Suggested: <strong>{{ onboarding.contact_draft.label }}</strong> (from playbook)</p>
+                    <div class="form-row align-items-end mb-2">
+                        <div class="col-8">
+                            <select class="form-control form-control-sm" id="contactStageSelect">
+                                {% for stage in onboarding.message_stages %}
+                                <option value="{{ stage.key }}" {% if stage.key == onboarding.contact_draft.selected %}selected{% endif %}>{{ stage.label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <button type="button" class="btn btn-sm btn-outline-success btn-block" data-toggle="modal" data-target="#waFollowModal">Edit &amp; send</button>
+                        </div>
+                    </div>
+                    {% if onboarding.wa_configured %}
+                    <form method="post" action="{{ onboarding.send_wa_url }}" class="d-inline" id="contactWaApiForm">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="kind" value="followup">
+                        <input type="hidden" name="stage" id="contactWaStage" value="{{ onboarding.contact_draft.selected }}">
+                        <input type="hidden" name="message_text" id="contactWaText" value="">
+                        <button type="submit" class="btn btn-sm btn-success mb-1">Send via API</button>
+                    </form>
+                    {% endif %}
+                    <a class="btn btn-sm btn-outline-secondary mb-1" href="#call-logs">Log a call ↓</a>
+                    <form method="post" action="{{ onboarding.mark_contacted_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-primary mb-1">Mark contacted</button>
+                    </form>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3" id="onboarding-step-meeting">
+                    <div class="ob-panel {% if onboarding.current_step.key == 'meeting' %}current-panel{% elif sb.meeting.done %}done-panel{% endif %}">
+                    <h6 class="text-primary">{{ sb.meeting.index }}. Meeting {% if sb.meeting.done %}<span class="badge badge-success">Done</span>{% elif onboarding.current_step.key == 'meeting' %}<span class="badge badge-primary">Now</span>{% endif %}</h6>
+                    <p class="small text-muted mb-1">{{ sb.meeting.how }}</p>
+                    <p class="small mb-2"><strong>Status:</strong> {{ sb.meeting.detail }}</p>
+                    <a class="btn btn-sm btn-primary mb-1" href="{{ onboarding.new_meeting_url }}">Schedule meeting</a>
+                    <a class="btn btn-sm btn-outline-secondary mb-1" href="#lead-meetings">Meetings ↓</a>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3" id="onboarding-step-risk">
+                    <div class="ob-panel {% if onboarding.current_step.key == 'risk' %}current-panel{% elif sb.risk.done %}done-panel{% endif %}">
+                    <h6 class="text-primary">{{ sb.risk.index }}. Risk profile {% if sb.risk.done %}<span class="badge badge-success">Done</span>{% elif onboarding.current_step.key == 'risk' %}<span class="badge badge-primary">Now</span>{% endif %}</h6>
+                    <p class="small text-muted mb-1">{{ sb.risk.how }}</p>
+                    <p class="small mb-2"><strong>Status:</strong> {{ sb.risk.detail }}</p>
+                    <button type="button" class="btn btn-sm btn-outline-success mb-1" data-toggle="modal" data-target="#waRiskModal">WhatsApp draft</button>
+                    {% if onboarding.wa_configured %}
+                    <form method="post" action="{{ onboarding.send_wa_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="kind" value="risk">
+                        <button type="submit" class="btn btn-sm btn-success mb-1">Send via API</button>
+                    </form>
+                    {% endif %}
+                    <a class="btn btn-sm btn-outline-primary mb-1" href="{{ onboarding.quiz_url }}" target="_blank" rel="noopener">Open quiz link</a>
+                    <form method="post" action="{{ onboarding.mark_risk_sent_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary mb-1">Mark sent</button>
+                    </form>
+                    {% if onboarding.risk_display %}
+                    <div class="mt-2 border-top pt-2">
+                        <p class="small mb-1"><strong>Evaluation:</strong> {{ onboarding.risk_display.summary_line }}</p>
+                        <button class="btn btn-sm btn-link p-0" type="button" data-toggle="collapse" data-target="#riskAnswersCollapse" aria-expanded="false">
+                            View answers &amp; evaluation
+                        </button>
+                        <div class="collapse mt-2" id="riskAnswersCollapse">
+                            <ul class="list-unstyled small mb-0">
+                                {% for row in onboarding.risk_display.answer_rows %}
+                                <li class="mb-1"><span class="text-muted">{{ row.label }}:</span> {{ row.value }}</li>
+                                {% endfor %}
+                            </ul>
+                            <p class="small mb-0 mt-2">
+                                Profile <strong>{{ onboarding.risk_display.risk_profile }}</strong>
+                                · TH {{ onboarding.risk_display.time_horizon_score }}
+                                · RT {{ onboarding.risk_display.risk_tolerance_score }}
+                                · Max equity {{ onboarding.risk_display.max_equity_pct }}%
+                            </p>
+                        </div>
+                    </div>
+                    {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3" id="onboarding-step-proposal">
+                    <div class="ob-panel {% if onboarding.current_step.key == 'proposal' %}current-panel{% elif sb.proposal.done %}done-panel{% endif %}">
+                    <h6 class="text-primary">{{ sb.proposal.index }}. Proposal {% if sb.proposal.done %}<span class="badge badge-success">Done</span>{% elif onboarding.current_step.key == 'proposal' %}<span class="badge badge-primary">Now</span>{% endif %}</h6>
+                    <p class="small text-muted mb-1">{{ sb.proposal.how }}</p>
+                    <p class="small mb-2"><strong>Status:</strong> {{ sb.proposal.detail }}</p>
+                    <a class="btn btn-sm btn-primary mb-1" href="{{ onboarding.proposal_url }}">Create / edit proposal</a>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3" id="onboarding-step-kyc">
+                    <div class="ob-panel {% if onboarding.current_step.key == 'kyc' %}current-panel{% elif sb.kyc.done %}done-panel{% endif %}">
+                    <h6 class="text-primary">{{ sb.kyc.index }}. KYC {% if sb.kyc.done %}<span class="badge badge-success">Done</span>{% elif onboarding.current_step.key == 'kyc' %}<span class="badge badge-primary">Now</span>{% endif %}</h6>
+                    <p class="small text-muted mb-1">{{ sb.kyc.how }}</p>
+                    <p class="small mb-2"><strong>Status:</strong> {{ sb.kyc.detail }}</p>
+                    <form method="post" action="{{ onboarding.save_kyc_profile_url }}" class="mb-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-row">
+                            <div class="col-6 mb-1">
+                                <input class="form-control form-control-sm" name="pan" placeholder="PAN"
+                                       value="{{ onboarding.kyc_profile.pan if onboarding.kyc_profile else '' }}">
+                            </div>
+                            <div class="col-6 mb-1">
+                                <input class="form-control form-control-sm" name="aadhaar_last4" placeholder="Aadhaar last 4" maxlength="4"
+                                       value="{{ onboarding.kyc_profile.aadhaar_last4 if onboarding.kyc_profile else '' }}">
+                            </div>
+                            <div class="col-12 mb-1">
+                                <input class="form-control form-control-sm" name="ckyc_number" placeholder="CKYC number (optional)"
+                                       value="{{ onboarding.kyc_profile.ckyc_number if onboarding.kyc_profile else '' }}">
+                            </div>
+                            <div class="col-12 mb-1">
+                                <input class="form-control form-control-sm" name="full_name_as_per_pan" placeholder="Name as per PAN"
+                                       value="{{ onboarding.kyc_profile.full_name_as_per_pan if onboarding.kyc_profile else '' }}">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-outline-primary mb-1">Save KYC profile</button>
+                    </form>
+                    <form method="post" action="{{ onboarding.upload_document_url }}" enctype="multipart/form-data" class="mb-2 border rounded p-2 bg-light">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="redirect_anchor" value="onboarding-step-kyc">
+                        <label class="small font-weight-bold d-block mb-1">Upload KYC document</label>
+                        <div class="form-row align-items-end">
+                            <div class="col-md-5 mb-1">
+                                <input type="file" class="form-control-file form-control-sm" name="document" accept="image/*,.pdf,.doc,.docx,.heic,.heif" multiple required>
+                            </div>
+                            <div class="col-md-4 mb-1">
+                                <select class="form-control form-control-sm" name="document_type">
+                                    <option value="KYC" selected>KYC</option>
+                                    <option value="PAN">PAN</option>
+                                    <option value="Address proof">Address proof</option>
+                                    <option value="Aadhaar">Aadhaar</option>
+                                    <option value="Passport">Passport</option>
+                                    <option value="CKYC">CKYC</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-1">
+                                <button type="submit" class="btn btn-sm btn-primary btn-block">Upload</button>
+                            </div>
+                        </div>
+                    </form>
+                    {% if onboarding.kyc_docs %}
+                    <ul class="list-unstyled small mb-2">
+                        {% for doc in onboarding.kyc_docs %}
+                        <li class="mb-1">
+                            <a href="{{ url_for('leads.download_lead_document', lead_id=lead.id, stored_name=doc.stored_name) }}">{{ doc.original_filename or doc.stored_name }}</a>
+                            <span class="text-muted">({{ doc.document_type }})</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                    <form method="post" action="{{ onboarding.mark_kyc_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary mb-1">Mark KYC complete (docs)</button>
+                    </form>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3" id="onboarding-step-agreement">
+                    <div class="ob-panel {% if onboarding.current_step.key == 'agreement' %}current-panel{% elif sb.agreement.done %}done-panel{% endif %}">
+                    <h6 class="text-primary">{{ sb.agreement.index }}. Agreement {% if sb.agreement.done %}<span class="badge badge-success">Done</span>{% elif onboarding.current_step.key == 'agreement' %}<span class="badge badge-primary">Now</span>{% endif %}</h6>
+                    <p class="small text-muted mb-1">{{ sb.agreement.how }}</p>
+                    <p class="small mb-2"><strong>Status:</strong> {{ sb.agreement.detail }}</p>
+                    {% if not onboarding.has_kyc %}
+                    <div class="alert alert-warning py-2 small mb-2">KYC not complete yet — you can still proceed; finish KYC before closing onboarding.</div>
+                    {% endif %}
+                    <a class="btn btn-sm btn-warning mb-1" href="{{ onboarding.create_agreement_url }}">New agreement</a>
+                    <a class="btn btn-sm btn-outline-warning mb-1" href="{{ onboarding.agreements_url }}">All agreements</a>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3" id="onboarding-step-invoice">
+                    <div class="ob-panel {% if onboarding.current_step.key == 'invoice' %}current-panel{% elif sb.invoice.done %}done-panel{% endif %}">
+                    <h6 class="text-primary">{{ sb.invoice.index }}. Invoice {% if sb.invoice.done %}<span class="badge badge-success">Done</span>{% elif onboarding.current_step.key == 'invoice' %}<span class="badge badge-primary">Now</span>{% endif %}</h6>
+                    <p class="small text-muted mb-1">{{ sb.invoice.how }}</p>
+                    <p class="small mb-2"><strong>Status:</strong> {{ sb.invoice.detail }}</p>
+                    {% if onboarding.latest_invoice %}
+                    <p class="small mb-2">
+                        Invoice <strong>{{ onboarding.latest_invoice.invoice_number }}</strong>
+                        · status <span class="badge badge-secondary">{{ onboarding.latest_invoice.status }}</span>
+                        · approval
+                        {% if onboarding.invoice_approval.is_approved %}
+                        <span class="badge badge-success">approved</span>
+                        {% elif onboarding.invoice_approval.is_pending %}
+                        <span class="badge badge-warning">pending</span>
+                        {% else %}
+                        <span class="badge badge-light">not submitted</span>
+                        {% endif %}
+                    </p>
+                    <button type="button" class="btn btn-sm btn-secondary mb-1" disabled>Invoice already generated</button>
+                    {% if onboarding.can_submit_invoice_approval and not onboarding.invoice_approval.is_approved and not onboarding.invoice_approval.is_pending %}
+                    <form method="post" action="{{ onboarding.request_invoice_approval_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-warning mb-1">Submit for approval</button>
+                    </form>
+                    {% endif %}
+                    {% if onboarding.can_approve_invoice %}
+                    <form method="post" action="{{ onboarding.approve_invoice_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-warning mb-1">Approve invoice</button>
+                    </form>
+                    {% endif %}
+                    {% elif not onboarding.has_signed_agreement %}
+                    <span class="small text-muted">Sign the agreement before generating an invoice.</span>
+                    {% elif onboarding.can_generate_invoice %}
+                    <form method="post" action="{{ onboarding.generate_invoice_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-primary mb-1">Generate invoice</button>
+                    </form>
+                    {% else %}
+                    <span class="small text-muted">Invoice not available yet.</span>
+                    {% endif %}
+                    {% if onboarding.invoice_view_url %}
+                    <a class="btn btn-sm btn-outline-primary mb-1" href="{{ onboarding.invoice_view_url }}">View invoice</a>
+                    {% endif %}
+                    {% if onboarding.zoho_configured and onboarding.latest_invoice and can_manage_finance %}
+                    {% if onboarding.invoice_send_ok %}
+                    <form method="post" action="{{ onboarding.send_zoho_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-info mb-1">{% if onboarding.zoho_linked %}Re-send Zoho email{% else %}Create in Zoho &amp; email{% endif %}</button>
+                    </form>
+                    {% else %}
+                    <span class="small text-muted d-block mb-1">Approve invoice before sending to client (Zoho).</span>
+                    {% endif %}
+                    {% if onboarding.zoho_linked %}
+                    <form method="post" action="{{ onboarding.sync_zoho_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-info mb-1">Sync Zoho status</button>
+                    </form>
+                    <a class="btn btn-sm btn-outline-secondary mb-1" href="{{ onboarding.zoho_pdf_url }}">Zoho invoice PDF</a>
+                    {% endif %}
+                    {% if onboarding.zoho_payment_id %}
+                    <a class="btn btn-sm btn-outline-success mb-1" href="{{ onboarding.zoho_receipt_url }}">Zoho receipt</a>
+                    {% endif %}
+                    {% elif onboarding.latest_invoice %}
+                    <span class="small text-muted d-block">Zoho not configured</span>
+                    {% endif %}
+                    {% if onboarding.zoho_invoice_id %}
+                    <span class="small text-muted d-block">Zoho ID: {{ onboarding.zoho_invoice_id }}</span>
+                    {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3" id="onboarding-step-payment">
+                    <div class="ob-panel {% if onboarding.current_step.key == 'payment' %}current-panel{% elif sb.payment.done %}done-panel{% endif %}">
+                    <h6 class="text-primary">{{ sb.payment.index }}. Payment {% if sb.payment.done %}<span class="badge badge-success">Done</span>{% elif onboarding.current_step.key == 'payment' %}<span class="badge badge-primary">Now</span>{% endif %}</h6>
+                    <p class="small text-muted mb-1">{{ sb.payment.how }}</p>
+                    <p class="small mb-2"><strong>Status:</strong> {{ sb.payment.detail }}</p>
+                    {% if onboarding.mark_paid_url and can_manage_finance %}
+                    <form method="post" action="{{ onboarding.mark_paid_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="text" name="payment_reference" class="form-control form-control-sm d-inline-block mb-1" style="max-width: 140px;" placeholder="Ref (optional)">
+                        <input type="text" name="payment_method" class="form-control form-control-sm d-inline-block mb-1" style="max-width: 100px;" placeholder="UPI/NEFT">
+                        <button type="submit" class="btn btn-sm btn-success mb-1">Mark paid{% if onboarding.zoho_configured %} (+ Zoho){% endif %}</button>
+                    </form>
+                    {% elif onboarding.has_paid %}
+                    <span class="badge badge-success">Paid</span>
+                    {% if onboarding.zoho_configured and onboarding.zoho_linked and can_manage_finance %}
+                    <form method="post" action="{{ onboarding.sync_zoho_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-info mb-1">Refresh Zoho status</button>
+                    </form>
+                    {% endif %}
+                    {% elif onboarding.latest_invoice and not can_manage_finance %}
+                    <span class="small text-muted">A manager or admin must record payment.</span>
+                    {% else %}
+                    <span class="small text-muted">Generate an invoice first</span>
+                    {% endif %}
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3" id="onboarding-step-convert">
+                    <div class="ob-panel {% if onboarding.current_step.key == 'convert' %}current-panel{% elif sb.convert.done %}done-panel{% endif %}">
+                    <h6 class="text-primary">{{ sb.convert.index }}. Convert {% if sb.convert.done %}<span class="badge badge-success">Done</span>{% elif onboarding.current_step.key == 'convert' %}<span class="badge badge-primary">Now</span>{% endif %}</h6>
+                    <p class="small text-muted mb-1">{{ sb.convert.how }}</p>
+                    <p class="small mb-2"><strong>Status:</strong> {{ sb.convert.detail }}</p>
+                    {% if onboarding.convert_url and not convert_blocked_reason %}
+                    <a class="btn btn-sm btn-success mb-1" href="{{ onboarding.convert_url }}">Convert to client</a>
+                    <p class="small text-muted">Activates client profile for first recommendation. Checklist stays open if KYC/agreement/payment remain.</p>
+                    {% elif onboarding.client_url %}
+                    <a class="btn btn-sm btn-outline-success mb-1" href="{{ onboarding.client_url }}">Open client</a>
+                    {% if onboarding.onboarding_open_items %}
+                    <p class="small text-warning mb-1">Still open: {{ onboarding.onboarding_open_items|join(', ') }}</p>
+                    <form method="post" action="{{ onboarding.close_onboarding_url }}" class="d-inline" onsubmit="return confirm('Mark onboarding complete even if some items are open?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary mb-1">Close onboarding</button>
+                    </form>
+                    {% elif not onboarding.fully_converted %}
+                    <form method="post" action="{{ onboarding.close_onboarding_url }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-sm btn-outline-secondary mb-1">Mark onboarding complete</button>
+                    </form>
+                    {% else %}
+                    <span class="badge badge-success">Onboarding closed</span>
+                    {% endif %}
+                    {% elif convert_blocked_reason %}
+                    <span class="small text-muted">{{ convert_blocked_reason }}</span>
+                    {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% if onboarding.risk_submission %}
+            <div class="alert alert-info mb-2 py-2 small">
+                Latest quiz: <strong>{{ onboarding.risk_submission.risk_profile }}</strong>
+                (TH {{ onboarding.risk_submission.time_horizon_score }},
+                RT {{ onboarding.risk_submission.risk_tolerance_score }},
+                max equity {{ onboarding.risk_submission.max_equity_pct }}%)
+                {% if onboarding.risk_display %}
+                — <a href="#onboarding-step-risk">view answers</a>
+                {% endif %}
+            </div>
+            {% if onboarding.risk_history and onboarding.risk_history|length > 1 %}
+            <div class="small mb-0">
+                <strong>History:</strong>
+                <ul class="mb-0 pl-3">
+                {% for row in onboarding.risk_history %}
+                    <li>{{ row.created_at.strftime('%Y-%m-%d') if row.created_at else '—' }} —
+                        {{ row.risk_profile }} (TH {{ row.time_horizon_score }}, RT {{ row.risk_tolerance_score }}, equity {{ row.max_equity_pct }}%)
+                        {% if loop.first %}<span class="badge badge-info">latest</span>{% endif %}
+                    </li>
+                {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="modal fade" id="waRiskModal" tabindex="-1" role="dialog" aria-labelledby="waRiskLabel" aria-hidden="true">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="waRiskLabel">WhatsApp — risk profile</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+          </div>
+          <div class="modal-body">
+            <textarea class="form-control" id="waRiskText" rows="10" readonly>{{ onboarding.risk_draft.text }}</textarea>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('waRiskText').value)">Copy</button>
+            {% if onboarding.risk_draft.wa_url %}
+            <a class="btn btn-success btn-sm" href="{{ onboarding.risk_draft.wa_url }}" target="_blank" rel="noopener">Open WhatsApp</a>
+            {% else %}
+            <span class="small text-muted">Add a phone number on the lead to enable Open WhatsApp.</span>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal fade" id="waFollowModal" tabindex="-1" role="dialog" aria-labelledby="waFollowLabel" aria-hidden="true">
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="waFollowLabel">WhatsApp — contact message</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+          </div>
+          <div class="modal-body">
+            <label class="small" for="waFollowStage">Stage (from playbook)</label>
+            <select class="form-control form-control-sm mb-2" id="waFollowStage">
+              {% for stage in onboarding.message_stages %}
+              <option value="{{ stage.key }}" {% if stage.key == onboarding.contact_draft.selected %}selected{% endif %}>{{ stage.label }}</option>
+              {% endfor %}
+            </select>
+            <label class="small" for="waFollowText">Edit before sending</label>
+            <textarea class="form-control" id="waFollowText" rows="12">{{ onboarding.contact_draft.text }}</textarea>
+            <p class="small text-muted mt-1 mb-0">Source: docs/onboarding_whatsapp_playbook.md — system suggests a stage; you can change text.</p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('waFollowText').value)">Copy</button>
+            <a class="btn btn-success btn-sm" id="waFollowOpen" href="{{ onboarding.contact_draft.wa_url or '#' }}" target="_blank" rel="noopener">Open WhatsApp</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <!-- Lead Information -->
+        <div class="col-xl-8 col-lg-7">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{% if is_career %}Application information{% else %}Lead Information{% endif %}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Name:</strong> <span class="text-dark">{{ lead.name if lead.name else 'Not Set' }}</span></p>
+                            <p><strong>Email:</strong> <span class="text-dark">{{ lead.email if lead.email else 'Not Set' }}</span></p>
+                            <p><strong>Phone:</strong> <span class="text-dark">{{ lead.phone if lead.phone else 'Not Set' }}</span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Source:</strong> <span class="text-dark">{{ lead.source|title if lead.source else 'Not Set' }}</span></p>
+                            <p><strong>Referral By:</strong> <span class="text-dark">{{ lead.referral_by if lead.referral_by else 'Not Set' }}</span></p>
+                            <p><strong>Status:</strong> <span class="text-dark">{{ lead.status|replace('_', ' ')|title if lead.status else 'Not Set' }}</span></p>
+                            <p><strong>Assigned To:</strong> 
+                                {% if lead.user %}
+                                    <span class="badge badge-info">{{ lead.user.username }}</span>
+                                    {% if current_user.is_manager or current_user.is_admin %}
+                                        <button type="button" class="btn btn-sm btn-outline-primary ml-2" data-toggle="modal" data-target="#assignLeadModal">
+                                            <i class="fas fa-user-edit"></i> Reassign
+                                        </button>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">Unassigned</span>
+                                    {% if current_user.is_manager or current_user.is_admin %}
+                                        <button type="button" class="btn btn-sm btn-primary ml-2" data-toggle="modal" data-target="#assignLeadModal">
+                                            <i class="fas fa-user-plus"></i> Assign
+                                        </button>
+                                    {% endif %}
+                                {% endif %}
+                            </p>
+                            <p><strong>Temperature:</strong> 
+                                {% if lead.is_active and not lead.client_id %}
+                                    <form method="POST" action="{{ url_for('leads.update_lead_temperature', lead_id=lead.id) }}" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <select name="temperature" class="form-control form-control-sm d-inline-block" 
+                                                onchange="this.form.submit()" style="width: 60px;">
+                                            {% for i in range(1, 6) %}
+                                            <option value="{{ i }}" {% if lead.temperature == i %}selected{% endif %}>
+                                                {{ i }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </form>
+                                    <div class="mt-1">
+                                        {% for i in range(1, 6) %}
+                                            <i class="fas fa-star {{ 'text-warning' if i <= lead.temperature else 'text-muted' }}" 
+                                               style="font-size: 0.9em;"></i>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <span class="text-muted">N/A ({{ 'Inactive' if not lead.is_active else 'Converted' }})</span>
+                                {% endif %}
+                            </p>
+                            <p><strong>Created:</strong> <span class="text-dark">{{ lead.created_at | ist_datetime }}</span></p>
+                            {% if lead.client_id %}
+                            <p><strong>Conversion Status:</strong> <span class="badge badge-success">Converted to Client</span></p>
+                            {% if lead.converted_at is defined and lead.converted_at %}
+                            <p><strong>Converted:</strong> <span class="text-dark">{{ lead.converted_at | ist_datetime }}</span></p>
+                            {% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notes Log -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h6 class="m-0 font-weight-bold text-primary">Notes</h6>
+                    <div class="d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#editNotesModal">
+                        <i class="fas fa-edit"></i> Edit notes
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#uploadLeadNotesModal">
+                        <i class="fas fa-camera"></i> Upload notes
+                    </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if lead.notes %}
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <p class="mb-0" style="white-space: pre-wrap;">{{ lead.notes | strip_ic_markers }}</p>
+                                <small class="text-muted">Last updated: {{ lead.updated_at | ist_datetime }}</small>
+                            </div>
+                        </div>
+                    {% else %}
+                        <p class="text-muted">No typed notes yet. Add text or upload a photo of handwritten notes.</p>
+                    {% endif %}
+                    {% if lead_note_documents|default([]) %}
+                        <h6 class="text-muted text-uppercase small">Uploaded notes</h6>
+                        <div class="row">
+                            {% for doc in lead_note_documents %}
+                            <div class="col-md-6 mb-3">
+                                {% if doc.is_image %}
+                                <a href="{{ url_for('leads.download_lead_document', lead_id=lead.id, stored_name=doc.stored_name) }}" class="d-block">
+                                    <img src="{{ url_for('leads.download_lead_document', lead_id=lead.id, stored_name=doc.stored_name) }}"
+                                         alt="{{ doc.original_name }}"
+                                         class="img-fluid rounded border">
+                                </a>
+                                {% else %}
+                                <a href="{{ url_for('leads.download_lead_document', lead_id=lead.id, stored_name=doc.stored_name) }}">{{ doc.original_name }}</a>
+                                {% endif %}
+                                <small class="text-muted d-block">{{ doc.document_type }}{% if doc.uploaded_at %}, {{ doc.uploaded_at[:10] }}{% endif %}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Documents -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">Documents</h6>
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#addLeadDocumentModal">
+                        <i class="fas fa-upload"></i> Upload Document
+                    </button>
+                </div>
+                <div class="card-body">
+                    {% if lead_documents|default([]) %}
+                        <ul class="list-group">
+                            {% for doc in lead_documents %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div>
+                                    <a href="{{ url_for('leads.download_lead_document', lead_id=lead.id, stored_name=doc.stored_name) }}">{{ doc.original_name }}</a>
+                                    <span class="text-muted">({{ doc.document_type }}{% if doc.uploaded_at %}, {{ doc.uploaded_at[:10] }}{% endif %})</span>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="text-muted text-center mb-0">{% if is_career %}No resume or other files uploaded yet.{% else %}No documents uploaded yet.{% endif %}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="row">
+                {% include 'clients/partials/content_intelligence_profile.html' %}
+            </div>
+
+            <!-- Follow-up Alerts -->
+            <div class="card shadow mb-4" style="border-left: 4px solid #ffc107;">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center" style="background-color: #fff3cd;">
+                    <h6 class="m-0 font-weight-bold text-warning">
+                        <i class="fas fa-bell"></i> Follow-up Alerts
+                    </h6>
+                    <button type="button" class="btn btn-warning btn-sm" data-toggle="modal" data-target="#createFollowupAlertModal">
+                        <i class="fas fa-plus"></i> Create Follow-up Alert
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="followupAlertsContainer">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="sr-only">Loading...</span>
+                            </div>
+                            <p class="mt-2">Loading alerts...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Meetings -->
+            <div class="card shadow mb-4" id="lead-meetings">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">Meetings</h6>
+                    <a href="{{ url_for('meetings.new_meeting', lead_id=lead.id) }}" class="btn btn-primary btn-sm">
+                        <i class="fas fa-plus"></i> Add Meeting
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Status</th>
+                                    <th>Notes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for meeting in lead.meetings %}
+                                <tr>
+                                    <td>{{ meeting.meeting_date | ist_datetime }}</td>
+                                    <td>
+                                        <span class="badge badge-{{ 'success' if meeting.status == 'completed' else 'warning' }} text-white">
+                                            {{ meeting.status|title }}
+                                        </span>
+                                    </td>
+                                    <td>{{ meeting.notes|truncate(50) }}</td>
+                                    <td>
+                                        <a href="{{ url_for('meetings.view_meeting', id=meeting.id) }}" class="btn btn-info btn-sm">
+                                            <i class="fas fa-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Call Logs -->
+            <div class="card shadow mb-4" id="call-logs">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">Call Logs</h6>
+                    <button type="button" class="btn btn-primary btn-sm" id="logCallBtn" data-toggle="modal" data-target="#addCallLogModal">
+                        <i class="fas fa-phone"></i> Add Call
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>Date & Time</th>
+                                    <th>Type</th>
+                                    <th>Duration</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if call_logs %}
+                                    {% for call in call_logs %}
+                                    <tr>
+                                        <td class="text-dark">{{ call.call_date.strftime('%Y-%m-%d %H:%M') if call.call_date else 'N/A' }}</td>
+                                        <td class="text-dark">{{ call.call_type|title if call.call_type else 'N/A' }}</td>
+                                        <td class="text-dark">{{ call.duration }} seconds</td>
+                                        <td class="text-dark">{{ call.notes|truncate(100) if call.notes else 'No notes' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center text-dark">No call logs found</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Timeline -->
+        <div class="col-xl-4 col-lg-5">
+            {% if lead.workflow %}
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">Workflow Timeline</h6>
+                    <button type="button" class="btn btn-success btn-sm" data-toggle="modal" data-target="#updateWorkflowModal">
+                        <i class="fas fa-edit"></i> Update Workflow
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- Workflow Status -->
+                    <div class="mb-3">
+                        <strong>Current Stage:</strong> 
+                        <span class="badge badge-{{ 'success' if lead.workflow.current_stage == 'COMPLETED' else 'warning' if lead.workflow.get_stage_status() == 'OVERDUE' else 'info' }} text-white">
+                            {{ lead.workflow.current_stage|replace('_', ' ') }}
+                        </span>
+                    </div>
+                    
+                    <!-- Workflow Actions -->
+                    <div class="workflow-actions">
+                        {% for action in lead.workflow.actions %}
+                        <div class="workflow-action-item mb-2 p-2 border-left border-primary">
+                            <div class="d-flex justify-content-between">
+                                <strong>{{ action.action_type|replace('_', ' ')|title }}</strong>
+                                <small class="text-muted">{{ action.action_date.strftime('%Y-%m-%d %H:%M') }}</small>
+                            </div>
+                            {% if action.notes %}
+                            <div class="text-muted small">{{ action.notes }}</div>
+                            {% endif %}
+                            <div class="text-muted small">By: {{ action.user.username }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Edit Notes Modal -->
+<div class="modal fade" id="editNotesModal" tabindex="-1" role="dialog" aria-labelledby="editNotesModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editNotesModalLabel">Edit Notes</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form action="{{ url_for('leads.update_notes', lead_id=lead.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="notes">Notes</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="6" placeholder="Add or update notes about this lead...">{{ (lead.notes or '') | strip_ic_markers }}</textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Notes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Upload handwritten / photo notes -->
+<div class="modal fade" id="uploadLeadNotesModal" tabindex="-1" role="dialog" aria-labelledby="uploadLeadNotesModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('leads.upload_lead_document', lead_id=lead.id) }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="uploadLeadNotesModalLabel">Upload notes</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted">Photo of handwritten notes, a scan, or a PDF. You can select several pages at once.</p>
+                    <div class="form-group">
+                        <label for="lead_notes_file">Photos or files</label>
+                        <input type="file" class="form-control" id="lead_notes_file" name="document"
+                               accept="image/*,.pdf,.heic,.heif" multiple required>
+                    </div>
+                    <div class="form-group">
+                        <label for="lead_notes_type">Type</label>
+                        <select class="form-control" id="lead_notes_type" name="document_type">
+                            <option value="Handwritten notes" selected>Handwritten notes</option>
+                            <option value="Notes">Typed / scanned notes</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Upload lead document -->
+<div class="modal fade" id="addLeadDocumentModal" tabindex="-1" role="dialog" aria-labelledby="addLeadDocumentModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('leads.upload_lead_document', lead_id=lead.id) }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addLeadDocumentModalLabel">Upload Document</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="lead_document_file">Select file</label>
+                        <input type="file" class="form-control" id="lead_document_file" name="document" accept="image/*,.pdf,.doc,.docx,.heic,.heif" multiple required>
+                    </div>
+                    <div class="form-group">
+                        <label for="lead_document_type">Document type</label>
+                        <select class="form-control" id="lead_document_type" name="document_type">
+                            <option value="Resume" {% if is_career %}selected{% endif %}>Resume / CV</option>
+                            <option value="Cover letter">Cover letter</option>
+                            <option value="Handwritten notes">Handwritten notes</option>
+                            <option value="Notes">Notes</option>
+                            <option value="KYC" {% if not is_career %}selected{% endif %}>KYC</option>
+                            <option value="PAN">PAN</option>
+                            <option value="Address proof">Address proof</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Call Log Modal -->
+<div class="modal fade" id="addCallLogModal" tabindex="-1" role="dialog" aria-labelledby="addCallLogModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addCallLogModalLabel">Log Call</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form action="{{ url_for('leads.add_call_log', lead_id=lead.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="call_type">Call Type</label>
+                        <select class="form-control" id="call_type" name="call_type" required>
+                            <option value="incoming">Incoming</option>
+                            <option value="outgoing">Outgoing</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="duration">Duration (seconds)</label>
+                        <input type="number" class="form-control" id="duration" name="duration" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="notes">Notes</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-primary">Save Call Log</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Update status / workflow -->
+<div class="modal fade" id="updateWorkflowModal" tabindex="-1" role="dialog" aria-labelledby="updateWorkflowModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="updateWorkflowModalLabel">Update Workflow</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form action="{{ url_for('leads.update_lead_status', lead_id=lead.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="status">Lead Status</label>
+                        <select class="form-control" id="status" name="status" required>
+                            <option value="">Select Status</option>
+                            {% for value, label in lead_status_choices %}
+                              {% if '(legacy)' not in label or lead.status == value %}
+                            <option value="{{ value }}" {{ 'selected' if lead.status == value }}>{{ label }}</option>
+                              {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="action_type">Action Type</label>
+                        <select class="form-control" id="action_type" name="action_type">
+                            <option value="">Select Action (Optional)</option>
+                            <option value="CONTACT_MADE">Contact Made</option>
+                            <option value="CONTACT_FAILED">Contact Failed</option>
+                            <option value="QUALIFIED">Qualified</option>
+                            <option value="NOT_QUALIFIED">Not Qualified</option>
+                            <option value="PROPOSAL_SENT">Proposal Sent</option>
+                            <option value="PROPOSAL_REVIEWED">Proposal Reviewed</option>
+                            <option value="AGREEMENT_SENT">Agreement Sent</option>
+                            <option value="AGREEMENT_SIGNED">Agreement Signed</option>
+                            <option value="ONBOARDING_STARTED">Onboarding Started</option>
+                            <option value="ONBOARDING_COMPLETED">Onboarding Completed</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="workflow_notes">Notes</label>
+                        <textarea class="form-control" id="workflow_notes" name="notes" rows="3" placeholder="Add notes about this action..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="submit" class="btn btn-success">Update Workflow</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Create Follow-up Alert Modal -->
+<div class="modal fade" id="createFollowupAlertModal" tabindex="-1" role="dialog" aria-labelledby="createFollowupAlertModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="createFollowupAlertModalLabel">Create Follow-up Alert</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form action="{{ url_for('leads.create_followup_alert', lead_id=lead.id) }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="followup_date">Follow-up Date *</label>
+                        <input type="date" class="form-control" id="followup_date" name="followup_date" required min="{{ today_date }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="followup_time">Follow-up Time (Optional)</label>
+                        <input type="time" class="form-control" id="followup_time" name="followup_time">
+                    </div>
+                    <div class="form-group">
+                        <label for="alert_notes">Notes (Optional)</label>
+                        <textarea class="form-control" id="alert_notes" name="alert_notes" rows="3" placeholder="Add any additional notes about this follow-up..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Create Alert</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Update the modal script -->
+<script>
+$(document).ready(function() {
+    console.log('DEBUG: Document ready');
+    
+    // Load follow-up alerts
+    loadFollowupAlerts();
+    
+    // Debug modal button
+    const logCallBtn = $('#logCallBtn');
+    console.log('DEBUG: Log Call button found:', logCallBtn.length > 0);
+    
+    // Debug modal
+    const callLogModal = $('#addCallLogModal');
+    console.log('DEBUG: Modal found:', callLogModal.length > 0);
+    
+    // Add click handler to button
+    logCallBtn.on('click', function() {
+        console.log('DEBUG: Log Call button clicked');
+        const modal = new bootstrap.Modal(document.getElementById('addCallLogModal'));
+        modal.show();
+    });
+    
+    // Debug form
+    const callLogForm = $('#addCallLogModal form');
+    console.log('DEBUG: Form found:', callLogForm.length > 0);
+    
+    // Add submit handler to form
+    callLogForm.on('submit', function(e) {
+        console.log('DEBUG: Form submitted');
+        const formData = new FormData(this);
+        for (let pair of formData.entries()) {
+            console.log('DEBUG: Form data:', pair[0], pair[1]);
+        }
+    });
+    
+    // Debug modal events
+    callLogModal.on('show.bs.modal', function () {
+        console.log('DEBUG: Modal showing');
+    });
+    
+    callLogModal.on('shown.bs.modal', function () {
+        console.log('DEBUG: Modal shown');
+    });
+    
+    callLogModal.on('hide.bs.modal', function () {
+        console.log('DEBUG: Modal hiding');
+    });
+    
+    callLogModal.on('hidden.bs.modal', function () {
+        console.log('DEBUG: Modal hidden');
+    });
+    
+    // Follow-up alert form submission
+    $('#createFollowupAlertModal form').on('submit', function(e) {
+        // Form will submit normally, reload alerts after success
+        setTimeout(function() {
+            loadFollowupAlerts();
+        }, 1000);
+    });
+    
+
+});
+
+function loadFollowupAlerts() {
+    $.ajax({
+        url: '{{ url_for("leads.lead_alerts", lead_id=lead.id) }}',
+        method: 'GET',
+        success: function(data) {
+            if (data.success) {
+                displayFollowupAlerts(data.alerts);
+            } else {
+                $('#followupAlertsContainer').html('<p class="text-danger">Error loading alerts: ' + data.error + '</p>');
+            }
+        },
+        error: function(xhr, status, error) {
+            $('#followupAlertsContainer').html('<p class="text-danger">Error loading alerts: ' + error + '</p>');
+        }
+    });
+}
+
+function displayFollowupAlerts(alerts) {
+    const container = $('#followupAlertsContainer');
+    
+    if (alerts.length === 0) {
+        container.html('<p class="text-muted text-center">No follow-up alerts created yet.</p>');
+        return;
+    }
+    
+    let html = '<div class="table-responsive"><table class="table table-bordered" width="100%" cellspacing="0">';
+    html += '<thead><tr><th>Alert</th><th>Severity</th><th>Created</th><th>Follow-up Date</th><th>Actions</th></tr></thead><tbody>';
+    
+    alerts.forEach(function(alert) {
+        const severityClass = alert.severity === 'critical' ? 'danger' : alert.severity === 'warning' ? 'warning' : 'info';
+        const followupDate = new Date(alert.created_at);
+        followupDate.setHours(followupDate.getHours() + alert.sla_timeline);
+        
+        html += '<tr>';
+        html += '<td><strong>' + alert.title + '</strong><br><small class="text-muted">' + alert.description + '</small></td>';
+        html += '<td><span class="badge badge-' + severityClass + '">' + alert.severity + '</span></td>';
+        html += '<td>' + alert.created_at + '</td>';
+        html += '<td>' + followupDate.toLocaleString() + '</td>';
+        html += '<td>';
+        html += '<button class="btn btn-success btn-sm" onclick="acknowledgeAlert(' + alert.id + ')"><i class="fas fa-check"></i> Done</button> ';
+        html += '<button class="btn btn-danger btn-sm" onclick="deleteAlert(' + alert.id + ')"><i class="fas fa-trash"></i> Delete</button>';
+        html += '</td>';
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table></div>';
+    container.html(html);
+}
+
+function acknowledgeAlert(alertId) {
+    $.ajax({
+        url: '/alerts/' + alertId + '/acknowledge',
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': $('input[name="csrf_token"]').val()
+        },
+        success: function(data) {
+            if (data.success) {
+                loadFollowupAlerts();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        },
+        error: function() {
+            alert('Error acknowledging alert');
+        }
+    });
+}
+
+function deleteAlert(alertId) {
+    if (confirm('Delete this follow-up alert?')) {
+        $.ajax({
+            url: '/alerts/' + alertId + '/delete',
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': $('input[name="csrf_token"]').val()
+            },
+            success: function(data) {
+                if (data.success) {
+                    loadFollowupAlerts();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            },
+            error: function() {
+                alert('Error deleting alert');
+            }
+        });
+    }
+}
+
+{% if onboarding and onboarding.preview_message_url %}
+(function() {
+  var previewUrl = {{ onboarding.preview_message_url|tojson }};
+  var csrf = {{ csrf_token()|tojson }};
+  function loadStage(stage, textEl, openEl) {
+    $.ajax({
+      url: previewUrl,
+      method: 'POST',
+      headers: {'X-CSRFToken': csrf},
+      data: {stage: stage},
+      success: function(data) {
+        if (data && data.text) {
+          if (textEl) textEl.value = data.text;
+          if (openEl) {
+            if (data.wa_url) {
+              openEl.href = data.wa_url;
+              openEl.classList.remove('disabled');
+            } else {
+              openEl.href = '#';
+            }
+          }
+          var apiStage = document.getElementById('contactWaStage');
+          if (apiStage) apiStage.value = stage;
+        }
+      }
+    });
+  }
+  $(document).on('change', '#waFollowStage, #contactStageSelect', function() {
+    var stage = $(this).val();
+    $('#waFollowStage').val(stage);
+    $('#contactStageSelect').val(stage);
+    loadStage(stage, document.getElementById('waFollowText'), document.getElementById('waFollowOpen'));
+  });
+  $('#waFollowText').on('input', function() {
+    var t = this.value;
+    var openEl = document.getElementById('waFollowOpen');
+    var phone = {{ (lead.phone or '')|tojson }};
+    var apiText = document.getElementById('contactWaText');
+    if (apiText) apiText.value = t;
+    // Rebuild wa.me on the fly when user edits
+    if (openEl && phone) {
+      var digits = String(phone).replace(/\D/g, '');
+      if (digits.length === 10) digits = '91' + digits;
+      openEl.href = 'https://wa.me/' + digits + '?text=' + encodeURIComponent(t);
+    }
+  });
+  $('#contactWaApiForm').on('submit', function() {
+    var t = document.getElementById('waFollowText');
+    var apiText = document.getElementById('contactWaText');
+    if (t && apiText) apiText.value = t.value;
+  });
+})();
+{% endif %}
+
+</script>
+
+<!-- Lead Assignment Modal -->
+{% if current_user.is_manager or current_user.is_admin %}
+<div class="modal fade" id="assignLeadModal" tabindex="-1" role="dialog" aria-labelledby="assignLeadModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="assignLeadModalLabel">Assign Lead</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form method="POST" action="{{ url_for('leads.assign_lead', lead_id=lead.id) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="assigned_user_id">Assign to User:</label>
+                        <select class="form-control" id="assigned_user_id" name="assigned_user_id" required>
+                            <option value="">Select a user...</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}" {% if lead.user and lead.user.id == user.id %}selected{% endif %}>
+                                {{ user.username }} ({{ user.role|title }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Note:</strong> This will assign the lead "{{ lead.name }}" to the selected user.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-user-check"></i> Assign Lead
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+.workflow-actions {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.workflow-action-item {
+    background-color: #f8f9fc;
+    border-radius: 0.35rem;
+}
+
+.progress {
+    background-color: #e3e6f0;
+    border-radius: 0.35rem;
+}
+
+.progress-bar {
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.btn-group .btn {
+    margin-right: 2px;
+}
+
+.btn-group .btn:last-child {
+    margin-right: 0;
+}
+</style>
+{% endblock %} 

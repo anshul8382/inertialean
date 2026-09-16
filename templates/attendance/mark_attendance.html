@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Mark Attendance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Mark Attendance (Single Day)</h1>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('attendance.mark_attendance_month') }}" class="btn btn-info">
+                <i class="fas fa-calendar-alt"></i> Mark for Month
+            </a>
+            <a href="{{ url_for('attendance.attendance_dashboard') }}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Attendance Details</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        
+                        <div class="form-group mb-3">
+                            <label for="date" class="form-label">Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="date" name="date" 
+                                   value="{{ default_date.strftime('%Y-%m-%d') }}" required>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="attendance_type" class="form-label">Attendance Type <span class="text-danger">*</span></label>
+                            <select class="form-control" id="attendance_type" name="attendance_type" required>
+                                <option value="">Select attendance type</option>
+                                <option value="full_day">Full Day</option>
+                                <option value="half_day">Half Day</option>
+                                <option value="leave">Leave</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="notes" class="form-label">Notes (Optional)</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3" 
+                                      placeholder="Add any additional notes..."></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Mark Attendance
+                            </button>
+                            <a href="{{ url_for('attendance.attendance_dashboard') }}" class="btn btn-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-info">Attendance Types</h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6 class="text-success">Full Day</h6>
+                        <p class="small text-muted">Complete working day attendance</p>
+                    </div>
+                    <div class="mb-3">
+                        <h6 class="text-warning">Half Day</h6>
+                        <p class="small text-muted">Partial working day attendance</p>
+                    </div>
+                    <div class="mb-3">
+                        <h6 class="text-danger">Leave</h6>
+                        <p class="small text-muted">Official leave or absence</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

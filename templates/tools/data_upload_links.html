@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% from 'partials/mobile/macros.html' import maint_hub_open, maint_hub_close, maint_desktop_close, maint_link, maint_section %}
+
+{% block title %}Maintenance — Data upload{% endblock %}
+
+{% block content %}
+{{ maint_hub_open('Data upload', 'Upload screens and templates used with those flows.', url_for('main.maintenance_trade_data')) }}
+  {{ maint_section('Uploads') }}
+  {{ maint_link('fa-file-upload', 'Trade upload', url_for('main.trade_upload')) }}
+  {{ maint_link('fa-money-bill-wave', 'Cashflow upload', url_for('main.cashflow_upload')) }}
+  {{ maint_link('fa-user-plus', 'Client upload', url_for('main.client_upload')) }}
+  {{ maint_link('fa-file-import', 'MProfit trade upload', url_for('main.mprofit_trade_upload')) }}
+  {{ maint_link('fa-coins', 'Securities upload (CSV)', url_for('main.upload_securities')) }}
+  {{ maint_link('fa-chart-line', 'Historical price upload', url_for('historical_prices.upload_page'), 'CSV, benchmarks, AMFI NAV') }}
+  {% if config.get('NAV_CORPORATE_ACTIONS_ENABLED') %}
+  {{ maint_link('fa-sitemap', 'Corporate actions upload', url_for('corporate_actions.upload_corporate_actions')) }}
+  {% endif %}
+  {{ maint_link('fa-file-contract', 'Agreement template upload', url_for('agreements.agreement_template_upload')) }}
+  {{ maint_section('Templates & export') }}
+  {{ maint_link('fa-file-download', 'Cashflow CSV template', url_for('main.download_cashflow_template')) }}
+  {{ maint_link('fa-file-download', 'Client CSV template', url_for('main.download_client_template')) }}
+  {% if user_is_admin %}
+  {{ maint_link('fa-database', 'Export client data (CSV)', url_for('main.download_client_data')) }}
+  {% endif %}
+{{ maint_hub_close() }}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0"><i class="fas fa-upload text-primary"></i> Data upload</h1>
+        <a href="{{ url_for('main.maintenance_trade_data') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-exchange-alt"></i> Trade data
+        </a>
+    </div>
+    <p class="text-muted mb-4">Upload screens and templates used with those flows.</p>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header">
+            <h4 class="mb-0"><i class="fas fa-file-upload"></i> Uploads</h4>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-4">Open the specific upload screen for each data type.</p>
+
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100" href="{{ url_for('main.trade_upload') }}">
+                        <i class="fas fa-file-upload me-1"></i> Trade Upload
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100" href="{{ url_for('main.cashflow_upload') }}">
+                        <i class="fas fa-money-bill-wave me-1"></i> Cashflow Upload
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100" href="{{ url_for('main.client_upload') }}">
+                        <i class="fas fa-user-plus me-1"></i> Client Upload
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100" href="{{ url_for('main.mprofit_trade_upload') }}">
+                        <i class="fas fa-file-import me-1"></i> MProfit Trade Upload
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100" href="{{ url_for('main.upload_securities') }}">
+                        <i class="fas fa-coins me-1"></i> Securities Upload (CSV)
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100" href="{{ url_for('historical_prices.upload_page') }}">
+                        <i class="fas fa-chart-line me-1"></i> Historical Price Upload
+                    </a>
+                    <p class="small text-muted mt-2 mb-0">
+                        Includes <strong>India MF (AMFI)</strong>:
+                        <a href="{{ url_for('historical_prices.upload_page') }}#amfi-india-mf-nav">sync NAV, search schemes, create fund</a>.
+                    </p>
+                </div>
+                {% if config.get('NAV_CORPORATE_ACTIONS_ENABLED') %}
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100" href="{{ url_for('corporate_actions.upload_corporate_actions') }}">
+                        <i class="fas fa-sitemap me-1"></i> Corporate Actions Upload
+                    </a>
+                </div>
+                {% endif %}
+                <div class="col-md-4">
+                    <a class="btn btn-outline-primary w-100" href="{{ url_for('agreements.agreement_template_upload') }}">
+                        <i class="fas fa-file-contract me-1"></i> Agreement Template Upload
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-header">
+            <h4 class="mb-0"><i class="fas fa-download"></i> Download templates / data</h4>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <a class="btn btn-outline-secondary w-100" href="{{ url_for('main.download_cashflow_template') }}">
+                        <i class="fas fa-file-download me-1"></i> Cashflow CSV template
+                    </a>
+                </div>
+                <div class="col-md-4">
+                    <a class="btn btn-outline-secondary w-100" href="{{ url_for('main.download_client_template') }}">
+                        <i class="fas fa-file-download me-1"></i> Client CSV template
+                    </a>
+                </div>
+                {% if user_is_admin %}
+                <div class="col-md-4">
+                    <a class="btn btn-outline-secondary w-100" href="{{ url_for('main.download_client_data') }}">
+                        <i class="fas fa-database me-1"></i> Export client data (CSV)
+                    </a>
+                    <p class="small text-muted mt-2 mb-0">Admin only; names and emails are partially masked in the file.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{{ maint_desktop_close() }}
+{% endblock %}
