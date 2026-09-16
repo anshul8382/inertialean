@@ -126,12 +126,13 @@ cd /Users/anshulkhare/Downloads/Inertia2026-lean
 **First time on VPS** (convert `/opt/Inertia2026v1` to a git checkout; keeps `.env` / `venv`):
 
 ```bash
-# On VPS — set ORIGIN_URL to the clone URL from Cursor / GitHub
-export ORIGIN_URL='https://origin.cursor.com/<org>/inertia2026-lean.git'
+# On VPS — HTTPS or SSH clone URL for https://github.com/anshul8382/inertialean
+export ORIGIN_URL='git@github.com:anshul8382/inertialean.git'
+# or: export ORIGIN_URL='https://github.com/anshul8382/inertialean.git'
 bash /opt/Inertia2026v1/scripts/deployment/bootstrap_lean_git.sh
-# If script not on server yet, scp it once or paste ORIGIN_URL and run from Mac:
+# If script not on server yet, scp it once or run from Mac:
 # ssh -i ~/.ssh/inertia_vps anshul@129.121.133.25 \
-#   "ORIGIN_URL='...' bash -s" < scripts/deployment/bootstrap_lean_git.sh
+#   "ORIGIN_URL='git@github.com:anshul8382/inertialean.git' bash -s" < scripts/deployment/bootstrap_lean_git.sh
 ```
 
 Manual equivalent (after remote is set):
