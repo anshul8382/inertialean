@@ -8,6 +8,15 @@
 
 **Every commit (enforced):** `./scripts/install_git_hooks.sh` then commits run `run_agent_approval_loop.py --pre-commit` (blocks on FAIL). See `docs/DEVELOP_WORKFLOW.md` §6.
 
+## Deploy target (this workspace)
+
+| Workspace | Server |
+|-----------|--------|
+| **Inertia2026-lean** | Lean VPS `129.121.133.25` — `./scripts/deployment/ship_lean.sh` |
+| **app 2** | BigRock `https://66.116.199.231/` — `deploy_agent.py full-prod` there only |
+
+**Never** `full-prod` / BigRock from this tree. See `docs/DEPLOY_WORKFLOW.md`.
+
 ## Databases and migrations
 
 **Canonical:** **`docs/DB_MIGRATION_AND_TEST_PROCESS.md`**.

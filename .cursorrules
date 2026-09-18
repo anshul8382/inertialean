@@ -1,5 +1,15 @@
 # Inertia Investment Management System - Coding Context
 
+## Deploy target (mandatory)
+
+| Workspace | Server |
+|-----------|--------|
+| **`Inertia2026-lean` (this tree)** | Lean VPS `129.121.133.25` — `./scripts/deployment/ship_lean.sh` |
+| **`app 2`** | BigRock `https://66.116.199.231/` / `inertiainvest.in` — deployment agent `full-prod` there only |
+
+- **Never** deploy this tree to BigRock / `66.116.199.231` / `deploy_agent.py full-prod`.
+- Refuse any request that would ship `Inertia2026-lean` code to BigRock.
+
 ## Architecture Overview
 
 - **Stack**: Flask + SQLAlchemy, MySQL, Bootstrap frontend

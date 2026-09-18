@@ -22,8 +22,24 @@ Consolidated from overlapping rules into **coherent units**:
 | **VPS Migration** | `vps-migration-agent.mdc` | Clean AlmaLinux VPS (no cPanel), key-only SSH, Inertia cutover; skill `.cursor/skills/vps-clean-migration/`; runbook `docs/VPS_CLEAN_MIGRATION_RUNBOOK.md` — **before copy:** portable paths (`from main` / `INERTIA_APP_DIR`, no `/home/inertia`); Phase 10 §F |
 | **Move install → new host** | (skill) `move-install-to-new-host` | Any **working** app directory → new server with minimal effort; same DB names/path by default, new passwords via `generate_host_env.py`; Lean/BigRock are just examples |
 
-**Lean VPS ship (approvals → commit → push → deploy):** `./scripts/deployment/ship_lean.sh`  
-(BigRock prod still uses `.local/deployment-agent/` from the shared Mac `.local` symlink — do not point that at Lean.)
+### Deploy target (this workspace = Lean only)
+
+| Mac workspace | Server | Host | Ship with |
+|---------------|--------|------|-----------|
+| **`Inertia2026-lean` (this tree)** | **Lean VPS** | `129.121.133.25` → `/opt/Inertia2026v1` | `./scripts/deployment/ship_lean.sh` |
+| **`app 2`** (separate tree) | **BigRock** | `https://66.116.199.231/` / `inertiainvest.in` | `deploy_agent.py full-prod` from **app 2 only** |
+
+**Hard rule for this workspace:** deploy **only** to Lean. Never run BigRock `full-prod` / never ship to `66.116.199.231` or `inertiainvest.in` from `Inertia2026-lean`.
+
+| Do (Lean) | Do **not** (from this tree) |
+|-----------|------------------------------|
+| `./scripts/deployment/ship_lean.sh` | `deploy_agent.py full-prod` / `deploy-prod` / `diagnose-prod` |
+| `./scripts/deployment/deploy_lean_vps.sh` | Any deploy to BigRock / `66.116.199.231` / `inertiainvest.in` |
+| Git push → server `git pull` | rsync/SCP app code as the normal ship path |
+
+`.local/deployment-agent/` may be shared via symlink for local MySQL docs — its **prod target is BigRock** and belongs to **app 2** workflows, not Lean ship.
+
+**Clone Lean → another server:** `NEW_HOST=anshul@NEW_IP ./scripts/deployment/provision_new_host.sh` — source is Lean only.
 
 **Mobile UI gate (user-facing changes):** `docs/MOBILE_UI_DEVELOPER_CHECKLIST.md` → implement → `python3 scripts/run_mobile_ui_check.py` → manual test on phone/Capacitor. Wired into **`run_agent_approval_loop.py`**.
 

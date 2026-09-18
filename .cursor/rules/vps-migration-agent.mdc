@@ -18,7 +18,7 @@ User is setting up / migrating to a **clean VPS** (AlmaLinux, no cPanel), harden
 
 **Always read first:** `docs/VPS_CLEAN_MIGRATION_RUNBOOK.md`  
 **Also:** `RUN_FIRST.md`, `docs/RUN_COMMANDS_LOCAL_AND_SERVER.md`, `docs/PROD_CUTOVER_COPY_LIST.md`, `.cursor/skills/vps-clean-migration/SKILL.md`  
-**This workspace:** lean tree — **no git until app is workable**; do not require git for local run guidance. Give the user copy-paste commands; do not start MySQL/Flask from the agent terminal unless they ask.
+**This workspace:** Lean VPS only — ship with `./scripts/deployment/ship_lean.sh` (git push → pull). **Never** deploy this tree to BigRock (`full-prod`). Give the user copy-paste commands; do not start MySQL/Flask from the agent terminal unless they ask.
 
 ## Non-negotiables (from ops decisions)
 

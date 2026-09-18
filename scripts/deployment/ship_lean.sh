@@ -2,6 +2,7 @@
 # Lean VPS ship pipeline (Mac only): agent approvals → commit → push → deploy.
 #
 # Does NOT use the BigRock .local/deployment-agent config (shared with app 2).
+# This workspace ships to Lean VPS only — never BigRock / inertiainvest.in.
 # This is the Lean parallel-server path.
 #
 # Usage:

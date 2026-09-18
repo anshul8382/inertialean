@@ -6,16 +6,19 @@ Sends daily email report with leads bucketed by status (active and inactive)
 
 import sys
 import os
+import html as html_lib
 from datetime import datetime, timedelta
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from collections import defaultdict
 
-# Add the application directory to Python path
+# Add the application directory to Python path (repo root when run from scripts/utilities/)
 current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
+app_root = os.path.dirname(os.path.dirname(current_dir))
+for path in (app_root, current_dir):
+    if path not in sys.path:
+        sys.path.insert(0, path)
 
 # Import Flask app and models
 from main import create_app
@@ -70,6 +73,85 @@ def get_lead_notes(lead):
     
     return 'No notes available'
 
+
+def _esc(value):
+    if value is None:
+        return 'N/A'
+    return html_lib.escape(str(value), quote=True)
+
+
+def _fmt_date(dt):
+    return dt.strftime('%Y-%m-%d') if dt else 'N/A'
+
+
+def _lead_field_row(label, value, value_style=''):
+    """Label/value row — stacks cleanly on narrow email viewports."""
+    return (
+        '<tr>'
+        f'<td style="padding:3px 10px 3px 0;vertical-align:top;width:34%;'
+        f'color:#666;font-size:12px;">{_esc(label)}</td>'
+        f'<td style="padding:3px 0;vertical-align:top;font-size:13px;'
+        f'word-break:break-word;overflow-wrap:anywhere;{value_style}">{value}</td>'
+        '</tr>'
+    )
+
+
+def _lead_card_html(
+    lead,
+    *,
+    next_step,
+    notes,
+    status=None,
+    sla_display=None,
+    highlight=False,
+):
+    """
+    One lead as a stacked card (email-safe nested tables).
+    Avoids wide multi-column tables that force horizontal scroll on phones.
+    """
+    bg = '#fff3cd' if highlight else '#ffffff'
+    border = '#ffc107' if highlight else '#dddddd'
+    rows = [
+        _lead_field_row('Phone', _esc(lead.phone or 'N/A')),
+        _lead_field_row('Source', _esc(lead.source or 'N/A')),
+    ]
+    if status is not None:
+        rows.append(
+            _lead_field_row(
+                'Status',
+                (
+                    f'<span style="display:inline-block;padding:2px 6px;border-radius:3px;'
+                    f'background:#28a745;color:#fff;font-size:11px;font-weight:bold;">'
+                    f'{_esc(status)}</span>'
+                ),
+            )
+        )
+    rows.append(_lead_field_row('Next step', _esc(next_step)))
+    rows.append(_lead_field_row('Notes', _esc(notes)))
+    if sla_display is not None:
+        rows.append(
+            _lead_field_row(
+                'SLA missed',
+                _esc(sla_display),
+                'color:#dc3545;font-weight:bold;',
+            )
+        )
+    rows.append(_lead_field_row('Created', _esc(_fmt_date(lead.created_at))))
+    rows.append(_lead_field_row('Updated', _esc(_fmt_date(lead.updated_at))))
+    return (
+        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'style="width:100%;max-width:100%;border-collapse:collapse;margin:0 0 12px 0;'
+        f'border:1px solid {border};background-color:{bg};">'
+        f'<tr><td style="padding:12px;">'
+        f'<div style="font-size:15px;font-weight:bold;color:#222;margin:0 0 8px 0;'
+        f'word-break:break-word;">{_esc(lead.name or "N/A")}</div>'
+        f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        f'style="width:100%;max-width:100%;border-collapse:collapse;">'
+        f'{"".join(rows)}'
+        f'</table></td></tr></table>'
+    )
+
+
 def create_leads_html_report():
     """Create HTML report for leads bucketed by status with alert leads first"""
     
@@ -120,322 +202,229 @@ def create_leads_html_report():
                 active_leads_by_status[lead.status or 'No Status'].append(lead)
             else:
                 inactive_leads_by_status[lead.status or 'No Status'].append(lead)
-    
-    # Create HTML content
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Daily Leads Report - {datetime.now().strftime('%B %d, %Y')}</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }}
-            .container {{ max-width: 1200px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
-            .header {{ text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #007bff; }}
-            .header h1 {{ color: #007bff; margin: 0; }}
-            .header p {{ color: #666; margin: 5px 0; }}
-            .section {{ margin-bottom: 30px; }}
-            .section h2 {{ color: #333; border-bottom: 1px solid #ddd; padding-bottom: 10px; }}
-            .status-group {{ margin-bottom: 20px; }}
-            .status-title {{ font-weight: bold; color: #007bff; margin-bottom: 10px; font-size: 16px; }}
-            .status-count {{ color: #666; font-size: 14px; margin-bottom: 10px; }}
-            .leads-table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; table-layout: fixed; }}
-            .leads-table th, .leads-table td {{ border: 1px solid #ddd; padding: 8px; text-align: left; word-wrap: break-word; overflow-wrap: break-word; }}
-            .leads-table th {{ background-color: #f8f9fa; font-weight: bold; }}
-            .leads-table tr:nth-child(even) {{ background-color: #f9f9f9; }}
-            .leads-table tr:hover {{ background-color: #f0f0f0; }}
-            .leads-table th:nth-child(1), .leads-table td:nth-child(1) {{ width: 12%; }} /* Name */
-            .leads-table th:nth-child(2), .leads-table td:nth-child(2) {{ width: 10%; }} /* Phone */
-            .leads-table th:nth-child(3), .leads-table td:nth-child(3) {{ width: 8%; }} /* Source */
-            .leads-table th:nth-child(4), .leads-table td:nth-child(4) {{ width: 8%; }} /* Status */
-            .leads-table th:nth-child(5), .leads-table td:nth-child(5) {{ width: 10%; }} /* Next Step */
-            .leads-table th:nth-child(6), .leads-table td:nth-child(6) {{ width: 15%; }} /* Notes */
-            .leads-table th:nth-child(7), .leads-table td:nth-child(7) {{ width: 10%; }} /* SLA Missed */
-            .leads-table th:nth-child(8), .leads-table td:nth-child(8) {{ width: 8%; }} /* Created */
-            .leads-table th:nth-child(9), .leads-table td:nth-child(9) {{ width: 8%; }} /* Updated */
-            .badge {{ padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }}
-            .badge-active {{ background-color: #28a745; color: white; }}
-            .badge-inactive {{ background-color: #dc3545; color: white; }}
-            .summary {{ background-color: #e9ecef; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
-            .summary h3 {{ margin-top: 0; color: #495057; }}
-            .summary-stats {{ display: flex; justify-content: space-around; text-align: center; }}
-            .stat {{ flex: 1; }}
-            .stat-number {{ font-size: 24px; font-weight: bold; color: #007bff; }}
-            .stat-label {{ color: #666; font-size: 14px; }}
-            .no-leads {{ text-align: center; color: #666; font-style: italic; padding: 20px; }}
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <div class="header">
-                <h1>Daily Leads Report</h1>
-                <p>Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}</p>
-                <p>Inertia Investment Management System</p>
-            </div>
-            
-            <div class="summary">
-                <h3>Summary</h3>
-                <div class="summary-stats">
-                    <div class="stat">
-                        <div class="stat-number">{len(alert_leads)}</div>
-                        <div class="stat-label">Alert Leads</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-number">{len([l for l in leads if l.is_active])}</div>
-                        <div class="stat-label">Active Leads</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-number">{len([l for l in leads if not l.is_active])}</div>
-                        <div class="stat-label">Inactive Leads</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-number">{len(leads)}</div>
-                        <div class="stat-label">Total Leads</div>
-                    </div>
-                </div>
-            </div>
-    """
+
+    active_count = len([l for l in leads if l.is_active])
+    inactive_count = len([l for l in leads if not l.is_active])
+    report_stamp = datetime.now().strftime('%B %d, %Y at %I:%M %p')
+    report_day = datetime.now().strftime('%B %d, %Y')
+
+    # Fluid, email-safe layout: stacked lead cards (not wide fixed tables)
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>Daily Leads Report - {report_day}</title>
+<style type="text/css">
+  /* Clients that keep &lt;style&gt; (Apple Mail, iOS); Gmail relies on inline styles */
+  body {{ margin: 0 !important; padding: 0 !important; -webkit-text-size-adjust: 100%; }}
+  table {{ border-collapse: collapse; }}
+  img {{ max-width: 100%; height: auto; }}
+  @media only screen and (max-width: 620px) {{
+    .container {{ width: 100% !important; max-width: 100% !important; padding: 12px !important; }}
+    .header h1 {{ font-size: 20px !important; }}
+    .section h2 {{ font-size: 16px !important; }}
+    .stat-number {{ font-size: 20px !important; }}
+  }}
+</style>
+</head>
+<body style="margin:0;padding:0;background-color:#f5f5f5;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.4;color:#222;-webkit-text-size-adjust:100%;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#f5f5f5;">
+<tr><td align="center" style="padding:12px 8px;">
+<table role="presentation" class="container" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:640px;background-color:#ffffff;border-radius:8px;">
+<tr><td class="container" style="padding:20px;">
+
+<div class="header" style="text-align:center;margin:0 0 20px 0;padding:0 0 16px 0;border-bottom:2px solid #007bff;">
+  <h1 style="color:#007bff;margin:0;font-size:22px;line-height:1.25;">Daily Leads Report</h1>
+  <p style="color:#666;margin:8px 0 0 0;font-size:13px;">Generated on {report_stamp}</p>
+  <p style="color:#666;margin:4px 0 0 0;font-size:13px;">Inertia Investment Management System</p>
+</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:100%;background-color:#e9ecef;border-radius:5px;margin:0 0 20px 0;">
+<tr><td style="padding:14px;">
+  <h3 style="margin:0 0 10px 0;color:#495057;font-size:15px;">Summary</h3>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;">
+    <tr>
+      <td width="25%" align="center" style="padding:6px 2px;vertical-align:top;">
+        <div class="stat-number" style="font-size:22px;font-weight:bold;color:#007bff;">{len(alert_leads)}</div>
+        <div style="color:#666;font-size:11px;">Alert</div>
+      </td>
+      <td width="25%" align="center" style="padding:6px 2px;vertical-align:top;">
+        <div class="stat-number" style="font-size:22px;font-weight:bold;color:#007bff;">{active_count}</div>
+        <div style="color:#666;font-size:11px;">Active</div>
+      </td>
+      <td width="25%" align="center" style="padding:6px 2px;vertical-align:top;">
+        <div class="stat-number" style="font-size:22px;font-weight:bold;color:#007bff;">{inactive_count}</div>
+        <div style="color:#666;font-size:11px;">Inactive</div>
+      </td>
+      <td width="25%" align="center" style="padding:6px 2px;vertical-align:top;">
+        <div class="stat-number" style="font-size:22px;font-weight:bold;color:#007bff;">{len(leads)}</div>
+        <div style="color:#666;font-size:11px;">Total</div>
+      </td>
+    </tr>
+  </table>
+</td></tr>
+</table>
+"""
     
     # Add Alert Leads section first
     if alert_leads:
         html += """
-            <div class="section">
-                <h2 style="color: #dc3545;">🚨 Alert Leads (Require Immediate Attention)</h2>
-        """
-        
-        html += """
-                    <table class="leads-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Phone</th>
-                                <th>Source</th>
-                                <th>Status</th>
-                                <th>Next Step</th>
-                                <th>Notes</th>
-                                <th>SLA Missed</th>
-                                <th>Created</th>
-                                <th>Updated</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-        """
-        
+<div class="section" style="margin:0 0 24px 0;">
+  <h2 style="color:#dc3545;font-size:17px;margin:0 0 12px 0;padding:0 0 8px 0;border-bottom:1px solid #ddd;">
+    Alert Leads (Require Immediate Attention)
+  </h2>
+"""
         for lead in alert_leads:
             next_step = get_lead_next_step(lead)
             notes = get_lead_notes(lead)
             sla_missed = alert_sla_info.get(lead.id, [])
             sla_display = ', '.join(sla_missed) if sla_missed else 'None'
-            
-            html += f"""
-                            <tr style="background-color: #fff3cd;">
-                                <td><strong>{lead.name or 'N/A'}</strong></td>
-                                <td>{lead.phone or 'N/A'}</td>
-                                <td>{lead.source or 'N/A'}</td>
-                                <td><span class="badge badge-active">{lead.status or 'No Status'}</span></td>
-                                <td>{next_step}</td>
-                                <td>{notes}</td>
-                                <td style="color: #dc3545; font-weight: bold;">{sla_display}</td>
-                                <td>{lead.created_at.strftime('%Y-%m-%d') if lead.created_at else 'N/A'}</td>
-                                <td>{lead.updated_at.strftime('%Y-%m-%d') if lead.updated_at else 'N/A'}</td>
-                            </tr>
-            """
-        
-        html += """
-                        </tbody>
-                    </table>
-                </div>
-        """
+            html += _lead_card_html(
+                lead,
+                next_step=next_step,
+                notes=notes,
+                status=lead.status or 'No Status',
+                sla_display=sla_display,
+                highlight=True,
+            )
+        html += '</div>'
     else:
         html += """
-            <div class="section">
-                <h2 style="color: #28a745;">✅ No Alert Leads</h2>
-                <p style="text-align: center; color: #666; font-style: italic;">All leads are currently within normal parameters.</p>
-            </div>
-        """
+<div class="section" style="margin:0 0 24px 0;">
+  <h2 style="color:#28a745;font-size:17px;margin:0 0 8px 0;">No Alert Leads</h2>
+  <p style="text-align:center;color:#666;font-style:italic;margin:0;">All leads are currently within normal parameters.</p>
+</div>
+"""
     
     html += """
-            <div class="section">
-                <h2>Active Leads by Status</h2>
-    """
+<div class="section" style="margin:0 0 24px 0;">
+  <h2 style="color:#333;font-size:17px;margin:0 0 12px 0;padding:0 0 8px 0;border-bottom:1px solid #ddd;">Active Leads by Status</h2>
+"""
     
     if active_leads_by_status:
         for status, status_leads in sorted(active_leads_by_status.items()):
-            html += f"""
-                <div class="status-group">
-                    <div class="status-title">{status.replace('_', ' ').title()}</div>
-                    <div class="status-count">{len(status_leads)} leads</div>
-                    <table class="leads-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Phone</th>
-                                <th>Source</th>
-                                <th>Next Step</th>
-                                <th>Notes</th>
-                                <th>Created</th>
-                                <th>Last Updated</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            """
-            
+            html += (
+                f'<div style="margin:0 0 18px 0;">'
+                f'<div style="font-weight:bold;color:#007bff;margin:0 0 4px 0;font-size:15px;">'
+                f'{_esc(status.replace("_", " ").title())}</div>'
+                f'<div style="color:#666;font-size:13px;margin:0 0 10px 0;">{len(status_leads)} leads</div>'
+            )
             for lead in status_leads:
-                next_step = get_lead_next_step(lead)
-                notes = get_lead_notes(lead)
-                html += f"""
-                            <tr>
-                                <td>{lead.name or 'N/A'}</td>
-                                <td>{lead.phone or 'N/A'}</td>
-                                <td>{lead.source or 'N/A'}</td>
-                                <td>{next_step}</td>
-                                <td>{notes}</td>
-                                <td>{lead.created_at.strftime('%Y-%m-%d') if lead.created_at else 'N/A'}</td>
-                                <td>{lead.updated_at.strftime('%Y-%m-%d') if lead.updated_at else 'N/A'}</td>
-                            </tr>
-                """
-            
-            html += """
-                        </tbody>
-                    </table>
-                </div>
-            """
+                html += _lead_card_html(
+                    lead,
+                    next_step=get_lead_next_step(lead),
+                    notes=get_lead_notes(lead),
+                )
+            html += '</div>'
     else:
-        html += '<div class="no-leads">No active leads found.</div>'
+        html += '<p style="text-align:center;color:#666;font-style:italic;padding:12px 0;">No active leads found.</p>'
     
     html += """
-            </div>
-            
-            <div class="section">
-                <h2>Inactive Leads by Status</h2>
-    """
+</div>
+<div class="section" style="margin:0 0 24px 0;">
+  <h2 style="color:#333;font-size:17px;margin:0 0 12px 0;padding:0 0 8px 0;border-bottom:1px solid #ddd;">Inactive Leads by Status</h2>
+"""
     
     if inactive_leads_by_status:
         for status, status_leads in sorted(inactive_leads_by_status.items()):
-            html += f"""
-                <div class="status-group">
-                    <div class="status-title">{status.replace('_', ' ').title()}</div>
-                    <div class="status-count">{len(status_leads)} leads</div>
-                    <table class="leads-table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Phone</th>
-                                <th>Source</th>
-                                <th>Next Step</th>
-                                <th>Notes</th>
-                                <th>Created</th>
-                                <th>Last Updated</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            """
-            
+            html += (
+                f'<div style="margin:0 0 18px 0;">'
+                f'<div style="font-weight:bold;color:#007bff;margin:0 0 4px 0;font-size:15px;">'
+                f'{_esc(status.replace("_", " ").title())}</div>'
+                f'<div style="color:#666;font-size:13px;margin:0 0 10px 0;">{len(status_leads)} leads</div>'
+            )
             for lead in status_leads:
-                next_step = get_lead_next_step(lead)
-                notes = get_lead_notes(lead)
-                html += f"""
-                            <tr>
-                                <td>{lead.name or 'N/A'}</td>
-                                <td>{lead.phone or 'N/A'}</td>
-                                <td>{lead.source or 'N/A'}</td>
-                                <td>{next_step}</td>
-                                <td>{notes}</td>
-                                <td>{lead.created_at.strftime('%Y-%m-%d') if lead.created_at else 'N/A'}</td>
-                                <td>{lead.updated_at.strftime('%Y-%m-%d') if lead.updated_at else 'N/A'}</td>
-                            </tr>
-                """
-            
-            html += """
-                        </tbody>
-                    </table>
-                </div>
-            """
+                html += _lead_card_html(
+                    lead,
+                    next_step=get_lead_next_step(lead),
+                    notes=get_lead_notes(lead),
+                )
+            html += '</div>'
     else:
-        html += '<div class="no-leads">No inactive leads found.</div>'
+        html += '<p style="text-align:center;color:#666;font-style:italic;padding:12px 0;">No inactive leads found.</p>'
     
     html += """
-            </div>
-            
-            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #666; font-size: 12px;">
-                <p>This report is automatically generated daily at 6:00 AM IST</p>
-                <p>Inertia Investment Management System</p>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
+</div>
+<div style="margin:24px 0 0 0;padding:16px 0 0 0;border-top:1px solid #ddd;text-align:center;color:#666;font-size:12px;">
+  <p style="margin:0 0 4px 0;">This report is automatically generated daily at 6:00 AM IST</p>
+  <p style="margin:0;">Inertia Investment Management System</p>
+</div>
+
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
+"""
     
     return html
 
 def send_email_report(html_content, report_date):
-    """Send the leads report via email using Flask-Mail with database recipients"""
-    
+    """Send the leads report via Flask-Mail. Reuses app context when caller already pushed one (Airflow)."""
+    from flask import has_app_context
+    from flask_mail import Message
+    from extensions import mail
+
+    def _send_in_context():
+        recipient_emails = []
+        if ReportRecipient:
+            try:
+                recipients = ReportRecipient.query.filter_by(job_id='daily_leads_report', is_active=True).all()
+                recipient_emails = [r.email for r in recipients]
+            except Exception as e:
+                print(f"⚠️ Error querying report recipients: {e}")
+                recipient_emails = []
+        if not recipient_emails:
+            print("⚠️ No active recipients found for daily_leads_report. Using default recipients.")
+            recipient_emails = ['onboarding@equities4wealth.com', 'anshul@equities4wealth.com']
+        msg = Message(
+            subject=f'Daily Leads Report - {report_date.strftime("%B %d, %Y")}',
+            recipients=recipient_emails,
+            html=html_content,
+        )
+        mail.send(msg)
+        print(f"✅ Daily leads report sent successfully to: {', '.join(recipient_emails)}")
+        return True
+
     try:
-        from flask_mail import Message
-        
-        # Create Flask app and context
+        if has_app_context():
+            return _send_in_context()
         app = create_app()
-        
         with app.app_context():
-            # Get recipients from database if available
-            recipient_emails = []
-            if ReportRecipient:
-                try:
-                    recipients = ReportRecipient.query.filter_by(job_id='daily_leads_report', is_active=True).all()
-                    recipient_emails = [r.email for r in recipients]
-                except Exception as e:
-                    print(f"⚠️ Error querying report recipients: {e}")
-                    recipient_emails = []
-            
-            if not recipient_emails:
-                print("⚠️ No active recipients found for daily_leads_report. Using default recipients.")
-                recipient_emails = ['onboarding@equities4wealth.com', 'anshul@equities4wealth.com']
-            
-            # Create message using Flask-Mail
-            msg = Message(
-                subject=f'Daily Leads Report - {report_date.strftime("%B %d, %Y")}',
-                recipients=recipient_emails,
-                html=html_content
-            )
-            
-            # Send email using Flask-Mail
-            from extensions import mail
-            mail.send(msg)
-            
-            print(f"✅ Daily leads report sent successfully to: {', '.join(recipient_emails)}")
-            return True
-        
+            return _send_in_context()
     except Exception as e:
         print(f"❌ Error sending leads report email: {str(e)}")
         return False
 
 def main():
     """Main function to generate and send daily leads report"""
+    from flask import has_app_context
+
+    def _run():
+        print("📊 Generating daily leads report...")
+        html_content = create_leads_html_report()
+        report_date = datetime.now()
+        success = send_email_report(html_content, report_date)
+        if success:
+            print("✅ Daily leads report completed successfully")
+        else:
+            print(
+                "⚠️ Daily leads report generated but email was not sent (check SMTP / MAIL_*)."
+            )
+        return 0
+
     try:
-        # Create Flask app context
+        if has_app_context():
+            return _run()
         app = create_app()
-        
         with app.app_context():
-            # Generate report
-            print("📊 Generating daily leads report...")
-            html_content = create_leads_html_report()
-            
-            # Send email
-            report_date = datetime.now()
-            success = send_email_report(html_content, report_date)
-            
-            if success:
-                print("✅ Daily leads report completed successfully")
-            else:
-                print("❌ Failed to send daily leads report")
-                return 1
-                
+            return _run()
     except Exception as e:
         print(f"❌ Error in daily leads report: {str(e)}")
         return 1
-    
-    return 0
 
 if __name__ == "__main__":
     exit(main())

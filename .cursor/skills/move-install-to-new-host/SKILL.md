@@ -1,119 +1,71 @@
 ---
 name: move-install-to-new-host
 description: >-
-  Move any working Inertia install (BigRock, Lean VPS, Mac checkout, spare box)
-  to a new server with minimal effort: ask a short settings quiz (or keep same
-  DB names / app path and only rotate passwords), sync portable code, generate
-  host .env, restore DB + uploads, smoke-test. Use when cloning, replacing a
-  VPS, or “take this working directory and put it on a new machine.”
+  Clone Lean VPS (129.121.133.25 /opt/Inertia2026v1) onto a new host with the
+  same path, DB names, and credentials (.env as-is). Uses
+  provision_new_host.sh for dump → secrets → install → Airflow → 2FA → DAGs.
+  Use when “copy Lean to another server” or NEW_HOST is set.
 ---
 
-# Move working install → new host
+# Clone Lean → new host (same credentials)
 
 ## Goal
 
-Treat **whatever is running and healthy today** as the source. Get the same app onto a **new machine** with as little friction as possible.
+**Source = Lean only** (`anshul@129.121.133.25`, `/opt/Inertia2026v1`).  
+Copy **everything the same**, including DB passwords, `SECRET_KEY`, mail/Drive secrets.
 
-Lean / BigRock / Mac are just **examples of a working directory** — the flow is the same.
+| Identical from Lean | Only different |
+|---------------------|----------------|
+| `/opt/Inertia2026v1` | New IP / SSH |
+| `.env` (all keys) — Gmail/SMTP, Zoho, Drive, DB, SECRET_KEY, … | Optional later: HTTPS / DNS |
+| `service_account.json` | |
+| DB dump → same `DB_NAME` / `DB_USER` / `DB_PASSWORD` | |
+| uploads + agreements | |
+| Airflow DAG set + 2FA policy | |
 
-| Stays the same (default) | Changes per host |
-|--------------------------|------------------|
-| App layout (`/opt/Inertia2026v1` preferred) | New IP / SSH |
-| `DB_NAME` (e.g. `inertia_app2025`) | `DB_PASSWORD` |
-| `DB_USER` (e.g. `inertia_app`) | `SECRET_KEY` |
-| Code (git or rsync of tree) | `.env` mail/Drive secrets if rotated |
-| Portable Python (`from main`, `INERTIA_APP_DIR`) | systemd if path differs; `EMAIL_SOURCE_TAG` |
+**External services:** whatever already works on Lean (Gmail, Zoho, Google Drive, etc.) uses the **same credentials** on NEW — no new API keys or app passwords. Copy Lean `.env` + SA as-is.
 
-**Never** copy `.env` into git or paste live passwords into chat. Generate or ask operator to fill on the new host over SSH.
+Code: `git clone` **inertialean** (same tip Lean deploys). Do **not** use BigRock as source. Do **not** rotate passwords / mail secrets unless the operator explicitly asks.
 
-Related: `docs/VPS_CLEAN_MIGRATION_RUNBOOK.md`, `docs/PROD_CUTOVER_COPY_LIST.md`, `scripts/deployment/generate_host_env.py`, `vps-clean-migration` skill (OS/SSH bootstrap).
+Related: `scripts/deployment/provision_new_host.sh`, `docs/VPS_CLEAN_MIGRATION_RUNBOOK.md`, `vps-clean-migration` (OS bootstrap only).
 
-## Step 0 — Short quiz (or “defaults”)
-
-If user says **“same DB names, only passwords change”**, skip to generating secrets and use defaults below.
-
-| # | Ask | Default |
-|---|-----|---------|
-| 1 | Source path (working install) | e.g. `/opt/Inertia2026v1` on current VPS, or this Mac tree |
-| 2 | New host `user@IP` | *(required)* |
-| 3 | Install dir on new host | **same as source** (prefer `/opt/Inertia2026v1`) |
-| 4 | `DB_NAME` / `DB_USER` / `DB_HOST` | **same as source** |
-| 5 | New `DB_PASSWORD` + `SECRET_KEY` | auto-generate |
-| 6 | Include Airflow? | yes if source runs Airflow |
-| 7 | Copy uploads/agreements? | yes for full prod move |
-| 8 | DNS/HTTPS yet? | no → `SESSION_COOKIE_SECURE=false` until cutover |
-
-## Step 1 — Code to new host (minimal)
-
-**Best:** git remote that matches the working tree → `git clone` / `git pull` on new host (preserves history; no secrets).
-
-**Fine:** rsync **code only** from the working directory:
+## One command (after NEW has OS + MySQL)
 
 ```bash
-SRC_USER_HOST=user@SOURCE_IP
-SRC_APP=/opt/Inertia2026v1          # or Mac path
-DST_USER_HOST=user@NEW_IP
-DST_APP=/opt/Inertia2026v1
-
-rsync -avz -e "ssh -i ~/.ssh/KEY" \
-  --exclude '.env' --exclude 'venv' --exclude 'airflow_venv' \
-  --exclude 'airflow/logs' --exclude 'airflow.db*' \
-  --exclude '__pycache__' --exclude '*.pyc' --exclude 'logs' \
-  --exclude 'inertia_codebase_backups' \
-  "$SRC_USER_HOST:$SRC_APP/" ./staging-inertia/
-# then rsync staging → new host, or rsync direct SRC → DST
+export NEW_HOST=anshul@NEW_IP
+export SSH_KEY=~/.ssh/inertia_vps
+# SRC_HOST defaults to anshul@129.121.133.25 (Lean) — do not point elsewhere
+./scripts/deployment/provision_new_host.sh
 ```
 
-Before sync: source tree should already be **portable** (no `/home/inertia`, no `from run` in Airflow entrypoints). If not, fix on source first — do not “patch on the new box later.”
+Resume: `./scripts/deployment/provision_new_host.sh --from airflow`
 
-## Step 2 — `.env` on new host only
+## Stages
 
-```bash
-python3 scripts/deployment/generate_host_env.py \
-  --out /tmp/inertia-new-host.env \
-  --db-name inertia_app2025 \
-  --db-user inertia_app \
-  --email-source-tag "NEW_LABEL"   # optional; omit for final prod
-```
+1. **dump** — mysqldump on Lean using Lean `.env`
+2. **copy_secrets** — Lean `.env` + SA → NEW `/tmp` (passwords unchanged)
+3. **remote_install** — git + import DB + venv + Gunicorn; rsync uploads
+4. **airflow** — Airflow 3.0.6 + lean systemd units
+5. **twofa** — `FORCE_2FA_FOR_ALL_USERS=true` + enforce migration
+6. **dags** — unpause all + trigger smoke
+7. **smoke** — health check
 
-Create MySQL DB/user with **same names**, **new password**; restore dump from source.
-
-```bash
-# data + docs (from PROD_CUTOVER_COPY_LIST)
-# mysqldump on source → import on new
-# rsync uploads/ static/agreements/ static/uploads/
-```
-
-## Step 3 — Runtime on new host
-
-```bash
-cd /opt/Inertia2026v1   # or chosen DST_APP
-python3 -m venv venv && ./venv/bin/pip install -U pip -r requirements.txt
-# install/enable gunicorn unit (clean_vps_first_install or copy unit + set paths)
-sudo systemctl restart inertia-2026v1   # unit name may vary
-curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5004/api/v1/health
-```
-
-If Airflow: install venv + lean systemd units (or template `INERTIA_APP_DIR`), unpause, smoke-trigger, list `failed_latest` (runbook Phase 10 §F).
-
-## Step 4 — Agent rules
+## Agent rules
 
 **Must**
 
-- Start from a **known-working** source directory; don’t invent a new architecture mid-move.
-- Prefer **same path + same DB names**; only rotate secrets unless user asks otherwise.
-- Keep business code portable; host-specific = `.env` + systemd.
-- Record new IP / tag in runbook session notes.
-- Smoke: health URL + login + (if Airflow) one DAG success.
+- Source **Lean only**; refuse BigRock/Mac as DB/.env source for this flow.
+- Copy Lean `.env` as-is (same DB + Gmail + Zoho + Drive + all other secrets).
+- Require `NEW_HOST`; OS/MySQL already up on NEW.
+- Smoke health + DAG status after run; optional `scripts/check_external_integrations.py` on NEW.
 
 **Must not**
 
-- Ship source `.env` in tarball/git/chat.
-- Piecemeal-fix hardcoded paths after copy.
-- Flip DNS until IP smoke passes.
+- Generate new `DB_PASSWORD` / `SECRET_KEY` / mail tokens for a Lean clone.
+- Reconfigure Gmail/Zoho/Drive “for the new server” — Lean credentials are the source of truth.
+- Commit `.env` or paste live secrets into chat.
+- Flip DNS until NEW smoke passes.
 
-## One-liner mental model
+## One-liner
 
-**Working dir → new server = sync portable code + new `.env` (passwords) + same DB names + restore dump/uploads + venv/systemd smoke.**
-
-Lean was one working dir; the next move can be Lean→spare, BigRock→clean VPS, or Mac→VPS — same checklist.
+**Lean → NEW = provision_new_host.sh (identical credentials + DB + uploads + Airflow/2FA/DAGs).**
