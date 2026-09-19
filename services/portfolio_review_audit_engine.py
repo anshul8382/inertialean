@@ -371,11 +371,23 @@ def _audit_price_backends() -> Tuple[str, ...]:
     PORTFOLIO_AUDIT_PRICE_SOURCE:
       - db_sheets (default) — database then Google Sheets
       - sheets_db — Google Sheets then database
+      - db — database only (recommended on gunicorn; Sheets GOOGLEFINANCE
+        can take ~5–10s per miss and trip worker timeouts on large portfolios)
+      - sheets — Google Sheets only
     """
     raw = (os.environ.get("PORTFOLIO_AUDIT_PRICE_SOURCE") or "db_sheets").strip().lower()
+    if raw in ("db", "database"):
+        return ("db",)
+    if raw in ("sheets", "google_sheets"):
+        return ("google_sheets",)
     if raw == "sheets_db":
         return ("google_sheets", "db")
     return ("db", "google_sheets")
+
+
+# Symbols that already failed Sheets in this process (delisted / #N/A) — avoid
+# repeating multi-second GOOGLEFINANCE writes on every date for the same ticker.
+_sheets_miss_symbols: Set[str] = set()
 
 
 def _lookup_security_id(symbol_plain: str) -> Optional[int]:
@@ -439,7 +451,13 @@ def _fetch_close_sheets(symbol: str, target_date: date) -> Tuple[Optional[float]
         sym = _normalize_sheets_symbol(symbol)
         if not sym or sym == "INVALID":
             return None, "no_data"
-        r = GoogleSheetsHistoricalPrice.get_historical_price(sym, target_date)
+        if sym in _sheets_miss_symbols:
+            return None, "no_data"
+        # Fail fast: full 5-day lookback with 4s sleeps can exceed gunicorn timeout
+        # when many holdings miss DB (seen on Lean for large portfolios).
+        r = GoogleSheetsHistoricalPrice.get_historical_price(
+            sym, target_date, try_nearby_days=True, max_days_back=1
+        )
         if r and r.get("price") is not None:
             d_raw = r.get("date") or target_date
             if isinstance(d_raw, datetime):
@@ -454,10 +472,14 @@ def _fetch_close_sheets(symbol: str, target_date: date) -> Tuple[Optional[float]
                 price = PriceService.restate_historical_price_to_current_basis(sid, price, d)
             ds = d.isoformat() if isinstance(d, date) else str(d)[:10]
             return price, ds
+        _sheets_miss_symbols.add(sym)
     except FileNotFoundError:
         logger.info("audit Google Sheets: service_account.json not found; skip sheets")
     except Exception as ex:
         logger.warning("audit Google Sheets close failed %s %s: %s", symbol, target_date, ex)
+        sym = _normalize_sheets_symbol(symbol)
+        if sym and sym != "INVALID":
+            _sheets_miss_symbols.add(sym)
     return None, "no_data"
 
 

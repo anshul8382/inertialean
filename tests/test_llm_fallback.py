@@ -1,4 +1,8 @@
-"""LLM fallback helpers — no network."""
+"""LLM fallback helpers — no network.
+
+Lean VPS has no Ollama; LLM_FALLBACK_TO_OLLAMA defaults to false.
+Fallback behaviour is only asserted when that flag is explicitly enabled.
+"""
 
 import pytest
 
@@ -9,7 +13,20 @@ from services.llm_fallback_service import (
 )
 
 
-def test_should_fallback_usage_limit_400():
+def test_no_fallback_when_ollama_disabled(monkeypatch):
+    monkeypatch.setenv("LLM_FALLBACK_TO_OLLAMA", "false")
+    payload = {
+        "error": {
+            "type": "invalid_request_error",
+            "message": "You have reached your specified API usage limits.",
+        }
+    }
+    assert should_fallback_from_http(429, None) is False
+    assert should_fallback_from_http(400, payload) is False
+
+
+def test_should_fallback_usage_limit_400(monkeypatch):
+    monkeypatch.setenv("LLM_FALLBACK_TO_OLLAMA", "true")
     payload = {
         "error": {
             "type": "invalid_request_error",
@@ -19,11 +36,13 @@ def test_should_fallback_usage_limit_400():
     assert should_fallback_from_http(400, payload) is True
 
 
-def test_should_fallback_429():
+def test_should_fallback_429(monkeypatch):
+    monkeypatch.setenv("LLM_FALLBACK_TO_OLLAMA", "true")
     assert should_fallback_from_http(429, None) is True
 
 
-def test_should_not_fallback_400_generic():
+def test_should_not_fallback_400_generic(monkeypatch):
+    monkeypatch.setenv("LLM_FALLBACK_TO_OLLAMA", "true")
     assert should_fallback_from_http(400, {"error": {"type": "bad_request", "message": "missing field"}}) is False
 
 

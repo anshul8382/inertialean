@@ -1315,7 +1315,15 @@ class PerformanceAnalysisEmail {
         try {
             data = JSON.parse(raw);
         } catch (e) {
-            throw new Error('Invalid JSON from audit API');
+            const snippet = (raw || '').trim().slice(0, 120);
+            if (!snippet) {
+                throw new Error(
+                    'Audit API returned an empty response (often a server worker timeout on large portfolios). Retry, or ask ops to set PORTFOLIO_AUDIT_PRICE_SOURCE=db.'
+                );
+            }
+            throw new Error(
+                `Invalid JSON from audit API (HTTP ${resp.status}): ${snippet}`
+            );
         }
         if (!resp.ok || !data.success) {
             const err = (data && (data.error || data.message)) || resp.statusText;
