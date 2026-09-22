@@ -62,7 +62,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-SSH=(ssh -i "$SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes)
+SSH=(ssh -i "$SSH_KEY" -o IdentitiesOnly=yes)
 die() { echo "ERROR: $*" >&2; exit 1; }
 
 cd "$ROOT"
