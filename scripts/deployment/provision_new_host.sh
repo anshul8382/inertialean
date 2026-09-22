@@ -92,7 +92,7 @@ cd '$APP_DIR'
 set -a; source .env; set +a
 OUT=/tmp/inertia_provision_\$(date +%Y%m%d_%H%M%S).sql.gz
 mysqldump -u "\$DB_USER" -p"\$DB_PASSWORD" -h "\${DB_HOST:-127.0.0.1}" -P "\${DB_PORT:-3306}" \
-  --single-transaction --routines --triggers "\$DB_NAME" | gzip -c > "\$OUT"
+  --single-transaction --routines --triggers --no-tablespaces "\$DB_NAME" | gzip -c > "\$OUT"
 echo "\$OUT"
 ls -lh "\$OUT"
 EOF

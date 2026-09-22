@@ -120,7 +120,7 @@ def main() -> None:
             '{% include "partials/mobile/app_header.html" %}'
             '<a href="{{ url_for(\'settings.cron_jobs\') }}" class="im-settings-link"><i class="fas fa-clock"></i><span>Cron jobs</span><i class="fas fa-chevron-right"></i></a>'
             '<a href="{{ url_for(\'settings.system_info\') }}" class="im-settings-link"><i class="fas fa-server"></i><span>System info</span><i class="fas fa-chevron-right"></i></a>'
-            '<a href="{{ url_for(\'settings.service_readiness\') }}" class="im-settings-link"><i class="fas fa-heartbeat"></i><span>Service readiness</span><i class="fas fa-chevron-right"></i></a>'
+            '<a href="{{ url_for(\'main.service_readiness\') }}" class="im-settings-link"><i class="fas fa-heartbeat"></i><span>Service readiness</span><i class="fas fa-chevron-right"></i></a>'
             "</div>"
             '<div class="im-desktop-only container-fluid">',
         ),

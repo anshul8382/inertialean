@@ -22,28 +22,31 @@ Consolidated from overlapping rules into **coherent units**:
 | **VPS Migration** | `vps-migration-agent.mdc` | Clean AlmaLinux VPS (no cPanel), key-only SSH, Inertia cutover; skill `.cursor/skills/vps-clean-migration/`; runbook `docs/VPS_CLEAN_MIGRATION_RUNBOOK.md` — **before copy:** portable paths (`from main` / `INERTIA_APP_DIR`, no `/home/inertia`); Phase 10 §F |
 | **Move install → new host** | (skill) `move-install-to-new-host` | Any **working** app directory → new server with minimal effort; same DB names/path by default, new passwords via `generate_host_env.py`; Lean/BigRock are just examples |
 
-### Deploy target (this workspace = Lean only)
+### Deploy target (this workspace = Lean repo → KVM preferred)
 
 | Mac workspace | Server | Host | Ship with |
 |---------------|--------|------|-----------|
-| **`Inertia2026-lean` (this tree)** | **Lean VPS** | `129.121.133.25` → `/opt/Inertia2026v1` | `./scripts/deployment/ship_lean.sh` |
+| **`Inertia2026-lean` (this tree)** | **KVM4 (active)** | `187.127.188.97` → `/opt/Inertia2026v1` | `./scripts/deployment/ship_kvm.sh` |
+| **`Inertia2026-lean`** | **Lean (sunset)** | `129.121.133.25` → `/opt/Inertia2026v1` | `./scripts/deployment/ship_lean.sh` |
 | **`app 2`** (separate tree) | **BigRock** | `https://66.116.199.231/` / `inertiainvest.in` | `deploy_agent.py full-prod` from **app 2 only** |
 
-**Hard rule for this workspace:** deploy **only** to Lean. Never run BigRock `full-prod` / never ship to `66.116.199.231` or `inertiainvest.in` from `Inertia2026-lean`.
+**Hard rule for this workspace:** never ship to BigRock / `66.116.199.231` / `inertiainvest.in`. Prefer **KVM** for ongoing deploys; Lean remains available until cutover.
 
-| Do (Lean) | Do **not** (from this tree) |
-|-----------|------------------------------|
-| `./scripts/deployment/ship_lean.sh` | `deploy_agent.py full-prod` / `deploy-prod` / `diagnose-prod` |
-| `./scripts/deployment/deploy_lean_vps.sh` | Any deploy to BigRock / `66.116.199.231` / `inertiainvest.in` |
-| Git push → server `git pull` | rsync/SCP app code as the normal ship path |
+| Do | Do **not** (from this tree) |
+|----|------------------------------|
+| `./scripts/deployment/ship_kvm.sh` | `deploy_agent.py full-prod` / `deploy-prod` / `diagnose-prod` |
+| `./scripts/deployment/deploy_kvm_vps.sh` | Any deploy to BigRock / `inertiainvest.in` |
+| `./scripts/deployment/ship_lean.sh` (legacy) | rsync/SCP app code as the normal ship path |
+| Git push → server `git pull` | |
 
-`.local/deployment-agent/` may be shared via symlink for local MySQL docs — its **prod target is BigRock** and belongs to **app 2** workflows, not Lean ship.
+`.local/deployment-agent/` may be shared via symlink for local MySQL docs — its **prod target is BigRock** and belongs to **app 2** workflows, not Lean/KVM ship.
 
 **Clone Lean → another server:** `NEW_HOST=anshul@NEW_IP ./scripts/deployment/provision_new_host.sh` — source is Lean only.
 
 **Mobile UI gate (user-facing changes):** `docs/MOBILE_UI_DEVELOPER_CHECKLIST.md` → implement → `python3 scripts/run_mobile_ui_check.py` → manual test on phone/Capacitor. Wired into **`run_agent_approval_loop.py`**.
 
-**Workflow:** `docs/DEVELOP_WORKFLOW.md` · **Approval loop:** `python3 scripts/run_agent_approval_loop.py --write-status` · **Per commit:** `./scripts/install_git_hooks.sh` (pre-commit gate) · **Lean deploy:** `./scripts/deployment/ship_lean.sh`
+**Workflow:** `docs/DEVELOP_WORKFLOW.md` · **Approval loop:** `python3 scripts/run_agent_approval_loop.py --write-status` · **Per commit:** `./scripts/install_git_hooks.sh` (pre-commit gate) · **KVM deploy:** `./scripts/deployment/ship_kvm.sh` · **Lean deploy:** `./scripts/deployment/ship_lean.sh`
+
 
 **DB cutover (prod schema lag):** Develop on **local** `inertia_app2025_dev` — see **`docs/DB_MIGRATION_AND_TEST_PROCESS.md`**. When code needs tables prod does not have yet — **gate + document** (`docs/DB_CUTOVER_REGISTRY.md`, `services/db_cutover.py`), do **not** run full migrations on prod mid-sprint. Cutover: migrate **`_test` then prod**, then data-only refresh `_test`. Agent: `db-cutover-status` / `db-cutover-prod`. See development gate § “Databases and migrations”.
 

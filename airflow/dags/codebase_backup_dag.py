@@ -33,10 +33,11 @@ def run_codebase_backup_job():
     for key in (
         "CODEBASE_BACKUP_DRIVE_FOLDER_ID",
         "CODEBASE_BACKUP_DRIVE_ENABLED",
+        "BACKUP_DRIVE_CODE_LATEST_NAME",
         "GOOGLE_SERVICE_ACCOUNT_FILE",
     ):
         if key not in env:
-            # already in env from EnvironmentFile when set
+            # already in env from EnvironmentFile / .env when set
             pass
     proc = subprocess.run(
         [app_python(), script],

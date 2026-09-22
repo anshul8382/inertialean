@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# One-time: turn existing /opt/Inertia2026v1 on Lean into a git checkout of this repo.
-# Run ON the VPS (or via ssh). Preserves .env, venv/, airflow_venv/, uploads/.
+# One-time: turn existing /opt/Inertia2026v1 into a git checkout of inertialean.
+# Works on Lean or KVM4. Run ON the VPS (or via ssh). Preserves .env, venv/, airflow_venv/, uploads/.
 #
 # Usage (on VPS):
 #   export ORIGIN_URL='https://github.com/anshul8382/inertialean.git'
 #   bash /opt/Inertia2026v1/scripts/deployment/bootstrap_lean_git.sh
 #
-# From Mac (preferred — avoids bash -s stdin fighting git):
+# From Mac — Lean:
 #   scp -i ~/.ssh/inertia_vps scripts/deployment/bootstrap_lean_git.sh anshul@129.121.133.25:/tmp/
 #   ssh -i ~/.ssh/inertia_vps anshul@129.121.133.25 \
-#     "ORIGIN_URL='https://github.com/anshul8382/inertialean.git' bash /tmp/bootstrap_lean_git.sh"
+#     "ORIGIN_URL='git@github.com:anshul8382/inertialean.git' bash /tmp/bootstrap_lean_git.sh"
+#
+# From Mac — KVM4 (required once before ship_kvm.sh / deploy_kvm_vps.sh):
+#   scp -i ~/.ssh/inertia_vps scripts/deployment/bootstrap_lean_git.sh anshul@187.127.188.97:/tmp/
+#   ssh -i ~/.ssh/inertia_vps anshul@187.127.188.97 \
+#     "ORIGIN_URL='git@github.com:anshul8382/inertialean.git' bash /tmp/bootstrap_lean_git.sh"
 #
 set -euo pipefail
 

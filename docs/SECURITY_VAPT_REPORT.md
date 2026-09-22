@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-09-19T10:03:12.894370+00:00
+Generated: 2026-09-22T13:05:08.683199+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -9,15 +9,15 @@ Agent: `security_audit_agent` v1.0.0
 |----------|-------|
 | critical | 5 |
 | high | 49 |
-| medium | 13 |
+| medium | 14 |
 | low | 0 |
 | info | 0 |
-| **Total** | **67** |
+| **Total** | **68** |
 
 ## Threat themes
 
 - **EXTERNAL** — External attackers / public internet exposure (62 findings)
-- **INTERNAL** — Insider misuse / employee data theft (5 findings)
+- **INTERNAL** — Insider misuse / employee data theft (6 findings)
 - **COMPLIANCE** — SEBI / financial-data regulatory standards (0 findings)
 - **CONFIG** — Misconfiguration & operational hardening (0 findings)
 
@@ -766,6 +766,14 @@ csrf.exempt(transactions_v2_bp)
 ```
 
 **Fix:** Re-enable CSRF for any session-authenticated endpoint. For API endpoints used by mobile/JWT clients, leave exempt but ensure the route is registered under `/api/*` and protected by `api/v1/auth_guard.enforce_v1_api_auth` (or v2 equivalent). Add an entry to the documented allowlist.
+
+### `SEC-CMP-004` — Database backup file in working tree: `.deploy_preserve/provision_20260921_193809/db.sql.gz`
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `.deploy_preserve/provision_20260921_193809/db.sql.gz`
+
+SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
+
+**Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
 
 ### `SEC-CMP-004` — Database backup file in working tree: `.deploy_preserve/vps_code_snapshot/scripts/migration/backup_inertia_app2025_20250915_134823.sql`
 

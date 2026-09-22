@@ -1,5 +1,6 @@
 """Google Calendar OAuth for OpsTask deadline sync (assignee primary calendar)."""
 import logging
+import os
 import secrets
 
 from flask import Blueprint, current_app, flash, redirect, request, session, url_for
@@ -17,6 +18,12 @@ from services.google_calendar_service import GOOGLE_USER_OAUTH_SCOPES
 SCOPES = GOOGLE_USER_OAUTH_SCOPES
 
 
+def _allow_http_oauth_for_tunnel() -> None:
+    """google-auth-oauthlib requires HTTPS unless this env is set (SSH tunnel / IP smoke)."""
+    if request.url.startswith("http://"):
+        os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+
+
 def _web_client_config(redirect_uri: str) -> dict:
     return {
         "web": {
@@ -32,6 +39,7 @@ def _web_client_config(redirect_uri: str) -> dict:
 @google_calendar_bp.route("/connect")
 @login_required
 def calendar_connect():
+    _allow_http_oauth_for_tunnel()
     cid = (current_app.config.get("GOOGLE_CALENDAR_CLIENT_ID") or "").strip()
     csec = (current_app.config.get("GOOGLE_CALENDAR_CLIENT_SECRET") or "").strip()
     if not cid or not csec:
@@ -63,6 +71,7 @@ def calendar_connect():
 @google_calendar_bp.route("/oauth2callback")
 @login_required
 def calendar_oauth_callback():
+    _allow_http_oauth_for_tunnel()
     if request.args.get("state") != session.get("gcal_oauth_state"):
         flash("Invalid or expired OAuth state. Try connecting again.", "error")
         return redirect(url_for("settings.index"))

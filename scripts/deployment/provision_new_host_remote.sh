@@ -64,8 +64,10 @@ stage_install() {
   [[ -n "${DB_NAME:-}" && -n "${DB_USER:-}" && -n "${DB_PASSWORD:-}" ]] || die ".env missing DB_*"
 
   echo "==> MySQL create DB/user (idempotent) + import"
+  # Fresh DB on each install so a failed mid-import can be retried cleanly
   mysql -u root <<SQL
-CREATE DATABASE IF NOT EXISTS \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+DROP DATABASE IF EXISTS \`${DB_NAME}\`;
+CREATE DATABASE \`${DB_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
 CREATE USER IF NOT EXISTS '${DB_USER}'@'127.0.0.1' IDENTIFIED BY '${DB_PASSWORD}';
 ALTER USER '${DB_USER}'@'localhost' IDENTIFIED BY '${DB_PASSWORD}';
@@ -74,7 +76,11 @@ GRANT ALL ON \`${DB_NAME}\`.* TO '${DB_USER}'@'localhost';
 GRANT ALL ON \`${DB_NAME}\`.* TO '${DB_USER}'@'127.0.0.1';
 FLUSH PRIVILEGES;
 SQL
-  gunzip -c /tmp/inertia_provision_db.sql.gz | mysql -u "$DB_USER" -p"$DB_PASSWORD" -h "$DB_HOST" -P "$DB_PORT" "$DB_NAME"
+  # Import as root (not app user): dumps often contain DEFINER= on views/routines
+  # and MySQL 8.4 app users lack SET_ANY_DEFINER / SUPER.
+  gunzip -c /tmp/inertia_provision_db.sql.gz \
+    | sed -e 's/DEFINER=`[^`]*`@`[^`]*`//g' \
+    | mysql --database="$DB_NAME"
   echo "    DB import OK"
 
   echo "==> App venv + pip"

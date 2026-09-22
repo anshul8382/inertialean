@@ -88,11 +88,22 @@ def _default_excludes(source_name: str) -> List[str]:
         f"{source_name}/.venv",
         f"{source_name}/venv",
         f"{source_name}/.venv_airflow_test",
+        f"{source_name}/airflow_venv",
         f"{source_name}/node_modules",
         f"{source_name}/flask_sessions",
         f"{source_name}/logs",
         f"{source_name}/airflow/logs",
+        f"{source_name}/backups",
         f"{source_name}/*.pyc",
+        f"{source_name}/.env",
+        f"{source_name}/.env.*",
+        f"{source_name}/service_account.json",
+        f"{source_name}/credentials.json",
+        f"{source_name}/token.json",
+        f"{source_name}/token.pickle",
+        f"{source_name}/client_secret*.json",
+        f"{source_name}/apps/capacitor-shell/node_modules",
+        f"{source_name}/apps/mobile/node_modules",
     ]
 
 
@@ -182,7 +193,17 @@ def run_daily_codebase_backup(app_config: Optional[dict] = None) -> Dict[str, An
         )
 
         if drive_upload_enabled(cfg):
-            drive_result = upload_file_to_drive_folder(dest, app_config=cfg)
+            drive_name = (
+                str(
+                    cfg.get("BACKUP_DRIVE_CODE_LATEST_NAME")
+                    or os.environ.get("BACKUP_DRIVE_CODE_LATEST_NAME")
+                    or ""
+                ).strip()
+                or "KVM_inertia_code_latest.tar.gz"
+            )
+            drive_result = upload_file_to_drive_folder(
+                dest, app_config=cfg, name=drive_name
+            )
             if not drive_result.get("ok"):
                 logger.warning("Drive upload failed (local backup kept): %s", drive_result.get("error"))
     except Exception as e:

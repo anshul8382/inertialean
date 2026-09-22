@@ -15,6 +15,8 @@ PUBLIC_V1_PATH_SUFFIXES = (
     "/auth/verify-2fa",
     "/public/contact",
     "/public/careers",
+    "/public/booking-intake",
+    "/public/booking-prep-email",
     "/whatsapp/webhook",
     "/leegality/webhook",
     "/health",

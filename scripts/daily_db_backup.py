@@ -8,6 +8,8 @@ via python-dotenv when present, then uses config.Config for DB credentials.
 Env (optional):
   BACKUP_DIR       — default: <app>/backups
   BACKUP_RETENTION_DAYS — default: 30
+  CODEBASE_BACKUP_DRIVE_FOLDER_ID / ENABLED — Shared drive upload (same as codebase)
+  BACKUP_DRIVE_LATEST_NAME — default KVM_<DB_NAME>_latest.sql.gz (replaced each run)
 """
 from __future__ import annotations
 
@@ -104,6 +106,29 @@ def main() -> int:
             pass
     if removed:
         print(f"Pruned {removed} backup(s) older than {retention_days} days", flush=True)
+
+    # Optional: push latest DB dump to Google Shared drive (replaces same Drive filename)
+    try:
+        from services.google_drive_backup_service import (
+            drive_upload_enabled,
+            upload_file_to_drive_folder,
+        )
+
+        if drive_upload_enabled():
+            drive_name = (
+                os.environ.get("BACKUP_DRIVE_LATEST_NAME") or ""
+            ).strip() or f"KVM_{cfg.DB_NAME}_latest.sql.gz"
+            result = upload_file_to_drive_folder(gz, name=drive_name)
+            if result.get("ok"):
+                print(
+                    f"Drive OK {result.get('name')} "
+                    f"(replaced={result.get('replaced')}) {result.get('web_view_link') or ''}",
+                    flush=True,
+                )
+            else:
+                print(f"Drive upload failed (local kept): {result.get('error')}", flush=True)
+    except Exception as exc:
+        print(f"Drive upload skipped/failed (local kept): {exc}", flush=True)
 
     return 0
 

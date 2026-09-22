@@ -296,3 +296,129 @@ def submit_contact():
 @public_contact_bp.route("/careers", methods=["POST"])
 def submit_career():
     return _submit_public_form(force_career=True)
+
+
+BOOKING_SOURCE = "equities4wealth.com/booking"
+
+
+def _send_booking_team_email(name: str, email: str, phone: str, lead_id: int) -> bool:
+    body_html = f"""
+    <h2>New discovery-call booking intake</h2>
+    <p><strong>Lead ID:</strong> {lead_id}</p>
+    <table cellpadding="6" style="border-collapse:collapse;">
+      <tr><td><strong>Name</strong></td><td>{html.escape(name)}</td></tr>
+      <tr><td><strong>Email</strong></td><td>{html.escape(email)}</td></tr>
+      <tr><td><strong>Phone</strong></td><td>{html.escape(phone)}</td></tr>
+    </table>
+    <p style="color:#666;font-size:12px;">Source: {html.escape(BOOKING_SOURCE)}</p>
+    """
+    msg = Message(
+        subject=f"Discovery call booking: {name}",
+        recipients=NOTIFY_EMAILS,
+        html=body_html,
+        reply_to=email,
+    )
+    mail.send(msg)
+    return True
+
+
+def _send_booking_prep_email(name: str, email: str) -> bool:
+    safe_name = html.escape(name.strip() or "there")
+    body_html = f"""
+    <p>Hi {safe_name},</p>
+    <p>Thanks for booking a discovery call with Inertia Equities For Wealth
+    (SEBI Registered Investment Adviser — INA000018090).</p>
+    <p>Before we meet, please:</p>
+    <ol>
+      <li>Complete our short risk / investor-profile quiz if we send you a link
+          (or reply to this email if you already have one).</li>
+      <li>Have handy any recent portfolio statements or a rough list of holdings
+          and monthly surplus you are comfortable sharing.</li>
+      <li>Note 2–3 goals or questions you want to cover in the call.</li>
+    </ol>
+    <p>This is a no-obligation conversation — we listen first and will tell you
+    clearly whether we can help.</p>
+    <p>Regards,<br>Team Inertia<br>
+    <a href="https://equities4wealth.com">equities4wealth.com</a></p>
+    """
+    msg = Message(
+        subject="Before your Inertia discovery call — quick prep",
+        recipients=[email],
+        html=body_html,
+        reply_to="anshul@equities4wealth.com",
+    )
+    mail.send(msg)
+    return True
+
+
+@public_contact_bp.route("/booking-intake", methods=["POST"])
+def submit_booking_intake():
+    """Website book-online.html → PHP → create lead before calendar slot pick."""
+    if not _authorized():
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+
+    data = _request_payload()
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    phone = (data.get("phone") or "").strip()
+    if data.get("_hp_verify") or data.get("company"):
+        return jsonify({"success": True})
+
+    if len(name) < 2:
+        return jsonify({"success": False, "error": "Please enter your full name."}), 400
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return jsonify({"success": False, "error": "Please enter a valid email address."}), 400
+    if len(phone) < 8:
+        return jsonify({"success": False, "error": "Please enter a valid mobile number."}), 400
+
+    notes = "Discovery call booking intake (website book-online)."
+    source = canonical_source(source=BOOKING_SOURCE, notes=notes)
+    lead = Lead(
+        name=name,
+        email=email,
+        phone=phone,
+        source=source,
+        status="new",
+        notes=notes,
+        user_id=1,
+    )
+    db.session.add(lead)
+    db.session.commit()
+    _create_lead_workflow(lead, name, source)
+
+    email_sent = False
+    try:
+        email_sent = _send_booking_team_email(name, email, phone, lead.id)
+    except Exception as exc:
+        logger.exception("Booking intake notify failed for lead %s: %s", lead.id, exc)
+
+    return jsonify(
+        {
+            "success": True,
+            "lead_id": lead.id,
+            "email_sent": email_sent,
+            "category": "booking",
+        }
+    )
+
+
+@public_contact_bp.route("/booking-prep-email", methods=["POST"])
+def submit_booking_prep_email():
+    """Delayed prep email to the prospect (PHP booking-followup-cron)."""
+    if not _authorized():
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+
+    data = _request_payload()
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    if not name or "@" not in email:
+        return jsonify({"success": False, "error": "Name and email required."}), 400
+
+    try:
+        _send_booking_prep_email(name, email)
+    except Exception as exc:
+        logger.exception("Booking prep email failed for %s: %s", email, exc)
+        return jsonify({"success": False, "error": "Email send failed."}), 500
+
+    return jsonify({"success": True, "email_sent": True})
+
