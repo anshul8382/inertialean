@@ -633,11 +633,11 @@
                                     <span class="text-muted">N/A ({{ 'Inactive' if not lead.is_active else 'Converted' }})</span>
                                 {% endif %}
                             </p>
-                            <p><strong>Created:</strong> <span class="text-dark">{{ lead.created_at | ist_datetime }}</span></p>
+                            <p><strong>Created:</strong> <span class="text-dark">{{ lead.created_at | utc_to_ist }} IST</span></p>
                             {% if lead.client_id %}
                             <p><strong>Conversion Status:</strong> <span class="badge badge-success">Converted to Client</span></p>
                             {% if lead.converted_at is defined and lead.converted_at %}
-                            <p><strong>Converted:</strong> <span class="text-dark">{{ lead.converted_at | ist_datetime }}</span></p>
+                            <p><strong>Converted:</strong> <span class="text-dark">{{ lead.converted_at | utc_to_ist }} IST</span></p>
                             {% endif %}
                             {% endif %}
                         </div>
@@ -663,7 +663,7 @@
                         <div class="card mb-3">
                             <div class="card-body">
                                 <p class="mb-0" style="white-space: pre-wrap;">{{ lead.notes | strip_ic_markers }}</p>
-                                <small class="text-muted">Last updated: {{ lead.updated_at | ist_datetime }}</small>
+                                <small class="text-muted">Last updated: {{ lead.updated_at | utc_to_ist }} IST</small>
                             </div>
                         </div>
                     {% else %}
@@ -808,7 +808,7 @@
                                 {% if call_logs %}
                                     {% for call in call_logs %}
                                     <tr>
-                                        <td class="text-dark">{{ call.call_date.strftime('%Y-%m-%d %H:%M') if call.call_date else 'N/A' }}</td>
+                                        <td class="text-dark">{{ call.call_date | utc_to_ist if call.call_date else 'N/A' }} <span class="text-muted small">IST</span></td>
                                         <td class="text-dark">{{ call.call_type|title if call.call_type else 'N/A' }}</td>
                                         <td class="text-dark">{{ call.duration }} seconds</td>
                                         <td class="text-dark">{{ call.notes|truncate(100) if call.notes else 'No notes' }}</td>
@@ -851,7 +851,7 @@
                         <div class="workflow-action-item mb-2 p-2 border-left border-primary">
                             <div class="d-flex justify-content-between">
                                 <strong>{{ action.action_type|replace('_', ' ')|title }}</strong>
-                                <small class="text-muted">{{ action.action_date.strftime('%Y-%m-%d %H:%M') }}</small>
+                                <small class="text-muted">{{ action.action_date | utc_to_ist }} IST</small>
                             </div>
                             {% if action.notes %}
                             <div class="text-muted small">{{ action.notes }}</div>

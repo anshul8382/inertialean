@@ -225,6 +225,18 @@ try:
 except Exception:
     pass
 try:
+    from models.finding_notification_decision import FindingNotificationDecision
+
+    setattr(sys.modules[__name__], "FindingNotificationDecision", FindingNotificationDecision)
+except Exception:
+    pass
+try:
+    from models.user_peer_message import UserPeerMessage
+
+    setattr(sys.modules[__name__], "UserPeerMessage", UserPeerMessage)
+except Exception:
+    pass
+try:
     from models.lead_onboarding import LeadProposal, RiskAssessmentSubmission, LeadKycProfile
 
     setattr(sys.modules[__name__], "LeadProposal", LeadProposal)

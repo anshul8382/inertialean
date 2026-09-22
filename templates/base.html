@@ -608,6 +608,13 @@
 
                 <!-- User Menu -->
                 <ul class="navbar-nav ms-2">
+                    <li class="nav-item">
+                        <a class="nav-link position-relative" href="{{ url_for('notification_centre.centre') }}" title="Notification centre" id="ncBellLink">
+                            <i class="fas fa-bell" aria-hidden="true"></i>
+                            <span class="visually-hidden">Notifications</span>
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none" id="ncBellBadge" style="font-size: 0.65rem;">0</span>
+                        </a>
+                    </li>
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" data-bs-popper="static" aria-expanded="false">
                             <i class="fas fa-user"></i> {{ current_user.username }}
@@ -697,6 +704,29 @@
     <!-- jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     {% block scripts %}    {% endblock %}
+    {% if current_user.is_authenticated %}
+    <script>
+    (function () {
+      fetch('/api/v1/notifications/count', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data) return;
+          var badge = document.getElementById('ncBellBadge');
+          if (!badge) return;
+          var n = data.bell_count;
+          if (n == null) {
+            n = (data.urgent_count || 0) + (data.message_count || 0);
+            if (!n) n = data.count || 0;
+          }
+          if (n > 0) {
+            badge.textContent = n > 99 ? '99+' : String(n);
+            badge.classList.remove('d-none');
+          }
+        })
+        .catch(function () {});
+    })();
+    </script>
+    {% endif %}
     
     <!-- Mobile Bottom Navigation (visible only on mobile) -->
     {% if current_user.is_authenticated %}
@@ -755,5 +785,6 @@
             });
         }
     </script>
+    {% include 'partials/ist_clock.html' %}
 </body>
 </html>

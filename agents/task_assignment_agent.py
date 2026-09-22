@@ -41,7 +41,8 @@ class TaskAssignmentAgent:
     def run_backfill(self) -> tuple:
         """
         Assign / reassign open issues to current policy.
-        Creates OpsTasks for assigned issues so they appear in /tasks.
+        OpsTask auto-create is gated off by default (DI_CREATE_OPS_TASKS /
+        REVIEW_CREATE_OPS_TASKS); assignment of existing open tasks still follows.
         Returns (issues_assigned_or_reassigned, ops_tasks_created).
         """
         open_issues = DataIntegrityIssue.query.filter(
@@ -125,7 +126,8 @@ class TaskAssignmentAgent:
         return updated, tasks_created
 
     def _backfill_review_workflows(self) -> tuple:
-        """Assign open ReviewWorkflows to each client's advisor; create OpsTasks.
+        """Assign open ReviewWorkflows to each client's advisor.
+        OpsTask create is a no-op unless REVIEW_CREATE_OPS_TASKS is on.
         Returns (workflows_assigned_or_reassigned, ops_tasks_created)."""
         assigned_count = 0
         tasks_count = 0

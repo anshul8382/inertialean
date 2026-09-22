@@ -41,4 +41,5 @@ _safe_register("api.v1.health", "health_bp")
 _safe_register("api.v1.campaign_studio_api", "campaign_studio_api_bp", url_prefix="/campaign-studio")
 # Pass url_prefix explicitly: _safe_register defaults to "" which overrides Blueprint(url_prefix=...).
 _safe_register("api.v1.leegality", "leegality_bp", url_prefix="/leegality")
+_safe_register("api.v1.notification_centre", "notification_centre_bp")
 __all__ = ["api_v1"]

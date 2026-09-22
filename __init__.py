@@ -48,14 +48,27 @@ def create_app(config_class=ProductionConfig):
     def ist_datetime_filter(dt):
         """Format datetime in app local time (TIMEZONE, default IST).
 
-        Naive datetimes are treated as wall clock in that zone (same as forms/DB convention).
-        Aware datetimes are converted to the app zone for display.
+        Naive datetimes are treated as wall clock in that zone (user-entered
+        form/meeting times). For DB columns filled with datetime.utcnow(), use
+        ``utc_to_ist`` instead.
         """
         if dt is None:
             return 'Not Set'
         tz = app.config['TIMEZONE']
         if dt.tzinfo is None:
             ist_dt = tz.localize(dt)
+        else:
+            ist_dt = dt.astimezone(tz)
+        return ist_dt.strftime('%Y-%m-%d %H:%M')
+
+    @app.template_filter('utc_to_ist')
+    def utc_to_ist_filter(dt):
+        """Display naive-UTC (or aware) datetime as Asia/Kolkata wall clock."""
+        if dt is None:
+            return 'Not Set'
+        tz = app.config['TIMEZONE']
+        if dt.tzinfo is None:
+            ist_dt = pytz.UTC.localize(dt).astimezone(tz)
         else:
             ist_dt = dt.astimezone(tz)
         return ist_dt.strftime('%Y-%m-%d %H:%M')
@@ -68,6 +81,18 @@ def create_app(config_class=ProductionConfig):
         tz = app.config['TIMEZONE']
         if dt.tzinfo is None:
             ist_dt = tz.localize(dt)
+        else:
+            ist_dt = dt.astimezone(tz)
+        return ist_dt.strftime('%Y-%m-%d')
+
+    @app.template_filter('utc_to_ist_date')
+    def utc_to_ist_date_filter(dt):
+        """Date portion of a naive-UTC datetime in Asia/Kolkata."""
+        if dt is None:
+            return 'Not Set'
+        tz = app.config['TIMEZONE']
+        if dt.tzinfo is None:
+            ist_dt = pytz.UTC.localize(dt).astimezone(tz)
         else:
             ist_dt = dt.astimezone(tz)
         return ist_dt.strftime('%Y-%m-%d')
@@ -370,6 +395,12 @@ def create_app(config_class=ProductionConfig):
     app.register_blueprint(bni_referrals_bp)
     app.register_blueprint(rec_exec_bp)
     app.register_blueprint(attendance_bp)
+    try:
+        from routes.notification_centre import notification_centre_ui_bp
+
+        app.register_blueprint(notification_centre_ui_bp)
+    except Exception as _nc_e:
+        app.logger.warning("Notification centre UI not registered: %s", _nc_e)
     app.config["NAV_TASKS_ENABLED"] = False
     try:
         from routes.tasks import tasks_bp as _tasks_bp

@@ -312,6 +312,36 @@ Period invoice = `current_annual_fee / frequency_divisor` (yearly=1, half-yearly
 
 **Added:** 2026-09-05
 
+### Finding notification centre
+
+| Item | Detail |
+|------|--------|
+| **Status** | Local/dev ready; gate until table exists on each host |
+| **Table** | `finding_notification_decision` |
+| **Migration** | `migrations/add_finding_notification_decision.py` |
+| **Model** | `models/finding_notification_decision.py` |
+| **Code gate** | `services/db_cutover.py` → `finding_notification_enabled()` |
+| **Service / UI** | `services/notification_centre_service.py`, `/notifications`, `/api/v1/notifications*` |
+| **User impact while deferred / missing table** | Bell returns empty; page shows “waiting on schema”. Live findings still exist elsewhere. |
+| **Notes** | Do **not** add `finding_notification` to `DEFER_DB_FEATURES` on local after migration. On prod, run migration then leave defer list without this key (or omit — feature enables when table exists). |
+
+---
+
+### Peer messages (notification bell)
+
+| Item | Detail |
+|------|--------|
+| **Status** | Local/dev MVP; gate until table exists on each host |
+| **Table** | `user_peer_message` |
+| **Migration** | `migrations/add_user_peer_message.py` |
+| **Model** | `models/user_peer_message.py` |
+| **Code gate** | `services/db_cutover.py` → `peer_messages_enabled()` |
+| **Service / UI** | `services/peer_message_service.py`, Messages tab + compose on `/notifications`, `/api/v1/notifications/message` |
+| **User impact while deferred / missing table** | Compose hidden; Messages tab absent; send API returns `peer_messages_disabled`. Findings centre still works independently. |
+| **Notes** | Feature key `peer_message`. Do not add to `DEFER_DB_FEATURES` on local after migration. |
+
+---
+
 ### Lead KYC profile
 
 | Item | Detail |

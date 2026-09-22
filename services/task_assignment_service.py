@@ -146,12 +146,14 @@ def apply_review_assignment(review_workflow) -> bool:
     Set assigned_to on a ReviewWorkflow based on its status and rules.
     Call after creating or updating a ReviewWorkflow.
     Returns True if assignment was applied.
+
+    Does not auto-create OpsTasks (REVIEW_CREATE_OPS_TASKS defaults false). The open review
+    is the work item; create_ops_task_from_review_workflow remains for rare explicit enable.
     """
     try:
         assignee_id = get_assignee_for_review_status(review_workflow)
         if assignee_id:
             review_workflow.assigned_to = assignee_id
-            # Create OpsTask for open workflows so they appear in /tasks
             if review_workflow.status in ('initiated', 'sent', 'meeting'):
                 create_ops_task_from_review_workflow(review_workflow, assignee_id=assignee_id)
             return True
@@ -488,9 +490,24 @@ def create_ops_task_from_review_workflow(
     Create an OpsTask from an open ReviewWorkflow so it appears in /tasks.
     Only for status in (initiated, sent, meeting). Skips closed workflows.
     Skips if an OpsTask already exists for this workflow.
+
+    When REVIEW_CREATE_OPS_TASKS is false (default), skips creation — the open review is the
+    work item; users may still create a task manually for tracking.
     Returns the created OpsTask or None.
     """
     if not workflow or not workflow.id:
+        return None
+    try:
+        from services.ops_digest_email_service import review_create_ops_tasks_enabled
+
+        if not review_create_ops_tasks_enabled():
+            logger.debug(
+                "Skipping OpsTask for ReviewWorkflow %s (REVIEW_CREATE_OPS_TASKS off)",
+                workflow.id,
+            )
+            return None
+    except Exception as e:
+        logger.debug("REVIEW_CREATE_OPS_TASKS check failed, skipping OpsTask: %s", e)
         return None
     if workflow.status == 'closed':
         return None

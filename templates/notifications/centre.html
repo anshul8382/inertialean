@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+{% block title %}Notification centre{% endblock %}
+
+{% macro nc_item_row(item, view) %}
+<div class="list-group-item nc-item {% if item.urgent %}border-start border-danger border-3{% endif %}"
+     data-entity-type="{{ item.entity_type }}"
+     data-entity-id="{{ item.entity_id }}"
+     data-signal-id="{{ item.signal_id }}"
+     data-ignore-allowed="{{ '1' if item.ignore_allowed else '0' }}"
+     data-member-ids="{{ (item.facts.member_ids or [item.entity_id]) | tojson }}">
+  <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+    <div class="flex-grow-1 min-w-0">
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+        <span class="badge bg-dark">{{ item.signal_id }}</span>
+        {% if item.urgent %}<span class="badge bg-danger">urgent</span>{% endif %}
+        {% if item.member_count and item.member_count > 1 %}
+        <span class="badge bg-secondary">{{ item.member_count }} issues</span>
+        {% endif %}
+        <span class="badge bg-{{ 'danger' if item.severity == 'critical' else ('warning text-dark' if item.severity == 'warning' else 'secondary') }}">{{ item.severity }}</span>
+        <span class="text-muted small">{{ item.age_label }}</span>
+        {% if view == 'snoozed' and item.facts and item.facts.snooze_until %}
+        <span class="badge bg-info text-dark">until {{ item.facts.snooze_until[:16]|replace('T', ' ') }} UTC</span>
+        {% endif %}
+      </div>
+      <div class="fw-semibold">{{ item.title }}</div>
+      <div class="small text-muted">{{ item.nudge_text }}</div>
+      {% if item.detail_lines %}
+      <ul class="small mb-1 mt-2 ps-3">
+        {% for line in item.detail_lines %}
+        <li>{{ line }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if item.app_path %}
+      <a class="small" href="{{ item.app_path }}">
+        {% if '/monthly-investments/' in item.app_path %}Open workflow
+        {% elif '/workflows/lead/' in item.app_path %}Open lead workflow
+        {% elif '/review-workflow/' in item.app_path %}Open review
+        {% elif '/tickets/' in item.app_path %}Open ticket
+        {% elif '/tasks/' in item.app_path %}Open task
+        {% elif '/attendance/' in item.app_path %}Mark attendance
+        {% else %}Open related screen{% endif %}
+      </a>
+      {% endif %}
+    </div>
+    <div class="d-flex flex-wrap gap-1 align-items-start nc-actions">
+      {% set done_label = (item.facts.done_label if item.facts and item.facts.done_label else 'Done') %}
+      {% set is_msg = item.entity_type == 'peer_message' %}
+      {% if view == 'snoozed' %}
+      <button type="button" class="btn btn-sm btn-primary nc-act" data-decision="unsnooze">Wake</button>
+      <button type="button" class="btn btn-sm btn-outline-primary nc-act" data-decision="committed">{{ done_label }}</button>
+      {% if not is_msg %}
+      <button type="button" class="btn btn-sm btn-outline-primary nc-act" data-decision="committed" data-create-task="1">Task</button>
+      {% endif %}
+      {% else %}
+      <button type="button" class="btn btn-sm btn-primary nc-act" data-decision="committed" title="{{ item.facts.done_means if item.facts and item.facts.done_means else 'Mark done' }}">{{ done_label }}</button>
+      <button type="button" class="btn btn-sm btn-outline-secondary nc-act" data-decision="snoozed">Snooze</button>
+      {% if not is_msg %}
+      <button type="button" class="btn btn-sm btn-outline-primary nc-act" data-decision="committed" data-create-task="1">Task</button>
+      {% if item.ignore_allowed %}
+      <button type="button" class="btn btn-sm btn-outline-danger nc-act" data-decision="ignored">Ignore</button>
+      {% else %}
+      <button type="button" class="btn btn-sm btn-outline-secondary" disabled title="Ignore not allowed for this signal">Ignore</button>
+      {% endif %}
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+  <div class="small text-danger mt-1 nc-error d-none" role="alert"></div>
+</div>
+{% endmacro %}
+
+{% block content %}
+<div class="container-fluid py-3 notification-centre-page">
+  <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <div>
+      <h1 class="h4 mb-1">Notification centre</h1>
+      <p class="text-muted mb-0 small">
+        {% if view == 'messages' %}
+        Peer messages — Done or Snooze.
+        {% else %}
+        Open findings — Done, Snooze, Task, or Ignore (where allowed).
+        {% endif %}
+        {% if not payload.enabled %}
+        <span class="badge bg-secondary">waiting on schema</span>
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex gap-2 align-items-center flex-wrap">
+      <span class="badge bg-danger" id="ncUrgentBadge">{{ payload.urgent_count or 0 }} urgent</span>
+      <span class="badge bg-primary" id="ncCountBadge">{{ payload.count or 0 }} open</span>
+      <span class="badge bg-secondary" id="ncSnoozedBadge">{{ payload.snoozed_count or 0 }} snoozed</span>
+      {% if peer_enabled %}
+      <span class="badge bg-info text-dark" id="ncMsgBadge">{{ payload.message_count or 0 }} messages</span>
+      {% endif %}
+      <button type="button" class="btn btn-sm btn-outline-secondary" id="ncRefreshBtn">Refresh</button>
+    </div>
+  </div>
+
+  {% if can_firm_scope and view in ('open', 'snoozed') %}
+  <div class="btn-group btn-group-sm mb-3" role="group" aria-label="Assignment scope">
+    <a class="btn {% if scope == 'mine' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+       href="{{ url_for('notification_centre.centre', view=view, scope='mine') }}">My assignments</a>
+    <a class="btn {% if scope == 'firm' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+       href="{{ url_for('notification_centre.centre', view=view, scope='firm') }}"
+       title="Adds firm radar: A2, B1, E1, F1, G7">Firm radar</a>
+  </div>
+  <p class="small text-muted mb-3">
+    {% if scope == 'firm' %}
+    Firm radar adds A2 / B1 / E1 / F1 / G7 for the whole book (not every signal).
+    {% else %}
+    Showing only items assigned to you. Switch to Firm radar for oversight signals.
+    {% endif %}
+  </p>
+  {% endif %}
+
+  {% if peer_enabled %}
+  <div class="border rounded p-3 mb-3 bg-light" id="ncComposeBox">
+    <div class="fw-semibold small mb-2">Send message</div>
+    <form id="ncComposeForm" class="row g-2 align-items-end">
+      <div class="col-md-4">
+        <label class="form-label small mb-0" for="ncPeerSelect">To</label>
+        <select class="form-select form-select-sm" id="ncPeerSelect" required>
+          <option value="">Select colleague…</option>
+          {% for p in peers %}
+          <option value="{{ p.id }}">{{ p.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label small mb-0" for="ncPeerBody">Message (max 280)</label>
+        <input type="text" class="form-control form-control-sm" id="ncPeerBody" maxlength="280" required
+               placeholder="Short note for their bell…">
+      </div>
+      <div class="col-md-2">
+        <button type="submit" class="btn btn-sm btn-primary w-100" id="ncSendBtn">Send</button>
+      </div>
+      <div class="col-12">
+        <div class="small text-danger d-none" id="ncComposeError" role="alert"></div>
+        <div class="small text-success d-none" id="ncComposeOk" role="status"></div>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item">
+      <a class="nav-link {% if view == 'open' %}active{% endif %}"
+         href="{{ url_for('notification_centre.centre', view='open', scope=scope) }}">Open</a>
+    </li>
+    <li class="nav-item">
+      <a class="nav-link {% if view == 'snoozed' %}active{% endif %}"
+         href="{{ url_for('notification_centre.centre', view='snoozed', scope=scope) }}">
+        Snoozed{% if payload.snoozed_count %} ({{ payload.snoozed_count }}){% endif %}
+      </a>
+    </li>
+    {% if peer_enabled %}
+    <li class="nav-item">
+      <a class="nav-link {% if view == 'messages' %}active{% endif %}"
+         href="{{ url_for('notification_centre.centre', view='messages') }}">
+        Messages{% if payload.message_count %} ({{ payload.message_count }}){% endif %}
+      </a>
+    </li>
+    {% endif %}
+  </ul>
+
+  {% if payload.message %}
+  <div class="alert alert-info">{{ payload.message }}</div>
+  {% endif %}
+
+  {% if view == 'messages' %}
+  <div id="ncList" class="list-group list-group-flush" data-view="{{ view }}">
+    {% for item in items %}
+    {{ nc_item_row(item, view) }}
+    {% else %}
+    <div class="list-group-item text-muted" id="ncEmpty">No open messages.</div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div id="ncList" data-view="{{ view }}">
+    {% set ns = namespace(any=false) %}
+    {% for section in sections %}
+      {% if section.count %}
+      {% set ns.any = true %}
+      <div class="nc-section mb-3 border rounded" data-section="{{ section.id }}">
+        <button type="button"
+                class="btn btn-light w-100 text-start d-flex justify-content-between align-items-center rounded-0 border-0 nc-section-toggle"
+                data-bs-toggle="collapse"
+                data-bs-target="#ncSec-{{ section.id }}"
+                aria-expanded="{{ 'true' if not section.collapsed else 'false' }}">
+          <span class="fw-semibold">
+            {{ section.label }}
+            <span class="badge bg-secondary ms-1">{{ section.count }}</span>
+          </span>
+          <i class="fas fa-chevron-down small text-muted" aria-hidden="true"></i>
+        </button>
+        <div id="ncSec-{{ section.id }}" class="collapse {% if not section.collapsed %}show{% endif %}">
+          <div class="list-group list-group-flush border-top">
+            {% for item in section.items %}
+            {{ nc_item_row(item, view) }}
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    {% endfor %}
+    {% if not ns.any %}
+    <div class="list-group-item text-muted border rounded" id="ncEmpty">
+      {% if view == 'snoozed' %}No snoozed notifications.{% else %}No open notifications.{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+  const view = document.getElementById('ncList')?.dataset.view || 'open';
+
+  function emptyCopy() {
+    if (view === 'snoozed') return 'No snoozed notifications.';
+    if (view === 'messages') return 'No open messages.';
+    return 'No open notifications.';
+  }
+
+  async function decide(itemEl, decision, createTask) {
+    const err = itemEl.querySelector('.nc-error');
+    err.classList.add('d-none');
+    err.textContent = '';
+    let memberIds = [];
+    try {
+      memberIds = JSON.parse(itemEl.dataset.memberIds || '[]');
+    } catch (e) {
+      memberIds = [Number(itemEl.dataset.entityId)];
+    }
+    const body = {
+      entity_type: itemEl.dataset.entityType,
+      entity_id: Number(itemEl.dataset.entityId),
+      signal_id: itemEl.dataset.signalId,
+      decision: decision === 'unsnooze' ? 'unsnooze' : decision,
+      create_task: !!createTask,
+      member_ids: memberIds,
+    };
+    if (decision === 'snoozed') {
+      const until = new Date(Date.now() + 4 * 3600 * 1000);
+      body.snooze_until = until.toISOString();
+    }
+    try {
+      const res = await fetch('/api/v1/notifications/decide', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': csrf,
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        err.textContent = data.message || data.error || 'Decision failed';
+        err.classList.remove('d-none');
+        return;
+      }
+      const section = itemEl.closest('.nc-section');
+      itemEl.remove();
+      if (section) {
+        const badge = section.querySelector('.badge');
+        const leftInSec = section.querySelectorAll('.nc-item').length;
+        if (badge) badge.textContent = String(leftInSec);
+        if (!leftInSec) section.remove();
+      }
+      const left = document.querySelectorAll('.nc-item').length;
+      if (!left) {
+        const list = document.getElementById('ncList');
+        list.innerHTML = '<div class="list-group-item text-muted border rounded">' + emptyCopy() + '</div>';
+      }
+    } catch (e) {
+      err.textContent = 'Network error';
+      err.classList.remove('d-none');
+    }
+  }
+
+  document.getElementById('ncList')?.addEventListener('click', function (ev) {
+    const btn = ev.target.closest('.nc-act');
+    if (!btn) return;
+    const item = btn.closest('.nc-item');
+    if (!item) return;
+    decide(item, btn.dataset.decision, btn.dataset.createTask === '1');
+  });
+
+  document.getElementById('ncRefreshBtn')?.addEventListener('click', function () {
+    window.location.reload();
+  });
+
+  const compose = document.getElementById('ncComposeForm');
+  if (compose) {
+    compose.addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      const errEl = document.getElementById('ncComposeError');
+      const okEl = document.getElementById('ncComposeOk');
+      errEl.classList.add('d-none');
+      okEl.classList.add('d-none');
+      const toUserId = document.getElementById('ncPeerSelect').value;
+      const body = document.getElementById('ncPeerBody').value;
+      try {
+        const res = await fetch('/api/v1/notifications/message', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrf,
+          },
+          credentials: 'same-origin',
+          body: JSON.stringify({ to_user_id: Number(toUserId), body: body }),
+        });
+        const data = await res.json();
+        if (!data.ok) {
+          errEl.textContent = data.error || 'Send failed';
+          errEl.classList.remove('d-none');
+          return;
+        }
+        document.getElementById('ncPeerBody').value = '';
+        okEl.textContent = 'Sent to ' + (data.to_username || 'colleague') + '.';
+        okEl.classList.remove('d-none');
+      } catch (e) {
+        errEl.textContent = 'Network error';
+        errEl.classList.remove('d-none');
+      }
+    });
+  }
+})();
+</script>
+{% endblock %}

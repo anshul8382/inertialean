@@ -17,19 +17,10 @@ logger = logging.getLogger(__name__)
 
 
 def _business_hours_since(start: datetime, now: datetime) -> float:
-    """Rough business-hours elapsed (excludes Sat/Sun). Not timezone-aware IST yet."""
-    if start >= now:
-        return 0.0
-    hours = 0.0
-    cursor = start
-    # Cap loop to 90 days of safety
-    for _ in range(90 * 24):
-        if cursor >= now:
-            break
-        if cursor.weekday() < 5:  # Mon–Fri
-            hours += 1.0
-        cursor += timedelta(hours=1)
-    return hours
+    """Working hours: Saturday counts; Sunday excluded (CAPTURED 2026-09)."""
+    from services.working_hours import working_hours_since
+
+    return working_hours_since(start, now)
 
 
 def _planned_amount(workflow) -> float:
@@ -50,13 +41,13 @@ def collect_issue_observations() -> List[Dict[str, Any]]:
         "negative_price": ("G4", "critical"),
         "unexecuted_recommendations_batch": ("G5", "warning"),
         "unrecorded_superseded_session": ("G5", "info"),
-        "trade_execution_mismatch": ("G6", "warning"),
+        "trade_execution_mismatch": ("G6", "critical"),
         "orphan_cashflow": ("G7", "warning"),
         "underperformance_vs_benchmark": ("I1", "warning"),
         "agreement_missing": ("J1", "critical"),
         "agreement_pdf_missing": ("J2", "critical"),
-        "workflow_stalled": ("H1", "warning"),
-        "amount_mismatch": ("H2", "info"),
+        "workflow_stalled": ("H1", "warning"),  # folded into A* for notify; keep observation for debug
+        "amount_mismatch": ("H2", "warning"),
     }
 
     out: List[Dict[str, Any]] = []
@@ -155,9 +146,8 @@ def collect_workflow_observations(now: Optional[datetime] = None) -> List[Dict[s
                 )
             )
         elif stage == "RECOS":
-            # Same family as B1: funds ready path, recs not sent
-            grace_week = amount == 0
-            severity = "critical" if (not grace_week and biz_hours >= 24) else "warning"
+            # A2/B1: immediate radar; target 48 working hrs; escalate 72. Lean week = planning, not grace.
+            severity = "critical" if biz_hours >= 72 else ("warning" if biz_hours >= 48 else "info")
             out.append(
                 make_observation(
                     client_id=client_id,
@@ -172,14 +162,14 @@ def collect_workflow_observations(now: Optional[datetime] = None) -> List[Dict[s
                         "stage": stage,
                         "investment_amount": amount,
                         "funds_ready": True,
-                        "business_hours": round(biz_hours, 1),
-                        "zero_investment_grace_week": grace_week,
-                        "sla_business_hours_max": 48 if not grace_week else 40,  # ~1 week biz
+                        "working_hours": round(biz_hours, 1),
+                        "sla_working_hours_target": 48,
+                        "sla_working_hours_escalate": 72,
+                        "lean_week_planning": True,
                     },
                     ref_id=f"wf:{wf.id}:RECOS",
                 )
             )
-            # Alias observation id family B1 for guidelines matching
             out.append(
                 make_observation(
                     client_id=client_id,
@@ -193,48 +183,53 @@ def collect_workflow_observations(now: Optional[datetime] = None) -> List[Dict[s
                         "workflow_id": wf.id,
                         "funds_ready": True,
                         "investment_amount": amount,
-                        "business_hours": round(biz_hours, 1),
-                        "zero_investment_grace_week": grace_week,
+                        "working_hours": round(biz_hours, 1),
                     },
                     ref_id=f"wf:{wf.id}:B1",
                 )
             )
         elif stage == "NOTIFY":
+            from services.working_hours import wall_hours_since
+
+            wall = wall_hours_since(age_start, now)
+            severity = "critical" if wall >= 1.0 else "warning"
             out.append(
                 make_observation(
                     client_id=client_id,
                     signal_id="A3",
                     source="monthly_workflow",
                     signal="NOTIFY_delay",
-                    severity="warning",
-                    title="Recommendations ready; client not notified",
+                    severity=severity,
+                    title="Recommendations sent; notify client within 1 hour",
                     assignee_user_id=assignee,
                     facts={
                         "workflow_id": wf.id,
                         "stage": stage,
-                        "business_hours": round(biz_hours, 1),
+                        "wall_hours": round(wall, 2),
+                        "sla_wall_hours": 1,
                     },
                     ref_id=f"wf:{wf.id}:NOTIFY",
                 )
             )
-        elif stage == "EXEC":
+        elif stage == "UPDATE":
             out.append(
                 make_observation(
                     client_id=client_id,
-                    signal_id="A4",
+                    signal_id="A5",
                     source="monthly_workflow",
-                    signal="EXEC_delay",
-                    severity="warning",
-                    title="Execution pending after notify",
+                    signal="UPDATE_pending",
+                    severity="warning" if biz_hours >= 24 else "info",
+                    title="UPDATE pending — record the trade",
                     assignee_user_id=assignee,
                     facts={
                         "workflow_id": wf.id,
                         "stage": stage,
-                        "business_hours": round(biz_hours, 1),
+                        "working_hours": round(biz_hours, 1),
                     },
-                    ref_id=f"wf:{wf.id}:EXEC",
+                    ref_id=f"wf:{wf.id}:UPDATE",
                 )
             )
+        # EXEC (former A4) ≡ G5 silence — covered by unexecuted-recommendation findings, not a parallel A4
     return out
 
 

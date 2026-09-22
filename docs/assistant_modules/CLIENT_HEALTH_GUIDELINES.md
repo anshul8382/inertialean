@@ -12,6 +12,11 @@ Used by:
 Detailed per-signal YAML: [`CLIENT_HEALTH_SCENARIO_QUESTIONNAIRE.md`](CLIENT_HEALTH_SCENARIO_QUESTIONNAIRE.md)  
 (**CAPTURED** = interview; **PROPOSED** = drafted for your review).
 
+**Separate concern:** how the system routes a finding as *work* (notification / commit / ignore /
+report) is **not** defined here — see
+[`FINDING_PROCESSING_GUIDELINES.md`](FINDING_PROCESSING_GUIDELINES.md). Both consumers share the
+questionnaire as their expectations base, joined by signal ID; their actions differ.
+
 ---
 
 ## Product stance (vs Intelligence Hub)

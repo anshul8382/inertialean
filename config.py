@@ -78,6 +78,11 @@ class Config:
     DI_CREATE_OPS_TASKS = os.environ.get('DI_CREATE_OPS_TASKS', 'false').lower() in (
         '1', 'true', 'yes', 'on',
     )
+    # When false (default), ReviewWorkflow does not auto-create OpsTasks — the open review is the
+    # work item; users may still create a task for their own tracking.
+    REVIEW_CREATE_OPS_TASKS = os.environ.get('REVIEW_CREATE_OPS_TASKS', 'false').lower() in (
+        '1', 'true', 'yes', 'on',
+    )
 
     # AI API Keys
     # Perplexity: also used as fallback for hybrid portfolio review prose if Anthropic fails or is unset

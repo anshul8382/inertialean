@@ -105,6 +105,7 @@ DEFAULT_EXCLUDES = (
     "static/agreements",
     ".git",
     "airflow/logs",
+    ".deploy_preserve",  # local VPS/provision snapshots — not app source
 )
 
 PY_GLOBS = ("*.py",)

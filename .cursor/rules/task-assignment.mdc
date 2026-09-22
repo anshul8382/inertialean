@@ -16,14 +16,15 @@ globs: services/task_assignment_service.py,agents/task_assignment_agent.py,route
 - `get_assignee_for_workflow_stage(workflow)` – monthly investment workflows
 - `get_assignee_for_issue(issue)` – DataIntegrityIssue
 - `get_assignee_for_review_status(workflow)` – ReviewWorkflow
-- `apply_review_assignment(workflow)` – sets assigned_to + creates OpsTask if open
-- `create_ops_task_from_issue(issue)` – DataIntegrityIssue → OpsTask
-- `create_ops_task_from_review_workflow(workflow)` – open ReviewWorkflow → OpsTask
+- `apply_review_assignment(workflow)` – sets assigned_to (OpsTask create gated off by default)
+- `create_ops_task_from_issue(issue)` – DataIntegrityIssue → OpsTask (`DI_CREATE_OPS_TASKS`, default false)
+- `create_ops_task_from_review_workflow(workflow)` – ReviewWorkflow → OpsTask (`REVIEW_CREATE_OPS_TASKS`, default false)
 
 ## OpsTask Links
 - `data_integrity_issue_id` – when created from DataIntegrityIssue
 - `review_workflow_id` – when created from ReviewWorkflow
-- Only create for open reviews (initiated, sent, meeting); skip closed
+- Auto-create is **off by default**. Users may create tasks for their own tracking.
+- Backlog cleanup: `scripts/retire_auto_created_ops_tasks.py` (see `docs/PROD_DATA_CLEANUP_SCRIPTS.md`)
 
 ## Admin
 - UI: `/admin/task-assignment-rules`
