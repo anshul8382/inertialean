@@ -9,12 +9,14 @@ assistant_bp = Blueprint("assistant", __name__)
 
 
 def _assistant_ui_enabled() -> bool:
+    """True only when local Ollama AI is available (never on Lean/KVM)."""
     from services.ollama_service import ai_services_enabled, ollama_enabled
 
     return ai_services_enabled() and ollama_enabled()
 
 
 def _redirect_if_lean_disabled():
+    """Hub / SQL AI tools require Ollama — bounce to the PDF manual on Lean."""
     if not _assistant_ui_enabled():
         return redirect(url_for("main.user_manual_pdf"))
     return None
@@ -30,9 +32,7 @@ def _ollama_status():
 @assistant_bp.route("/")
 @login_required
 def assistant_hub():
-    bounced = _redirect_if_lean_disabled()
-    if bounced:
-        return bounced
+    # Show hub even without Ollama so users can reach docs fast-path help.
     ai_enabled, ollama_ok, ollama_models = _ollama_status()
     return render_template(
         "tools/assistant_hub.html",
@@ -53,9 +53,7 @@ def sql_assistant_page():
 @assistant_bp.route("/help")
 @login_required
 def help_assistant_page():
-    bounced = _redirect_if_lean_disabled()
-    if bounced:
-        return bounced
+    # Docs fast-path works without Ollama; keep the page available on Lean/KVM.
     from services.help_knowledge_update_service import user_may_approve
 
     ai_enabled, ollama_ok, ollama_models = _ollama_status()
@@ -71,8 +69,6 @@ def help_assistant_page():
 @assistant_bp.route("/help/chat", methods=["POST"])
 @login_required
 def help_assistant_chat():
-    if not _assistant_ui_enabled():
-        abort(404)
     from services.help_assistant_service import ask_help_assistant
 
     data = request.get_json(silent=True) or {}

@@ -1881,61 +1881,27 @@ class PerformanceAnalysisEmail {
     }
     
     generateResultsHeader() {
+        // Local Ollama period insights UI suppressed on Lean/KVM.
+        // Restore prior generateResultsHeader body from git history when bringing it back.
         return `
-            <div style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 4px;">
-                <h3 style="margin: 0 0 10px 0; font-size: 16px;">AI Insights (Periods)</h3>
-                <p style="margin: 0 0 10px 0; color: #666; font-size: 13px;">Generate AI period insights one-by-one (Period 1 → Period 2 → Period 3). Period 2 unlocks after Period 1 completes, and Period 3 unlocks after Period 2.</p>
-                <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                    <button id="generateAiPeriod1Btn" class="btn btn-primary" style="padding: 8px 14px; font-size: 13px;">Generate Period 1</button>
-                    <button id="generateAiPeriod2Btn" class="btn btn-primary" style="padding: 8px 14px; font-size: 13px;" disabled>Generate Period 2</button>
-                    <button id="generateAiPeriod3Btn" class="btn btn-primary" style="padding: 8px 14px; font-size: 13px;" disabled>Generate Period 3</button>
-                    <button id="generateAiAllSequentialBtn" class="btn btn-outline-primary" style="padding: 8px 14px; font-size: 13px;">Generate All (1→2→3)</button>
-                    <span id="aiSummaryStatus" style="margin-left: 6px; color: #666; font-size: 13px;"></span>
-                </div>
-                <div style="margin-top: 8px; font-size: 12px; color: #666;">
-                    <span id="aiPeriodStatus-period1"></span>
-                    <span id="aiPeriodStatus-period2" style="margin-left: 12px;"></span>
-                    <span id="aiPeriodStatus-period3" style="margin-left: 12px;"></span>
-                </div>
-            </div>
-            <div style="margin: -6px 0 14px 0; padding: 10px 12px; background: #fff; border: 1px solid #eee; border-radius: 4px; font-size: 13px; color:#555;">
-                <strong>Jump to:</strong>
-                <a href="#section-review-report" style="margin-left: 8px;">Review report</a>
+            <div id="section-ai-insights-periods" style="margin: 20px 0; padding: 12px 14px; border: 1px dashed #bbb; border-radius: 4px; background: #f8f9fa;">
+                <h3 style="margin: 0 0 6px 0; font-size: 15px; color: #666;">AI Insights (Periods) — suppressed</h3>
+                <p style="margin: 0; color: #666; font-size: 12px; line-height: 1.45;">
+                    Period AI prose used local Ollama, which is not on this server. Core period tables and numbers are unchanged. This block can be brought back later if a local model is deployed.
+                </p>
             </div>
         `;
     }
     
     generateEmailSections() {
+        // Hybrid Claude review report UI suppressed on Lean/KVM (not in use).
+        // Restore prior generateEmailSections body from git history when bringing it back.
         return `
-            <div id="section-review-report" style="margin: 20px 0; padding: 15px; border: 1px solid #c5cae9; border-radius: 4px; background: #fafbff;">
-                <h3 style="margin: 0 0 8px 0; font-size: 16px;">Review report (hybrid)</h3>
-                <p style="margin: 0 0 10px 0; color: #555; font-size: 12px; line-height: 1.45;">
-                    Claude writes anonymised prose; the server injects figures and enforces the audit gate. Configure <code>ANTHROPIC_API_KEY</code> on the server. The portfolio audit for Period 1 must pass before generation.
+            <div id="section-review-report" style="margin: 20px 0; padding: 12px 14px; border: 1px dashed #c5cae9; border-radius: 4px; background: #f8f9fc;">
+                <h3 style="margin: 0 0 6px 0; font-size: 15px; color: #5c6bc0;">Review report (hybrid) — suppressed</h3>
+                <p style="margin: 0; color: #666; font-size: 12px; line-height: 1.45;">
+                    This section is hidden for now (not used on this server). The hybrid Claude report flow can be brought back later from product/engineering without changing core period analysis.
                 </p>
-                <div style="display:flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 8px;">
-                    <label class="small mb-0" for="reviewReportTone">Tone</label>
-                    <select id="reviewReportTone" class="form-select form-select-sm" style="width: auto; min-width: 120px;">
-                        <option value="warm" selected>Warm</option>
-                        <option value="formal">Formal</option>
-                        <option value="brief">Brief</option>
-                    </select>
-                    <button type="button" id="generateReviewReportBtn" class="btn btn-sm btn-primary">Generate review report</button>
-                    <span id="reviewReportStatus" class="small text-muted"></span>
-                </div>
-                <label class="small fw-bold" for="reviewReportAdviserNotes">Adviser notes (optional, screened before API)</label>
-                <p class="small text-muted mb-1" style="line-height: 1.35;">
-                    Factual or situational context for the model (constraints, life events, risk stance, what to avoid). Kept in a short line in the prompt; not treated as “voice” instructions.
-                </p>
-                <textarea id="reviewReportAdviserNotes" class="form-control form-control-sm mb-2" rows="2" placeholder="Background context only (avoid raw client identifiers or amounts where possible)."></textarea>
-                <label class="small fw-bold" for="reviewReportUserComments">Your comments for the report (optional)</label>
-                <p class="small text-muted mb-1" style="line-height: 1.35;">
-                    Themes and phrasing you want in the client-facing narrative. The model weaves these into sections (tone, emphasis, thanks). Figures are screened before the API; final numbers still come from the server.
-                </p>
-                <textarea id="reviewReportUserComments" class="form-control form-control-sm mb-2" rows="4" placeholder="e.g. Emphasise discipline after the drawdown; mention we added to X on weakness; thank them for staying the course…"></textarea>
-                <p class="small text-muted mb-2" style="line-height: 1.35;">
-                    Your text in both fields is remembered on this browser until you change it (local storage on this site).
-                </p>
-                <div id="reviewReportOutput" style="display: none; margin-top: 10px; padding: 10px; background: #fff; border: 1px solid #e0e0e0; border-radius: 4px; max-height: 560px; overflow: auto; font-size: 12px;"></div>
             </div>
         `;
     }
@@ -1947,6 +1913,7 @@ class PerformanceAnalysisEmail {
             emailPlaceholder.outerHTML = this.generateEmailSections();
         }
         
+        // No-op while hybrid UI is suppressed (button absent).
         this.wireReviewReportSection(periods);
 
         this.wirePeriodHandlers();
@@ -1954,6 +1921,9 @@ class PerformanceAnalysisEmail {
 
     wireReviewReportSection(periods) {
         const btn = document.getElementById('generateReviewReportBtn');
+        if (!btn) {
+            return; // section suppressed
+        }
         const statusEl = document.getElementById('reviewReportStatus');
         const notesEl = document.getElementById('reviewReportAdviserNotes');
         const userCommentsEl = document.getElementById('reviewReportUserComments');
@@ -2204,12 +2174,16 @@ class PerformanceAnalysisEmail {
     }
     
     wirePeriodHandlers() {
-        // Wire AI buttons
+        // Wire AI buttons (absent while AI Insights UI is suppressed)
         const status = document.getElementById('aiSummaryStatus');
         const p1Btn = document.getElementById('generateAiPeriod1Btn');
         const p2Btn = document.getElementById('generateAiPeriod2Btn');
         const p3Btn = document.getElementById('generateAiPeriod3Btn');
         const allBtn = document.getElementById('generateAiAllSequentialBtn');
+
+        if (!p1Btn && !p2Btn && !p3Btn && !allBtn) {
+            return; // section suppressed
+        }
 
         if (!window.PERF_ANALYSIS_AI_ENABLED) {
             [p1Btn, p2Btn, p3Btn, allBtn].forEach((b) => {
@@ -2406,23 +2380,8 @@ class PerformanceAnalysisEmail {
         const resultsSection = document.getElementById('resultsSection');
         let html = '';
         
-        // Add AI Summary Generation UI (period-by-period, sequential unlock)
-        html += '<div style="margin: 20px 0; padding: 15px; background-color: #f8f9fa; border: 1px solid #ddd; border-radius: 4px;">';
-        html += '<h3 style="margin: 0 0 10px 0; font-size: 16px;">AI Insights (Periods)</h3>';
-        html += '<p style="margin: 0 0 10px 0; color: #666; font-size: 13px;">Generate AI period insights one-by-one (Period 1 → Period 2 → Period 3). Period 2 unlocks after Period 1 completes, and Period 3 unlocks after Period 2.</p>';
-        html += '<div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">';
-        html += '<button id="generateAiPeriod1Btn" class="btn btn-primary" style="padding: 8px 14px; font-size: 13px;">Generate Period 1</button>';
-        html += '<button id="generateAiPeriod2Btn" class="btn btn-primary" style="padding: 8px 14px; font-size: 13px;" disabled>Generate Period 2</button>';
-        html += '<button id="generateAiPeriod3Btn" class="btn btn-primary" style="padding: 8px 14px; font-size: 13px;" disabled>Generate Period 3</button>';
-        html += '<button id="generateAiAllSequentialBtn" class="btn btn-outline-primary" style="padding: 8px 14px; font-size: 13px;">Generate All (1→2→3)</button>';
-        html += '<span id="aiSummaryStatus" style="margin-left: 6px; color: #666; font-size: 13px;"></span>';
-        html += '</div>';
-        html += '<div style="margin-top: 8px; font-size: 12px; color: #666;">';
-        html += '<span id="aiPeriodStatus-period1"></span>';
-        html += '<span id="aiPeriodStatus-period2" style="margin-left: 12px;"></span>';
-        html += '<span id="aiPeriodStatus-period3" style="margin-left: 12px;"></span>';
-        html += '</div>';
-        html += '</div>';
+        // Add AI Summary Generation UI (suppressed on Lean/KVM — Ollama removed)
+        html += this.generateResultsHeader();
 
         if (this.periodData.period1) {
             html += this.generatePortfolioSnapshotSection(this.periodData.portfolioSnapshot, this.periodData.period1);
@@ -2448,49 +2407,7 @@ class PerformanceAnalysisEmail {
         resultsSection.innerHTML = html;
         resultsSection.style.display = 'block';
         
-        // Wire AI buttons
-        const status = document.getElementById('aiSummaryStatus');
-        const p1Btn = document.getElementById('generateAiPeriod1Btn');
-        const p2Btn = document.getElementById('generateAiPeriod2Btn');
-        const p3Btn = document.getElementById('generateAiPeriod3Btn');
-        const allBtn = document.getElementById('generateAiAllSequentialBtn');
-
-        if (!window.PERF_ANALYSIS_AI_ENABLED) {
-            [p1Btn, p2Btn, p3Btn, allBtn].forEach((b) => {
-                if (b) {
-                    b.disabled = true;
-                    b.title = 'AI generation is disabled (ENABLE_AI_SERVICES).';
-                }
-            });
-            if (status) {
-                status.textContent = 'AI disabled on this server.';
-                status.style.color = '#666';
-            }
-        } else {
-            // Disable buttons if the corresponding period doesn't exist
-            if (p1Btn && !this.periodData.period1) p1Btn.disabled = true;
-            if (p2Btn && !this.periodData.period2) p2Btn.disabled = true;
-            if (p3Btn && !this.periodData.period3) p3Btn.disabled = true;
-            if (allBtn && !this.periodData.period1) allBtn.disabled = true;
-            
-            // Unlock period 2/3 based on already-generated summaries (if any)
-            if (p2Btn && this.periodData.period2 && this.periodData.period1 && this.periodData.period1.ai_text_summaries) {
-                p2Btn.disabled = false;
-            }
-            if (p3Btn && this.periodData.period3 && this.periodData.period2 && this.periodData.period2.ai_text_summaries) {
-                p3Btn.disabled = false;
-            }
-            
-            if (status) {
-                status.textContent = 'Ready.';
-                status.style.color = '#666';
-            }
-            
-            if (p1Btn) p1Btn.addEventListener('click', () => this.generateAiForPeriod('period1'));
-            if (p2Btn) p2Btn.addEventListener('click', () => this.generateAiForPeriod('period2'));
-            if (p3Btn) p3Btn.addEventListener('click', () => this.generateAiForPeriod('period3'));
-            if (allBtn) allBtn.addEventListener('click', () => this.generateAiAllSequential());
-        }
+        this.wirePeriodHandlers();
     }
     
     _formatSnapshotCell(value, kind) {

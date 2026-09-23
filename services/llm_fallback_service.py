@@ -1,7 +1,8 @@
 """
-Fallback to local Ollama when cloud LLMs are unavailable (rate limits, missing keys, errors).
+Cloud LLM helpers — Ollama fallback removed on Lean/KVM.
 
-Used by claude/openai proxies and content-intelligence tag generation.
+``should_fallback_from_http`` and format helpers remain for proxies/tagger.
+``generate_text_via_ollama`` always raises; cloud→local fallback never runs.
 """
 
 from __future__ import annotations
@@ -10,13 +11,13 @@ import json
 import logging
 import os
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 
 class LLMFallbackUnavailable(Exception):
-    """Raised when cloud failed and Ollama cannot be used."""
+    """Raised when cloud LLM cannot be used and local fallback is not available."""
 
 
 def _config_bool(name: str, default: bool = False) -> bool:
@@ -36,7 +37,12 @@ def _config_bool(name: str, default: bool = False) -> bool:
 
 
 def llm_fallback_to_ollama_enabled() -> bool:
-    """When true, proxies and tagger may use Ollama after cloud failure. Lean default: off."""
+    """
+    Legacy flag for ``should_fallback_from_http`` tests/callers.
+
+    On Lean/KVM, generate_text_via_ollama always raises even if this is true —
+    there is no Ollama host. Prefer leaving LLM_FALLBACK_TO_OLLAMA unset/false.
+    """
     return _config_bool("LLM_FALLBACK_TO_OLLAMA", default=False)
 
 
@@ -72,43 +78,27 @@ def extract_json_object(text: str) -> dict:
         return json.loads(match.group(0))
 
 
-def _ollama_combined_prompt(system: str, user: str) -> str:
-    return (
-        f"{system.strip()}\n\n"
-        "---\n\n"
-        f"{user.strip()}\n\n"
-        "Respond with only what was requested (no preamble)."
-    )
-
-
 def generate_text_via_ollama(
     system: str,
     user: str,
     *,
-    max_tokens: int = 1200,
+    max_tokens: int = 1500,
     temperature: float = 0.2,
 ) -> str:
-    from services.ollama_service import OllamaUnavailableError, ollama_service
-
-    prompt = _ollama_combined_prompt(system, user)
-    try:
-        return ollama_service.generate(
-            prompt,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            allow_when_ai_disabled=True,
-        )
-    except OllamaUnavailableError as exc:
-        raise LLMFallbackUnavailable(str(exc)) from exc
+    raise LLMFallbackUnavailable(
+        "Local LLM (Ollama) fallback is not part of this Lean/KVM build. "
+        "Configure a cloud API key or use non-AI workflows."
+    )
 
 
 def format_anthropic_message(text: str, *, model: str = "ollama-local") -> dict:
+    # Provider label kept as "ollama" for legacy callers/tests; generation is disabled.
     return {
-        "id": "msg_ollama_fallback",
+        "id": "msg_local_removed",
         "type": "message",
         "role": "assistant",
-        "model": model,
         "content": [{"type": "text", "text": text}],
+        "model": model,
         "stop_reason": "end_turn",
         "usage": {"input_tokens": 0, "output_tokens": 0},
         "_llm_provider": "ollama",
@@ -117,9 +107,8 @@ def format_anthropic_message(text: str, *, model: str = "ollama-local") -> dict:
 
 def format_openai_chat_completion(text: str, *, model: str = "ollama-local") -> dict:
     return {
-        "id": "chatcmpl-ollama-fallback",
+        "id": "chatcmpl-local-removed",
         "object": "chat.completion",
-        "model": model,
         "choices": [
             {
                 "index": 0,
@@ -127,6 +116,7 @@ def format_openai_chat_completion(text: str, *, model: str = "ollama-local") -> 
                 "finish_reason": "stop",
             }
         ],
+        "model": model,
         "_llm_provider": "ollama",
     }
 
@@ -137,28 +127,17 @@ def try_cloud_then_ollama_anthropic(
     payload: dict,
     cloud_request_fn,
 ) -> Tuple[dict, int]:
-    """
-    cloud_request_fn: callable returning (response_json, status_code).
-  """
+    """Cloud only — name kept for import compatibility; no Ollama I/O."""
     tools = payload.get("tools")
-    system = payload.get("system") or ""
-    user_msg = ""
-    for m in payload.get("messages") or []:
-        if m.get("role") == "user":
-            user_msg = m.get("content") or ""
-            break
-    max_tokens = int(payload.get("max_tokens") or 1500)
 
     if not api_key:
         if tools:
             raise LLMFallbackUnavailable(
                 "ANTHROPIC_API_KEY not configured. Web-search research requires a cloud API key."
             )
-        if not llm_fallback_to_ollama_enabled():
-            raise LLMFallbackUnavailable("ANTHROPIC_API_KEY not configured on server")
-        text = generate_text_via_ollama(system, user_msg, max_tokens=max_tokens)
-        logger.info("Claude proxy: no API key — using Ollama fallback")
-        return format_anthropic_message(text), 200
+        raise LLMFallbackUnavailable(
+            "ANTHROPIC_API_KEY not configured. Local Ollama fallback was removed on Lean/KVM."
+        )
 
     data, status = cloud_request_fn()
     if status == 200:
@@ -166,17 +145,6 @@ def try_cloud_then_ollama_anthropic(
 
     if tools:
         return data, status
-
-    if should_fallback_from_http(status, data if isinstance(data, dict) else None):
-        try:
-            text = generate_text_via_ollama(system, user_msg, max_tokens=max_tokens)
-            logger.warning(
-                "Claude proxy: cloud status=%s — using Ollama fallback",
-                status,
-            )
-            return format_anthropic_message(text), 200
-        except LLMFallbackUnavailable:
-            pass
 
     return data, status
 
@@ -187,37 +155,14 @@ def try_cloud_then_ollama_openai(
     payload: dict,
     cloud_request_fn,
 ) -> Tuple[dict, int]:
-    messages = payload.get("messages") or []
-    system = ""
-    user_msg = ""
-    for m in messages:
-        role = m.get("role")
-        if role == "system":
-            system = m.get("content") or ""
-        elif role == "user":
-            user_msg = m.get("content") or ""
-    max_tokens = int(payload.get("max_tokens") or 2000)
-
+    """Cloud only — name kept for import compatibility; no Ollama I/O."""
     if not api_key:
-        if not llm_fallback_to_ollama_enabled():
-            raise LLMFallbackUnavailable("OPENAI_API_KEY not configured on server")
-        text = generate_text_via_ollama(system, user_msg, max_tokens=max_tokens)
-        logger.info("OpenAI proxy: no API key — using Ollama fallback")
-        return format_openai_chat_completion(text), 200
+        raise LLMFallbackUnavailable(
+            "OPENAI_API_KEY not configured. Local Ollama fallback was removed on Lean/KVM."
+        )
 
     data, status = cloud_request_fn()
     if status == 200:
         return data, status
-
-    if should_fallback_from_http(status, data if isinstance(data, dict) else None):
-        try:
-            text = generate_text_via_ollama(system, user_msg, max_tokens=max_tokens)
-            logger.warning(
-                "OpenAI proxy: cloud status=%s — using Ollama fallback",
-                status,
-            )
-            return format_openai_chat_completion(text), 200
-        except LLMFallbackUnavailable:
-            pass
 
     return data, status

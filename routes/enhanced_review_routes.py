@@ -16,7 +16,6 @@ from models import (
     AssetClass,
 )
 # DEPRECATED: EnhancedReviewService moved to _deprecated/services/enhanced_review_service.py
-from services.market_commentary_service import MarketCommentaryService
 from extensions import db, csrf, mail
 from datetime import datetime, date
 import logging
@@ -35,14 +34,15 @@ logger = logging.getLogger(__name__)
 
 
 def _ai_services_enabled() -> bool:
-    return bool(current_app.config.get('ENABLE_AI_SERVICES', False))
+    # Local AI (Ollama / ai_models) removed from Lean/KVM — never enable.
+    return False
 
 
 def _ai_disabled_json_response():
     return jsonify({
         'success': False,
         'code': 'ai_disabled',
-        'error': 'AI content generation is disabled (ENABLE_AI_SERVICES is not set to true).',
+        'error': 'AI content generation is not available on this Lean/KVM build (Ollama removed).',
     }), 422
 
 # ---------------------------------------------------------------------
@@ -1281,18 +1281,8 @@ def send_period_analysis_v2_email():
         except Exception as logo_err:
             logger.warning(f"Could not load logo for email: {logo_err}")
         
-        # Get market commentary (compulsory for all emails)
+        # Market commentary removed on Lean/KVM
         market_commentary = None
-        try:
-            commentary_service = MarketCommentaryService()
-            commentary = commentary_service.get_active_commentary()
-            if commentary:
-                market_commentary = commentary.content
-                logger.info(f"Market commentary loaded (ID: {commentary.id}, Version: {commentary.version})")
-            else:
-                logger.warning("No active market commentary found - email will be sent without commentary")
-        except Exception as commentary_err:
-            logger.warning(f"Could not load market commentary: {commentary_err}", exc_info=True)
         
         email_html = render_template(
             'email/period_analysis_v2_snippets.html',
@@ -1635,18 +1625,8 @@ def preview_period_analysis_v2_email():
             except Exception as logo_err:
                 logger.warning(f"Could not load logo for email: {logo_err}", exc_info=True)
             
-            # Get market commentary (compulsory for all emails)
+            # Market commentary removed on Lean/KVM
             market_commentary = None
-            try:
-                commentary_service = MarketCommentaryService()
-                commentary = commentary_service.get_active_commentary()
-                if commentary:
-                    market_commentary = commentary.content
-                    logger.info(f"Market commentary loaded (ID: {commentary.id}, Version: {commentary.version})")
-                else:
-                    logger.warning("No active market commentary found - email will be generated without commentary")
-            except Exception as commentary_err:
-                logger.warning(f"Could not load market commentary: {commentary_err}", exc_info=True)
             
             email_html = render_template(
                 'email/period_analysis_v2_snippets.html',
@@ -1946,210 +1926,42 @@ def generate_strategy_going_forward():
         logger.error(f"Error generating strategy going forward: {str(e)}", exc_info=True)
         return jsonify({"success": False, "error": str(e)}), 500
 
-# Market Commentary API Endpoints for Period Analysis V2
+# Market Commentary API — removed on Lean/KVM (no Ollama / MarketCommentary model)
+
+_COMMENTARY_GONE = {
+    'success': False,
+    'code': 'market_commentary_removed',
+    'error': 'Market commentary was removed from this Lean/KVM build.',
+    'commentary': None,
+}
+
 
 @enhanced_review_bp.route('/api/period-analysis-v2/market-commentary', methods=['GET'])
 @login_required
 def get_market_commentary():
-    """Get the currently active market commentary"""
-    try:
-        service = MarketCommentaryService()
-        commentary = service.get_active_commentary()
-        
-        if commentary:
-            return jsonify({
-                'success': True,
-                'commentary': {
-                    'id': commentary.id,
-                    'content': commentary.content,
-                    'is_ai_generated': commentary.is_ai_generated,
-                    'version': commentary.version,
-                    'period_start_date': commentary.period_start_date.isoformat() if commentary.period_start_date else None,
-                    'period_end_date': commentary.period_end_date.isoformat() if commentary.period_end_date else None,
-                    'created_at': commentary.created_at.isoformat(),
-                    'updated_at': commentary.updated_at.isoformat(),
-                    'created_by': commentary.created_by
-                }
-            })
-        else:
-            return jsonify({
-                'success': True,
-                'commentary': None,
-                'message': 'No active market commentary found'
-            })
-            
-    except Exception as e:
-        error_msg = str(e)
-        # Check if it's a table doesn't exist error
-        if 'market_commentary' in error_msg.lower() or 'doesn\'t exist' in error_msg.lower() or 'table' in error_msg.lower():
-            logger.warning(f"Market commentary table may not exist: {error_msg}")
-            return jsonify({
-                'success': True,
-                'commentary': None,
-                'message': 'Market commentary table not initialized. Please run migration first.'
-            })
-        logger.error(f"Error getting market commentary: {error_msg}", exc_info=True)
-        return jsonify({'success': False, 'error': error_msg}), 500
+    return jsonify({
+        'success': True,
+        'commentary': None,
+        'message': 'Market commentary removed on Lean/KVM',
+    })
 
 
 @enhanced_review_bp.route('/api/period-analysis-v2/market-commentary/generate', methods=['POST'])
 @login_required
 def generate_market_commentary():
-    """Generate new AI market commentary"""
-    try:
-        # Ensure we return JSON even on errors
-        if not request.is_json:
-            return jsonify({'success': False, 'error': 'Request must be JSON'}), 400
-        
-        data = request.get_json() or {}
-        period_start_str = data.get('period_start_date')
-        period_end_str = data.get('period_end_date')
-        
-        period_start = None
-        period_end = None
-        
-        if period_start_str:
-            try:
-                period_start = datetime.strptime(period_start_str, '%Y-%m-%d').date()
-            except ValueError:
-                return jsonify({'success': False, 'error': 'Invalid period_start_date format. Use YYYY-MM-DD'}), 400
-        
-        if period_end_str:
-            try:
-                period_end = datetime.strptime(period_end_str, '%Y-%m-%d').date()
-            except ValueError:
-                return jsonify({'success': False, 'error': 'Invalid period_end_date format. Use YYYY-MM-DD'}), 400
-
-        if not _ai_services_enabled():
-            return _ai_disabled_json_response()
-        
-        service = MarketCommentaryService()
-        result = service.generate_ai_commentary(
-            period_start=period_start,
-            period_end=period_end,
-            user_id=current_user.id
-        )
-        
-        if result.get('success'):
-            return jsonify({
-                'success': True,
-                'content': result.get('content', ''),
-                'is_ai_generated': result.get('is_ai_generated', True),
-                'source': result.get('source', 'unknown')
-            })
-        else:
-            error_msg = result.get('error', 'Failed to generate commentary')
-            code = result.get('code')
-            # Missing AI stack is expected on some deployments — not a 500.
-            if code == 'ai_unavailable':
-                logger.warning("Market commentary generate skipped: %s", error_msg)
-                return jsonify({
-                    'success': False,
-                    'code': code,
-                    'error': error_msg,
-                }), 422
-            logger.error(f"Market commentary generation failed: {error_msg}")
-            return jsonify({
-                'success': False,
-                'error': error_msg
-            }), 500
-            
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f"Error generating market commentary: {error_msg}", exc_info=True)
-        return jsonify({'success': False, 'error': f'Server error: {error_msg}'}), 500
+    return jsonify(_COMMENTARY_GONE), 410
 
 
 @enhanced_review_bp.route('/api/period-analysis-v2/market-commentary/save', methods=['POST'])
 @login_required
 def save_market_commentary():
-    """Save market commentary (creates new active commentary, deactivates previous)"""
-    try:
-        data = request.get_json() or {}
-        content = data.get('content', '').strip()
-        is_ai_generated = data.get('is_ai_generated', True)
-        period_start_str = data.get('period_start_date')
-        period_end_str = data.get('period_end_date')
-        
-        if not content:
-            return jsonify({'success': False, 'error': 'Content is required'}), 400
-        
-        period_start = None
-        period_end = None
-        
-        if period_start_str:
-            try:
-                period_start = datetime.strptime(period_start_str, '%Y-%m-%d').date()
-            except ValueError:
-                return jsonify({'success': False, 'error': 'Invalid period_start_date format. Use YYYY-MM-DD'}), 400
-        
-        if period_end_str:
-            try:
-                period_end = datetime.strptime(period_end_str, '%Y-%m-%d').date()
-            except ValueError:
-                return jsonify({'success': False, 'error': 'Invalid period_end_date format. Use YYYY-MM-DD'}), 400
-        
-        service = MarketCommentaryService()
-        result = service.save_commentary(
-            content=content,
-            is_ai_generated=is_ai_generated,
-            period_start=period_start,
-            period_end=period_end,
-            user_id=current_user.id
-        )
-        
-        if result['success']:
-            return jsonify({
-                'success': True,
-                'commentary': result['commentary']
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': result.get('error', 'Failed to save commentary')
-            }), 500
-            
-    except Exception as e:
-        logger.error(f"Error saving market commentary: {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'error': str(e)}), 500
+    return jsonify(_COMMENTARY_GONE), 410
 
 
 @enhanced_review_bp.route('/api/period-analysis-v2/market-commentary/update', methods=['POST'])
 @login_required
 def update_market_commentary():
-    """Update existing market commentary"""
-    try:
-        data = request.get_json() or {}
-        commentary_id = data.get('id')
-        content = data.get('content', '').strip()
-        
-        if not commentary_id:
-            return jsonify({'success': False, 'error': 'Commentary ID is required'}), 400
-        
-        if not content:
-            return jsonify({'success': False, 'error': 'Content is required'}), 400
-        
-        service = MarketCommentaryService()
-        result = service.update_commentary(
-            commentary_id=commentary_id,
-            content=content,
-            user_id=current_user.id
-        )
-        
-        if result['success']:
-            return jsonify({
-                'success': True,
-                'commentary': result['commentary']
-            })
-        else:
-            return jsonify({
-                'success': False,
-                'error': result.get('error', 'Failed to update commentary')
-            }), 500
-            
-    except Exception as e:
-        logger.error(f"Error updating market commentary: {str(e)}", exc_info=True)
-        return jsonify({'success': False, 'error': str(e)}), 500
+    return jsonify(_COMMENTARY_GONE), 410
 
 
 @enhanced_review_bp.route("/api/portfolio-review-audit/full", methods=["POST"])

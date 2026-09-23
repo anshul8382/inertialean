@@ -1,14 +1,16 @@
-"""INERTIA help assistant — docs + codebase context, fast path, local Ollama."""
+"""INERTIA help assistant — docs + codebase context + fast-path answers.
+
+Local Ollama generation was removed on Lean/KVM (no Ollama host). Questions that
+do not match a fast-path pattern return unavailable instead of hanging on HTTP.
+"""
 
 from __future__ import annotations
 
-import os
 import re
 import time
 from pathlib import Path
 
 from services.help_codebase_context_service import build_codebase_context
-from services.ollama_service import OllamaUnavailableError, ollama_service
 
 _DOCS_ROOT = Path(__file__).resolve().parent.parent / "docs"
 _KNOWLEDGE_PATH = _DOCS_ROOT / "HELP_ASSISTANT_KNOWLEDGE.md"
@@ -17,7 +19,6 @@ _WORKFLOW_GUIDE_PATH = _DOCS_ROOT / "WORKFLOW_SYSTEM_GUIDE.md"
 _NAVBAR_PATH = _DOCS_ROOT / "NAVBAR_MODULES.md"
 
 _MAX_CONTEXT_CHARS = 14_000
-_HELP_MAX_TOKENS = int(os.environ.get("OLLAMA_HELP_MAX_TOKENS", "520"))
 
 _KNOWLEDGE_ALWAYS_SECTIONS = (
     "response policy and guardrails",
@@ -413,35 +414,13 @@ def ask_help_assistant(question: str, history: list[dict] | None = None) -> dict
             "sources": ["knowledge_base", "codebase"],
         }
 
-    try:
-        raw = ollama_service.generate(
-            _build_prompt(q, history),
-            max_tokens=_HELP_MAX_TOKENS,
-            temperature=0.05,
-        )
-        reply = _clean_reply(raw)
-        if not reply:
-            return {"success": False, "error": "Empty response from AI. Try again."}
-
-        if _looks_hallucinated(reply) or _misanswer_security_with_workflow(q, reply):
-            retry = _try_fast_path(q)
-            if retry:
-                reply = retry
-
-        elapsed_ms = int((time.perf_counter() - t0) * 1000)
-        ctx = _build_knowledge_context(q, include_manual=False)
-        thin_doc = len(ctx) < 800 or q.lower() not in ctx.lower()
-
-        return {
-            "success": True,
-            "reply": reply,
-            "model": ollama_service.get_model(),
-            "fast_path": False,
-            "elapsed_ms": elapsed_ms,
-            "suggest_doc_update": thin_doc,
-            "sources": ["knowledge_base", "codebase", "user_manual", "ollama"],
-        }
-    except OllamaUnavailableError as exc:
-        return {"success": False, "error": str(exc), "unavailable": True}
-    except Exception as exc:
-        return {"success": False, "error": f"Help assistant failed: {exc}"}
+    elapsed_ms = int((time.perf_counter() - t0) * 1000)
+    return {
+        "success": False,
+        "error": (
+            "No matching quick answer, and local AI help is not available on this "
+            "server. Try rephrasing, or open Help → User Manual / docs."
+        ),
+        "unavailable": True,
+        "elapsed_ms": elapsed_ms,
+    }

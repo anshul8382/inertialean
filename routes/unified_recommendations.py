@@ -16,12 +16,12 @@ import copy
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from unified_recommendation_service import UnifiedRecommendationService
 from recommendation_api import recommendation_api
-from enhanced_recommendation_api import enhanced_recommendation_api
+from recommendation_api import recommendation_api
+from enhanced_recommendation_api import enhanced_recommendation_api  # thin passthrough (ML removed)
 # New service layer imports
 from services.recommendation_data_service import RecommendationDataService
 from services.recommendation_service import RecommendationService
 from services.email_service import EmailService
-from services.analytics_service import AnalyticsService
 from services.asset_allocation_service import (
     ALLOCATION_EDITS_MARKER,
     apply_asset_row_display_rules,
@@ -2443,74 +2443,9 @@ def security_distribution():
     if final_s1_count > 0:
         logger.info(f"Section 1 security IDs (first 5): {[r.get('security_id') for r in pending_data['section_1_recommended'][:5]]}")
     
-    # Enhance all recommendations with ML insights if available
-    try:
-        from scripts.utilities.enhanced_recommendation_api import enhanced_recommendation_api
-        from behavioral_prediction_engine import behavioral_predictor
-        
-        # Enhance Section 1 recommendations
-        if pending_data.get('section_1_recommended'):
-            all_recommendations = pending_data['section_1_recommended']
-            behavioral_predictions = behavioral_predictor.predict_user_modifications(
-                client_id, all_recommendations
-            )
-            predictions_map = {p.get('security_id'): p for p in behavioral_predictions}
-            
-            for rec in all_recommendations:
-                security_id = rec.get('security_id')
-                
-                # Get basic ML insight from enhanced API
-                try:
-                    ml_enhanced = enhanced_recommendation_api._enhance_recommendation_with_ml(
-                        client_id=client_id,
-                        recommendation=rec
-                    )
-                    rec['ml_insights'] = ml_enhanced.get('ml_insights', {})
-                except Exception as e:
-                    logger.debug(f"Could not add ML insights for security {security_id}: {e}")
-                    rec['ml_insights'] = {
-                        'confidence': 50.0,
-                        'prediction': 'unknown',
-                        'color': 'yellow',
-                        'history': None
-                    }
-                
-                # Add behavioral predictions if available
-                if security_id in predictions_map:
-                    pred = predictions_map[security_id]
-                    if rec.get('ml_insights'):
-                        rec['ml_insights']['behavioral'] = {
-                            'predicted_quantity': pred.get('predicted_quantity'),
-                            'predicted_amount': pred.get('predicted_amount'),
-                            'predicted_action': pred.get('predicted_action'),
-                            'original_action': pred.get('original_action'),
-                            'original_quantity': pred.get('original_quantity'),
-                            'original_amount': pred.get('original_amount'),
-                            'modification_confidence': pred.get('modification_confidence', 0),
-                            'predicted_modifications': pred.get('predicted_modifications', {}),
-                            'suggested_actions': pred.get('suggested_actions', [])
-                        }
-                        
-                        # Determine if action will change
-                        if pred.get('predicted_action') != pred.get('original_action'):
-                            rec['ml_insights']['action_change'] = {
-                                'from': pred.get('original_action'),
-                                'to': pred.get('predicted_action'),
-                                'likely': True
-                            }
-                        else:
-                            rec['ml_insights']['action_change'] = None
-    except Exception as e:
-        logger.warning(f"Could not add ML insights to security distribution: {e}")
-    
-    # Determine if ML insights are enabled (check if any recommendation has ml_insights)
+    # ML / behavioral prediction layer removed on Lean/KVM (no local model).
     ml_insights_enabled = False
-    if pending_data.get('section_1_recommended'):
-        for rec in pending_data['section_1_recommended']:
-            if rec.get('ml_insights'):
-                ml_insights_enabled = True
-                break
-    
+
     asset_class_warnings = []
     asset_class_warning_fingerprint = ''
     try:
@@ -5073,7 +5008,7 @@ def enhanced_asset_class_implementation(asset_class_name):
             }
             asset_securities.append(security_data)
         
-        ml_insights_enabled = True
+        ml_insights_enabled = False
         print(f"DEBUG: Loaded {len(asset_securities)} recommendations from database")
         print(f"DEBUG: ===== END LOADING EXISTING RECOMMENDATIONS =====")
         # Skip session data check since we have database data
@@ -5096,22 +5031,13 @@ def enhanced_asset_class_implementation(asset_class_name):
                 security['future_weight'] = 0.0
             if 'current_price' not in security:
                 security['current_price'] = 0.0
-            
-            # Add ML insights if not present
-            if 'ml_insights' not in security:
-                security['ml_insights'] = {
-                    'confidence': 85,  # High confidence for saved recommendations
-                    'prediction': 'Previously saved recommendation',
-                    'color': 'green'
-                }
         
-        ml_insights_enabled = True
+        ml_insights_enabled = False
         print(f"DEBUG: Loaded {len(asset_securities)} saved recommendations")
     else:
         print(f"DEBUG: No database or session data found, generating new recommendations for {asset_class_name}")
-        # Generate new enhanced security recommendations with ML insights
         try:
-            enhanced_result = enhanced_recommendation_api.generate_enhanced_security_recommendations(
+            enhanced_result = recommendation_api.generate_security_recommendations_only(
                 client_id=pending_data['client_id'],
                 asset_class=asset_class_name,
                 current_asset_value=asset_recommendation.get('current_value', 0),
@@ -5120,74 +5046,17 @@ def enhanced_asset_class_implementation(asset_class_name):
             
             if enhanced_result.get('success'):
                 asset_securities = enhanced_result.get('security_recommendations', [])
-                ml_insights_enabled = enhanced_result.get('ml_insights_enabled', False)
             else:
-                flash(f'Error generating enhanced recommendations: {enhanced_result.get("error", "Unknown error")}', 'error')
+                flash(f'Error generating recommendations: {enhanced_result.get("error", "Unknown error")}', 'error')
                 asset_securities = []
-                ml_insights_enabled = False
+            ml_insights_enabled = False
         except Exception as e:
-            flash(f'Error generating enhanced recommendations: {str(e)}', 'error')
+            flash(f'Error generating recommendations: {str(e)}', 'error')
             asset_securities = []
             ml_insights_enabled = False
     
-    # Enhance all recommendations with behavioral predictions if available
-    if asset_securities and ml_insights_enabled:
-        try:
-            from behavioral_prediction_engine import behavioral_predictor
-            # Get behavioral predictions for all recommendations
-            behavioral_predictions = behavioral_predictor.predict_user_modifications(
-                pending_data['client_id'], asset_securities
-            )
-            
-            # Map predictions by security_id for quick lookup
-            predictions_map = {p.get('security_id'): p for p in behavioral_predictions}
-            
-            # Enhance each security with behavioral predictions
-            for security in asset_securities:
-                security_id = security.get('security_id')
-                if security_id in predictions_map:
-                    pred = predictions_map[security_id]
-                    
-                    # Ensure ml_insights exists
-                    if 'ml_insights' not in security:
-                        security['ml_insights'] = {
-                            'confidence': 50.0,
-                            'prediction': 'unknown',
-                            'color': 'yellow',
-                            'history': None
-                        }
-                    
-                    # Add behavioral predictions
-                    security['ml_insights']['behavioral'] = {
-                        'predicted_quantity': pred.get('predicted_quantity'),
-                        'predicted_amount': pred.get('predicted_amount'),
-                        'predicted_action': pred.get('predicted_action'),
-                        'original_action': pred.get('original_action'),
-                        'original_quantity': pred.get('original_quantity'),
-                        'original_amount': pred.get('original_amount'),
-                        'modification_confidence': pred.get('modification_confidence', 0),
-                        'predicted_modifications': pred.get('predicted_modifications', {}),
-                        'suggested_actions': pred.get('suggested_actions', [])
-                    }
-                    
-                    # Determine if action will change
-                    if pred.get('predicted_action') != pred.get('original_action'):
-                        security['ml_insights']['action_change'] = {
-                            'from': pred.get('original_action'),
-                            'to': pred.get('predicted_action'),
-                            'likely': True
-                        }
-                    else:
-                        security['ml_insights']['action_change'] = None
-        except Exception as e:
-            logger.warning(f"Could not add behavioral predictions: {e}")
-            # Continue without behavioral predictions
-    
-    # Get user behavior summary
-    try:
-        behavior_summary = enhanced_recommendation_api.get_user_behavior_summary(pending_data['client_id'])
-    except Exception as e:
-        behavior_summary = {}
+    # Behavioral ML predictions removed on Lean/KVM.
+    behavior_summary = {}
     
     # Determine if we're viewing saved recommendations
     is_viewing_saved = asset_class_name in saved_recommendations
@@ -5234,80 +5103,16 @@ def record_user_feedback():
 @unified_recommendations_bp.route('/track-modification', methods=['POST'])
 @login_required
 def track_user_modification():
-    """Track user modifications for ML training"""
-    try:
-        data = request.get_json()
-        print(f"DEBUG: Modification tracking data received: {data}")
-        
-        modification_type = data.get('modification_type')
-        client_id = data.get('client_id')
-        
-        # Import the modification tracker
-        from user_modification_tracker import modification_tracker
-        
-        if modification_type == 'quantity_change':
-            success = modification_tracker.record_quantity_modification(
-                client_id=client_id,
-                recommendation_id=data.get('recommendation_id'),
-                original_quantity=data.get('original_quantity'),
-                new_quantity=data.get('new_quantity'),
-                original_amount=data.get('original_amount'),
-                new_amount=data.get('new_amount'),
-                context=data.get('context', {})
-            )
-        elif modification_type == 'security_addition':
-            success = modification_tracker.record_security_addition(
-                client_id=client_id,
-                asset_class=data.get('asset_class'),
-                added_security=data.get('added_security'),
-                context=data.get('context', {})
-            )
-        elif modification_type == 'security_deletion':
-            success = modification_tracker.record_security_deletion(
-                client_id=client_id,
-                recommendation_id=data.get('recommendation_id'),
-                deleted_security=data.get('deleted_security'),
-                context=data.get('context', {})
-            )
-        else:
-            success = False
-            print(f"DEBUG: Unknown modification type: {modification_type}")
-        
-        print(f"DEBUG: Modification tracking result: {success}")
-        return jsonify({'success': success})
-        
-    except Exception as e:
-        print(f"DEBUG: Error in modification tracking: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+    """ML modification tracking removed on Lean/KVM — accept and no-op."""
+    return jsonify({'success': True, 'tracked': False, 'message': 'ML tracking disabled on this build'})
+
 
 @unified_recommendations_bp.route('/get-behavioral-predictions', methods=['POST'])
 @login_required
 def get_behavioral_predictions():
-    """Get behavioral predictions for recommendations"""
-    try:
-        data = request.get_json()
-        client_id = data.get('client_id')
-        recommendations = data.get('recommendations', [])
-        
-        # Import the behavioral predictor
-        from behavioral_prediction_engine import behavioral_predictor
-        
-        # Get predictions
-        predictions = behavioral_predictor.predict_user_modifications(client_id, recommendations)
-        
-        # Calculate overall confidence level
-        overall_confidence = sum(p['modification_confidence'] for p in predictions) / max(len(predictions), 1)
-        
-        return jsonify({
-            'success': True,
-            'predictions': predictions,
-            'overall_confidence': round(overall_confidence, 1),
-            'model_status': 'training' if overall_confidence < 70 else 'ready_for_filtering' if overall_confidence > 80 else 'monitoring'
-        })
-        
-    except Exception as e:
-        print(f"DEBUG: Error getting behavioral predictions: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+    """Behavioral ML predictions removed on Lean/KVM."""
+    return jsonify({'success': True, 'predictions': [], 'ml_available': False})
+
 
 @unified_recommendations_bp.route('/cashflow-upload')
 @login_required

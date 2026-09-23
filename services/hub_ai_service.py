@@ -174,64 +174,10 @@ class HubAIService:
             return None
 
     def analyze_issues(self, issue_ids: list, user_id: int) -> list:
-        from models import Client, DataIntegrityIssue
-
-        issues = DataIntegrityIssue.query.filter(
-            DataIntegrityIssue.id.in_(issue_ids), DataIntegrityIssue.status.in_(["open", "baseline"])
-        ).all()
-        if not issues:
-            return []
-
-        self._get_model()
-        client_ids = list(set(i.client_id for i in issues))
-        clients = {c.id: c for c in Client.query.filter(Client.id.in_(client_ids)).all()}
-        client_contexts = {}
-        for cid in client_ids:
-            c = clients.get(cid)
-            if c:
-                client_contexts[cid] = {
-                    "name": c.name,
-                    "aum": float(getattr(c, "aum", 0) or 0) / 1e7,
-                    "rm": getattr(c, "relationship_manager", None) or "Unknown",
-                    "open_issues": sum(1 for i in issues if i.client_id == cid),
-                }
-
-        has_ppm = any(i.check_category == "PORTFOLIO_PERFORMANCE" for i in issues)
-        market_context = self._get_market_context(has_ppm)
-        past_feedback = self._get_past_feedback()
-        now = datetime.utcnow()
-        issue_dicts = []
-        for issue in issues:
-            age_days = (now - issue.detected_at).days if issue.detected_at else 0
-            issue_dicts.append(
-                {
-                    "id": issue.id,
-                    "client_id": issue.client_id,
-                    "check_category": issue.check_category,
-                    "check_name": issue.check_name,
-                    "severity": issue.severity,
-                    "message": issue.message or "",
-                    "age_days": age_days,
-                }
-            )
-
-        raw_response = self._call_ollama(self._build_prompt(issue_dicts, client_contexts, past_feedback, market_context))
-        recommendations = self._parse_response(raw_response)
-        issue_map = {i.id: i for i in issues}
-        for rec in recommendations:
-            issue = issue_map.get(rec["issue_id"])
-            if issue:
-                rec["client_id"] = issue.client_id
-                rec["client_name"] = client_contexts.get(issue.client_id, {}).get("name", "Unknown")
-                rec["check_category"] = issue.check_category
-                rec["severity"] = issue.severity
-                rec["assignee_user_id"] = self._resolve_assignee_user(rec["assignee_role"], issue.client_id, issue.check_category)
-                if rec["action"] in ("create_task", "create_ticket"):
-                    days = 2 if issue.severity == "critical" else 5
-                    rec["suggested_deadline"] = (now + timedelta(days=days)).strftime("%Y-%m-%dT%H:%M")
-                else:
-                    rec["suggested_deadline"] = None
-        return recommendations
+        # Hub AI depended on Ollama; Lean/KVM has no local model.
+        raise OllamaUnavailableError(
+            "Hub AI analysis is not available on this Lean/KVM build (Ollama removed)."
+        )
 
     def execute_recommendation(self, rec: dict, user_id: int) -> dict:
         from flask import url_for

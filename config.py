@@ -97,7 +97,8 @@ class Config:
     OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 
     # When False, app does not call Ollama, Perplexity, AIInsightsService, or hybrid AI for content.
-    # Lean / clean-VPS default: AI off. Set ENABLE_AI_SERVICES=true only if you intend cloud/local LLM.
+    # Local Ollama / ai_models removed from Lean/KVM. This flag no longer enables
+    # local LLM; leave false. Cloud LLM proxies still need their own API keys.
     ENABLE_AI_SERVICES = os.environ.get('ENABLE_AI_SERVICES', '').lower() in ('true', '1', 'on', 'yes')
 
     # Local Ollama HTTP API — empty by default in lean builds (no VPS Ollama).

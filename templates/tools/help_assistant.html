@@ -41,7 +41,7 @@
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
         <div>
             <h1 class="h3 mb-1"><i class="fas fa-comments text-primary"></i> Ask INERTIA</h1>
-            <p class="text-muted mb-0 small">Read-only help: Ollama only generates text from docs and whitelisted code excerpts. It cannot change code, data, or files. No live client data or SQL.</p>
+            <p class="text-muted mb-0 small">Read-only help from docs and knowledge base. Common questions answer instantly; full free-text AI is not available on this server.</p>
         </div>
         <div class="d-flex gap-2">
             <a href="{{ url_for('assistant.assistant_hub') }}" class="btn btn-outline-secondary btn-sm">
@@ -53,27 +53,18 @@
         </div>
     </div>
 
-    {% if not ai_enabled %}
     <div class="alert alert-warning">
-        <strong>AI-assisted answers are disabled.</strong> Common questions still answer instantly from the docs. For full AI answers, set <code>ENABLE_AI_SERVICES=true</code> in the server environment and restart the app.
+        <strong>AI-assisted answers are not available on this server.</strong>
+        Common questions still answer instantly from the docs and knowledge base.
+        Open the PDF manual for full how-tos.
     </div>
-    {% elif not ollama_ok %}
-    <div class="alert alert-danger">
-        <strong>Ollama is not reachable.</strong> Common questions still answer instantly from the docs. For full AI answers, on the app server run <code>systemctl status ollama</code> and ensure <code>llama3.1:8b</code> is pulled.
-    </div>
-    {% else %}
-    <div class="alert alert-success py-2 small mb-3">
-        <i class="fas fa-check-circle"></i> Connected to Ollama
-        {% if ollama_models %} — models: {{ ollama_models|join(', ') }}{% endif %}
-    </div>
-    {% endif %}
 
     <div class="card shadow-sm mb-3">
         <div class="card-body p-0">
             <div id="helpChatLog" class="help-chat-log">
                 <div class="help-msg assistant">
                     <div class="label">INERTIA</div>
-                    <div class="bubble">Ask about menus, workflows, monthly investments, reviews, or uploads. Common questions (e.g. creating a workflow) answer instantly; others use local AI with codebase context.</div>
+                    <div class="bubble">Ask about menus, workflows, monthly investments, reviews, or uploads. Common questions answer instantly from the docs; other topics may need the PDF manual (local AI is not on this server).</div>
                 </div>
             </div>
         </div>
