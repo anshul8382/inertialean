@@ -77,6 +77,11 @@
       <i class="fas fa-chart-pie"></i> Practice Analytics
     </a>
     {% endif %}
+    {% if (current_user.is_manager or has_route_access('regulatory_advisory_register.advisory_register') or has_route_access('main.regulatory_client_master') or has_route_access('main.practice_analytics')) and nav_can('regulatory_advisory_register.advisory_register') %}
+    <a href="{{ url_for('regulatory_advisory_register.advisory_register') }}" class="im-more-menu__link">
+      <i class="fas fa-book"></i> Advisory Register
+    </a>
+    {% endif %}
     <hr class="im-more-menu__divider">
     {% endif %}
     {% if config.get('NAV_INTELLIGENCE_HUB_ENABLED') and nav_can('hub.operational_dashboard') %}

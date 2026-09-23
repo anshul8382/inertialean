@@ -23,7 +23,9 @@ class ManualCkycProvider:
 
     def verify(self, profile) -> Dict[str, Any]:
         pan = (profile.pan or "").strip().upper()
-        if pan and not re.match(r"^[A-Z]{5}[0-9]{4}[A-Z]$", pan):
+        if not pan:
+            return {"ok": False, "error": "PAN is required."}
+        if not re.match(r"^[A-Z]{5}[0-9]{4}[A-Z]$", pan):
             return {"ok": False, "error": "Invalid PAN format."}
         if profile.ckyc_number and len(profile.ckyc_number.strip()) >= 10:
             return {
@@ -32,13 +34,18 @@ class ManualCkycProvider:
                 "provider_ref": profile.ckyc_number.strip(),
                 "message": "CKYC number recorded for manual review.",
             }
-        if pan and profile.aadhaar_last4:
+        if profile.aadhaar_last4:
             return {
                 "ok": True,
                 "status": "submitted",
                 "message": "KYC details saved. Add CKYC number when available, or upload documents.",
             }
-        return {"ok": False, "error": "Enter PAN and Aadhaar last 4, or a CKYC number."}
+        # PAN alone is enough to persist for regulatory reporting; docs/CKYC can follow.
+        return {
+            "ok": True,
+            "status": "submitted",
+            "message": "PAN saved for regulatory records. Add Aadhaar last 4 / CKYC and upload documents when ready.",
+        }
 
 
 def get_ckyc_provider() -> ManualCkycProvider:
@@ -75,7 +82,10 @@ def save_kyc_profile(lead_id: int, form_data: Dict[str, Any], *, verify: bool = 
     pan = (form_data.get("pan") or "").strip().upper()[:10] or None
     aadhaar_last4 = (form_data.get("aadhaar_last4") or "").strip()[:4] or None
     ckyc_number = (form_data.get("ckyc_number") or "").strip()[:32] or None
-    if pan and not re.match(r"^[A-Z]{5}[0-9]{4}[A-Z]$", pan):
+    # PAN is required going forward (regulatory client master / SEBI reporting).
+    if not pan:
+        return {"error": "PAN is required for KYC."}
+    if not re.match(r"^[A-Z]{5}[0-9]{4}[A-Z]$", pan):
         return {"error": "Invalid PAN format."}
     if aadhaar_last4 and not re.match(r"^[0-9]{4}$", aadhaar_last4):
         return {"error": "Aadhaar last 4 must be exactly four digits."}
@@ -114,6 +124,13 @@ def save_kyc_profile(lead_id: int, form_data: Dict[str, Any], *, verify: bool = 
                 mark_kyc_complete(lead)
         except Exception:
             logger.debug("Lead KYC status promote skipped", exc_info=True)
+
+    try:
+        from services.regulatory_identity_capture_service import sync_kyc_pan_to_lead_agreements
+
+        sync_kyc_pan_to_lead_agreements(lead_id, pan=pan)
+    except Exception:
+        logger.debug("KYC→agreement PAN sync skipped", exc_info=True)
 
     db.session.commit()
     return result

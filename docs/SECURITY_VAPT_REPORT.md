@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-09-23T04:19:36.920514+00:00
+Generated: 2026-09-23T19:15:43.410677+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -9,15 +9,15 @@ Agent: `security_audit_agent` v1.0.0
 |----------|-------|
 | critical | 0 |
 | high | 20 |
-| medium | 8 |
+| medium | 15 |
 | low | 0 |
 | info | 0 |
-| **Total** | **28** |
+| **Total** | **35** |
 
 ## Threat themes
 
 - **EXTERNAL** — External attackers / public internet exposure (23 findings)
-- **INTERNAL** — Insider misuse / employee data theft (5 findings)
+- **INTERNAL** — Insider misuse / employee data theft (12 findings)
 - **COMPLIANCE** — SEBI / financial-data regulatory standards (0 findings)
 - **CONFIG** — Misconfiguration & operational hardening (0 findings)
 
@@ -315,6 +315,14 @@ SQL dumps inside the repo or working tree get copied to laptops, containers, and
 
 **Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
 
+### `SEC-CMP-004` — Database backup file in working tree: `backups/inertia_app2025_20260922_210003.sql.gz`
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/inertia_app2025_20260922_210003.sql.gz`
+
+SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
+
+**Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
+
 ### `SEC-INT-002` — Export/download endpoint `download_invoice_pdf` is not audit-logged
 
 **Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/invoices.py:615`
@@ -350,6 +358,78 @@ def download_lead_proposal(
 ```
 
 **Fix:** Call `services.audit_service.log_audit_event('bulk_export', resource_type='<entity>', details={'rows': n, 'filters': ...})` before returning the response. Include `client_id` when scope is single-client.
+
+### `SEC-INT-002` — Export/download endpoint `download_regulatory_client_master_archive` is not audit-logged
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/main.py:1720`
+
+Functions named export/download/csv/excel/backup typically return client data in bulk. Without an audit log entry, an internal user downloading the entire client base is invisible.
+
+```
+def download_regulatory_client_master_archive(
+```
+
+**Fix:** Call `services.audit_service.log_audit_event('bulk_export', resource_type='<entity>', details={'rows': n, 'filters': ...})` before returning the response. Include `client_id` when scope is single-client.
+
+### `SEC-INT-004` — Potential sensitive value in a log statement
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** log_pii_leak • **CWE:** CWE-532 • **Location:** `services/lead_kyc_profile_service.py:133`
+
+Log files can be read by internal users with shell access, shared with third parties for debugging, or ingested by SaaS log services. Secrets and PII inside logs are then effectively leaked.
+
+```
+logger.debug("KYC→agreement PAN sync skipped", exc_info=True)
+```
+
+**Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
+
+### `SEC-INT-004` — Potential sensitive value in a log statement
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** log_pii_leak • **CWE:** CWE-532 • **Location:** `services/regulatory_client_master_service.py:174`
+
+Log files can be read by internal users with shell access, shared with third parties for debugging, or ingested by SaaS log services. Secrets and PII inside logs are then effectively leaked.
+
+```
+logger.debug("PAN PDF extract failed agreement=%s: %s", agreement.id, exc)
+```
+
+**Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
+
+### `SEC-INT-004` — Potential sensitive value in a log statement
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** log_pii_leak • **CWE:** CWE-532 • **Location:** `services/regulatory_client_master_service.py:231`
+
+Log files can be read by internal users with shell access, shared with third parties for debugging, or ingested by SaaS log services. Secrets and PII inside logs are then effectively leaked.
+
+```
+logger.debug("KYC PAN lookup skipped: %s", exc)
+```
+
+**Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
+
+### `SEC-INT-004` — Potential sensitive value in a log statement
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** log_pii_leak • **CWE:** CWE-532 • **Location:** `services/regulatory_identity_capture_service.py:44`
+
+Log files can be read by internal users with shell access, shared with third parties for debugging, or ingested by SaaS log services. Secrets and PII inside logs are then effectively leaked.
+
+```
+logger.debug("KYC PAN read failed lead=%s", lead_id, exc_info=True)
+```
+
+**Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
+
+### `SEC-INT-004` — Potential sensitive value in a log statement
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** log_pii_leak • **CWE:** CWE-532 • **Location:** `services/regulatory_identity_capture_service.py:177`
+
+Log files can be read by internal users with shell access, shared with third parties for debugging, or ingested by SaaS log services. Secrets and PII inside logs are then effectively leaked.
+
+```
+logger.debug("KYC PAN backfill skipped lead=%s", lead_id, exc_info=True)
+```
+
+**Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
 
 ---
 Run again: `python3 scripts/run_security_audit.py --write-report`

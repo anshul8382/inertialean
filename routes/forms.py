@@ -535,8 +535,18 @@ class RecordExistingAgreementForm(FlaskForm):
     ], validators=[DataRequired()], default='signed')
     sent_date = DateField('Sent Date', validators=[Optional()], format='%Y-%m-%d')
     signed_date = DateField('Signed Date', validators=[DataRequired()], format='%Y-%m-%d')
+    pan = StringField(
+        'PAN (client)',
+        validators=[DataRequired(), Length(min=10, max=10)],
+        filters=[lambda x: (x or '').strip().upper() or None],
+    )
     notes = TextAreaField('Notes', validators=[Optional(), Length(max=1000)])
     submit = SubmitField('Record Agreement')
+
+    def validate_pan(self, field):
+        import re
+        if field.data and not re.match(r'^[A-Z]{5}[0-9]{4}[A-Z]$', field.data):
+            raise ValidationError('Enter a valid PAN (e.g. ABCDE1234F).')
 
     def __init__(self, *args, **kwargs):
         super(RecordExistingAgreementForm, self).__init__(*args, **kwargs)

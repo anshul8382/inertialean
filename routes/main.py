@@ -33,6 +33,8 @@ _MENU_ENDPOINTS = {
     "main.whatsapp_groups",
     "financial_analytics.dashboard",
     "main.practice_analytics",
+    "main.regulatory_client_master",
+    "regulatory_advisory_register.advisory_register",
     "leads.list_leads",
     "meetings.list_meetings",
     "meetings.new_meeting",
@@ -1545,6 +1547,194 @@ def download_practice_analytics():
     return attachment_response(
         data,
         download_name=fname,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def _regulatory_client_master_denied():
+    from utils.permissions import has_route_access
+
+    if current_user.is_manager or has_route_access("main.regulatory_client_master"):
+        return None
+    # Managers who can see practice analytics can also see this sheet.
+    if has_route_access("main.practice_analytics"):
+        return None
+    flash("You do not have permission to access the Regulatory Client Master.", "error")
+    return redirect(url_for("main.dashboard"))
+
+
+@main.route("/regulatory/client-master")
+@login_required
+def regulatory_client_master():
+    redir = _regulatory_client_master_denied()
+    if redir:
+        return redir
+    from services.regulatory_client_master_service import (
+        available_as_of_options,
+        build_regulatory_client_master,
+        list_quarter_snapshots,
+        parse_as_of_param,
+    )
+
+    raw = (request.args.get("as_of") or "live").strip()
+    as_of, mode_key = parse_as_of_param(raw)
+    mode = "live" if mode_key == "live" else "quarter_end"
+    payload = build_regulatory_client_master(as_of=as_of, mode=mode)
+    return render_template(
+        "regulatory/client_master.html",
+        payload=payload,
+        as_of_param=mode_key if mode_key == "live" else as_of.isoformat(),
+        as_of_options=available_as_of_options(),
+        snapshots=list_quarter_snapshots(),
+        user_is_admin=bool(getattr(current_user, "is_admin", False)),
+    )
+
+
+@main.route("/regulatory/client-master/download")
+@login_required
+def download_regulatory_client_master():
+    redir = _regulatory_client_master_denied()
+    if redir:
+        return redir
+    from services.audit_service import log_data_export
+    from services.regulatory_client_master_service import (
+        build_regulatory_client_master,
+        build_regulatory_client_master_workbook_bytes,
+        parse_as_of_param,
+    )
+
+    raw = (request.args.get("as_of") or "live").strip()
+    as_of, mode_key = parse_as_of_param(raw)
+    mode = "live" if mode_key == "live" else "quarter_end"
+    payload = build_regulatory_client_master(as_of=as_of, mode=mode)
+    data, fname = build_regulatory_client_master_workbook_bytes(payload)
+    log_data_export(
+        "regulatory_client_master_xlsx",
+        details={"filename": fname, "as_of": payload.get("as_of"), "mode": payload.get("mode")},
+    )
+    from flask import Response
+
+    return Response(
+        data,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@main.route("/regulatory/client-master/freeze", methods=["POST"])
+@login_required
+def freeze_regulatory_client_master():
+    redir = _regulatory_client_master_denied()
+    if redir:
+        return redir
+    if not getattr(current_user, "is_admin", False) and not getattr(
+        current_user, "is_manager", False
+    ):
+        flash("Only managers/admins can freeze quarter snapshots.", "error")
+        return redirect(url_for("main.regulatory_client_master"))
+    from services.regulatory_client_master_service import (
+        freeze_quarter_snapshot,
+        parse_as_of_param,
+    )
+
+    raw = (request.form.get("as_of") or request.args.get("as_of") or "").strip()
+    force = (request.form.get("force") or "").lower() in ("1", "true", "yes")
+    as_of, _ = parse_as_of_param(raw)
+    result = freeze_quarter_snapshot(
+        as_of, user_id=getattr(current_user, "id", None), force=force
+    )
+    if result.get("success"):
+        flash(f"Frozen snapshot for {as_of.isoformat()}.", "success")
+    else:
+        flash(result.get("error") or "Freeze failed.", "error")
+    return redirect(
+        url_for("main.regulatory_client_master", as_of=as_of.isoformat())
+    )
+
+
+@main.route(
+    "/regulatory/client-master/refresh/<int:client_id>",
+    methods=["POST"],
+)
+@login_required
+def refresh_regulatory_client_identity(client_id):
+    """Per-client: re-read agreement PDF and persist PAN + start date."""
+    redir = _regulatory_client_master_denied()
+    if redir:
+        return redir
+    from services.regulatory_identity_capture_service import (
+        refresh_client_identity_from_agreement,
+    )
+
+    force = (request.form.get("force") or "").lower() in ("1", "true", "yes")
+    as_of = (request.form.get("as_of") or request.args.get("as_of") or "live").strip()
+    result = refresh_client_identity_from_agreement(client_id, force=force)
+    if not result.get("success"):
+        flash(result.get("error") or "Refresh failed.", "error")
+    elif result.get("warning"):
+        flash(
+            f"{result.get('client_name')}: start={result.get('agreement_start_date') or '—'}; "
+            f"{result['warning']}",
+            "warning",
+        )
+    else:
+        flash(
+            f"{result.get('client_name')}: PAN={result.get('pan') or '—'}, "
+            f"start={result.get('agreement_start_date') or '—'} "
+            f"(from agreement #{result.get('agreement_id')}).",
+            "success",
+        )
+    return redirect(url_for("main.regulatory_client_master", as_of=as_of))
+
+
+@main.route("/regulatory/client-master/fill-blanks", methods=["POST"])
+@login_required
+def fill_regulatory_identity_blanks():
+    """Batch: PDF-extract only for active clients still missing PAN (not a full rescan)."""
+    redir = _regulatory_client_master_denied()
+    if redir:
+        return redir
+    if not getattr(current_user, "is_admin", False) and not getattr(
+        current_user, "is_manager", False
+    ):
+        flash("Only managers/admins can run fill-blanks.", "error")
+        return redirect(url_for("main.regulatory_client_master"))
+    from services.regulatory_identity_capture_service import (
+        backfill_missing_identity_from_agreements,
+    )
+
+    as_of = (request.form.get("as_of") or "live").strip()
+    result = backfill_missing_identity_from_agreements(only_missing=True, force=False)
+    flash(
+        f"Filled blanks from agreement PDFs: scanned {result.get('scanned', 0)} "
+        f"(skipped {result.get('skipped_already_have_pan', 0)} with PAN), "
+        f"saved PAN for {result.get('filled_pan', 0)}, "
+        f"warnings {result.get('warnings', 0)}, failed {result.get('failed', 0)}.",
+        "success" if result.get("success") else "error",
+    )
+    return redirect(url_for("main.regulatory_client_master", as_of=as_of))
+
+
+@main.route("/regulatory/client-master/archive/<as_of_key>")
+@login_required
+def download_regulatory_client_master_archive(as_of_key):
+    redir = _regulatory_client_master_denied()
+    if redir:
+        return redir
+    from pathlib import Path
+
+    from flask import send_file
+
+    from services.regulatory_client_master_service import get_snapshot_xlsx_path
+
+    path = get_snapshot_xlsx_path(as_of_key)
+    if not path or not Path(path).is_file():
+        flash("Archived snapshot not found.", "error")
+        return redirect(url_for("main.regulatory_client_master"))
+    return send_file(
+        path,
+        as_attachment=True,
+        download_name=Path(path).name,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 

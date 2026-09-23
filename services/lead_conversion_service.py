@@ -130,10 +130,12 @@ def onboarding_checklist_incomplete(lead: Lead) -> list:
     except Exception:
         missing.append("signed agreement")
     try:
-        from services.lead_kyc_service import lead_has_kyc_documents
+        from services.lead_kyc_service import lead_has_kyc_documents, lead_has_kyc_pan
 
         if not lead_has_kyc_documents(lead.id):
             missing.append("KYC")
+        elif not lead_has_kyc_pan(lead.id):
+            missing.append("PAN on KYC")
     except Exception:
         missing.append("KYC")
     try:
@@ -254,3 +256,16 @@ def _finalize_lead_conversion(
         {"client_id": client.id},
         synchronize_session=False,
     )
+
+    # Capture PAN on agreement variables for regulatory client master going forward.
+    try:
+        from services.regulatory_identity_capture_service import (
+            ensure_regulatory_fields_on_agreement,
+            sync_kyc_pan_to_lead_agreements,
+        )
+
+        sync_kyc_pan_to_lead_agreements(lead.id)
+        for ag in lead_convertible_agreements(lead):
+            ensure_regulatory_fields_on_agreement(ag, lead.id, client.id)
+    except Exception:
+        pass

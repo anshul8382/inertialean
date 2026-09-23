@@ -398,9 +398,15 @@ def build_onboarding_hub(lead) -> Dict[str, Any]:
 
     kyc_docs = []
     has_kyc = False
+    has_kyc_pan = False
     try:
         kyc_docs = list_kyc_documents(lead.id)
         has_kyc = bool(kyc_docs) or lead_has_kyc_documents(lead.id)
+        from services.lead_kyc_service import lead_has_kyc_pan
+
+        has_kyc_pan = lead_has_kyc_pan(lead.id)
+        # Regulatory: KYC step is only "done" when docs + PAN are captured.
+        has_kyc = has_kyc and has_kyc_pan
     except Exception:
         pass
 
@@ -510,13 +516,23 @@ def build_onboarding_hub(lead) -> Dict[str, Any]:
         {
             "key": "kyc",
             "label": "KYC",
-            "done": has_kyc or _status_done(st, "kyc_uploaded", "onboarding_completed"),
-            "detail": (
-                f"{len(kyc_docs)} document(s) on file"
-                if kyc_docs
-                else "Documents / profile not complete"
+            "done": has_kyc or (
+                _status_done(st, "kyc_uploaded", "onboarding_completed") and has_kyc_pan
             ),
-            "how": "Complete KYC (parallel with agreement) — PAN fields + docs",
+            "detail": (
+                f"{len(kyc_docs)} document(s); PAN saved"
+                if kyc_docs and has_kyc_pan
+                else (
+                    f"{len(kyc_docs)} document(s) — PAN still required"
+                    if kyc_docs
+                    else (
+                        "PAN saved — upload documents"
+                        if has_kyc_pan
+                        else "Documents / PAN not complete"
+                    )
+                )
+            ),
+            "how": "Complete KYC (parallel with agreement) — PAN required + docs",
         },
         {
             "key": "agreement",

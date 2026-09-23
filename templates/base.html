@@ -260,7 +260,7 @@
                     <!-- Advisor -->
                     {% if nav_group_visible('advisor') %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('tasks.') or request.endpoint.startswith('tickets.') or request.endpoint == 'main.practice_analytics') %}active{% endif %}" href="#" id="advisorDropdown" role="button" data-bs-toggle="dropdown" data-bs-popper="static" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('tasks.') or request.endpoint.startswith('tickets.') or request.endpoint in ('main.practice_analytics', 'main.regulatory_client_master')) %}active{% endif %}" href="#" id="advisorDropdown" role="button" data-bs-toggle="dropdown" data-bs-popper="static" aria-expanded="false">
                             <i class="fas fa-user-tie"></i> Advisor
                         </a>
                         <ul class="dropdown-menu">
@@ -281,8 +281,13 @@
                             {% endif %}
                             {% if (current_user.is_manager or has_route_access('main.practice_analytics')) and nav_can('main.practice_analytics') %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item {% if request.endpoint == 'main.practice_analytics' %}active{% endif %}" href="{{ url_for('main.practice_analytics') }}">
+                            <li><a class="dropdown-item {% if request.endpoint in ('main.practice_analytics', 'main.regulatory_client_master') %}active{% endif %}" href="{{ url_for('main.practice_analytics') }}">
                                 <i class="fas fa-chart-pie"></i> Practice Analytics
+                            </a></li>
+                            {% endif %}
+                            {% if (current_user.is_manager or has_route_access('regulatory_advisory_register.advisory_register') or has_route_access('main.regulatory_client_master') or has_route_access('main.practice_analytics')) and nav_can('regulatory_advisory_register.advisory_register') %}
+                            <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('regulatory_advisory_register.') %}active{% endif %}" href="{{ url_for('regulatory_advisory_register.advisory_register') }}">
+                                <i class="fas fa-book"></i> Advisory Register
                             </a></li>
                             {% endif %}
                         </ul>

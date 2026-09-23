@@ -1071,6 +1071,16 @@ def create_agreement(lead_id):
             else:
                 _save_billing_transition_vars(agreement, lead_id, _client_id, request.form)
             _save_agreement_date_var(agreement, lead_id, _client_id)
+            try:
+                from services.regulatory_identity_capture_service import (
+                    ensure_regulatory_fields_on_agreement,
+                )
+
+                ensure_regulatory_fields_on_agreement(
+                    agreement, lead_id, _client_id
+                )
+            except Exception:
+                logger.debug("Regulatory identity capture on create skipped", exc_info=True)
 
             db.session.commit()
             
@@ -1104,6 +1114,13 @@ def record_existing_agreement(lead_id):
     lead = Lead.query.get_or_404(lead_id)
     from .forms import RecordExistingAgreementForm
     form = RecordExistingAgreementForm()
+    if request.method == 'GET' and not form.pan.data:
+        try:
+            from services.regulatory_identity_capture_service import get_lead_kyc_pan
+
+            form.pan.data = get_lead_kyc_pan(lead_id) or None
+        except Exception:
+            pass
     
     if form.validate_on_submit():
         try:
@@ -1210,6 +1227,20 @@ def record_existing_agreement(lead_id):
             else:
                 _save_billing_transition_vars(agreement, lead_id, _cli_id, request.form)
 
+            try:
+                from services.regulatory_identity_capture_service import (
+                    ensure_regulatory_fields_on_agreement,
+                )
+
+                ensure_regulatory_fields_on_agreement(
+                    agreement,
+                    lead_id,
+                    _cli_id,
+                    pan=form.pan.data,
+                )
+            except Exception:
+                logger.debug("Regulatory identity capture on record skipped", exc_info=True)
+
             db.session.commit()
             
             flash(f'Existing agreement recorded successfully with status: {form.status.data}.', 'success')
@@ -1258,6 +1289,13 @@ def record_existing_agreement_for_client(client_id):
     
     from .forms import RecordExistingAgreementForm
     form = RecordExistingAgreementForm()
+    if request.method == 'GET' and not form.pan.data:
+        try:
+            from services.regulatory_identity_capture_service import get_lead_kyc_pan
+
+            form.pan.data = get_lead_kyc_pan(lead.id) or None
+        except Exception:
+            pass
     
     if form.validate_on_submit():
         try:
@@ -1363,6 +1401,20 @@ def record_existing_agreement_for_client(client_id):
             else:
                 _save_billing_transition_vars(agreement, lead.id, client.id, request.form)
 
+            try:
+                from services.regulatory_identity_capture_service import (
+                    ensure_regulatory_fields_on_agreement,
+                )
+
+                ensure_regulatory_fields_on_agreement(
+                    agreement,
+                    lead.id,
+                    client.id,
+                    pan=form.pan.data,
+                )
+            except Exception:
+                logger.debug("Regulatory identity capture on client record skipped", exc_info=True)
+
             db.session.commit()
             
             flash(f'Existing agreement recorded successfully for {client.name} with status: {form.status.data}.', 'success')
@@ -1445,6 +1497,13 @@ def _autofill_structured_vars(
             _set(alias, pan_name)
 
     pan_number = (vars_map.get('pan') or '').strip()
+    if not pan_number and lead and lead.id:
+        try:
+            from services.regulatory_identity_capture_service import get_lead_kyc_pan
+
+            pan_number = get_lead_kyc_pan(lead.id)
+        except Exception:
+            pan_number = ""
     if pan_number:
         _set('pan', pan_number)
 

@@ -1485,12 +1485,26 @@ def mark_onboarding_invoice_paid(lead_id):
 @handle_errors
 def mark_kyc_complete(lead_id):
     lead = _authorized_lead(lead_id)
-    from services.lead_kyc_service import lead_has_kyc_documents, mark_kyc_complete as _mark
+    from services.lead_kyc_service import (
+        lead_has_kyc_documents,
+        lead_has_kyc_pan,
+        mark_kyc_complete as _mark,
+    )
 
+    if not lead_has_kyc_pan(lead.id):
+        flash(
+            'Save a valid PAN on the KYC profile first (required for regulatory reporting).',
+            'error',
+        )
+        return redirect(url_for('leads.view_lead', lead_id=lead.id))
     if not lead_has_kyc_documents(lead.id):
         flash('Upload at least one KYC / PAN / address-proof document first (Documents section).', 'error')
         return redirect(url_for('leads.view_lead', lead_id=lead.id))
-    _mark(lead)
+    try:
+        _mark(lead)
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('leads.view_lead', lead_id=lead.id))
     flash('KYC marked complete on this lead.', 'success')
     return redirect(url_for('leads.view_lead', lead_id=lead.id))
 
@@ -1531,6 +1545,29 @@ def close_onboarding(lead_id):
     lead = _authorized_lead(lead_id)
     if not lead.client_id:
         flash('Convert the lead to a client before closing onboarding.', 'error')
+        return redirect(url_for('leads.view_lead', lead_id=lead.id))
+    from services.regulatory_identity_capture_service import (
+        ensure_regulatory_fields_on_agreement,
+        regulatory_gaps_for_lead,
+        sync_kyc_pan_to_lead_agreements,
+    )
+
+    sync_kyc_pan_to_lead_agreements(lead.id)
+    try:
+        from services.lead_conversion_service import lead_convertible_agreements
+
+        for ag in lead_convertible_agreements(lead):
+            ensure_regulatory_fields_on_agreement(
+                ag, lead.id, lead.client_id
+            )
+    except Exception:
+        pass
+    gaps = regulatory_gaps_for_lead(lead)
+    if gaps:
+        flash(
+            'Cannot close onboarding — missing: ' + ', '.join(gaps) + '.',
+            'error',
+        )
         return redirect(url_for('leads.view_lead', lead_id=lead.id))
     lead.status = 'onboarding_completed'
     lead.updated_at = datetime.utcnow()

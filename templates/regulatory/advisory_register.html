@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Advisory Register{% endblock %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Advisory register' %}
+  {% set mobile_back_url = url_for('main.dashboard') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <div class="im-metric-grid mb-3">
+    <div class="im-metric-tile"><span class="im-metric-tile__label">Entries</span><span class="im-metric-tile__value">{{ payload.row_count }}</span></div>
+    <div class="im-metric-tile"><span class="im-metric-tile__label">FY</span><span class="im-metric-tile__value">{{ payload.fy_label }}</span></div>
+  </div>
+  <form method="get" class="mb-3">
+    <label class="small text-muted d-block mb-1" for="fy-mobile">Financial year</label>
+    <select id="fy-mobile" name="fy" class="form-control form-control-sm mb-2" onchange="this.form.submit()">
+      {% for opt in fy_options %}
+      <option value="{{ opt.value }}" {% if opt.value == fy_param %}selected{% endif %}>{{ opt.label }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <a class="im-settings-link" href="{{ url_for('regulatory_advisory_register.download_advisory_register', fy=fy_param) }}">
+    <i class="fas fa-download"></i><span>Download Excel</span><i class="fas fa-chevron-right text-muted"></i>
+  </a>
+  <p class="text-muted small mt-2">Full table on desktop. Fee is ₹0 for all advice entries.</p>
+</div>
+
+<div class="im-desktop-only container-fluid">
+  <div class="d-sm-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h1 class="h3 mb-1 text-gray-800"><i class="fas fa-book"></i> Advisory Register</h1>
+      <p class="text-muted small mb-0">
+        Client · Date of Advice · Nature · Products/Securities · Fee
+        · FY <strong>{{ payload.fy_label }}</strong>
+        {% if payload.gmail_stop_from %}
+        · Gmail import stopped from <strong>{{ payload.gmail_stop_from }}</strong>
+        {% endif %}
+      </p>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <form method="get" class="d-flex align-items-center gap-2 mb-0">
+        <label class="small text-muted mb-0" for="fy-desktop">FY</label>
+        <select id="fy-desktop" name="fy" class="form-control form-control-sm" onchange="this.form.submit()">
+          {% for opt in fy_options %}
+          <option value="{{ opt.value }}" {% if opt.value == fy_param %}selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+      </form>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('regulatory_advisory_register.download_advisory_register', fy=fy_param) }}">
+        <i class="fas fa-download"></i> Download Excel
+      </a>
+      {% if current_user.is_manager or current_user.is_admin %}
+      <form method="post" action="{{ url_for('regulatory_advisory_register.import_advisory_register_fy') }}" class="mb-0"
+            onsubmit="return confirm('{% if payload.gmail_import_allowed %}Import FY {{ fy_param }} from Gmail Sent + DB?{% else %}Import FY {{ fy_param }} from app DB only (no Gmail)?{% endif %}');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="fy" value="{{ fy_param }}">
+        <button type="submit" class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-{% if payload.gmail_import_allowed %}envelope-open-text{% else %}database{% endif %}"></i>
+          {% if payload.gmail_import_allowed %}Import FY{% else %}Backfill from DB{% endif %}
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not payload.enabled %}
+  <div class="alert alert-warning" role="alert">
+    Advisory register table is not available yet. Run
+    <code>python migrations/add_advisory_register_entry.py</code> on this database.
+  </div>
+  {% endif %}
+
+  <div class="row mb-3">
+    <div class="col-md-3">
+      <div class="card border-left-primary shadow h-100 py-2">
+        <div class="card-body py-2">
+          <div class="text-xs font-weight-bold text-primary text-uppercase">Entries</div>
+          <div class="h5 mb-0 font-weight-bold">{{ payload.row_count }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 font-weight-bold text-primary">Register</h6>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0" data-mobile-table="scroll">
+          <thead class="thead-light">
+            <tr>
+              <th scope="col">#</th>
+              {% for col in payload.columns %}
+              <th scope="col">{{ col }}</th>
+              {% endfor %}
+              <th scope="col">Source</th>
+              <th scope="col">Confidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in payload.rows %}
+            <tr>
+              <td>{{ r.s_no }}</td>
+              <td>
+                {% if r.client_id %}
+                <a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client }}</a>
+                {% else %}
+                {{ r.client }}
+                {% endif %}
+              </td>
+              <td>{{ r.advice_date }}</td>
+              <td>{{ r.nature_of_advice }}</td>
+              <td>{{ r.products_securities }}</td>
+              <td class="text-num">{{ r.fee_charged }}</td>
+              <td><span class="badge badge-light">{{ r.source }}</span></td>
+              <td>
+                {% if r.import_confidence == 'low' %}
+                <span class="badge badge-warning">{{ r.import_confidence }}</span>
+                {% else %}
+                <span class="badge badge-secondary">{{ r.import_confidence }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="8" class="text-center text-muted py-4">
+                No entries for this FY.
+                {% if current_user.is_manager or current_user.is_admin %}
+                  {% if payload.gmail_import_allowed %}
+                  Use Import FY to load Gmail Sent + DB.
+                  {% else %}
+                  New advice is recorded automatically when you send recommendations. Use Backfill from DB if needed.
+                  {% endif %}
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

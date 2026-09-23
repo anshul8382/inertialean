@@ -237,6 +237,12 @@ try:
 except Exception:
     pass
 try:
+    from models.advisory_register import AdvisoryRegisterEntry
+
+    setattr(sys.modules[__name__], "AdvisoryRegisterEntry", AdvisoryRegisterEntry)
+except Exception:
+    pass
+try:
     from models.lead_onboarding import LeadProposal, RiskAssessmentSubmission, LeadKycProfile
 
     setattr(sys.modules[__name__], "LeadProposal", LeadProposal)

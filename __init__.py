@@ -428,6 +428,13 @@ def create_app(config_class=ProductionConfig):
     except Exception as _cs_e:
         app.logger.warning("Campaign studio blueprint not registered: %s", _cs_e)
 
+    try:
+        from routes.regulatory_advisory_register import regulatory_advisory_register_bp
+
+        app.register_blueprint(regulatory_advisory_register_bp)
+    except Exception as _ar_e:
+        app.logger.warning("Advisory register blueprint not registered: %s", _ar_e)
+
     # Financial planning — separately developed module; not part of core Inertia.
     # Enable only when integrating: FINANCIAL_PLANNING_ENABLED=true in .env
     app.config["NAV_FINANCIAL_PLANNING_ENABLED"] = False

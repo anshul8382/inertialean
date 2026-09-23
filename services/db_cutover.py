@@ -12,6 +12,7 @@ from typing import FrozenSet, Optional
 FEATURE_AUDIT_LOG = "audit_log"
 FEATURE_FINDING_NOTIFICATION = "finding_notification"
 FEATURE_PEER_MESSAGE = "peer_message"
+FEATURE_ADVISORY_REGISTER = "advisory_register"
 
 _REGISTRY = {
     FEATURE_AUDIT_LOG: {
@@ -37,6 +38,14 @@ _REGISTRY = {
         "restricted": (
             "Peer short messages via notification bell. Compose/send disabled until "
             "user_peer_message exists."
+        ),
+    },
+    FEATURE_ADVISORY_REGISTER: {
+        "migration_script": "migrations/add_advisory_register_entry.py",
+        "code_gate": "services/advisory_register_service.py",
+        "restricted": (
+            "SEBI advisory register (view/Excel/import + auto-append on recommendation send). "
+            "UI shows empty / import disabled until advisory_register_entry exists."
         ),
     },
 }
@@ -86,6 +95,14 @@ def audit_log_table_exists() -> bool:
 
 _finding_notif_table_checked: Optional[bool] = None
 _peer_message_table_checked: Optional[bool] = None
+_advisory_register_table_checked: Optional[bool] = None
+
+
+def advisory_register_enabled() -> bool:
+    """True when advisory_register_entry exists and feature is not deferred."""
+    if is_feature_deferred(FEATURE_ADVISORY_REGISTER):
+        return False
+    return _advisory_register_table_exists()
 
 
 def finding_notification_enabled() -> bool:
@@ -100,6 +117,30 @@ def peer_messages_enabled() -> bool:
     if is_feature_deferred(FEATURE_PEER_MESSAGE):
         return False
     return _peer_message_table_exists()
+
+
+def _advisory_register_table_exists() -> bool:
+    global _advisory_register_table_checked
+    if _advisory_register_table_checked is not None:
+        return _advisory_register_table_checked
+    try:
+        from flask import has_request_context, current_app
+        from sqlalchemy import inspect
+
+        from extensions import db
+
+        if has_request_context():
+            _advisory_register_table_checked = inspect(db.engine).has_table(
+                "advisory_register_entry"
+            )
+        else:
+            with current_app.app_context():
+                _advisory_register_table_checked = inspect(db.engine).has_table(
+                    "advisory_register_entry"
+                )
+    except Exception:
+        _advisory_register_table_checked = False
+    return _advisory_register_table_checked
 
 
 def _finding_notification_table_exists() -> bool:

@@ -303,8 +303,10 @@
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="form-row">
                             <div class="col-6 mb-1">
-                                <input class="form-control form-control-sm" name="pan" placeholder="PAN"
-                                       value="{{ onboarding.kyc_profile.pan if onboarding.kyc_profile else '' }}">
+                                <input class="form-control form-control-sm" name="pan" placeholder="PAN (required)"
+                                       value="{{ onboarding.kyc_profile.pan if onboarding.kyc_profile else '' }}"
+                                       required maxlength="10" pattern="[A-Za-z]{5}[0-9]{4}[A-Za-z]"
+                                       title="PAN format: ABCDE1234F" autocomplete="off">
                             </div>
                             <div class="col-6 mb-1">
                                 <input class="form-control form-control-sm" name="aadhaar_last4" placeholder="Aadhaar last 4" maxlength="4"

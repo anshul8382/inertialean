@@ -46,11 +46,26 @@ def lead_has_kyc_documents(lead_id: int) -> bool:
     return False
 
 
+def lead_has_kyc_pan(lead_id: int) -> bool:
+    try:
+        from services.regulatory_identity_capture_service import lead_has_regulatory_pan
+
+        return lead_has_regulatory_pan(lead_id)
+    except Exception:
+        return False
+
+
 def mark_kyc_complete(lead) -> None:
     """Set lead status to kyc_uploaded when still pre-invoice stages."""
     from datetime import datetime
 
     from extensions import db
+
+    if not lead_has_kyc_pan(lead.id):
+        raise ValueError(
+            "Save a valid PAN on the KYC profile before marking KYC complete "
+            "(needed for regulatory client master)."
+        )
 
     note = "[KYC] Documents uploaded / marked complete (manual — CKYC API not connected yet)."
     existing = (lead.notes or "").strip()
@@ -75,4 +90,10 @@ def mark_kyc_complete(lead) -> None:
         if lead_has_kyc_documents(lead.id):
             lead.status = "kyc_uploaded"
     lead.updated_at = datetime.utcnow()
+    try:
+        from services.regulatory_identity_capture_service import sync_kyc_pan_to_lead_agreements
+
+        sync_kyc_pan_to_lead_agreements(lead.id)
+    except Exception:
+        pass
     db.session.commit()

@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Regulatory Client Master{% endblock %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Regulatory client master' %}
+  {% set mobile_back_url = url_for('main.practice_analytics') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <div class="im-metric-grid mb-3">
+    <div class="im-metric-tile"><span class="im-metric-tile__label">Active clients</span><span class="im-metric-tile__value">{{ payload.row_count }}</span></div>
+    <div class="im-metric-tile"><span class="im-metric-tile__label">Practice AUA (₹L)</span><span class="im-metric-tile__value">{{ "{:,.2f}".format(payload.total_aua_lakhs) }}</span></div>
+  </div>
+  <form method="get" class="mb-3">
+    <label class="small text-muted d-block mb-1">As of</label>
+    <select name="as_of" class="form-control form-control-sm mb-2" onchange="this.form.submit()">
+      {% for opt in as_of_options %}
+      <option value="{{ opt.value }}" {% if opt.value == as_of_param %}selected{% endif %}>{{ opt.label }}</option>
+      {% endfor %}
+    </select>
+  </form>
+  <a class="im-settings-link" href="{{ url_for('main.download_regulatory_client_master', as_of=as_of_param) }}">
+    <i class="fas fa-download"></i><span>Download Excel</span><i class="fas fa-chevron-right text-muted"></i>
+  </a>
+  <p class="text-muted small mt-2">Full table on desktop. Blank PAN / agreement dates stay listed.</p>
+</div>
+
+<div class="im-desktop-only container-fluid">
+  <div class="d-sm-flex align-items-center justify-content-between mb-3">
+    <div>
+      <a href="{{ url_for('main.practice_analytics') }}" class="small text-muted text-decoration-none">← Practice analytics</a>
+      <h1 class="h3 mb-1 text-gray-800"><i class="fas fa-file-excel"></i> Regulatory Client Master</h1>
+      <p class="text-muted small mb-0">
+        Active clients · Practice AUA · Agreement start date · PAN
+        · as of <strong>{{ payload.as_of }}</strong> ({{ payload.mode }})
+      </p>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <form method="get" class="d-flex align-items-center gap-2 mb-0">
+        <label class="small text-muted mb-0">As of</label>
+        <select name="as_of" class="form-control form-control-sm" onchange="this.form.submit()">
+          {% for opt in as_of_options %}
+          <option value="{{ opt.value }}" {% if opt.value == as_of_param %}selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+      </form>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('main.download_regulatory_client_master', as_of=as_of_param) }}">
+        <i class="fas fa-download"></i> Download Excel
+      </a>
+      {% if current_user.is_manager or current_user.is_admin %}
+      <form method="post" action="{{ url_for('main.freeze_regulatory_client_master') }}" class="mb-0"
+            onsubmit="return confirm('Freeze a durable quarter snapshot for {{ as_of_param }}?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="as_of" value="{{ as_of_param }}">
+        <button type="submit" class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-snowflake"></i> Freeze snapshot
+        </button>
+      </form>
+      <form method="post" action="{{ url_for('main.fill_regulatory_identity_blanks') }}" class="mb-0"
+            onsubmit="return confirm('Scan agreement PDFs only for clients still missing PAN? This may take a minute.');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="as_of" value="{{ as_of_param }}">
+        <button type="submit" class="btn btn-outline-primary btn-sm" title="Only clients missing PAN — not a full rescan">
+          <i class="fas fa-file-pdf"></i> Fill blanks from PDFs
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row mb-3">
+    <div class="col-md-3">
+      <div class="card border-left-primary shadow h-100 py-2">
+        <div class="card-body py-2">
+          <div class="text-xs font-weight-bold text-primary text-uppercase">Active clients</div>
+          <div class="h5 mb-0 font-weight-bold">{{ payload.row_count }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="card border-left-success shadow h-100 py-2">
+        <div class="card-body py-2">
+          <div class="text-xs font-weight-bold text-success text-uppercase">Practice AUA (₹ lakhs)</div>
+          <div class="h5 mb-0 font-weight-bold">{{ "{:,.2f}".format(payload.total_aua_lakhs) }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 font-weight-bold text-primary">Client master sheet</h6>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead class="thead-light">
+            <tr>
+              {% for col in payload.columns %}
+              <th>{{ col }}</th>
+              {% endfor %}
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in payload.rows %}
+            <tr {% if not r.pan or not r.agreement_start_date %}class="table-warning"{% endif %}>
+              <td>{{ r.s_no }}</td>
+              <td>
+                <a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_name }}</a>
+              </td>
+              <td class="text-end">{{ "{:,.2f}".format(r.aua_lakhs) }}</td>
+              <td>
+                {% if r.agreement_id %}
+                <a href="{{ r.agreement_link }}">Agreement #{{ r.agreement_id }}</a>
+                <span class="text-muted small">({{ r.agreement_status }})</span>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>{{ r.agreement_start_date or '' }}</td>
+              <td>{{ r.pan or '' }}</td>
+              <td>{{ r.email }}</td>
+              <td>{{ r.phone }}</td>
+              <td class="text-nowrap">
+                {% if r.agreement_id %}
+                <form method="post" action="{{ url_for('main.refresh_regulatory_client_identity', client_id=r.client_id) }}" class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="as_of" value="{{ as_of_param }}">
+                  <button type="submit" class="btn btn-link btn-sm p-0"
+                          title="Re-read agreement PDF for PAN and start date">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                  </button>
+                </form>
+                {% else %}
+                <span class="text-muted small">No PDF</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" class="text-muted text-center py-4">No active clients.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card shadow mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 font-weight-bold text-primary">Archived quarter-end downloads</h6>
+    </div>
+    <div class="card-body">
+      {% if snapshots %}
+      <ul class="list-unstyled mb-0">
+        {% for s in snapshots %}
+        <li class="mb-2">
+          {% if s.exists %}
+          <a href="{{ url_for('main.download_regulatory_client_master_archive', as_of_key=s.download_key) }}">
+            {{ s.as_of }} — {{ s.row_count }} clients · ₹{{ "{:,.2f}".format(s.total_aua_lakhs or 0) }} L
+          </a>
+          <span class="text-muted small">frozen {{ s.generated_at_utc }}</span>
+          {% else %}
+          <span class="text-muted">{{ s.as_of }} (file missing)</span>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="text-muted mb-0">No frozen snapshots yet. Select a quarter end and click Freeze snapshot.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

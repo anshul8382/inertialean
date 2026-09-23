@@ -63,6 +63,23 @@ Logic: `services/db_cutover.py` → `audit_log_writes_enabled()`
 4. Restart app  
 5. Remove or shorten `DB CUTOVER` blocks in `audit_service.py` if desired (optional; gate is harmless if left)
 
+### 2. `advisory_register` — SEBI advisory register
+
+| Item | Detail |
+|------|--------|
+| **Status** | Table-gated (not in default `DEFER_DB_FEATURES`; enable by running migration) |
+| **User impact** | `/regulatory/advisory-register` empty / import disabled until table exists; recommendation send still works |
+| **Code gate** | `services/db_cutover.py` → `advisory_register_enabled()`; `services/advisory_register_service.py` |
+| **Migration** | `migrations/add_advisory_register_entry.py` |
+| **Model** | `models/advisory_register.py` |
+| **Optional defer** | Add `advisory_register` to `DEFER_DB_FEATURES` to force-disable even if table exists |
+
+**After cutover:**
+
+1. `python migrations/add_advisory_register_entry.py` on local `_dev`, then `_test` + prod  
+2. Restart app  
+3. Manager: Import FY from UI or `python3 scripts/import_advisory_register_fy.py` (needs Gmail IMAP)
+
 ---
 
 ## Code fixes (no DB) — already deployed in branch
@@ -139,6 +156,7 @@ Run **only** after backup. Prefer scripts that use `create(..., checkfirst=True)
 - `add_whatsapp_groups_tables.py`
 - `add_tax_optimiser_*.py` (multiple; run in dependency order per script headers)
 - `add_user_feedback_tables.py`, `add_user_modification_tracking.py`
+- `add_advisory_register_entry.py` — **SEBI advisory register** (`/regulatory/advisory-register`)
 
 **Avoid on prod until planned:**
 

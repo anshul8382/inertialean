@@ -176,7 +176,26 @@
                                         </div>
                                     {% endif %}
                                     <small class="form-text text-muted">
-                                        Date when agreement was signed (required)
+                                        Date when agreement was signed (required — used as agreement start date)
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    {{ form.pan.label(class="form-label") }}
+                                    {{ form.pan(class="form-control", maxlength=10, placeholder="ABCDE1234F", autocomplete="off") }}
+                                    {% if form.pan.errors %}
+                                        <div class="text-danger">
+                                            {% for error in form.pan.errors %}
+                                                <small>{{ error }}</small>
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <small class="form-text text-muted">
+                                        Required for regulatory client master.
                                     </small>
                                 </div>
                             </div>

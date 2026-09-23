@@ -11,6 +11,7 @@
     <div class="im-metric-tile"><span class="im-metric-tile__label">Clients</span><span class="im-metric-tile__value">{{ total_clients }}</span></div>
     <div class="im-metric-tile"><span class="im-metric-tile__label">AUM</span><span class="im-metric-tile__value">₹{{ "{:,.0f}".format(total_current_value) if total_current_value else 0 }}</span></div>
   </div>
+  <a href="{{ url_for('main.regulatory_client_master') }}" class="im-settings-link"><i class="fas fa-file-excel"></i><span>Regulatory client master</span><i class="fas fa-chevron-right text-muted"></i></a>
   {% if total_clients > 0 and user_is_admin %}
   <a href="{{ url_for('main.download_practice_analytics') }}" class="im-settings-link"><i class="fas fa-download"></i><span>Download masked data (Excel)</span><i class="fas fa-chevron-right text-muted"></i></a>
   {% endif %}
@@ -20,10 +21,13 @@
     <!-- Page Heading -->
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
         <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-chart-pie"></i> Practice Analytics Dashboard</h1>
-        <div class="d-flex align-items-center gap-3">
+        <div class="d-flex align-items-center gap-3 flex-wrap">
             <div class="text-muted">
                 <i class="fas fa-users"></i> Active clients: <strong>{{ total_clients }}</strong>
             </div>
+            <a href="{{ url_for('main.regulatory_client_master') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-file-excel"></i> Regulatory client master
+            </a>
             {% if total_clients > 0 %}
             <button class="btn btn-success btn-sm" onclick="downloadAllCharts()" title="Download all charts as images">
                 <i class="fas fa-images"></i> Download All Charts

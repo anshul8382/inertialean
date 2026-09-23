@@ -71,3 +71,23 @@ Do **not** mix Gmail SMTP with an `@inertiainvest.in` username (or vice versa).
 - `extensions.mail` / Flask-Mail — other notifications
 
 Both read the same `MAIL_*` environment variables loaded in `wsgi.py` / `config.py`.
+
+## IMAP (Advisory Register historical import)
+
+**FY 2025-26 only.** From **FY 2026-27** onward the register is filled by the live recommendation-send hook (and optional DB backfill) — **no Gmail read**.
+
+FY 2025-26 backfill reads **Gmail Sent** via IMAP using the same App Password:
+
+1. In Google Workspace / Gmail: enable **IMAP** (Settings → See all settings → Forwarding and POP/IMAP → Enable IMAP).
+2. Same `MAIL_USERNAME` / `MAIL_PASSWORD` as SMTP (`imap.gmail.com:993`).
+3. Import:
+
+   ```bash
+   python3 migrations/add_advisory_register_entry.py
+   python3 scripts/import_advisory_register_fy.py --fy 2025-26
+   # or dry-run:
+   python3 scripts/import_advisory_register_fy.py --fy 2025-26 --dry-run
+   ```
+
+4. Subject filter: only messages containing **Portfolio Investment Recos**.
+5. After a contiguous **14-day** window where every such Sent mail matches a reliable Inertia send, Gmail import stops from the next day within that FY; later rows come from the DB / live recommendation send hook.

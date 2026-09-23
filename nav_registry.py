@@ -65,7 +65,13 @@ NAV_GROUPS: Tuple[NavGroup, ...] = (
             NavItem("tickets.new_ticket", "New Service Ticket", "fas fa-plus-circle",
                     nav_flag="NAV_TICKETS_ENABLED", active_match=("tickets.",)),
             NavItem("main.practice_analytics", "Practice Analytics", "fas fa-chart-pie",
-                    active_match=("main.practice_analytics",)),
+                    active_match=("main.practice_analytics", "main.regulatory_client_master")),
+            NavItem(
+                "regulatory_advisory_register.advisory_register",
+                "Advisory Register",
+                "fas fa-book",
+                active_match=("regulatory_advisory_register.",),
+            ),
         ),
     ),
     NavGroup(

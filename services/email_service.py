@@ -595,6 +595,7 @@ class EmailService:
                     "Email sent but skipping EmailLog insert because sent_by_user_id is not available "
                     f"(session_id={session_id}, recipient={recipient_email_log})"
                 )
+                email_log = None
             else:
                 email_log = EmailLog(
                     client_id=client.id,
@@ -609,6 +610,26 @@ class EmailService:
                 )
                 db.session.add(email_log)
                 db.session.commit()
+
+            # Advisory register (SEBI) — best-effort; never fail the send
+            try:
+                from services.db_cutover import advisory_register_enabled
+                from services.advisory_register_service import append_from_session
+
+                if advisory_register_enabled():
+                    elog_id = getattr(email_log, "id", None) if email_log is not None else None
+                    append_from_session(
+                        int(session_id),
+                        email_log_id=elog_id,
+                        user_id=effective_user_id,
+                        commit=True,
+                    )
+            except Exception as _ar_exc:
+                self.logger.warning(
+                    "Advisory register append skipped after send (session_id=%s): %s",
+                    session_id,
+                    _ar_exc,
+                )
             
             return {
                 'success': True,
