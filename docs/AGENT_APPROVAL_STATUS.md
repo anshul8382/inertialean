@@ -1,6 +1,6 @@
 # Agent approval status
 
-Generated: 2026-09-22T20:00:01.755255+00:00
+Generated: 2026-09-22T20:01:59.407315+00:00
 
 | Agent | Status | Detail |
 |-------|--------|--------|
@@ -12,9 +12,7 @@ Generated: 2026-09-22T20:00:01.755255+00:00
 | Security (deps) | PASS | deps: 0 Python, 0 Node → docs/DEPENDENCY_AUDIT.md |
 | Security (ZAP) | SKIP | set ZAP_TARGET_URL=http://<staging> to enable |
 | Mobile Optimiser | PARTIAL | Capacitor shell + mobile-ui stack; Expo scaffold: no; JWT: yes; template audit: 3 high (standalone UIs expected) |
-| Delivery quality | PASS | pytest exit 0 |
-| Delivery quality (functional) | PASS | pytest functional exit 0 |
-| Delivery quality (functional packs) | PASS | exit 0 |
+| Delivery quality | SKIP | —skip-tests |
 | Delivery quality (docs) | PASS | core docs present |
 | Live architecture map | PASS | docs/ARCHITECTURE_LIVE.md (live surfaces map) |
 

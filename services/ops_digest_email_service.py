@@ -55,6 +55,23 @@ def di_create_ops_tasks_enabled() -> bool:
     return raw in ("1", "true", "yes", "on")
 
 
+def review_create_ops_tasks_enabled() -> bool:
+    """Default false — open ReviewWorkflow is the work item; no auto OpsTask mirror."""
+    try:
+        from flask import current_app, has_app_context
+
+        if has_app_context():
+            val = current_app.config.get("REVIEW_CREATE_OPS_TASKS")
+            if isinstance(val, bool):
+                return val
+            if val is not None and str(val).strip() != "":
+                return str(val).strip().lower() in ("1", "true", "yes", "on")
+    except Exception:
+        pass
+    raw = (os.environ.get("REVIEW_CREATE_OPS_TASKS") or "false").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
 def _manager_admin_emails() -> List[str]:
     from models import ReportRecipient, User
 

@@ -49,6 +49,11 @@ ssh -i ~/.ssh/inertia_vps anshul@187.127.188.97 \
 
 See also `AGENTS.md` § Deploy target.
 
+### One-off data cleanups (KVM)
+
+Not part of ship. After the matching commit is on KVM, dry-run then apply — see
+`docs/PROD_DATA_CLEANUP_SCRIPTS.md` (duplicate reviews, superseded recommendation-match issues).
+
 ### DB cutover note
 
 Develop SQL on local `inertia_app2025_dev`. Each host has its own MySQL; see `docs/DB_MIGRATION_AND_TEST_PROCESS.md` and `docs/DB_CUTOVER_REGISTRY.md`. Do **not** run `flask db upgrade` on any prod host.

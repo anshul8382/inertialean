@@ -85,3 +85,48 @@
 .navbar-nav .dropdown:hover .dropdown-menu {
     display: block;
 } 
+/* Persistent IST clock (all layouts via base templates) */
+.inertia-ist-clock {
+    position: fixed;
+    z-index: 1080;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.28rem 0.55rem;
+    border-radius: 0.35rem;
+    background: rgba(33, 37, 41, 0.88);
+    color: #f8f9fa;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+    pointer-events: none;
+    max-width: calc(100vw - 1rem);
+    white-space: nowrap;
+}
+.inertia-ist-clock .fa-clock {
+    opacity: 0.85;
+    font-size: 0.7rem;
+}
+.inertia-ist-clock__tz {
+    opacity: 0.8;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+@media (min-width: 992px) {
+    .inertia-ist-clock {
+        top: 4.35rem;
+        right: 1rem;
+    }
+}
+@media (max-width: 991.98px) {
+    .inertia-ist-clock {
+        top: auto;
+        bottom: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+        left: 0.5rem;
+        right: auto;
+        font-size: 0.68rem;
+        padding: 0.22rem 0.45rem;
+    }
+}

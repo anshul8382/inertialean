@@ -196,7 +196,7 @@
         </button>
         <div id="ncSec-{{ section.id }}" class="collapse {% if not section.collapsed %}show{% endif %}">
           <div class="list-group list-group-flush border-top">
-            {% for item in section.items %}
+            {% for item in section['items'] %}
             {{ nc_item_row(item, view) }}
             {% endfor %}
           </div>

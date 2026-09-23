@@ -85,6 +85,7 @@ def main() -> int:
             "PORTFOLIO_REVIEW_HYBRID_SKIP_LLM=true",
             "",
             "DI_CREATE_OPS_TASKS=false",
+            "REVIEW_CREATE_OPS_TASKS=false",
             "",
         ]
     )

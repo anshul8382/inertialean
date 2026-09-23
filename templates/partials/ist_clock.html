@@ -1,0 +1,11 @@
+{# Persistent IST clock — included from base templates. Driven by static/js/ist-clock.js #}
+<div id="inertia-ist-clock"
+     class="inertia-ist-clock"
+     role="status"
+     aria-live="polite"
+     title="India Standard Time (Asia/Kolkata)">
+  <i class="fas fa-clock" aria-hidden="true"></i>
+  <time class="inertia-ist-clock__time" datetime="">—</time>
+  <span class="inertia-ist-clock__tz">IST</span>
+</div>
+<script src="{{ url_for('static', filename='js/ist-clock.js') }}?v=1" defer></script>

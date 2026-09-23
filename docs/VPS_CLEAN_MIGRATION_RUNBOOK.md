@@ -734,6 +734,8 @@ sed -i 's/^EMAIL_SOURCE_TAG=.*/EMAIL_SOURCE_TAG=Lean server/' .env
 grep EMAIL_SOURCE_TAG .env
 grep -q '^DI_CREATE_OPS_TASKS=' .env || echo 'DI_CREATE_OPS_TASKS=false' >> .env
 sed -i 's/^DI_CREATE_OPS_TASKS=.*/DI_CREATE_OPS_TASKS=false/' .env
+grep -q '^REVIEW_CREATE_OPS_TASKS=' .env || echo 'REVIEW_CREATE_OPS_TASKS=false' >> .env
+sed -i 's/^REVIEW_CREATE_OPS_TASKS=.*/REVIEW_CREATE_OPS_TASKS=false/' .env
 # After deploy of advisor digests: restart app + trigger task_assignment_daily so open
 # reviews/issues reassign to Client.advisor_id; then unpause review_workflow_daily_report.
 sudo systemctl restart inertia-2026v1   # or your Gunicorn unit name
