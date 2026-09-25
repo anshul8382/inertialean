@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-09-23T19:15:43.410677+00:00
+Generated: 2026-09-25T10:07:44.340783+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -8,20 +8,32 @@ Agent: `security_audit_agent` v1.0.0
 | Severity | Count |
 |----------|-------|
 | critical | 0 |
-| high | 20 |
-| medium | 15 |
+| high | 21 |
+| medium | 16 |
 | low | 0 |
 | info | 0 |
-| **Total** | **35** |
+| **Total** | **37** |
 
 ## Threat themes
 
-- **EXTERNAL** — External attackers / public internet exposure (23 findings)
-- **INTERNAL** — Insider misuse / employee data theft (12 findings)
+- **EXTERNAL** — External attackers / public internet exposure (24 findings)
+- **INTERNAL** — Insider misuse / employee data theft (13 findings)
 - **COMPLIANCE** — SEBI / financial-data regulatory standards (0 findings)
 - **CONFIG** — Misconfiguration & operational hardening (0 findings)
 
 ## Findings
+
+### `SEC-EXT-002` — Possible SQL injection: f-string passed to execute()
+
+**Severity:** high • **Theme:** EXTERNAL • **Category:** sql_injection • **CWE:** CWE-89 • **Location:** `migrations/add_client_google_drive_folder.py:33`
+
+Constructing SQL with an f-string interpolates Python expressions directly into the query. If any value comes from user input, this is a SQL injection.
+
+```
+db.session.execute(text(f"ALTER TABLE {TABLE} ADD COLUMN {name} {ddl}"))
+```
+
+**Fix:** Use parameter binding: `db.session.execute(text('SELECT ... WHERE id = :id'), {'id': value})`. Never concatenate or f-string user data into SQL.
 
 ### `SEC-EXT-002` — Possible SQL injection: f-string passed to execute()
 
@@ -430,6 +442,18 @@ logger.debug("KYC PAN backfill skipped lead=%s", lead_id, exc_info=True)
 ```
 
 **Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
+
+### `SEC-INT-005` — `routes/client_google_drive.py` has 3 client-scoped route(s) without an explicit access check
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_client_scope • **CWE:** CWE-639 • **Location:** `routes/client_google_drive.py:63`
+
+Routes that take `<int:client_id>` should verify the current user can see that client. Without it, an advisor can read other advisors' clients by guessing IDs.
+
+```
+L63: @client_google_drive_bp.route(; L99: @client_google_drive_bp.route(; L140: @client_google_drive_bp.route(
+```
+
+**Fix:** Add `@client_access_required` (from `access_control`) to each route, OR add a `before_request` hook on this blueprint that calls `can_access_client(client_id)` and aborts 403 if not. Also call `services.audit_service.log_audit_event('client_view', client_id=client_id)` so internal access is recorded for SEBI.
 
 ---
 Run again: `python3 scripts/run_security_audit.py --write-report`

@@ -35,6 +35,7 @@ _MENU_ENDPOINTS = {
     "main.practice_analytics",
     "main.regulatory_client_master",
     "regulatory_advisory_register.advisory_register",
+    "client_google_drive.list_client_drive_folders",
     "leads.list_leads",
     "meetings.list_meetings",
     "meetings.new_meeting",

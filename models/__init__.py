@@ -243,6 +243,12 @@ try:
 except Exception:
     pass
 try:
+    from models.suitability_report import SuitabilityReport
+
+    setattr(sys.modules[__name__], "SuitabilityReport", SuitabilityReport)
+except Exception:
+    pass
+try:
     from models.lead_onboarding import LeadProposal, RiskAssessmentSubmission, LeadKycProfile
 
     setattr(sys.modules[__name__], "LeadProposal", LeadProposal)

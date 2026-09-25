@@ -72,6 +72,12 @@ NAV_GROUPS: Tuple[NavGroup, ...] = (
                 "fas fa-book",
                 active_match=("regulatory_advisory_register.",),
             ),
+            NavItem(
+                "client_google_drive.list_client_drive_folders",
+                "Client Drive folders",
+                "fab fa-google-drive",
+                active_match=("client_google_drive.",),
+            ),
         ),
     ),
     NavGroup(

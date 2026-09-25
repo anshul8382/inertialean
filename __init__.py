@@ -435,6 +435,13 @@ def create_app(config_class=ProductionConfig):
     except Exception as _ar_e:
         app.logger.warning("Advisory register blueprint not registered: %s", _ar_e)
 
+    try:
+        from routes.client_google_drive import client_google_drive_bp
+
+        app.register_blueprint(client_google_drive_bp)
+    except Exception as _cgd_e:
+        app.logger.warning("Client Google Drive blueprint not registered: %s", _cgd_e)
+
     # Financial planning — separately developed module; not part of core Inertia.
     # Enable only when integrating: FINANCIAL_PLANNING_ENABLED=true in .env
     app.config["NAV_FINANCIAL_PLANNING_ENABLED"] = False

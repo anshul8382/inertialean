@@ -80,6 +80,17 @@ Logic: `services/db_cutover.py` → `audit_log_writes_enabled()`
 2. Restart app  
 3. Manager: Import FY from UI or `python3 scripts/import_advisory_register_fy.py` (needs Gmail IMAP)
 
+### 3. Client Google Drive + Suitability report
+
+| Item | Detail |
+|------|--------|
+| **Status** | Additive columns + table (run migration before use) |
+| **User impact** | Drive card / suitability generate disabled until columns/table exist |
+| **Migration** | `migrations/add_client_google_drive_folder.py` |
+| **Docs** | `docs/CLIENT_GOOGLE_DRIVE.md` |
+
+**After cutover:** run migration on `_dev` / `_test` / prod; ensure `service_account.json` is on the host and Shared drive folders are shared with the SA email.
+
 ---
 
 ## Code fixes (no DB) — already deployed in branch
@@ -157,6 +168,7 @@ Run **only** after backup. Prefer scripts that use `create(..., checkfirst=True)
 - `add_tax_optimiser_*.py` (multiple; run in dependency order per script headers)
 - `add_user_feedback_tables.py`, `add_user_modification_tracking.py`
 - `add_advisory_register_entry.py` — **SEBI advisory register** (`/regulatory/advisory-register`)
+- `add_client_google_drive_folder.py` — client Drive folder columns + `suitability_report`
 
 **Avoid on prod until planned:**
 

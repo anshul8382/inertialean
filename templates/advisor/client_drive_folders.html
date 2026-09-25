@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Client Drive folders{% endblock %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Client Drive folders' %}
+  {% set mobile_back_url = url_for('main.dashboard') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <p class="text-muted small">Share each client folder with the app email, then paste the Folder ID. Full table on desktop.</p>
+  <p class="small mb-3"><strong>App email:</strong> <code>{{ sa_email or 'service_account.json missing' }}</code></p>
+</div>
+
+<div class="im-desktop-only container-fluid">
+  <div class="d-sm-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h1 class="h3 mb-1 text-gray-800"><i class="fas fa-folder-open"></i> Client Drive folders</h1>
+      <p class="text-muted small mb-0">
+        Ask the client (or your team) to share the Google Drive folder with
+        <code>{{ sa_email or 'the app service account' }}</code>
+        as Editor / Content manager, then paste the Folder ID below.
+        Prefer a <strong>Shared drive</strong> folder so suitability uploads succeed.
+      </p>
+    </div>
+  </div>
+
+  {% if not columns_ready %}
+  <div class="alert alert-warning" role="alert">
+    Run <code>python migrations/add_client_google_drive_folder.py</code> on this database.
+  </div>
+  {% endif %}
+
+  <div class="card shadow mb-4">
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0" data-mobile-table="scroll">
+          <thead class="thead-light">
+            <tr>
+              <th scope="col">Client</th>
+              <th scope="col">Folder ID</th>
+              <th scope="col">Note</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            <tr>
+              <td>
+                <a href="{{ url_for('clients.client_details', client_id=row.client.id) }}">{{ row.client.name }}</a>
+              </td>
+              <td colspan="3">
+                <form method="post" action="{{ url_for('client_google_drive.save_client_google_drive', client_id=row.client.id) }}" class="form-row align-items-end">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="next" value="{{ url_for('client_google_drive.list_client_drive_folders') }}">
+                  <div class="col-md-4 mb-2">
+                    <label class="small text-muted d-block" for="fid-{{ row.client.id }}">Folder ID or URL</label>
+                    <input id="fid-{{ row.client.id }}" class="form-control form-control-sm" type="text"
+                           name="google_drive_folder_id" value="{{ row.folder_id }}"
+                           placeholder="Paste folder ID or Drive URL" {% if not columns_ready %}disabled{% endif %}>
+                  </div>
+                  <div class="col-md-3 mb-2">
+                    <label class="small text-muted d-block" for="note-{{ row.client.id }}">Note</label>
+                    <input id="note-{{ row.client.id }}" class="form-control form-control-sm" type="text"
+                           name="google_drive_folder_note" value="{{ row.note }}"
+                           placeholder="Optional" {% if not columns_ready %}disabled{% endif %}>
+                  </div>
+                  <div class="col-md-5 mb-2">
+                    <button type="submit" class="btn btn-sm btn-primary" {% if not columns_ready %}disabled{% endif %}>Save</button>
+                    {% if row.folder_url %}
+                    <a class="btn btn-sm btn-outline-secondary" href="{{ row.folder_url }}" target="_blank" rel="noopener">
+                      <i class="fas fa-external-link-alt"></i> Open folder
+                    </a>
+                    {% endif %}
+                  </div>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="text-center text-muted py-4">No accessible clients.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

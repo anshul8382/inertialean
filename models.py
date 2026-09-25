@@ -32,6 +32,8 @@ class Client(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     advisor_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     is_active = db.Column(db.Boolean, default=True, nullable=False)  # Active vs inactive client engagement
+    google_drive_folder_id = db.Column(db.String(128), nullable=True)
+    google_drive_folder_note = db.Column(db.String(255), nullable=True)
     
     # Relationships
     portfolios = db.relationship('Portfolio', back_populates='client')

@@ -265,6 +265,93 @@
     </div>
     {% endif %}
 
+    <!-- Google Drive + Suitability -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fab fa-google-drive"></i> Google Drive &amp; Suitability
+                    </h6>
+                    {% if google_drive_folder_url %}
+                    <a class="btn btn-sm btn-outline-primary" href="{{ google_drive_folder_url }}" target="_blank" rel="noopener">
+                        <i class="fas fa-external-link-alt"></i> Open Drive folder
+                    </a>
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-lg-6 mb-3 mb-lg-0">
+                            <h6 class="text-primary mb-2">Link client folder</h6>
+                            <p class="small text-muted">
+                                Share the client’s Drive folder with
+                                <code>{{ google_drive_sa_email or 'the app service account' }}</code>
+                                as Editor / Content manager (prefer a Shared drive), then paste the Folder ID.
+                            </p>
+                            <form method="post" action="{{ url_for('client_google_drive.save_client_google_drive', client_id=client.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <div class="mb-2">
+                                    <label class="form-label small" for="google_drive_folder_id">Folder ID or URL</label>
+                                    <input class="form-control form-control-sm" type="text" id="google_drive_folder_id"
+                                           name="google_drive_folder_id"
+                                           value="{{ client.google_drive_folder_id or '' }}"
+                                           placeholder="Paste folder ID or Drive URL">
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small" for="google_drive_folder_note">Note (optional)</label>
+                                    <input class="form-control form-control-sm" type="text" id="google_drive_folder_note"
+                                           name="google_drive_folder_note"
+                                           value="{{ client.google_drive_folder_note or '' }}">
+                                </div>
+                                <button type="submit" class="btn btn-sm btn-primary">Save folder</button>
+                                <a class="btn btn-sm btn-link" href="{{ url_for('client_google_drive.list_client_drive_folders') }}">All clients</a>
+                            </form>
+                        </div>
+                        <div class="col-lg-6">
+                            <h6 class="text-primary mb-2">Suitability report</h6>
+                            <p class="small text-muted mb-2">
+                                Generates a Word-based report (asset classes from holdings; risk from client profile or
+                                <em>Moderately aggressive</em>), uploads it as an editable Google Doc into the linked folder.
+                            </p>
+                            <form method="post" action="{{ url_for('client_google_drive.generate_suitability_report', client_id=client.id) }}"
+                                  onsubmit="return confirm('Generate suitability report and upload to this client’s Drive folder?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-success" {% if not client.google_drive_folder_id %}disabled title="Link a Drive folder first"{% endif %}>
+                                    <i class="fas fa-file-word"></i> Generate suitability report
+                                </button>
+                            </form>
+                            {% if suitability_reports %}
+                            <div class="table-responsive mt-3">
+                                <table class="table table-sm mb-0">
+                                    <thead><tr><th>Report</th><th>Risk</th><th></th></tr></thead>
+                                    <tbody>
+                                    {% for r in suitability_reports %}
+                                    <tr>
+                                        <td class="small">{{ r.title }}<br><span class="text-muted">{{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else '' }}</span></td>
+                                        <td class="small">{{ r.risk_profile_used or '—' }}</td>
+                                        <td class="text-nowrap">
+                                            {% if r.web_view_link %}
+                                            <a class="btn btn-sm btn-outline-primary" href="{{ r.web_view_link }}" target="_blank" rel="noopener">Open</a>
+                                            {% endif %}
+                                            {% if r.drive_file_id %}
+                                            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('client_google_drive.download_suitability_report', client_id=client.id, report_id=r.id) }}">Download</a>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="small text-muted mt-2 mb-0">No suitability reports yet.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Billing and Agreement Card -->
     <div class="row mb-4">
         <div class="col-12">

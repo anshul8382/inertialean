@@ -290,6 +290,11 @@
                                 <i class="fas fa-book"></i> Advisory Register
                             </a></li>
                             {% endif %}
+                            {% if nav_can('client_google_drive.list_client_drive_folders') %}
+                            <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('client_google_drive.') %}active{% endif %}" href="{{ url_for('client_google_drive.list_client_drive_folders') }}">
+                                <i class="fab fa-google-drive"></i> Client Drive folders
+                            </a></li>
+                            {% endif %}
                         </ul>
                     </li>
                     {% endif %}

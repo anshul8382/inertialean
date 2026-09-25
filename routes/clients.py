@@ -1178,8 +1178,38 @@ def client_details(client_id):
     except Exception as e:
         logger.debug("Risk refresh banner skipped for client %s: %s", client_id, e)
 
+    # Google Drive + suitability reports (best-effort if migrations not applied)
+    google_drive_folder_url = ""
+    google_drive_sa_email = ""
+    suitability_reports = []
+    try:
+        from services.client_google_drive_service import (
+            client_drive_columns_ready,
+            folder_url,
+            service_account_email,
+            suitability_table_ready,
+        )
+
+        google_drive_sa_email = service_account_email()
+        if client_drive_columns_ready() and getattr(client, "google_drive_folder_id", None):
+            google_drive_folder_url = folder_url(client.google_drive_folder_id)
+        if suitability_table_ready():
+            from models.suitability_report import SuitabilityReport
+
+            suitability_reports = (
+                SuitabilityReport.query.filter_by(client_id=client_id)
+                .order_by(SuitabilityReport.created_at.desc())
+                .limit(20)
+                .all()
+            )
+    except Exception as e:
+        logger.debug("Drive/suitability context skipped for client %s: %s", client_id, e)
+
     return render_template('clients/client_details.html',
                          client=client,
+                         google_drive_folder_url=google_drive_folder_url,
+                         google_drive_sa_email=google_drive_sa_email,
+                         suitability_reports=suitability_reports,
                          ic_person_id=client.id,
                          ic_profile_seed=ic_profile_seed,
                          model_assignment=model_assignment,
