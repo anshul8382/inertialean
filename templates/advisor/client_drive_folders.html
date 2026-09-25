@@ -7,8 +7,8 @@
   {% set mobile_page_title = 'Client Drive folders' %}
   {% set mobile_back_url = url_for('main.dashboard') %}
   {% include 'partials/mobile/app_header.html' %}
-  <p class="text-muted small">Share each client folder with the app email, then paste the Folder ID. Full table on desktop.</p>
-  <p class="small mb-3"><strong>App email:</strong> <code>{{ sa_email or 'service_account.json missing' }}</code></p>
+  <p class="text-muted small mb-2">App email: <code>{{ sa_email or 'service_account.json missing' }}</code></p>
+  <p class="text-muted small">{{ missing_rows|length }} client(s) still need a folder ID. Use desktop for the full editor.</p>
 </div>
 
 <div class="im-desktop-only container-fluid">
@@ -16,10 +16,9 @@
     <div>
       <h1 class="h3 mb-1 text-gray-800"><i class="fas fa-folder-open"></i> Client Drive folders</h1>
       <p class="text-muted small mb-0">
-        Ask the client (or your team) to share the Google Drive folder with
+        Share each folder with
         <code>{{ sa_email or 'the app service account' }}</code>
-        as Editor / Content manager, then paste the Folder ID below.
-        Prefer a <strong>Shared drive</strong> folder so suitability uploads succeed.
+        as Content manager (prefer a Shared drive), then paste the Folder ID.
       </p>
     </div>
   </div>
@@ -31,6 +30,12 @@
   {% endif %}
 
   <div class="card shadow mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 font-weight-bold text-primary">
+        Clients without a folder ID
+        <span class="badge badge-secondary font-weight-normal">{{ missing_rows|length }}</span>
+      </h6>
+    </div>
     <div class="card-body p-0">
       <div class="table-responsive">
         <table class="table table-sm table-hover mb-0" data-mobile-table="scroll">
@@ -43,7 +48,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for row in rows %}
+            {% for row in missing_rows %}
             <tr>
               <td>
                 <a href="{{ url_for('clients.client_details', client_id=row.client.id) }}">{{ row.client.name }}</a>
@@ -55,32 +60,85 @@
                   <div class="col-md-4 mb-2">
                     <label class="small text-muted d-block" for="fid-{{ row.client.id }}">Folder ID or URL</label>
                     <input id="fid-{{ row.client.id }}" class="form-control form-control-sm" type="text"
-                           name="google_drive_folder_id" value="{{ row.folder_id }}"
+                           name="google_drive_folder_id" value=""
                            placeholder="Paste folder ID or Drive URL" {% if not columns_ready %}disabled{% endif %}>
                   </div>
                   <div class="col-md-3 mb-2">
                     <label class="small text-muted d-block" for="note-{{ row.client.id }}">Note</label>
                     <input id="note-{{ row.client.id }}" class="form-control form-control-sm" type="text"
-                           name="google_drive_folder_note" value="{{ row.note }}"
+                           name="google_drive_folder_note" value=""
                            placeholder="Optional" {% if not columns_ready %}disabled{% endif %}>
                   </div>
                   <div class="col-md-5 mb-2">
                     <button type="submit" class="btn btn-sm btn-primary" {% if not columns_ready %}disabled{% endif %}>Save</button>
-                    {% if row.folder_url %}
-                    <a class="btn btn-sm btn-outline-secondary" href="{{ row.folder_url }}" target="_blank" rel="noopener">
-                      <i class="fas fa-external-link-alt"></i> Open folder
-                    </a>
-                    {% endif %}
                   </div>
                 </form>
               </td>
             </tr>
             {% else %}
-            <tr><td colspan="4" class="text-center text-muted py-4">No accessible clients.</td></tr>
+            <tr>
+              <td colspan="4" class="text-center text-muted py-4">
+                All accessible clients already have a Drive folder ID.
+              </td>
+            </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
+    </div>
+  </div>
+
+  <div class="card shadow mb-4">
+    <div class="card-header py-3">
+      <h6 class="m-0 font-weight-bold text-primary">Edit an existing folder ID</h6>
+    </div>
+    <div class="card-body">
+      {% if linked_rows %}
+      <div class="form-group mb-3" style="max-width: 28rem;">
+        <label class="small text-muted d-block" for="edit-client-select">Client</label>
+        <select id="edit-client-select" class="form-control form-control-sm"
+                onchange="if (this.value) { window.location = '{{ url_for('client_google_drive.list_client_drive_folders') }}?edit=' + this.value; }">
+          {% for row in linked_rows %}
+          <option value="{{ row.client.id }}"
+            {% if edit_row and edit_row.client.id == row.client.id %}selected{% endif %}>
+            {{ row.client.name }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      {% if edit_row %}
+      <form method="post" action="{{ url_for('client_google_drive.save_client_google_drive', client_id=edit_row.client.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ url_for('client_google_drive.list_client_drive_folders', edit=edit_row.client.id) }}">
+        <div class="form-row align-items-end">
+          <div class="col-md-5 mb-2">
+            <label class="small text-muted d-block" for="edit-fid">Folder ID or URL</label>
+            <input id="edit-fid" class="form-control form-control-sm" type="text"
+                   name="google_drive_folder_id" value="{{ edit_row.folder_id }}"
+                   {% if not columns_ready %}disabled{% endif %}>
+          </div>
+          <div class="col-md-3 mb-2">
+            <label class="small text-muted d-block" for="edit-note">Note</label>
+            <input id="edit-note" class="form-control form-control-sm" type="text"
+                   name="google_drive_folder_note" value="{{ edit_row.note }}"
+                   {% if not columns_ready %}disabled{% endif %}>
+          </div>
+          <div class="col-md-4 mb-2">
+            <button type="submit" class="btn btn-sm btn-primary" {% if not columns_ready %}disabled{% endif %}>Update</button>
+            {% if edit_row.folder_url %}
+            <a class="btn btn-sm btn-outline-secondary" href="{{ edit_row.folder_url }}" target="_blank" rel="noopener">
+              <i class="fas fa-external-link-alt"></i> Open folder
+            </a>
+            {% endif %}
+            <a class="btn btn-sm btn-link" href="{{ url_for('clients.client_details', client_id=edit_row.client.id) }}">Client page</a>
+          </div>
+        </div>
+      </form>
+      {% endif %}
+      {% else %}
+      <p class="text-muted mb-0">No clients have a folder ID yet — add one in the list above.</p>
+      {% endif %}
     </div>
   </div>
 </div>

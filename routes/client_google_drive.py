@@ -41,20 +41,34 @@ def list_client_drive_folders():
 
     clients = get_accessible_clients_ordered()
     ready = client_drive_columns_ready()
-    rows = []
+    missing_rows = []
+    linked_rows = []
     for c in clients:
-        fid = getattr(c, "google_drive_folder_id", None) if ready else None
-        rows.append(
-            {
-                "client": c,
-                "folder_id": fid or "",
-                "folder_url": folder_url(fid) if fid else "",
-                "note": (getattr(c, "google_drive_folder_note", None) or "") if ready else "",
-            }
-        )
+        fid = (getattr(c, "google_drive_folder_id", None) or "").strip() if ready else ""
+        row = {
+            "client": c,
+            "folder_id": fid,
+            "folder_url": folder_url(fid) if fid else "",
+            "note": (getattr(c, "google_drive_folder_note", None) or "") if ready else "",
+        }
+        if fid:
+            linked_rows.append(row)
+        else:
+            missing_rows.append(row)
+
+    edit_id = request.args.get("edit", type=int)
+    edit_row = None
+    if linked_rows:
+        if edit_id:
+            edit_row = next((r for r in linked_rows if r["client"].id == edit_id), None)
+        if edit_row is None:
+            edit_row = linked_rows[0]
+
     return render_template(
         "advisor/client_drive_folders.html",
-        rows=rows,
+        missing_rows=missing_rows,
+        linked_rows=linked_rows,
+        edit_row=edit_row,
         sa_email=service_account_email(),
         columns_ready=ready,
     )

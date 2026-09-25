@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-09-25T10:07:44.340783+00:00
+Generated: 2026-09-25T12:40:19.146632+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -373,7 +373,7 @@ def download_lead_proposal(
 
 ### `SEC-INT-002` — Export/download endpoint `download_regulatory_client_master_archive` is not audit-logged
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/main.py:1720`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/main.py:1721`
 
 Functions named export/download/csv/excel/backup typically return client data in bulk. Without an audit log entry, an internal user downloading the entire client base is invisible.
 
@@ -445,12 +445,12 @@ logger.debug("KYC PAN backfill skipped lead=%s", lead_id, exc_info=True)
 
 ### `SEC-INT-005` — `routes/client_google_drive.py` has 3 client-scoped route(s) without an explicit access check
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_client_scope • **CWE:** CWE-639 • **Location:** `routes/client_google_drive.py:63`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_client_scope • **CWE:** CWE-639 • **Location:** `routes/client_google_drive.py:77`
 
 Routes that take `<int:client_id>` should verify the current user can see that client. Without it, an advisor can read other advisors' clients by guessing IDs.
 
 ```
-L63: @client_google_drive_bp.route(; L99: @client_google_drive_bp.route(; L140: @client_google_drive_bp.route(
+L77: @client_google_drive_bp.route(; L113: @client_google_drive_bp.route(; L154: @client_google_drive_bp.route(
 ```
 
 **Fix:** Add `@client_access_required` (from `access_control`) to each route, OR add a `before_request` hook on this blueprint that calls `can_access_client(client_id)` and aborts 403 if not. Also call `services.audit_service.log_audit_event('client_view', client_id=client_id)` so internal access is recorded for SEBI.
