@@ -187,7 +187,7 @@
 <body class="modern-app">
     {% set dashboards_nav_active = current_user.is_authenticated and request.endpoint and (
         request.endpoint == 'main.list_monthly_investments' or
-        request.endpoint in ('clients.list_review_schedules', 'main.list_review_schedules') or
+        request.endpoint in ('clients.list_review_schedules', 'clients.review_report', 'clients.review_cashflow_projection', 'main.list_review_schedules') or
         (request.endpoint.startswith('workflows.') and request.endpoint != 'workflows.workflow_dashboard')
     ) %}
     {% block navbar %}
@@ -438,8 +438,13 @@
                             </a></li>
                             {% endif %}
                             {% if nav_can('clients.list_review_schedules') %}
-                            <li><a class="dropdown-item {% if request.endpoint in ('clients.list_review_schedules', 'main.list_review_schedules') %}active{% endif %}" href="{{ url_for('clients.list_review_schedules') }}">
-                                <i class="fas fa-calendar-check"></i> Reviews
+                            <li><a class="dropdown-item {% if request.endpoint in ('clients.list_review_schedules', 'clients.review_report', 'main.list_review_schedules') %}active{% endif %}" href="{{ url_for('clients.review_report') }}">
+                                <i class="fas fa-clipboard-list"></i> Client reviews
+                            </a></li>
+                            {% endif %}
+                            {% if current_user.email and current_user.email|lower == 'anshul@equities4wealth.com' and nav_can('clients.review_cashflow_projection') %}
+                            <li><a class="dropdown-item {% if request.endpoint == 'clients.review_cashflow_projection' %}active{% endif %}" href="{{ url_for('clients.review_cashflow_projection') }}">
+                                <i class="fas fa-chart-line"></i> Review cashflow
                             </a></li>
                             {% endif %}
                         </ul>

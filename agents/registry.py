@@ -207,6 +207,17 @@ SCHEDULED_AGENT_LIKE_JOBS: List[Dict[str, Any]] = [
         "group": "scheduled_jobs",
         "airflow_dags": ["task_auto_close_daily"],
     },
+    {
+        "name": "review_billing_projection_weekly",
+        "display_name": "Review Cashflow Projection (weekly)",
+        "description": (
+            "Sunday email: next 12 months review dues with agreement fee estimates "
+            "on current values (anshul@equities4wealth.com only)"
+        ),
+        "service": "services.review_billing_projection_service.send_review_billing_projection_weekly",
+        "group": "scheduled_jobs",
+        "airflow_dags": ["review_billing_projection_weekly"],
+    },
 ]
 
 # Standalone tooling (not AgentRun / DataIntegrityIssue)

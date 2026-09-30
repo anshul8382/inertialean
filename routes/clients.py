@@ -239,6 +239,27 @@ def review_report():
     return redirect(url_for("clients.list_review_schedules", bucket="report"))
 
 
+@clients_bp.route("/review-cashflow")
+@login_required
+@handle_errors
+def review_cashflow_projection():
+    """12-month review dues + agreement fee estimates (Anshul only)."""
+    from flask import abort
+    from services.review_billing_projection_service import (
+        build_projection_from_db,
+        user_may_view_review_cashflow,
+    )
+
+    if not user_may_view_review_cashflow(current_user):
+        abort(403)
+    projection = build_projection_from_db()
+    return render_template(
+        "review_cashflow_projection.html",
+        projection=projection,
+        today=date.today(),
+    )
+
+
 @clients_bp.route("/<int:client_id>/review-schedule", methods=["GET", "POST"])
 @login_required
 @handle_errors

@@ -63,6 +63,7 @@ _MENU_ENDPOINTS = {
     "workflows.list_workflows",
     "clients.list_review_schedules",
     "clients.review_report",
+    "clients.review_cashflow_projection",
     "rec_execution.dashboard",
     "rec_execution.by_client",
     "rec_execution.sla_settings",

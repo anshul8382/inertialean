@@ -251,6 +251,22 @@ def task_bni_ty_notes_weekly():
                 "BNI TY Notes: no admin/ops_manager recipients with email configured"
             )
 
+
+def task_review_billing_projection_weekly():
+    from services.review_billing_projection_service import (
+        send_review_billing_projection_weekly,
+    )
+
+    app = _app()
+    with app.app_context():
+        result = send_review_billing_projection_weekly(dry_run=False)
+        print(f"review_billing_projection_weekly {result}")
+        if not result.get("sent"):
+            raise RuntimeError(
+                f"Review cashflow weekly email failed to send: {result}"
+            )
+
+
 TASKS = {
     "data_integrity_daily": task_data_integrity_daily,
     "data_integrity_weekly": task_data_integrity_weekly,
@@ -274,6 +290,7 @@ TASKS = {
     "cashflow_trade_integrity_nightly": task_cashflow_trade_integrity_nightly,
     "client_data_integrity_nightly": task_client_data_integrity_nightly,
     "bni_ty_notes_weekly": task_bni_ty_notes_weekly,
+    "review_billing_projection_weekly": task_review_billing_projection_weekly,
 }
 
 
