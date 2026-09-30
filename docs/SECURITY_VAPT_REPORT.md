@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-09-25T12:42:49.754397+00:00
+Generated: 2026-09-30T02:11:50.804745+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -373,7 +373,7 @@ def download_lead_proposal(
 
 ### `SEC-INT-002` — Export/download endpoint `download_regulatory_client_master_archive` is not audit-logged
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/main.py:1721`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/main.py:1728`
 
 Functions named export/download/csv/excel/backup typically return client data in bulk. Without an audit log entry, an internal user downloading the entire client base is invisible.
 

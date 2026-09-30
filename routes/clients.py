@@ -137,9 +137,9 @@ def add_client():
 def list_review_schedules():
     from access_control import accessible_client_ids, scope_query_to_accessible_clients
     from services.review_list_service import (
-        UPCOMING_DAYS,
         classify_review_workflows,
         normalize_bucket,
+        workflows_for_bucket,
     )
 
     today = date.today()
@@ -168,22 +168,42 @@ def list_review_schedules():
     due_workflows = classified["due"]
     upcoming_workflows = classified["upcoming"]
     upcoming_end = classified["upcoming_end"]
+    upcoming_days = classified["upcoming_days"]
 
-    if bucket == "due":
-        board_workflows = due_workflows
-        board_title = "Due reviews (overdue + today)"
-    elif bucket == "upcoming":
-        board_workflows = upcoming_workflows
-        board_title = f"Upcoming reviews (next {UPCOMING_DAYS} days)"
-    elif bucket == "open":
-        board_workflows = open_workflows
-        board_title = "Open reviews"
-    elif bucket == "all":
-        board_workflows = all_workflows
-        board_title = "All review workflows"
-    else:
+    bucket_titles = {
+        "current": "Current — in progress & due",
+        "priority": "Priority — initiated & due",
+        "this_month": "Due this month",
+        "next_month": "Due next month",
+        "suggested_close": "Suggested to close — obsolete",
+        "date_missing": "Date missing",
+        "due": "Due (in progress + initiated)",
+        "upcoming": "This month + next month",
+        "open": "Board open reviews (through next month)",
+        "all": "All review workflows",
+        "schedules": "Active review schedules",
+    }
+    if bucket in ("board",):
         board_workflows = None
         board_title = None
+    elif bucket == "schedules":
+        board_workflows = None
+        board_title = bucket_titles["schedules"]
+    elif bucket == "all":
+        board_workflows = all_workflows
+        board_title = bucket_titles["all"]
+    else:
+        board_workflows = workflows_for_bucket(classified, bucket)
+        board_title = bucket_titles.get(bucket, "Reviews")
+
+    board_total = (
+        len(classified["current"])
+        + len(classified["priority"])
+        + len(classified["this_month"])
+        + len(classified["next_month"])
+        + len(classified["suggested_close"])
+        + len(classified["date_missing"])
+    )
 
     return render_template(
         "review_schedules_list.html",
@@ -193,14 +213,30 @@ def list_review_schedules():
         due_workflows=due_workflows,
         upcoming_workflows=upcoming_workflows,
         overdue_workflows=due_workflows,
+        current_workflows=classified["current"],
+        priority_workflows=classified["priority"],
+        this_month_workflows=classified["this_month"],
+        next_month_workflows=classified["next_month"],
+        suggested_close_workflows=classified["suggested_close"],
+        date_missing_workflows=classified["date_missing"],
+        month_end=classified["month_end"],
         board_workflows=board_workflows,
         board_title=board_title,
+        board_total=board_total,
         bucket=bucket,
-        upcoming_days=UPCOMING_DAYS,
+        upcoming_days=upcoming_days,
         upcoming_end=upcoming_end,
         today=today,
         timedelta=timedelta,
     )
+
+
+@clients_bp.route("/review-report")
+@login_required
+@handle_errors
+def review_report():
+    """Same due-board digest as the daily consolidated email (in-app)."""
+    return redirect(url_for("clients.list_review_schedules", bucket="report"))
 
 
 @clients_bp.route("/<int:client_id>/review-schedule", methods=["GET", "POST"])

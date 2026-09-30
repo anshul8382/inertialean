@@ -62,6 +62,7 @@ _MENU_ENDPOINTS = {
     # Dashboards (monthly investments list, generic workflows, review schedules)
     "workflows.list_workflows",
     "clients.list_review_schedules",
+    "clients.review_report",
     "rec_execution.dashboard",
     "rec_execution.by_client",
     "rec_execution.sla_settings",
@@ -1085,7 +1086,13 @@ def workflow_cleanup():
 @main.route("/review-schedules")
 @login_required
 def list_review_schedules():
-    return redirect(url_for("clients.list_review_schedules"))
+    return redirect(url_for("clients.review_report"))
+
+
+@main.route("/review-report")
+@login_required
+def review_report():
+    return redirect(url_for("clients.review_report"))
 
 
 @main.route("/client/<int:client_id>/review-schedule")

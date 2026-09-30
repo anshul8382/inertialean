@@ -124,7 +124,7 @@ If you only need one entry, use manual trade entry where enabled.""",
     "reviews_period_analysis": """For review analytics:
 
 1. Open **Maintenance → Reviews → Period analysis V2** for review metrics.
-2. Use **Dashboards → Reviews** for schedules/status.
+2. Use **Dashboards → Client reviews** for the due-board report (same sections as the daily digest email).
 3. For client-level details, open the client and review workflow/status sections.""",
     "user_manual_pdf": """To open the user manual PDF:
 

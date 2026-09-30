@@ -157,8 +157,8 @@ NAV_GROUPS: Tuple[NavGroup, ...] = (
                     active_match=("main.list_monthly_investments",)),
             NavItem("workflows.list_workflows", "All workflows", "fas fa-list",
                     active_match=("workflows.",)),
-            NavItem("clients.list_review_schedules", "Reviews", "fas fa-calendar-check",
-                    active_match=("clients.list_review_schedules", "main.list_review_schedules")),
+            NavItem("clients.review_report", "Client reviews", "fas fa-clipboard-list",
+                    active_match=("clients.review_report", "clients.list_review_schedules", "main.list_review_schedules")),
         ),
     ),
     NavGroup(

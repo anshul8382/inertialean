@@ -901,9 +901,15 @@ def send_alert_advisor_digests() -> Dict[str, Any]:
 
 
 def send_review_workflow_daily_digests() -> Dict[str, Any]:
-    """Open ReviewWorkflows: per client-advisor + consolidated manager/admin."""
+    """Open ReviewWorkflows: per client-advisor + consolidated manager/admin.
+
+    Uses review_list_service classification:
+    current / priority / this_month / next_month / suggested_close / date_missing.
+    One primary review per client on the board; obsolete rows listed separately.
+    """
     from models import Client, ReviewWorkflow
     from sqlalchemy.orm import joinedload
+    from services.review_list_service import classify_review_workflows
 
     reviews = (
         ReviewWorkflow.query.options(
@@ -913,11 +919,61 @@ def send_review_workflow_daily_digests() -> Dict[str, Any]:
         .order_by(ReviewWorkflow.status, ReviewWorkflow.updated_at.desc())
         .all()
     )
+    classified = classify_review_workflows(reviews)
+
+    section_defs = [
+        ("current", "1. Current — in progress & due", classified["current"]),
+        ("priority", "2. Priority — initiated & due", classified["priority"]),
+        ("this_month", "3. This month", classified["this_month"]),
+        ("next_month", "4. Next month", classified["next_month"]),
+        ("suggested_close", "5. Suggested to close (obsolete)", classified["suggested_close"]),
+        ("date_missing", "6. Date missing", classified["date_missing"]),
+    ]
+
+    def _row(rw) -> List[str]:
+        cname = getattr(rw.client, "name", None) or f"Client {rw.client_id}"
+        due = rw.review_date.strftime("%Y-%m-%d") if getattr(rw, "review_date", None) else "—"
+        return [cname, rw.status or "—", due, str(getattr(rw, "id", ""))]
+
+    def _sections_html(pairs_or_rows, for_advisor: bool) -> str:
+        parts = []
+        for _key, title, rows in section_defs:
+            if for_advisor:
+                allowed_ids = {id(rw) for rw, _ in pairs_or_rows}
+                filtered = [rw for rw in rows if id(rw) in allowed_ids]
+            else:
+                filtered = rows
+            if not filtered:
+                continue
+            table_rows = []
+            for rw in filtered[:80]:
+                if for_advisor:
+                    table_rows.append(_row(rw))
+                else:
+                    adv = _advisor_for_client(getattr(rw, "client", None))
+                    r = _row(rw)
+                    table_rows.append([r[0], r[1], getattr(adv, "username", None) or "—", r[2], r[3]])
+            headers = (
+                ["Client", "Status", "Due", "Review ID"]
+                if for_advisor
+                else ["Client", "Status", "Advisor", "Due", "Review ID"]
+            )
+            parts.append(f"<h3 style='margin:16px 0 8px;font-size:14px'>{html.escape(title)} ({len(filtered)})</h3>")
+            parts.append(_html_table(headers, table_rows))
+        if not parts:
+            return "<p>No open reviews in the due horizon.</p>"
+        return "".join(parts)
 
     by_advisor: Dict[int, List[Any]] = defaultdict(list)
     unassigned: List[Any] = []
+    board_ids = {
+        id(rw)
+        for key in ("current", "priority", "this_month", "next_month", "suggested_close", "date_missing")
+        for rw in classified[key]
+    }
     for rw in reviews:
-        # Always group by the client's advisor (book ownership)
+        if id(rw) not in board_ids:
+            continue
         adv = _advisor_for_client(getattr(rw, "client", None))
         if adv and getattr(adv, "id", None) and (adv.email or "").strip():
             by_advisor[adv.id].append((rw, adv))
@@ -927,53 +983,41 @@ def send_review_workflow_daily_digests() -> Dict[str, Any]:
     sent = 0
     for advisor_id, pairs in by_advisor.items():
         advisor = pairs[0][1]
-        rows = []
-        for rw, _ in pairs[:150]:
-            cname = getattr(rw.client, "name", None) or f"Client {rw.client_id}"
-            updated = ""
-            if getattr(rw, "updated_at", None):
-                updated = rw.updated_at.strftime("%Y-%m-%d")
-            rows.append([cname, rw.status or "—", updated, str(getattr(rw, "id", ""))])
-        html = _wrap(
-            f"Open client reviews — {advisor.username or advisor.email}",
-            f"{len(pairs)} open review(s) (initiated/sent/meeting).",
-            _html_table(["Client", "Status", "Updated", "Review ID"], rows),
+        body = _sections_html(pairs, for_advisor=True)
+        html_body = _wrap(
+            f"Client reviews — {advisor.username or advisor.email}",
+            f"{len(pairs)} review(s) on your due board (through end of next month).",
+            body,
         )
         if _send_html(
             f"Client reviews ({len(pairs)}) — {datetime.utcnow().strftime('%Y-%m-%d')}",
-            html,
+            html_body,
             [advisor.email.strip()],
         ):
             sent += 1
 
-    cons_rows = []
-    for rw in reviews[:200]:
-        cname = getattr(rw.client, "name", None) or f"Client {rw.client_id}"
-        adv = _advisor_for_client(rw.client)
-        cons_rows.append(
-            [
-                cname,
-                rw.status or "—",
-                getattr(adv, "username", None) or "—",
-                str(rw.id),
-            ]
-        )
+    cons_body = _sections_html(None, for_advisor=False)
     if unassigned:
-        cons_rows.append(["—", f"{len(unassigned)} unassigned", "—", "—"])
-
+        cons_body += f"<p>{len(unassigned)} unassigned on board.</p>"
+    board_count = sum(len(classified[k]) for k in ("current", "priority", "this_month", "next_month", "suggested_close", "date_missing"))
     cons_html = _wrap(
         "Client reviews — consolidated",
-        f"Open reviews: {len(reviews)}. Advisor emails: {sent}.",
-        _html_table(["Client", "Status", "Advisor", "Review ID"], cons_rows),
+        f"Board rows: {board_count} (open workflows loaded: {len(reviews)}). Advisor emails: {sent}. Horizon through {classified['upcoming_end']}.",
+        cons_body,
     )
     cons_ok = _send_html(
-        f"[Consolidated] Client reviews ({len(reviews)}) — {datetime.utcnow().strftime('%Y-%m-%d')}",
+        f"[Consolidated] Client reviews ({board_count}) — {datetime.utcnow().strftime('%Y-%m-%d')}",
         cons_html,
         _manager_admin_emails(),
     )
     return {
         "reviews": len(reviews),
+        "board_rows": board_count,
         "advisor_emails_sent": sent,
         "consolidated_sent": cons_ok,
         "unassigned": len(unassigned),
+        "current": len(classified["current"]),
+        "priority": len(classified["priority"]),
+        "suggested_close": len(classified["suggested_close"]),
+        "date_missing": len(classified["date_missing"]),
     }
