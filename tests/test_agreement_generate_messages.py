@@ -21,6 +21,21 @@ def test_generate_reports_missing_template():
     assert "not found" in (err or "").lower()
 
 
+def test_generate_reports_missing_pdf_template_file():
+    from routes.agreements import generate_agreement_docx_and_pdf
+
+    agreement = SimpleNamespace(id=1)
+    template = SimpleNamespace(
+        template_type="pdf",
+        template_file_path="/static/uploads/templates/missing.pdf",
+    )
+    with patch("routes.agreements._template_readable_path", return_value=None):
+        docx, pdf, err = generate_agreement_docx_and_pdf(agreement, template, {})
+    assert docx is None and pdf is None
+    assert "not found" in (err or "").lower()
+    assert "pdf" in (err or "").lower()
+
+
 def test_preserve_leegality_in_agreement_data():
     from services.leegality_service import LEEGALITY_META_KEY, preserve_leegality_in_agreement_data
 

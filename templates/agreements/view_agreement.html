@@ -15,7 +15,11 @@
                                 Template:
                                 <a href="{{ url_for('agreements.view_template', template_id=template.id) }}">
                                     <strong>{{ template.name }}</strong>
-                                </a> |
+                                </a>
+                                {% if not is_word_template %}
+                                    <span class="badge bg-secondary">{{ template.template_type|upper }}</span>
+                                {% endif %}
+                                |
                             {% else %}
                                 <span class="badge bg-info">Existing Agreement (Recorded)</span> | 
                             {% endif %}
@@ -157,19 +161,50 @@
                                 </div>
                                 <div class="card-body">
                                     <div class="d-grid gap-2">
-                                        {% if pdf_downloadable %}
-                                            <a href="{{ url_for('agreements.download_agreement', agreement_id=agreement.id) }}" 
-                                               class="btn btn-primary">
-                                                <i class="fas fa-download"></i> Download PDF
-                                            </a>
-                                        {% elif agreement.generated_pdf_path %}
-                                            <button class="btn btn-secondary" disabled title="PDF path is recorded but the file is missing on the server">
-                                                <i class="fas fa-file-pdf"></i> PDF File Missing
+                                        {% if is_word_template %}
+                                        <p class="form-text small mb-0">
+                                            1) Edit Variables → Word file&nbsp;
+                                            2) Download / edit / re-upload Word&nbsp;
+                                            3) Create PDF&nbsp;
+                                            4) Send to Leegality
+                                        </p>
+                                        {% endif %}
+
+                                        <a href="{{ url_for('agreements.fill_agreement_variables', agreement_id=agreement.id) }}"
+                                           class="btn btn-info">
+                                            <i class="fas fa-magic"></i>
+                                            {% if docx_downloadable %}Regenerate Word from variables{% else %}Generate Word from variables{% endif %}
+                                        </a>
+
+                                        {% if is_word_template or docx_downloadable %}
+                                        <a href="{{ url_for('agreements.download_agreement_docx', agreement_id=agreement.id) }}"
+                                           class="btn btn-success">
+                                            <i class="fas fa-file-word"></i> Download DOCX
+                                        </a>
+                                        {% endif %}
+
+                                        {% if is_word_template or docx_downloadable %}
+                                        <form method="POST"
+                                              action="{{ url_for('agreements.upload_agreement_docx', agreement_id=agreement.id) }}"
+                                              enctype="multipart/form-data"
+                                              class="border rounded p-2">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                            <label class="form-label small mb-1" for="agreement-docx-upload">
+                                                Re-upload edited Word
+                                            </label>
+                                            <input class="form-control form-control-sm mb-2"
+                                                   type="file"
+                                                   id="agreement-docx-upload"
+                                                   name="agreement_docx"
+                                                   accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                                   required>
+                                            <button type="submit" class="btn btn-outline-success btn-sm w-100">
+                                                <i class="fas fa-upload"></i> Save Word
                                             </button>
-                                        {% else %}
-                                            <button class="btn btn-secondary" disabled>
-                                                <i class="fas fa-file-pdf"></i> PDF Not Generated
-                                            </button>
+                                            <p class="form-text small mb-0 mt-1">
+                                                After offline edits. Clears the old PDF until you recreate it.
+                                            </p>
+                                        </form>
                                         {% endif %}
 
                                         {% if docx_downloadable and not pdf_downloadable %}
@@ -181,6 +216,21 @@
                                                     <i class="fas fa-file-pdf"></i> Create PDF from Word
                                                 </button>
                                             </form>
+                                        {% endif %}
+
+                                        {% if pdf_downloadable %}
+                                            <a href="{{ url_for('agreements.download_agreement', agreement_id=agreement.id) }}"
+                                               class="btn btn-primary">
+                                                <i class="fas fa-download"></i> Download PDF
+                                            </a>
+                                        {% elif agreement.generated_pdf_path %}
+                                            <button class="btn btn-secondary" disabled title="PDF path is recorded but the file is missing on the server">
+                                                <i class="fas fa-file-pdf"></i> PDF File Missing
+                                            </button>
+                                        {% elif not docx_downloadable %}
+                                            <button class="btn btn-secondary" disabled>
+                                                <i class="fas fa-file-pdf"></i> PDF Not Generated
+                                            </button>
                                         {% endif %}
 
                                         {% if not pdf_downloadable %}
@@ -202,35 +252,34 @@
                                                     <i class="fas fa-upload"></i> Save PDF
                                                 </button>
                                                 <p class="form-text small mb-0 mt-1">
-                                                    Export DOCX → PDF on your computer, then upload here (not under Replace Word).
+                                                    {% if is_word_template %}
+                                                        Fallback if server PDF conversion is unavailable.
+                                                    {% else %}
+                                                        This template is not Word — upload the signed PDF here.
+                                                    {% endif %}
                                                 </p>
                                             </form>
                                         {% endif %}
-                                        
-                                        <a href="{{ url_for('agreements.download_agreement_docx', agreement_id=agreement.id) }}" 
-                                           class="btn btn-success">
-                                            <i class="fas fa-file-word"></i> Download DOCX
-                                        </a>
-                                        
-                                        <a href="{{ url_for('agreements.update_agreement_details', agreement_id=agreement.id) }}" 
+
+                                        <a href="{{ url_for('agreements.update_agreement_details', agreement_id=agreement.id) }}"
                                            class="btn btn-warning">
                                             <i class="fas fa-pencil-alt"></i> Update Agreement Details
                                         </a>
-                                        
-                                        <a href="{{ url_for('agreements.fill_agreement_variables', agreement_id=agreement.id) }}" 
-                                           class="btn btn-info">
+
+                                        <a href="{{ url_for('agreements.fill_agreement_variables', agreement_id=agreement.id) }}"
+                                           class="btn btn-outline-info btn-sm">
                                             <i class="fas fa-edit"></i> Edit Variables
                                         </a>
-                                        
+
                                         <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#statusModal">
                                             <i class="fas fa-flag"></i> Update Status
                                         </button>
-                                        
+
                                         {% if not agreement.generated_pdf_path %}
                                             <button class="btn btn-outline-primary" onclick="findPdfFile()">
                                                 <i class="fas fa-search"></i> Find PDF File
                                             </button>
-                                            
+
                                             <button class="btn btn-outline-secondary" onclick="testPdfGeneration()">
                                                 <i class="fas fa-cog"></i> Test PDF Generation
                                             </button>

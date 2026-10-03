@@ -1667,7 +1667,7 @@ def fill_agreement_variables(agreement_id):
                     agreement, template, agreement_data
                 )
                 if docx_path:
-                    agreement.docx_path = docx_path
+                    agreement.docx_path = _agreement_file_web_path(docx_path) or docx_path
                 if pdf_path:
                     agreement.generated_pdf_path = pdf_path
                 if docx_path or pdf_path:
@@ -1712,7 +1712,7 @@ def fill_agreement_variables(agreement_id):
                 agreement, template, agreement_data
             )
             if docx_path:
-                agreement.docx_path = docx_path
+                agreement.docx_path = _agreement_file_web_path(docx_path) or docx_path
             if pdf_path:
                 agreement.generated_pdf_path = pdf_path
             if docx_path or pdf_path:
@@ -1779,6 +1779,8 @@ def view_agreement(agreement_id):
     agreement_data = json.loads(agreement.agreement_data) if agreement.agreement_data else {}
     pdf_downloadable = bool(agreement_pdf_abs_path(agreement.generated_pdf_path))
     docx_downloadable = bool(agreement_docx_abs_path(agreement.docx_path))
+    template_type = (template.template_type or '').lower() if template else ''
+    is_word_template = template_type in ('doc', 'docx')
     from services.leegality_service import (
         get_leegality_meta,
         is_configured as leegality_configured,
@@ -1793,6 +1795,7 @@ def view_agreement(agreement_id):
                          agreement_data=agreement_data,
                          pdf_downloadable=pdf_downloadable,
                          docx_downloadable=docx_downloadable,
+                         is_word_template=is_word_template,
                          leegality_meta=leegality_meta,
                          leegality_configured=leegality_configured(),
                          signing_contact=signing_contact)
@@ -2020,7 +2023,7 @@ def update_agreement_details(agreement_id):
                         agreement, template, agreement_data
                     )
                     if docx_path:
-                        agreement.docx_path = docx_path
+                        agreement.docx_path = _agreement_file_web_path(docx_path) or docx_path
                     if pdf_path:
                         agreement.generated_pdf_path = pdf_path
                     if docx_path or pdf_path:
@@ -2095,16 +2098,43 @@ def download_agreement(agreement_id):
 @agreements.route('/agreements/<int:agreement_id>/download-docx')
 @login_required
 def download_agreement_docx(agreement_id):
-    """Download the DOCX version of an agreement"""
+    """Download the filled/uploaded DOCX, or generate one from the Word template."""
     try:
         agreement = Agreement.query.get_or_404(agreement_id)
+
+        # Prefer an already filled or user-reuploaded Word file
+        existing_docx = agreement_docx_abs_path(agreement.docx_path)
+        if existing_docx:
+            from services.audit_service import log_data_export
+
+            cid = agreement.lead.client_id if agreement.lead else None
+            log_data_export(
+                "agreement_docx",
+                client_id=cid,
+                resource_type="agreement",
+                resource_id=agreement_id,
+            )
+            return send_file(
+                existing_docx,
+                as_attachment=True,
+                download_name=f"agreement_{agreement.id}_{datetime.now().strftime('%Y%m%d')}.docx",
+                mimetype=(
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                ),
+            )
+
         if not agreement.template_id:
             flash('This agreement has no template (recorded PDF only).', 'error')
             return redirect(url_for('agreements.view_agreement', agreement_id=agreement_id))
         template = AgreementTemplate.query.get_or_404(agreement.template_id)
 
         if template.template_type not in ('doc', 'docx'):
-            flash('This agreement template is not a Word document.', 'error')
+            flash(
+                'This agreement template is not a Word document. '
+                'Replace the template with a .docx (Templates → Replace Word file), '
+                'or upload an edited Word file for this agreement.',
+                'error',
+            )
             return redirect(url_for('agreements.view_agreement', agreement_id=agreement_id))
 
         # Check if user has access to this agreement
@@ -2144,8 +2174,7 @@ def download_agreement_docx(agreement_id):
         docx_path = generate_agreement_docx(agreement, template, sub_vars)
 
         if docx_path and os.path.exists(docx_path):
-            # Update agreement with DOCX path
-            agreement.docx_path = docx_path
+            agreement.docx_path = _agreement_file_web_path(docx_path) or docx_path
             db.session.commit()
 
             from services.audit_service import log_data_export
@@ -2179,6 +2208,43 @@ def download_agreement_docx(agreement_id):
         logger.error(f"Error downloading DOCX: {str(e)}")
         flash('Error downloading DOCX file.', 'error')
         return redirect(url_for('agreements.list_templates'))
+
+
+@agreements.route('/agreements/<int:agreement_id>/upload-docx', methods=['POST'])
+@login_required
+@handle_errors
+def upload_agreement_docx(agreement_id):
+    """Replace this agreement's Word file after offline edits (then Create PDF → Leegality)."""
+    from services.secure_upload import save_upload_to_directory
+
+    agreement = Agreement.query.get_or_404(agreement_id)
+    uploaded = request.files.get('agreement_docx')
+    if not uploaded or not getattr(uploaded, 'filename', ''):
+        flash('Choose a Word (.docx) file to upload.', 'error')
+        return redirect(url_for('agreements.view_agreement', agreement_id=agreement.id))
+    try:
+        upload_dir = os.path.join(current_app.root_path, 'static', 'uploads', 'agreements')
+        abs_path, _rel = save_upload_to_directory(
+            uploaded,
+            upload_dir,
+            allowed_extensions={'.doc', '.docx'},
+            prefix=f'agreement_{agreement.id}_',
+        )
+    except ValueError as exc:
+        flash(str(exc), 'error')
+        return redirect(url_for('agreements.view_agreement', agreement_id=agreement.id))
+
+    agreement.docx_path = _agreement_file_web_path(abs_path) or abs_path
+    # Edited Word invalidates prior PDF until converted again
+    agreement.generated_pdf_path = None
+    if agreement.status in ('draft', None, ''):
+        agreement.status = 'generated'
+    db.session.commit()
+    flash(
+        'Edited Word file saved. Use “Create PDF from Word”, then send to Leegality.',
+        'success',
+    )
+    return redirect(url_for('agreements.view_agreement', agreement_id=agreement.id))
 
 @agreements.route('/agreements/<int:agreement_id>/status', methods=['POST'])
 @login_required
@@ -2469,9 +2535,22 @@ def generate_agreement_docx_and_pdf(agreement, template, variables):
                 'Install LibreOffice headless (soffice) on the server.'
             )
     else:
+        tpl_abs = _template_readable_path(template)
+        if not tpl_abs:
+            return (
+                None,
+                None,
+                f'Template file not found on server ({template.template_type}): '
+                f'{template.template_file_path}. Re-upload the template, or use a Word '
+                '(.docx) template and regenerate.',
+            )
         pdf_path = generate_agreement_pdf(agreement, template, variables)
         if not pdf_path:
-            err = 'PDF generation failed for this template type.'
+            err = (
+                f'PDF generation failed for template type '
+                f'“{template.template_type}”. Prefer a Word (.docx) template; '
+                'PDF/HTML/TXT templates need the file on disk and WeasyPrint/ReportLab.'
+            )
     return docx_path, pdf_path, err
 
 
