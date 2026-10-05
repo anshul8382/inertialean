@@ -5,7 +5,7 @@ Single source of truth for recommendation data access
 Database-first approach - eliminates session/DB confusion
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional, Set
 from datetime import datetime
 from models import (
     Client, Recommendation, RecommendationSession, 
@@ -13,6 +13,8 @@ from models import (
 )
 from extensions import db
 from unified_recommendation_service import UnifiedRecommendationService
+from services.recommendation_multi_asset_service import normalize_asset_class_name
+from sqlalchemy import or_
 import logging
 import json
 import re
@@ -565,4 +567,75 @@ class RecommendationDataService:
             db.session.rollback()
             self.logger.error(f"Error deleting session: {e}")
             raise
+
+    @staticmethod
+    def resolve_asset_class_ids(asset_class_names: Iterable[str]) -> Set[int]:
+        """Resolve normalized class names to AssetClass IDs (incl. legacy aliases)."""
+        ids: Set[int] = set()
+        for raw in asset_class_names or []:
+            name = normalize_asset_class_name(raw) or (raw or "").strip()
+            if not name:
+                continue
+            candidates = [name]
+            if name == "Fixed Income":
+                candidates.extend(["Debt", "FIXED INCOME", "Fixed Income"])
+            elif name == "REITs":
+                candidates.extend(["REIT/InvIT", "REIT/INVIT", "REITs", "REIT"])
+            for candidate in candidates:
+                obj = AssetClass.query.filter_by(name=candidate).first()
+                if obj:
+                    ids.add(obj.id)
+        return ids
+
+    def delete_stale_section1_for_classes(
+        self,
+        session_id: int,
+        keep_security_ids: Set[int],
+        asset_class_names: Iterable[str],
+        *,
+        commit: bool = False,
+    ) -> int:
+        """
+        Delete session recommendations in the given asset classes that are not
+        in keep_security_ids (unchecked / removed Section 1 rows).
+
+        Does not touch other asset classes. Returns number of rows deleted.
+        Caller commits unless commit=True.
+        """
+        class_ids = self.resolve_asset_class_ids(asset_class_names)
+        if not class_ids:
+            self.logger.warning(
+                "delete_stale_section1_for_classes: no AssetClass IDs for %s "
+                "(session=%s); skipped deletion",
+                list(asset_class_names or []),
+                session_id,
+            )
+            return 0
+
+        q = Recommendation.query.join(Security, Recommendation.security_id == Security.id).filter(
+            Recommendation.session_id == session_id,
+            or_(
+                Recommendation.asset_class_id.in_(class_ids),
+                (Recommendation.asset_class_id.is_(None)) & (Security.asset_class_id.in_(class_ids)),
+            ),
+        )
+        if keep_security_ids:
+            q = q.filter(~Recommendation.security_id.in_(list(keep_security_ids)))
+
+        to_delete = q.all()
+        for rec in to_delete:
+            db.session.delete(rec)
+        deleted = len(to_delete)
+        if deleted:
+            self.logger.info(
+                "Deleted %s stale Section 1 recommendation(s) "
+                "(session=%s, classes=%s, keep=%s)",
+                deleted,
+                session_id,
+                sorted(class_ids),
+                sorted(keep_security_ids) if keep_security_ids else [],
+            )
+        if commit and deleted:
+            db.session.commit()
+        return deleted
 

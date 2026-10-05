@@ -6,7 +6,8 @@ OpsTask: event on assignee primary calendar (deadline + optional second event fo
         Standalone Google "Reminders" / Keep are separate products; this app uses Calendar events only.
 Meeting: one event on an organizer's calendar (creator or first participant with OAuth)
          with attendees = selected team + client/lead emails so everyone gets the invite.
-         New meetings request a Google Meet (conferenceData); the join URL is copied into meeting.notes.
+         Calendar payload is only title, start/end, and attendees (no notes/description).
+         New meetings request a Google Meet (conferenceData); the join URL is stored in app meeting.notes.
 
 Google Tasks (default list) for ops tasks is implemented in google_tasks_service.py using
 the same user refresh token and OAuth client.
@@ -528,7 +529,7 @@ def sync_ops_task_google_calendar(task_id: int) -> None:
 
 
 def quick_add_google_calendar_url_for_meeting(meeting: Meeting, details_url: str) -> str:
-    """Browser URL to pre-fill Google Calendar (no API); dates encoded as UTC for Google."""
+    """Browser URL to pre-fill Google Calendar (no API); title + times only (no notes/details)."""
     if not meeting or not meeting.meeting_date:
         return ""
     dur = int(meeting.duration) if meeting.duration else 60
@@ -536,20 +537,11 @@ def quick_add_google_calendar_url_for_meeting(meeting: Meeting, details_url: str
         dur = 15
     start = meeting.meeting_date
     end = start + timedelta(minutes=dur)
-    fmt = "%Y%m%dT%H%M%SZ"
     dates = f"{_fmt_google_quick_add_utc(start)}/{_fmt_google_quick_add_utc(end)}"
     title = quote(f"Meeting · {meeting.title or 'Meeting'}")
-    parts = []
-    if meeting.description:
-        parts.append(meeting.description.strip())
-    if meeting.notes:
-        parts.append(meeting.notes.strip())
-    if details_url:
-        parts.append(details_url)
-    body = quote("\n\n".join(parts)[:1800])
     return (
         "https://calendar.google.com/calendar/render?action=TEMPLATE"
-        f"&text={title}&dates={dates}&details={body}"
+        f"&text={title}&dates={dates}"
     )
 
 
@@ -632,23 +624,23 @@ def _collect_meeting_attendee_emails(meeting: Meeting, organizer: User) -> List[
 def _meeting_event_payload(
     meeting: Meeting, organizer: User, *, request_meet: bool = False
 ) -> Dict[str, Any]:
+    """
+    Build Google Calendar event body.
+
+    Only title, start/end, and attendees are sent. App notes/description and
+    Inertia URLs stay in the app; Meet join URL is written back to meeting.notes
+    after create, not pushed as calendar description.
+    """
     dur = int(meeting.duration) if meeting.duration else 60
     if dur < 15:
         dur = 15
     start = meeting.meeting_date
     end = start + timedelta(minutes=dur)
-    desc_parts: List[str] = []
-    if meeting.description:
-        desc_parts.append(meeting.description.strip())
-    if meeting.notes:
-        desc_parts.append("Notes:\n" + meeting.notes.strip())
-    view_url = _meeting_view_url(meeting.id)
-    if view_url:
-        desc_parts.append(f"Open in Inertia: {view_url}")
     attendees = _collect_meeting_attendee_emails(meeting, organizer)
     body: Dict[str, Any] = {
         "summary": f"Meeting · {meeting.title}"[:1024],
-        "description": "\n\n".join(desc_parts)[:8000] if desc_parts else "",
+        # Explicit empty so PATCH clears any previously synced notes/description.
+        "description": "",
         "start": {"dateTime": _rfc3339_for_google(start), "timeZone": "UTC"},
         "end": {"dateTime": _rfc3339_for_google(end), "timeZone": "UTC"},
         "attendees": attendees,
@@ -861,24 +853,10 @@ def sync_meeting_google_calendar(meeting_id: int) -> None:
             meeting.google_calendar_organizer_user_id = organizer.id
         meet_url = _extract_meet_url_from_event(data)
         if meet_url:
+            # Store Meet link in the app only — never push notes back to Google.
             new_notes = _merge_google_meet_into_notes(meeting.notes, meet_url)
             if new_notes != (meeting.notes or "").strip():
                 meeting.notes = new_notes
-                payload2 = _meeting_event_payload(meeting, organizer, request_meet=False)
-                r2 = requests.patch(
-                    f"{CALENDAR_EVENTS_BASE}/{meeting.google_calendar_event_id}",
-                    json=payload2,
-                    headers=headers,
-                    params={"sendUpdates": "all"},
-                    timeout=30,
-                )
-                if r2.status_code not in (200,):
-                    logger.warning(
-                        "Google Calendar PATCH (notes after Meet) failed meeting=%s status=%s body=%s",
-                        meeting_id,
-                        r2.status_code,
-                        r2.text[:500],
-                    )
 
         db.session.commit()
     except Exception:

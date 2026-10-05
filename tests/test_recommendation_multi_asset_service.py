@@ -3,8 +3,10 @@
 import pytest
 
 from services.recommendation_multi_asset_service import (
+    asset_classes_from_record_payload,
     default_action_for_class_change,
     future_weight_within_class,
+    keep_security_ids_from_payload,
     merge_section1_recommendations,
     parse_selected_asset_classes,
     signed_section1_sum,
@@ -63,6 +65,39 @@ def test_merge_replace_selected_keeps_other_classes():
     )
     ids = {r["security_id"] for r in merged}
     assert ids == {9, 2}
+
+
+def test_merge_replace_selected_drops_deselected_in_multi_class():
+    """Save/Record checked-only: drop unchecked Equity + FI, keep untouched Gold."""
+    existing = [
+        {"security_id": 1, "asset_class": "Equity", "amount": 1000},
+        {"security_id": 2, "asset_class": "Equity", "amount": 400},
+        {"security_id": 3, "asset_class": "Fixed Income", "amount": -500},
+        {"security_id": 4, "asset_class": "Gold", "amount": 200},
+    ]
+    incoming = [
+        {"security_id": 1, "asset_class": "Equity", "amount": 1000},
+        # 2 deselected Equity; 3 deselected FI
+    ]
+    merged = merge_section1_recommendations(
+        existing,
+        incoming,
+        selected_classes=["Equity", "Fixed Income"],
+        replace_selected=True,
+    )
+    assert {r["security_id"] for r in merged} == {1, 4}
+
+
+def test_asset_classes_from_record_payload_includes_row_classes():
+    # Top-level asset_class is only Equity (legacy UI), but payload has FI rows too
+    recs = [
+        {"security_id": 1, "asset_class": "Equity"},
+        {"security_id": 2, "asset_class": "Debt"},
+    ]
+    classes = asset_classes_from_record_payload(recs, "Equity")
+    assert classes == ["Equity", "Fixed Income"]
+    assert keep_security_ids_from_payload(recs) == {1, 2}
+    assert keep_security_ids_from_payload([{"security_id": "x"}]) == set()
 
 
 def test_parse_selected_asset_classes_aliases():

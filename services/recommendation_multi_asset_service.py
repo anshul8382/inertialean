@@ -92,6 +92,36 @@ def _security_key(rec: Dict) -> Optional[int]:
     return sid if sid else None
 
 
+def asset_classes_from_record_payload(
+    recommendations: Optional[Sequence[Dict]] = None,
+    *extra_class_sources: Any,
+) -> List[str]:
+    """
+    Asset classes touched by a Record/Save payload.
+
+    Includes each row's asset_class plus any selected_asset_classes / asset_class
+    fields so deselected rows in multi-class editors are pruned even when the
+    top-level asset_class is only the first selected class.
+    """
+    from_rows: List[str] = []
+    for rec in recommendations or []:
+        if isinstance(rec, dict) and rec.get("asset_class"):
+            from_rows.append(rec.get("asset_class"))
+    return parse_selected_asset_classes(*extra_class_sources, from_rows)
+
+
+def keep_security_ids_from_payload(recommendations: Optional[Sequence[Dict]] = None) -> Set[int]:
+    """Security IDs that must remain after Record/Save (checked Section 1 rows)."""
+    keep: Set[int] = set()
+    for rec in recommendations or []:
+        if not isinstance(rec, dict):
+            continue
+        sid = _security_key(rec)
+        if sid:
+            keep.add(sid)
+    return keep
+
+
 def merge_section1_recommendations(
     existing: Sequence[Dict],
     incoming: Sequence[Dict],
@@ -106,7 +136,8 @@ def merge_section1_recommendations(
     that are not in incoming. This is the add-security path.
 
     replace_selected=True: drop existing rows in selected_classes that are not
-    in incoming (recalculate / exclusions). Other classes are always kept.
+    in incoming (recalculate / exclusions / save checked-only). Other classes
+    are always kept.
     """
     selected_norm = {
         normalize_asset_class_name(c) for c in (selected_classes or []) if normalize_asset_class_name(c)

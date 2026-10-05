@@ -275,6 +275,34 @@ class RecommendationService:
                     if rec.get('security_id') == security_id_int:
                         found = rec
                         break
+
+            # Fallback: build a minimal row from DB if not present in regenerated S2/S3
+            # (state S2/S3 can be empty after session slim / asset-class filter mismatch).
+            if not found:
+                security = Security.query.get(security_id_int)
+                if security:
+                    from services.recommendation_trade_normalizer import apply_section1_signed_display
+                    price = float(security.current_price) if security.current_price else 0.0
+                    ac_name = (
+                        security.asset_class.name if security.asset_class else (asset_class or 'Equity')
+                    )
+                    found = apply_section1_signed_display({
+                        'security_id': security_id_int,
+                        'symbol': security.symbol,
+                        'security_name': security.name,
+                        'asset_class': ac_name,
+                        'amount': 0.0,
+                        'quantity': 0,
+                        'action': 'HOLD',
+                        'current_price': price,
+                        'target_price': price,
+                        'reason': 'Moved from Section 2/3',
+                        'is_user_modified': True,
+                    })
+                    self.logger.info(
+                        "Move-to-section1: security %s not in regenerated S2/S3; built from DB",
+                        security_id_int,
+                    )
             
             if found:
                 # Simple: Just append (make a copy) - preserve original values from Section 2/3

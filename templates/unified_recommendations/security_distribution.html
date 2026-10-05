@@ -1175,6 +1175,36 @@ async function moveToSection1(securityId, sourceSection, event) {
     } catch (e) {
         console.warn('Unable to parse source allocation/price for move:', e);
     }
+
+    // Snapshot live Section 1/2/3 so the server can keep remaining S2/S3 rows
+    // (Flask session strips S2/S3; regenerate alone often returns []).
+    function collectSectionRowsFromDom(tbodyId) {
+        const tbody = document.getElementById(tbodyId);
+        if (!tbody) return [];
+        const rows = [];
+        tbody.querySelectorAll('tr[data-security-id]').forEach(function (row) {
+            const sid = parseInt(row.getAttribute('data-security-id'), 10);
+            if (!sid) return;
+            const amountInput = row.querySelector('.amount-input');
+            const quantityInput = row.querySelector('.quantity-input');
+            const futureInput = row.querySelector('.future-weight-input');
+            const symbolEl = row.querySelector('td strong') || row.querySelector('td:nth-child(2)');
+            rows.push({
+                security_id: sid,
+                symbol: symbolEl ? (symbolEl.textContent || '').trim() : '',
+                security_name: row.getAttribute('data-security-name') || '',
+                asset_class: getRowAssetClass(row),
+                amount: amountInput ? (parseFloat(amountInput.value) || 0) : 0,
+                quantity: quantityInput ? (parseInt(quantityInput.value, 10) || 0) : 0,
+                future_weight: futureInput ? (parseFloat(futureInput.value) || 0) : 0,
+                current_price: parsePriceFromRowPriceCell(row) || 0
+            });
+        });
+        return rows;
+    }
+    const liveSection1 = collectSectionRowsFromDom('section1-tbody');
+    const liveSection2 = collectSectionRowsFromDom('section2-tbody');
+    const liveSection3 = collectSectionRowsFromDom('section3-tbody');
     
     // Find the button that was clicked
     let button = null;
@@ -1220,6 +1250,12 @@ async function moveToSection1(securityId, sourceSection, event) {
                 security_ids: [securityId],
                 manually_selected: userSelectedIds,    // Send FULL list including this one
                 manually_rejected: userRejectedIds,    // Send FULL list
+                selected_asset_classes: (typeof selectedAssetClasses !== 'undefined' && selectedAssetClasses.length)
+                    ? selectedAssetClasses
+                    : undefined,
+                current_section1_data: liveSection1,
+                current_section2_data: liveSection2,
+                current_section3_data: liveSection3,
                 // Optional hint (UI only today): allocation amount to deploy for this moved security.
                 suggested_amounts: sourceAllocationAmt ? { [securityId]: sourceAllocationAmt } : {}
             })
@@ -1285,13 +1321,32 @@ async function moveToSection1(securityId, sourceSection, event) {
                 });
                 updateSection1Table(normalizedS1);
             }
-            if (data.section_2_hot_stocks !== undefined) {
+            // Prefer API lists (now keep live S2/S3 minus moved). Never wipe a non-empty
+            // table with an empty regenerate response — remove only the moved row.
+            if (Array.isArray(data.section_2_hot_stocks) && data.section_2_hot_stocks.length > 0) {
                 console.log('Updating Section 2 with', data.section_2_hot_stocks.length, 'items');
                 updateSection2Table(data.section_2_hot_stocks);
+            } else if (sourceSection === 2) {
+                const row = _findSourceRow(2);
+                if (row) row.remove();
             }
-            if (data.section_3_other !== undefined) {
+            if (Array.isArray(data.section_3_other) && data.section_3_other.length > 0) {
                 console.log('Updating Section 3 with', data.section_3_other.length, 'items');
                 updateSection3Table(data.section_3_other);
+            } else if (sourceSection === 3) {
+                const row = _findSourceRow(3);
+                if (row) row.remove();
+            } else if (Array.isArray(data.section_3_other) && data.section_3_other.length === 0) {
+                // Explicit empty only when live snapshot was already the last row
+                const remainingLive = liveSection3.filter(function (r) {
+                    return parseInt(r.security_id, 10) !== securityId;
+                });
+                if (remainingLive.length === 0) {
+                    updateSection3Table([]);
+                } else {
+                    // Keep remaining live rows if API incorrectly returned empty
+                    updateSection3Table(remainingLive);
+                }
             }
             
             // Update totals
@@ -2903,7 +2958,11 @@ async function recordRecommendations() {
                 client_id: clientId,
                 session_id: sessionId,
                 asset_class: selectedAssetClass,
-                recommendations: recommendations  // Send all recommendations with their asset_classes
+                // Multi-class: prune deselected rows in every selected class, not only the first
+                selected_asset_classes: (typeof selectedAssetClasses !== 'undefined' && selectedAssetClasses.length)
+                    ? selectedAssetClasses
+                    : [selectedAssetClass],
+                recommendations: recommendations  // Checked Section 1 rows (keep-set) with asset_class per row
             })
         });
 

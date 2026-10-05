@@ -1888,13 +1888,32 @@ class UnifiedRecommendationService:
         
         # Get all securities: current holdings + model securities
         current_holdings = current_state.get('current_holdings', {})
-        held_ids = list(current_holdings.keys())
-        model_ids = list(model_securities.keys())
+        held_ids = []
+        for k in current_holdings.keys():
+            try:
+                held_ids.append(int(k))
+            except (TypeError, ValueError):
+                continue
+        model_ids = []
+        for k in model_securities.keys():
+            try:
+                model_ids.append(int(k))
+            except (TypeError, ValueError):
+                continue
         
         # Combine all exclusions: Section 1 + Section 2 + manually_selected + manually_rejected
-        exclude_ids = set(recommended_ids + hot_stock_ids)
+        exclude_ids = set()
+        for sid in list(recommended_ids or []) + list(hot_stock_ids or []):
+            try:
+                exclude_ids.add(int(sid))
+            except (TypeError, ValueError):
+                continue
         if excluded_security_ids:
-            exclude_ids.update(excluded_security_ids)
+            for sid in excluded_security_ids:
+                try:
+                    exclude_ids.add(int(sid))
+                except (TypeError, ValueError):
+                    continue
         
         self.logger.info(f"Section 3: Found {len(held_ids)} holdings, {len(model_ids)} model securities. Excluding {len(exclude_ids)} total (S1: {len(recommended_ids)}, S2: {len(hot_stock_ids)}, additional: {len(excluded_security_ids) if excluded_security_ids else 0})")
         

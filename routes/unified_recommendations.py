@@ -33,8 +33,10 @@ from services.asset_allocation_service import (
     session_has_allocation_edits,
 )
 from services.recommendation_multi_asset_service import (
+    asset_classes_from_record_payload,
     build_session_asset_row,
     default_action_for_class_change,
+    keep_security_ids_from_payload,
     merge_section1_recommendations,
     normalize_asset_class_name,
     parse_selected_asset_classes,
@@ -3354,11 +3356,13 @@ def update_security_allocation():
                     }
                     updated_recommendations.append(new_rec)
 
+        # Checked-only save: drop deselected/deleted rows in selected classes so
+        # session Section 1 matches the editor (email Record uses the same keep-set).
         merged_section_1 = merge_section1_recommendations(
             existing_full,
             updated_recommendations,
             selected_classes=selected_asset_classes,
-            replace_selected=False,
+            replace_selected=True,
         )
         logger.info(
             f"update_security_allocation: selected_asset_classes={selected_asset_classes}, "
@@ -3433,11 +3437,38 @@ def update_security_allocation():
         # Mark session as modified
         _set_pending_recommendations(pending_data)
         session.modified = True
+
+        # Prune DB rows for deselected securities so email preview (DB-backed) matches Save
+        deleted_count = 0
+        try:
+            session_id = (
+                pending_data.get('edit_session_id')
+                or session.get('current_recommendation_session_id')
+                or pending_data.get('session_id')
+            )
+            if session_id and selected_asset_classes:
+                keep_ids = keep_security_ids_from_payload(updated_recommendations)
+                data_service = RecommendationDataService()
+                deleted_count = data_service.delete_stale_section1_for_classes(
+                    int(session_id),
+                    keep_ids,
+                    selected_asset_classes,
+                    commit=True,
+                )
+        except Exception as prune_err:
+            logger.warning(
+                "update_security_allocation: could not prune stale DB recommendations: %s",
+                prune_err,
+            )
         
         logger.info(f"Security allocation updated: {len(merged_section_1)} total recommendations (client_id={pending_data.get('client_id', 'unknown')})")
         logger.info(f"Asset class totals: {asset_class_totals}")
         
-        return jsonify({'success': True, 'message': 'Security allocation saved successfully'})
+        return jsonify({
+            'success': True,
+            'message': 'Security allocation saved successfully',
+            'deleted_count': deleted_count,
+        })
         
     except Exception as e:
         logger.error(f"Error updating security allocation: {str(e)}")
@@ -4219,62 +4250,100 @@ def api_move_to_section1():
         if not session_id or not security_ids:
             return jsonify({'success': False, 'error': 'Missing required parameters'}), 400
         
-        # Get selected asset class from session for filtering Sections 2 and 3
-        selected_asset_class = session.get('selected_asset_class')
-        if 'pending_recommendations' in session:
-            selected_asset_class = session.get('pending_recommendations', {}).get('selected_asset_class') or selected_asset_class
+        pending_data = session.get('pending_recommendations', {}) or {}
+
+        # Multi-class: do not filter regenerate to only the first selected class
+        selected_asset_classes = parse_selected_asset_classes(
+            data.get('selected_asset_classes'),
+            pending_data.get('selected_asset_classes'),
+            session.get('selected_asset_classes'),
+            data.get('selected_asset_class'),
+            pending_data.get('selected_asset_class'),
+            session.get('selected_asset_class'),
+        )
+        # Single-class filter only when exactly one class is in scope; else regenerate all classes
+        asset_class_filter = selected_asset_classes[0] if len(selected_asset_classes) == 1 else None
         
-        # Get current Section 1 data to preserve user-edited values (from request or session)
+        # Prefer live editor Section 1 from the request; fall back to session
         current_section1_data = data.get('current_section1_data')
-        pending_data = session.get('pending_recommendations', {})
         if not current_section1_data and pending_data:
             current_section1_data = pending_data.get('section_1_recommended', [])
         if not current_section1_data:
             current_section1_data = []
+
+        # Live Section 2/3 from the browser (Flask session strips S2/S3 for size)
+        current_section2_data = data.get('current_section2_data') or []
+        current_section3_data = data.get('current_section3_data') or []
         
         # Use new service layer
         recommendation_service = RecommendationService()
         result = recommendation_service.move_to_section1(
             session_id, 
             security_ids, 
-            asset_class=selected_asset_class,
+            asset_class=asset_class_filter,
             current_section1_data=current_section1_data
         )
         
         if not result.get('success'):
             return jsonify(result)
         
-        # Preserve Section 2/3 state from session (so moving to sec1 doesn't reset sec2/sec3)
-        section_2_from_session = pending_data.get('section_2_hot_stocks', [])
-        section_3_from_session = pending_data.get('section_3_other', [])
         moved_ids = set(int(sid) for sid in security_ids)
-        s2_by_id = {int(r.get('security_id')): r for r in section_2_from_session if r.get('security_id')}
-        s3_by_id = {int(r.get('security_id')): r for r in section_3_from_session if r.get('security_id')}
-        
-        def merge_with_session(regenerated_list, session_by_id):
-            """For each item in regenerated list, copy over session fields for same security_id (preserve user state)."""
+
+        def _sid(rec):
+            try:
+                return int(rec.get('security_id'))
+            except (TypeError, ValueError):
+                return None
+
+        def _keep_unmoved(rows):
             out = []
-            for rec in regenerated_list:
-                rec = dict(rec)
-                sid = rec.get('security_id')
-                if sid is not None:
-                    sid = int(sid)
-                    if sid in session_by_id and sid not in moved_ids:
-                        old = session_by_id[sid]
-                        for key in ('future_weight', 'action', 'amount', 'quantity', 'current_weight', 'target_weight'):
-                            if key in old and old[key] is not None:
-                                rec[key] = old[key]
+            for rec in rows or []:
+                if not isinstance(rec, dict):
+                    continue
+                sid = _sid(rec)
+                if sid is None or sid in moved_ids:
+                    continue
                 out.append(rec)
             return out
+
+        # Authoritative S2/S3: live editor rows minus moved. Regenerated lists are
+        # a fallback only — session S2/S3 are always empty (slimmed for MySQL),
+        # and regenerate can return [] after a move which wiped the UI.
+        live_s2 = _keep_unmoved(current_section2_data)
+        live_s3 = _keep_unmoved(current_section3_data)
+        regenerated_s2 = result.get('section_2_hot_stocks') or []
+        regenerated_s3 = result.get('section_3_other') or []
+
+        if live_s2:
+            result['section_2_hot_stocks'] = live_s2
+        elif regenerated_s2:
+            result['section_2_hot_stocks'] = [
+                r for r in regenerated_s2 if _sid(r) not in moved_ids
+            ]
+        else:
+            result['section_2_hot_stocks'] = []
+
+        if live_s3:
+            result['section_3_other'] = live_s3
+        elif regenerated_s3:
+            result['section_3_other'] = [
+                r for r in regenerated_s3 if _sid(r) not in moved_ids
+            ]
+        else:
+            # Last resort: keep whatever was still in pending (usually empty)
+            result['section_3_other'] = _keep_unmoved(
+                pending_data.get('section_3_other') or []
+            )
         
-        result['section_2_hot_stocks'] = merge_with_session(
-            result.get('section_2_hot_stocks', []), s2_by_id)
-        result['section_3_other'] = merge_with_session(
-            result.get('section_3_other', []), s3_by_id)
-        
-        # Update session with merged result so subsequent requests see preserved state
+        # Update session Section 1; S2/S3 are slimmed away on write but kept in response
         if pending_data:
             pending_data['section_1_recommended'] = result.get('section_1_recommended', [])
+            pending_data['section_1_all'] = merge_section1_recommendations(
+                pending_data.get('section_1_all') or pending_data.get('section_1_recommended') or [],
+                result.get('section_1_recommended') or [],
+                selected_classes=selected_asset_classes or None,
+                replace_selected=False,
+            )
             pending_data['section_2_hot_stocks'] = result['section_2_hot_stocks']
             pending_data['section_3_other'] = result['section_3_other']
             pending_data['security_recommendations'] = pending_data.get('section_1_recommended', [])
@@ -5995,7 +6064,7 @@ def record_recommendations():
         session['current_recommendation_session_id'] = recommendation_session.id
         session.modified = True
         
-        # Get asset_class object for asset_class_id
+        # Get asset_class object for asset_class_id (primary / legacy fallback)
         from models import AssetClass
         # Normalize to DB asset class names
         asset_class_obj = AssetClass.query.filter_by(name=asset_class).first()
@@ -6004,31 +6073,46 @@ def record_recommendations():
             asset_class_obj = AssetClass.query.filter_by(name='Debt').first()
         if not asset_class_obj and asset_class == 'REITs':
             asset_class_obj = AssetClass.query.filter_by(name='REIT/InvIT').first() or AssetClass.query.filter_by(name='REIT/INVIT').first()
-        
-        # Delete recommendations no longer in Section 1 (unchecked or removed by user)
-        # Payload contains the securities to KEEP; delete any for this session+asset_class not in payload
-        payload_security_ids = {int(r.get('security_id')) for r in recommendations if r.get('security_id')}
-        deleted_count = 0
-        if asset_class_obj:
-            from sqlalchemy import or_
-            # Match by asset_class_id, or legacy rows with NULL asset_class_id (match via Security.asset_class_id)
-            q = Recommendation.query.join(Security, Recommendation.security_id == Security.id).filter(
-                Recommendation.session_id == recommendation_session.id,
-                or_(
-                    Recommendation.asset_class_id == asset_class_obj.id,
-                    (Recommendation.asset_class_id.is_(None)) & (Security.asset_class_id == asset_class_obj.id)
+
+        def _resolve_asset_class_obj(name):
+            ac_name = _normalize_asset_class_name(name or asset_class or 'Equity')
+            obj = AssetClass.query.filter_by(name=ac_name).first()
+            if not obj and ac_name == 'Fixed Income':
+                obj = AssetClass.query.filter_by(name='Debt').first()
+            if not obj and ac_name == 'REITs':
+                obj = (
+                    AssetClass.query.filter_by(name='REIT/InvIT').first()
+                    or AssetClass.query.filter_by(name='REIT/INVIT').first()
                 )
+            return obj, ac_name
+
+        # Classes to sync: selected classes + each row's class (multi-class editors)
+        classes_to_sync = asset_classes_from_record_payload(
+            recommendations,
+            data.get('selected_asset_classes'),
+            asset_class,
+            session.get('selected_asset_classes'),
+            (session.get('pending_recommendations') or {}).get('selected_asset_classes'),
+        )
+        if not classes_to_sync and asset_class:
+            classes_to_sync = [asset_class]
+
+        payload_security_ids = keep_security_ids_from_payload(recommendations)
+        data_service = RecommendationDataService()
+        deleted_count = data_service.delete_stale_section1_for_classes(
+            recommendation_session.id,
+            payload_security_ids,
+            classes_to_sync,
+            commit=False,
+        )
+        if deleted_count:
+            logger.info(
+                "Record: Deleted %s recommendations no longer in Section 1 "
+                "(session=%s, classes=%s)",
+                deleted_count,
+                recommendation_session.id,
+                classes_to_sync,
             )
-            if payload_security_ids:
-                q = q.filter(~Recommendation.security_id.in_(payload_security_ids))
-            to_delete = q.all()
-            for rec_to_del in to_delete:
-                db.session.delete(rec_to_del)
-                deleted_count += 1
-            if deleted_count:
-                logger.info(f"Record: Deleted {deleted_count} recommendations no longer in Section 1 (session={recommendation_session.id}, asset_class={asset_class})")
-        elif asset_class:
-            logger.warning(f"Record: Skipped deletion - asset_class '{asset_class}' not found in DB; some removals may not persist")
         
         # Record each recommendation to database
         recorded_count = 0
@@ -6050,6 +6134,7 @@ def record_recommendations():
                     print(f"DEBUG: Skipping recommendation with no action for security_id: {security_id}")
                     continue
                 trade_quantity = rec.get('quantity', 0)
+                rec_asset_class_obj, rec_asset_class = _resolve_asset_class_obj(rec.get('asset_class'))
                 
                 # Check if recommendation already exists (from auto-save)
                 # IMPORTANT: Include session_id to prevent duplicates when editing sec1
@@ -6072,11 +6157,11 @@ def record_recommendations():
                 # Get reason from recommendation data, or use a default
                 reason = rec.get('reason', '')
                 if not reason:
-                    reason = f"Recommended for {asset_class}"
+                    reason = f"Recommended for {rec_asset_class}"
                 
                 # Build notes with reason and other details
                 notes_parts = [f"Reason: {reason}"]
-                notes_parts.append(f"Asset Class: {asset_class}")
+                notes_parts.append(f"Asset Class: {rec_asset_class}")
                 notes_parts.append(f"Amount: {rec.get('amount', 0)}")
                 if rec.get('current_quantity') is not None:
                     notes_parts.append(f"Current Qty: {rec.get('current_quantity', 0)}")
@@ -6090,7 +6175,11 @@ def record_recommendations():
                     existing_rec.quantity = trade_quantity
                     existing_rec.target_price = target_price
                     existing_rec.is_user_modified = True
-                    existing_rec.asset_class_id = asset_class_obj.id if asset_class_obj else None
+                    existing_rec.asset_class_id = (
+                        rec_asset_class_obj.id if rec_asset_class_obj else (
+                            asset_class_obj.id if asset_class_obj else None
+                        )
+                    )
                     existing_rec.notes = notes
                     existing_rec.session_id = recommendation_session.id
                     existing_rec.batch_created_at = datetime.now()
@@ -6101,7 +6190,11 @@ def record_recommendations():
                     recommendation = Recommendation(
                         client_id=client_id,
                         security_id=security_id,
-                        asset_class_id=asset_class_obj.id if asset_class_obj else None,
+                        asset_class_id=(
+                            rec_asset_class_obj.id if rec_asset_class_obj else (
+                                asset_class_obj.id if asset_class_obj else None
+                            )
+                        ),
                         action=action,
                         quantity=trade_quantity,
                         target_price=target_price,
@@ -6136,59 +6229,109 @@ def record_recommendations():
             db.session.rollback()
             return jsonify({'success': False, 'error': f'Database error: {str(e)}'}), 500
         
-        # Update AssetClassDistribution
+        # Update AssetClassDistribution + prune Flask session Section 1 to match keep-set
         pending_data = session.get('pending_recommendations', {}) or {}
         from models import AssetClassDistribution
-        if asset_class_obj:
+        for sync_class in classes_to_sync:
+            sync_obj, sync_name = _resolve_asset_class_obj(sync_class)
+            if not sync_obj:
+                continue
+            class_recs = [
+                r for r in recommendations
+                if _normalize_asset_class_name(r.get('asset_class') or asset_class) == sync_name
+            ]
+            class_count = len(class_recs)
+            class_total = sum(float(r.get('amount', 0)) for r in class_recs)
             dist = AssetClassDistribution.query.filter_by(
                 session_id=recommendation_session.id,
-                asset_class_id=asset_class_obj.id
+                asset_class_id=sync_obj.id
             ).first()
             
             if dist:
-                # Update existing
-                dist.security_count = recorded_count
-                dist.total_recommended_amount = sum(float(r.get('amount', 0)) for r in recommendations)
+                dist.security_count = class_count
+                dist.total_recommended_amount = class_total
                 dist.updated_at = datetime.now()
-                logger.info(f"Updated AssetClassDistribution for {asset_class}: {recorded_count} securities, ₹{dist.total_recommended_amount}")
+                logger.info(
+                    f"Updated AssetClassDistribution for {sync_name}: "
+                    f"{class_count} securities, ₹{class_total}"
+                )
             else:
-                # Create new if doesn't exist
                 asset_rec = next(
                     (
                         r for r in pending_data.get('asset_recommendations', [])
-                        if _normalize_asset_class_name(r.get('asset_class')) == asset_class
+                        if _normalize_asset_class_name(r.get('asset_class')) == sync_name
                     ),
                     None
                 )
                 if asset_rec:
                     dist = AssetClassDistribution(
                         session_id=recommendation_session.id,
-                        asset_class_id=asset_class_obj.id,
+                        asset_class_id=sync_obj.id,
                         target_weight=asset_rec.get('target_weight', 0),
                         current_weight=asset_rec.get('current_weight', 0),
                         allocated_amount=asset_rec.get('target_value', 0),
                         required_change=asset_rec.get('required_change', 0),
-                        security_count=recorded_count,
-                        total_recommended_amount=sum(float(r.get('amount', 0)) for r in recommendations)
+                        security_count=class_count,
+                        total_recommended_amount=class_total,
                     )
                     db.session.add(dist)
-                    logger.info(f"Created AssetClassDistribution for {asset_class}")
+                    logger.info(f"Created AssetClassDistribution for {sync_name}")
             
-            db.session.commit()  # Commit AssetClassDistribution updates
+        db.session.commit()  # Commit AssetClassDistribution updates
+
+        # Keep Flask session Section 1 aligned with checked rows (email is DB-backed)
+        if pending_data:
+            existing_full = (
+                pending_data.get('section_1_all')
+                or pending_data.get('section_1_recommended')
+                or []
+            )
+            # Build minimal incoming from payload for merge (preserve amounts/qty)
+            incoming_for_session = []
+            for r in recommendations:
+                sid = r.get('security_id')
+                if not sid:
+                    continue
+                incoming_for_session.append({
+                    'security_id': int(sid),
+                    'asset_class': r.get('asset_class') or asset_class,
+                    'amount': r.get('amount', 0),
+                    'quantity': r.get('quantity', 0),
+                    'action': r.get('action'),
+                })
+            merged_session_s1 = merge_section1_recommendations(
+                existing_full,
+                incoming_for_session,
+                selected_classes=classes_to_sync,
+                replace_selected=True,
+            )
+            pending_data['section_1_all'] = merged_session_s1
+            pending_data['section_1_recommended'] = merged_session_s1
+            pending_data['security_recommendations'] = merged_session_s1
+            _set_pending_recommendations(pending_data)
         
         # Mark this asset class as recorded in session
         if 'recorded_recommendations' not in session:
             session['recorded_recommendations'] = {}
         
-        session['recorded_recommendations'][asset_class] = {
-            'client_id': client_id,
-            'asset_class': asset_class,
-            'recorded_at': datetime.now().isoformat(),
-            'count': recorded_count
-        }
+        for sync_class in classes_to_sync:
+            sync_name = _normalize_asset_class_name(sync_class) or sync_class
+            class_count = len([
+                r for r in recommendations
+                if _normalize_asset_class_name(r.get('asset_class') or asset_class) == sync_name
+            ])
+            session['recorded_recommendations'][sync_name] = {
+                'client_id': client_id,
+                'asset_class': sync_name,
+                'recorded_at': datetime.now().isoformat(),
+                'count': class_count,
+            }
         session.modified = True
         
-        print(f"DEBUG: Successfully recorded {recorded_count} recommendations for {asset_class}")
+        print(
+            f"DEBUG: Successfully recorded {recorded_count} recommendations "
+            f"for classes {classes_to_sync}"
+        )
         
         # Update workflow status to RECOS when recommendations are recorded
         try:
@@ -6227,14 +6370,16 @@ def record_recommendations():
             logger.warning(f"Could not update workflow after recording recommendations: {e}")
             # Don't fail the request if workflow update fails
         
-        msg = f'Successfully recorded {recorded_count} recommendations for {asset_class}'
+        classes_label = ', '.join(classes_to_sync) if classes_to_sync else asset_class
+        msg = f'Successfully recorded {recorded_count} recommendations for {classes_label}'
         if deleted_count:
             msg += f' and removed {deleted_count} recommendation(s) no longer in Section 1'
         return jsonify({
             'success': True,
             'message': msg,
             'recorded_count': recorded_count,
-            'deleted_count': deleted_count
+            'deleted_count': deleted_count,
+            'synced_asset_classes': classes_to_sync,
         })
         
     except Exception as e:
@@ -6475,10 +6620,31 @@ def delete_security_recommendation(recommendation_id):
             return jsonify({'success': False, 'error': 'Permission denied'}), 403
         
         print(f"DEBUG: Permission check passed. Proceeding with deletion...")
-        
+
+        deleted_security_id = recommendation.security_id
         db.session.delete(recommendation)
         print(f"DEBUG: Deleted from session. Committing to database...")
         db.session.commit()
+
+        # Keep Flask session Section 1 in sync so Save/Record/email stay consistent
+        try:
+            pending_data = session.get('pending_recommendations', {}) or {}
+            if pending_data and deleted_security_id:
+                for key in ('section_1_all', 'section_1_recommended', 'security_recommendations'):
+                    rows = pending_data.get(key) or []
+                    if not isinstance(rows, list):
+                        continue
+                    pending_data[key] = [
+                        r for r in rows
+                        if int(r.get('security_id') or 0) != int(deleted_security_id)
+                    ]
+                _set_pending_recommendations(pending_data)
+                session.modified = True
+        except Exception as session_err:
+            logger.warning(
+                "delete_security_recommendation: could not prune Flask session Section 1: %s",
+                session_err,
+            )
         
         print(f"DEBUG: ✅ DELETE SUCCESS - Security recommendation {recommendation_id} deleted successfully!")
         print(f"DEBUG: ===== END DELETE SECURITY RECOMMENDATION =====")
