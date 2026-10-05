@@ -31,6 +31,26 @@ def test_keep_unmoved_preserves_remaining_section3():
     assert [r["security_id"] for r in kept] == [10, 12]
 
 
+def test_sent_live_s3_flag_uses_snapshot_even_when_regenerate_empty():
+    """When client sends current_section3_data, keep unmoved rows (not regenerate [])."""
+    live_s3 = [
+        {"security_id": 10, "symbol": "AAA"},
+        {"security_id": 11, "symbol": "BBB"},
+    ]
+    moved_ids = {10}
+    sent_live_s3 = True
+    live_kept = _keep_unmoved(live_s3, moved_ids)
+    regenerated = []
+    if sent_live_s3:
+        result_s3 = live_kept
+    elif live_kept:
+        result_s3 = live_kept
+    else:
+        result_s3 = regenerated
+    assert len(result_s3) == 1
+    assert result_s3[0]["security_id"] == 11
+
+
 def test_empty_regenerate_does_not_force_empty_when_live_has_rows():
     live_s3 = [
         {"security_id": 10, "symbol": "AAA"},

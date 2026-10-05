@@ -4272,8 +4272,10 @@ def api_move_to_section1():
             current_section1_data = []
 
         # Live Section 2/3 from the browser (Flask session strips S2/S3 for size)
-        current_section2_data = data.get('current_section2_data') or []
-        current_section3_data = data.get('current_section3_data') or []
+        sent_live_s2 = 'current_section2_data' in data
+        sent_live_s3 = 'current_section3_data' in data
+        current_section2_data = data.get('current_section2_data') if sent_live_s2 else []
+        current_section3_data = data.get('current_section3_data') if sent_live_s3 else []
         
         # Use new service layer
         recommendation_service = RecommendationService()
@@ -4314,7 +4316,9 @@ def api_move_to_section1():
         regenerated_s2 = result.get('section_2_hot_stocks') or []
         regenerated_s3 = result.get('section_3_other') or []
 
-        if live_s2:
+        if sent_live_s2:
+            result['section_2_hot_stocks'] = live_s2
+        elif live_s2:
             result['section_2_hot_stocks'] = live_s2
         elif regenerated_s2:
             result['section_2_hot_stocks'] = [
@@ -4323,7 +4327,10 @@ def api_move_to_section1():
         else:
             result['section_2_hot_stocks'] = []
 
-        if live_s3:
+        if sent_live_s3:
+            # Browser snapshot is authoritative (regenerate often returns [] after a move).
+            result['section_3_other'] = live_s3
+        elif live_s3:
             result['section_3_other'] = live_s3
         elif regenerated_s3:
             result['section_3_other'] = [

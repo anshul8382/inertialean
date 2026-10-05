@@ -1181,6 +1181,7 @@ async function moveToSection1(securityId, sourceSection, event) {
     function collectSectionRowsFromDom(tbodyId) {
         const tbody = document.getElementById(tbodyId);
         if (!tbody) return [];
+        const isSection3 = tbodyId === 'section3-tbody';
         const rows = [];
         tbody.querySelectorAll('tr[data-security-id]').forEach(function (row) {
             const sid = parseInt(row.getAttribute('data-security-id'), 10);
@@ -1189,14 +1190,41 @@ async function moveToSection1(securityId, sourceSection, event) {
             const quantityInput = row.querySelector('.quantity-input');
             const futureInput = row.querySelector('.future-weight-input');
             const symbolEl = row.querySelector('td strong') || row.querySelector('td:nth-child(2)');
+            const nameEl = row.querySelector('td small.text-muted');
+            let amount = amountInput ? (parseFloat(amountInput.value) || 0) : 0;
+            let quantity = quantityInput ? (parseInt(quantityInput.value, 10) || 0) : 0;
+            let currentValue = 0;
+            let currentQty = 0;
+            if (isSection3) {
+                const amountCell = row.querySelector('td:nth-child(8)');
+                if (amountCell) {
+                    const rupees = String(amountCell.textContent || '').replace(/,/g, '').match(/₹\s*([-\d.]+)/g) || [];
+                    amount = rupees[0] ? (parseFloat(rupees[0].replace(/₹\s*/, '')) || 0) : 0;
+                    currentValue = rupees[1] ? (parseFloat(rupees[1].replace(/₹\s*/, '')) || 0) : 0;
+                }
+                const qtyCell = row.querySelector('td:nth-child(9)');
+                if (qtyCell) {
+                    const nums = String(qtyCell.textContent || '').match(/:\s*(-?\d+)/g) || [];
+                    quantity = nums[0] ? (parseInt(nums[0].replace(/:\s*/, ''), 10) || 0) : 0;
+                    currentQty = nums[1] ? (parseInt(nums[1].replace(/:\s*/, ''), 10) || 0) : 0;
+                }
+            }
+            const cwCell = row.querySelector('.current-weight-cell');
+            const twCell = row.querySelector('.target-weight-cell');
+            const actionBadge = row.querySelector('td:nth-child(7) .badge, td:nth-child(7) .action-badge');
             rows.push({
                 security_id: sid,
                 symbol: symbolEl ? (symbolEl.textContent || '').trim() : '',
-                security_name: row.getAttribute('data-security-name') || '',
+                security_name: (row.getAttribute('data-security-name') || (nameEl ? nameEl.textContent.trim() : '')),
                 asset_class: getRowAssetClass(row),
-                amount: amountInput ? (parseFloat(amountInput.value) || 0) : 0,
-                quantity: quantityInput ? (parseInt(quantityInput.value, 10) || 0) : 0,
+                amount: amount,
+                quantity: quantity,
+                current_value: currentValue,
+                current_quantity: currentQty,
+                current_weight: cwCell ? (parseFloat(cwCell.textContent) || 0) : 0,
+                target_weight: twCell ? (parseFloat(twCell.textContent) || 0) : 0,
                 future_weight: futureInput ? (parseFloat(futureInput.value) || 0) : 0,
+                action: actionBadge ? (actionBadge.textContent || 'HOLD').trim() : 'HOLD',
                 current_price: parsePriceFromRowPriceCell(row) || 0
             });
         });
@@ -1323,30 +1351,32 @@ async function moveToSection1(securityId, sourceSection, event) {
             }
             // Prefer API lists (now keep live S2/S3 minus moved). Never wipe a non-empty
             // table with an empty regenerate response — remove only the moved row.
-            if (Array.isArray(data.section_2_hot_stocks) && data.section_2_hot_stocks.length > 0) {
-                console.log('Updating Section 2 with', data.section_2_hot_stocks.length, 'items');
+            if (sourceSection === 2) {
+                if (Array.isArray(data.section_2_hot_stocks) && data.section_2_hot_stocks.length > 0) {
+                    console.log('Updating Section 2 with', data.section_2_hot_stocks.length, 'items');
+                    updateSection2Table(data.section_2_hot_stocks);
+                } else {
+                    const row = _findSourceRow(2);
+                    if (row) row.remove();
+                }
+            } else if (Array.isArray(data.section_2_hot_stocks) && data.section_2_hot_stocks.length > 0) {
                 updateSection2Table(data.section_2_hot_stocks);
-            } else if (sourceSection === 2) {
-                const row = _findSourceRow(2);
-                if (row) row.remove();
             }
-            if (Array.isArray(data.section_3_other) && data.section_3_other.length > 0) {
-                console.log('Updating Section 3 with', data.section_3_other.length, 'items');
-                updateSection3Table(data.section_3_other);
-            } else if (sourceSection === 3) {
+
+            const remainingS3 = liveSection3.filter(function (r) {
+                return parseInt(r.security_id, 10) !== securityId;
+            });
+            if (sourceSection === 3) {
+                // Never replace the whole Section 3 table on a S3→S1 move — regenerate often
+                // returns [] and would wipe remaining rows. Remove the moved row only.
                 const row = _findSourceRow(3);
                 if (row) row.remove();
-            } else if (Array.isArray(data.section_3_other) && data.section_3_other.length === 0) {
-                // Explicit empty only when live snapshot was already the last row
-                const remainingLive = liveSection3.filter(function (r) {
-                    return parseInt(r.security_id, 10) !== securityId;
-                });
-                if (remainingLive.length === 0) {
-                    updateSection3Table([]);
-                } else {
-                    // Keep remaining live rows if API incorrectly returned empty
-                    updateSection3Table(remainingLive);
+            } else if (Array.isArray(data.section_3_other) && data.section_3_other.length > 0) {
+                if (data.section_3_other.length >= remainingS3.length || remainingS3.length === 0) {
+                    updateSection3Table(data.section_3_other);
                 }
+            } else if (remainingS3.length > 0) {
+                updateSection3Table(remainingS3);
             }
             
             // Update totals
