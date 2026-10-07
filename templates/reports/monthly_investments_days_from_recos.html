@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}Days from Last Recos — Monthly Investments{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+        <div>
+            <h1 class="h2 mb-1">Days from last recommendations</h1>
+            <p class="text-muted mb-0">
+                Per client: days since last <code>RECOS_GENERATED</code> workflow action
+                {% if report_date %}· as of {{ report_date.strftime('%d %b %Y') }}{% endif %}
+            </p>
+        </div>
+        <div class="action-bar mobile-action-stack">
+            <a href="{{ url_for('main.list_monthly_investments') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1" aria-hidden="true"></i>Investment hub
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card card-app h-100">
+                <div class="card-body text-center">
+                    <div class="fs-3 fw-semibold text-primary">{{ total_clients }}</div>
+                    <div class="text-muted small">Clients in scope</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card card-app h-100">
+                <div class="card-body text-center">
+                    <div class="fs-3 fw-semibold">{{ clients_with_mi }}</div>
+                    <div class="text-muted small">With monthly investment</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card card-app h-100">
+                <div class="card-body text-center">
+                    <div class="fs-3 fw-semibold text-warning">{{ never_executed_count }}</div>
+                    <div class="text-muted small">Never generated recos</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card card-app h-100">
+                <div class="card-body text-center">
+                    <div class="fs-3 fw-semibold text-danger">{{ old_recos_count }}</div>
+                    <div class="text-muted small">≥ 30 days since recos</div>
+                    {% if avg_days is not none %}
+                    <div class="text-muted small mt-1">Avg {{ '%.1f'|format(avg_days) }} days</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card card-app">
+        <div class="card-header fw-semibold">Client detail</div>
+        <div class="card-body p-0">
+            {% if not report_data %}
+            <div class="text-center text-muted py-5">No clients in scope.</div>
+            {% else %}
+            <div class="table-responsive">
+                <table class="table table-app table-hover table-striped mb-0" data-mobile-table="scroll">
+                    <thead>
+                        <tr>
+                            <th scope="col">Client</th>
+                            <th scope="col">Stage</th>
+                            <th scope="col">Days since recos</th>
+                            <th scope="col">Last RECOS_GENERATED</th>
+                            <th scope="col" class="text-num">Planned ₹</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in report_data %}
+                        <tr>
+                            <td>{{ row.client_name }}</td>
+                            <td>
+                                {% set info = stage_info.get(row.current_stage, {}) if stage_info is defined else {} %}
+                                <span class="badge"
+                                      style="background-color: {{ info.get('color', '#6c757d') }};">
+                                    {{ row.current_stage }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if row.days_since_reco is none %}
+                                    <span class="text-muted">—</span>
+                                {% elif row.days_since_reco >= 30 %}
+                                    <span class="text-danger fw-semibold">{{ row.days_since_reco }}</span>
+                                {% elif row.days_since_reco >= 14 %}
+                                    <span class="text-warning fw-semibold">{{ row.days_since_reco }}</span>
+                                {% else %}
+                                    {{ row.days_since_reco }}
+                                {% endif %}
+                            </td>
+                            <td>{{ row.last_execution_date }}</td>
+                            <td class="text-num">{{ '%.2f'|format(row.planned_amount) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

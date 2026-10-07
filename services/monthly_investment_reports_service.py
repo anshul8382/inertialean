@@ -83,11 +83,11 @@ def build_stage_aging_report_context() -> dict[str, Any]:
         db.session.query(Workflow, MonthlyInvestment, Client)
         .join(MonthlyInvestment, Workflow.monthly_investment_id == MonthlyInvestment.id)
         .join(Client, MonthlyInvestment.client_id == Client.id)
+        .options(joinedload(Client.advisor))
         .filter(
             Workflow.current_stage != "COMPLETED",
             or_(Workflow.is_archived.is_(None), Workflow.is_archived == False),
         )
-        .options(joinedload(MonthlyInvestment.client))
     )
     q = scope_query_to_accessible_clients(q, MonthlyInvestment.client_id)
 
@@ -96,9 +96,16 @@ def build_stage_aging_report_context() -> dict[str, Any]:
         stage = _normalize_stage(wf.current_stage)
         ref = _naive_utc(wf.updated_at) or _naive_utc(wf.created_at) or now
         days_in_stage = max(0, (now - ref).days) if ref else 0
+        advisor = getattr(client, "advisor", None)
+        assigned_to = (
+            (advisor.username or advisor.email)
+            if advisor
+            else "Unassigned"
+        )
         report_data.append(
             {
                 "client_name": client.name or "",
+                "assigned_to": assigned_to,
                 "current_stage": stage,
                 "days_in_stage": days_in_stage,
                 "stage_entry_date": ref.strftime("%Y-%m-%d %H:%M") if ref else "N/A",
@@ -220,4 +227,5 @@ def build_days_from_recos_report_context() -> dict[str, Any]:
         "never_executed_count": never_executed_count,
         "old_recos_count": old_recos_count,
         "avg_days": avg_days,
+        "stage_info": STAGE_INFO,
     }

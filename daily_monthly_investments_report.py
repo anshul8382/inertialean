@@ -11,6 +11,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import or_
+from sqlalchemy.orm import joinedload
 from collections import defaultdict
 
 # Add the application directory to Python path
@@ -26,6 +27,16 @@ from services.monthly_investment_report_amounts import (
     effective_amount_for_investment,
     planned_amount_for_investment,
 )
+
+
+def _advisor_assigned_to_name(client) -> str:
+    """Advisor display name for the Assigned to column (client.advisor)."""
+    if not client:
+        return "Unassigned"
+    advisor = getattr(client, "advisor", None)
+    if not advisor:
+        return "Unassigned"
+    return advisor.username or advisor.email or f"User #{advisor.id}"
 
 
 def _calendar_month_bounds(d: date) -> tuple[date, date]:
@@ -56,9 +67,14 @@ def _fetch_monthly_investments_report_data(today: Optional[date] = None):
     not_archived = or_(Workflow.is_archived.is_(None), Workflow.is_archived == False)
     active_client = Client.is_active.is_(True)
 
+    client_advisor_opts = (
+        joinedload(MonthlyInvestment.client).joinedload(Client.advisor),
+    )
+
     completed_investments = (
         MonthlyInvestment.query.join(Workflow)
         .join(Client, MonthlyInvestment.client_id == Client.id)
+        .options(*client_advisor_opts)
         .filter(
             Workflow.current_stage == "COMPLETED",
             not_archived,
@@ -72,6 +88,7 @@ def _fetch_monthly_investments_report_data(today: Optional[date] = None):
     pending_with_workflow = (
         MonthlyInvestment.query.join(Workflow)
         .join(Client, MonthlyInvestment.client_id == Client.id)
+        .options(*client_advisor_opts)
         .filter(
             Workflow.current_stage != "COMPLETED",
             not_archived,
@@ -84,6 +101,7 @@ def _fetch_monthly_investments_report_data(today: Optional[date] = None):
     investments_without_workflow = (
         MonthlyInvestment.query.outerjoin(Workflow)
         .join(Client, MonthlyInvestment.client_id == Client.id)
+        .options(*client_advisor_opts)
         .filter(
             Workflow.id.is_(None),
             active_client,
@@ -170,6 +188,7 @@ def _completed_section_html(completed_investments) -> str:
             else "N/A"
         )
         client_name = investment.client.name if investment.client else "N/A"
+        assigned_to = _advisor_assigned_to_name(investment.client)
         inv_date = (
             investment.investment_date.strftime("%Y-%m-%d")
             if investment.investment_date
@@ -178,6 +197,7 @@ def _completed_section_html(completed_investments) -> str:
         rows.append(
             f"<tr>"
             f"<td>{client_name}</td>"
+            f"<td>{assigned_to}</td>"
             f"<td class=\"amount\">Rs. {planned_amount_for_investment(investment):,.2f}</td>"
             f"<td class=\"amount\">Rs. {actual:,.2f}</td>"
             f"<td>{inv_date}</td>"
@@ -188,7 +208,7 @@ def _completed_section_html(completed_investments) -> str:
     return (
         '<table class="investments-table">'
         "<thead><tr>"
-        "<th>Client</th><th>Planned amount</th><th>Actual amount</th>"
+        "<th>Client</th><th>Assigned to</th><th>Planned amount</th><th>Actual amount</th>"
         "<th>Investment date</th><th>Completed on</th>"
         "</tr></thead>"
         f"<tbody>{''.join(rows)}</tbody>"
@@ -364,6 +384,7 @@ def create_monthly_investments_html_report():
                             <thead>
                                 <tr>
                                     <th>Client</th>
+                                    <th>Assigned to</th>
                                     <th>Amount</th>
                                     <th>Investment date</th>
                                     <th>Created</th>
@@ -375,9 +396,11 @@ def create_monthly_investments_html_report():
 
                 for investment in stage_investments:
                     amt = effective_amount_for_investment(investment)
+                    assigned_to = _advisor_assigned_to_name(investment.client)
                     html += f"""
                                 <tr>
                                     <td>{investment.client.name if investment.client else 'N/A'}</td>
+                                    <td>{assigned_to}</td>
                                     <td class="amount">Rs. {amt:,.2f}</td>
                                     <td>{investment.investment_date.strftime('%Y-%m-%d') if investment.investment_date else 'N/A'}</td>
                                     <td>{investment.created_at.strftime('%Y-%m-%d') if investment.created_at else 'N/A'}</td>
@@ -399,15 +422,25 @@ def create_monthly_investments_html_report():
         clients_without_mi,
         extra_columns=[
             {
+                "label": "Assigned to",
+                "value": lambda c: c.get("assigned_to") or "Unassigned",
+            },
+            {
                 "label": "Schedule on file",
                 "value": lambda c: "Yes" if c.get("has_schedule") else "No",
-            }
+            },
         ],
     )
     inactive_table = _client_directory_section_html(
         "Inactive clients",
         inactive_clients,
-        extra_columns=[{"label": "Phone", "value": lambda c: c.get("phone", "—")}],
+        extra_columns=[
+            {
+                "label": "Assigned to",
+                "value": lambda c: c.get("assigned_to") or "Unassigned",
+            },
+            {"label": "Phone", "value": lambda c: c.get("phone", "—")},
+        ],
     )
 
     html += f"""

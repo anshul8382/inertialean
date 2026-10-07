@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Stage Aging — Monthly Investments{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+        <div>
+            <h1 class="h2 mb-1">Stage aging report</h1>
+            <p class="text-muted mb-0">
+                Open monthly-investment workflows by days in current stage
+                {% if report_date %}· as of {{ report_date.strftime('%d %b %Y') }}{% endif %}
+            </p>
+        </div>
+        <div class="action-bar mobile-action-stack">
+            <a href="{{ url_for('main.list_monthly_investments') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1" aria-hidden="true"></i>Investment hub
+            </a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="card card-app h-100">
+                <div class="card-body text-center">
+                    <div class="fs-3 fw-semibold text-primary">{{ report_data|length }}</div>
+                    <div class="text-muted small">Open workflows</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card card-app h-100">
+                <div class="card-body text-center">
+                    <div class="fs-3 fw-semibold">{{ unique_stages }}</div>
+                    <div class="text-muted small">Stages with items</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card card-app h-100">
+                <div class="card-body text-center">
+                    <div class="fs-3 fw-semibold">{{ '%.1f'|format(avg_days) }}</div>
+                    <div class="text-muted small">Avg days in stage</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card card-app h-100">
+                <div class="card-body text-center">
+                    <div class="fs-3 fw-semibold text-danger">{{ max_days }}</div>
+                    <div class="text-muted small">Max days in stage</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not report_data %}
+    <div class="card card-app">
+        <div class="card-body text-center text-muted py-5">
+            No open (non-completed) monthly investment workflows.
+        </div>
+    </div>
+    {% else %}
+        {% for stage in sorted_stages %}
+            {% set rows = grouped_data[stage] %}
+            {% set info = stage_info.get(stage, {}) %}
+            <div class="card card-app mb-4">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <span class="fw-semibold">
+                        <i class="fas {{ info.get('icon', 'fa-circle') }} me-2" aria-hidden="true"
+                           style="color: {{ info.get('color', '#6c757d') }};"></i>
+                        {{ stage }}
+                        <span class="text-muted fw-normal">— {{ info.get('description', stage) }}</span>
+                    </span>
+                    <span class="badge bg-secondary">{{ rows|length }}</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-app table-hover table-striped mb-0" data-mobile-table="scroll">
+                            <thead>
+                                <tr>
+                                    <th scope="col">Client</th>
+                                    <th scope="col">Assigned to</th>
+                                    <th scope="col">Days in stage</th>
+                                    <th scope="col">Stage since</th>
+                                    <th scope="col">Investment date</th>
+                                    <th scope="col" class="text-num">Planned ₹</th>
+                                    <th scope="col" class="text-num">Actual ₹</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in rows %}
+                                <tr>
+                                    <td>{{ row.client_name }}</td>
+                                    <td>{{ row.assigned_to }}</td>
+                                    <td>
+                                        {% if row.days_in_stage >= 14 %}
+                                            <span class="text-danger fw-semibold">{{ row.days_in_stage }}</span>
+                                        {% elif row.days_in_stage >= 7 %}
+                                            <span class="text-warning fw-semibold">{{ row.days_in_stage }}</span>
+                                        {% else %}
+                                            {{ row.days_in_stage }}
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ row.stage_entry_date }}</td>
+                                    <td>{{ row.investment_date }}</td>
+                                    <td class="text-num">{{ '%.2f'|format(row.planned_amount) }}</td>
+                                    <td class="text-num">{{ '%.2f'|format(row.actual_amount) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% endif %}
+</div>
+{% endblock %}

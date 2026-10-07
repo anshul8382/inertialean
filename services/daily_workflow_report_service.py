@@ -34,6 +34,11 @@ def fetch_inactive_clients_list() -> list[dict[str, Any]]:
         {
             "name": c.name,
             "phone": c.phone or "—",
+            "assigned_to": (
+                (c.advisor.username or c.advisor.email)
+                if c.advisor
+                else "Unassigned"
+            ),
         }
         for c in clients
     ]
@@ -55,6 +60,11 @@ def active_clients_without_monthly_investment() -> list[dict[str, Any]]:
         {
             "name": c.name,
             "has_schedule": c.monthly_investment_schedule is not None,
+            "assigned_to": (
+                (c.advisor.username or c.advisor.email)
+                if c.advisor
+                else "Unassigned"
+            ),
         }
         for c in clients
     ]
