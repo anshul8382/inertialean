@@ -263,6 +263,42 @@ def query_monthly_investments_for_list(
     return q.order_by(MonthlyInvestment.investment_date.desc()).all()
 
 
+def query_monthly_schedules_for_list(
+    status: str | None = None,
+    client_id: int | None = None,
+) -> dict:
+    """
+    Filtered list of MonthlyInvestmentSchedule rows for the all-schedules page.
+
+    status: 'active' | 'inactive' | None (all)
+    Returns schedules (joined client) and planned_amount_sum for the filtered set.
+    """
+    from access_control import scope_query_to_accessible_clients
+
+    q = MonthlyInvestmentSchedule.query.options(
+        joinedload(MonthlyInvestmentSchedule.client),
+    ).join(Client, MonthlyInvestmentSchedule.client_id == Client.id)
+    q = scope_query_to_accessible_clients(q, MonthlyInvestmentSchedule.client_id)
+
+    status_key = (status or "").strip().lower()
+    if status_key == "active":
+        q = q.filter(MonthlyInvestmentSchedule.is_active == True)  # noqa: E712
+    elif status_key == "inactive":
+        q = q.filter(MonthlyInvestmentSchedule.is_active == False)  # noqa: E712
+
+    if client_id:
+        q = q.filter(MonthlyInvestmentSchedule.client_id == client_id)
+
+    schedules = q.order_by(Client.name.asc(), MonthlyInvestmentSchedule.day_of_month.asc()).all()
+    planned_amount_sum = float(
+        sum((s.planned_amount or 0) for s in schedules)
+    )
+    return {
+        "schedules": schedules,
+        "planned_amount_sum": planned_amount_sum,
+    }
+
+
 def clients_for_monthly_filters():
     from access_control import get_accessible_clients_ordered
     return get_accessible_clients_ordered()

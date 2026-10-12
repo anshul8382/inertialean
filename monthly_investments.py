@@ -60,6 +60,29 @@ def list_monthly_investments():
     )
 
 
+@monthly_investments.route('/schedules')
+@login_required
+def list_monthly_schedules():
+    """All monthly investment schedules (recurring client schedules)."""
+    from services.monthly_investment_hub_service import (
+        query_monthly_schedules_for_list,
+        clients_for_monthly_filters,
+    )
+
+    status = (request.args.get('status') or '').strip() or None
+    client_id = request.args.get('client_id', type=int)
+
+    result = query_monthly_schedules_for_list(status=status, client_id=client_id)
+    clients = clients_for_monthly_filters()
+
+    return render_template(
+        'monthly_investment_schedules.html',
+        schedules=result['schedules'],
+        planned_amount_sum=result['planned_amount_sum'],
+        clients=clients,
+    )
+
+
 @monthly_investments.route('/new', methods=['GET', 'POST'])
 @login_required
 def new_monthly_investment():

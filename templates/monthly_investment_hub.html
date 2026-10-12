@@ -15,6 +15,7 @@
   </div>
   <a href="{{ url_for('monthly_investments.new_monthly_investment') }}" class="im-fab" aria-label="New monthly investment"><i class="fas fa-plus"></i></a>
   <a href="{{ url_for('monthly_investments.list_monthly_investments') }}" class="im-settings-link"><i class="fas fa-list-ul"></i><span>All investments</span><i class="fas fa-chevron-right text-muted"></i></a>
+  <a href="{{ url_for('monthly_investments.list_monthly_schedules', status='active') }}" class="im-settings-link"><i class="fas fa-calendar-check"></i><span>All schedules</span><i class="fas fa-chevron-right text-muted"></i></a>
   <a href="{{ url_for('workflows.list_workflows') }}" class="im-settings-link"><i class="fas fa-project-diagram"></i><span>Workflows</span><i class="fas fa-chevron-right text-muted"></i></a>
   <p class="text-muted small mt-2">Hub tables and inconsistency details below.</p>
 </div>
@@ -173,6 +174,7 @@
                     <p class="mb-1"><strong>{{ active_schedules_count }}</strong> active schedule(s) overlapping this month</p>
                     <p class="mb-0 text-muted">Sum of planned amounts: <strong>₹{{ active_schedules_planned_sum|number_format(0) }}</strong></p>
                     <small class="text-muted d-block mt-2">Schedules define recurring expectations; actual rows appear when you create monthly investments.</small>
+                    <a href="{{ url_for('monthly_investments.list_monthly_schedules', status='active') }}" class="btn btn-sm btn-outline-primary mt-3">View all schedules</a>
                 </div>
             </div>
         </div>
@@ -206,17 +208,22 @@
         <div class="card-header bg-white fw-semibold">More shortcuts</div>
         <div class="card-body">
             <div class="row g-2">
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <a class="btn btn-outline-primary w-100 text-start" href="{{ url_for('monthly_investments.list_monthly_investments') }}">
                         <i class="fas fa-list-ul me-2"></i>All monthly investments (table)
                     </a>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
+                    <a class="btn btn-outline-primary w-100 text-start" href="{{ url_for('monthly_investments.list_monthly_schedules') }}">
+                        <i class="fas fa-calendar-check me-2"></i>All monthly schedules
+                    </a>
+                </div>
+                <div class="col-md-3">
                     <a class="btn btn-outline-primary w-100 text-start" href="{{ url_for('workflows.list_workflows') }}">
                         <i class="fas fa-list me-2"></i>All workflows
                     </a>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <a class="btn btn-outline-primary w-100 text-start" href="{{ url_for('recommended_trades.list_all_recommended_trades') }}">
                         <i class="fas fa-exchange-alt me-2"></i>All recommended trades
                     </a>

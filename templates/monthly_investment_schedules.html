@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Monthly investment schedules{% endblock %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Monthly schedules' %}
+  {% set mobile_back_url = url_for('main.list_monthly_investments') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <div class="im-mobile-search">
+    <i class="fas fa-search"></i>
+    <input type="search" data-im-mobile-filter="imMobileSchedulesList" placeholder="Search by client…" aria-label="Search">
+  </div>
+  <p class="text-muted small mb-2">
+    {{ schedules|length }} schedule(s)
+    {% if schedules %}
+    · Planned sum ₹{{ "{:,.0f}".format(planned_amount_sum) }}
+    {% endif %}
+  </p>
+  <div class="im-list-stack" id="imMobileSchedulesList">
+    {% for schedule in schedules %}
+    <a href="{{ url_for('clients.manage_monthly_schedule', client_id=schedule.client_id) }}" class="im-list-card text-decoration-none">
+      <h2 class="im-list-card__title">{{ schedule.client.name if schedule.client else 'Client #' ~ schedule.client_id }}</h2>
+      <p class="im-list-card__meta mb-1">
+        ₹{{ "{:,.0f}".format(schedule.planned_amount) }}
+        · Day {{ schedule.day_of_month }}
+        {% if schedule.is_active %}
+        · <span class="text-success">Active</span>
+        {% else %}
+        · <span class="text-muted">Inactive</span>
+        {% endif %}
+      </p>
+      <p class="im-list-card__meta mb-0 small text-muted">
+        {{ schedule.start_date.strftime('%d %b %Y') if schedule.start_date else '—' }}
+        →
+        {% if schedule.end_date %}{{ schedule.end_date.strftime('%d %b %Y') }}{% else %}Ongoing{% endif %}
+      </p>
+    </a>
+    {% else %}
+    <div class="im-empty-state"><p class="text-muted mb-0">No schedules match these filters.</p></div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="im-desktop-only im-collapsed-on-mobile container mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-1">
+          <li class="breadcrumb-item"><a href="{{ url_for('main.list_monthly_investments') }}">Monthly investments hub</a></li>
+          <li class="breadcrumb-item active" aria-current="page">Schedules</li>
+        </ol>
+      </nav>
+      <h1 class="mb-0">Monthly investment schedules</h1>
+      <p class="text-muted mb-0 mt-1">
+        Recurring client schedules
+        {% if schedules %}
+        — {{ schedules|length }} row(s), planned sum
+        <strong>₹{{ "{:,.0f}".format(planned_amount_sum) }}</strong>
+        {% endif %}
+      </p>
+    </div>
+    <a href="{{ url_for('monthly_investments.list_monthly_investments') }}" class="btn btn-outline-secondary">
+      <i class="fas fa-list-ul"></i> Investment rows
+    </a>
+  </div>
+
+  {% if request.args.get('status') or request.args.get('client_id') %}
+  <div class="card card-app mb-3">
+    <div class="card-body py-2">
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <span class="text-muted small me-1">Active filters:</span>
+        {% if request.args.get('status') %}
+        <span class="badge bg-primary">Status: {{ request.args.get('status')|title }}</span>
+        {% endif %}
+        {% if request.args.get('client_id') %}
+        {% set client = clients|selectattr('id', 'equalto', request.args.get('client_id')|int)|first %}
+        {% if client %}
+        <span class="badge bg-success">Client: {{ client.name }}</span>
+        {% endif %}
+        {% endif %}
+        <a href="{{ url_for('monthly_investments.list_monthly_schedules') }}" class="btn btn-sm btn-outline-secondary ms-auto">Clear</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card card-app mb-4">
+    <div class="card-header">Filters</div>
+    <div class="card-body">
+      <form method="GET" action="{{ url_for('monthly_investments.list_monthly_schedules') }}" class="row g-3 filter-bar">
+        <div class="col-md-3">
+          <label for="status_filter" class="form-label">Status</label>
+          <select class="form-select" id="status_filter" name="status">
+            <option value="" {% if not request.args.get('status') %}selected{% endif %}>All</option>
+            <option value="active" {% if request.args.get('status') == 'active' %}selected{% endif %}>Active</option>
+            <option value="inactive" {% if request.args.get('status') == 'inactive' %}selected{% endif %}>Inactive</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label for="client_filter" class="form-label">Client</label>
+          <select class="form-select" id="client_filter" name="client_id">
+            <option value="">All clients</option>
+            {% for client in clients %}
+            <option value="{{ client.id }}" {% if request.args.get('client_id')|int == client.id %}selected{% endif %}>{{ client.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-5 d-flex align-items-end gap-2">
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-filter"></i> Apply
+          </button>
+          <a href="{{ url_for('monthly_investments.list_monthly_schedules') }}" class="btn btn-outline-secondary">Clear</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card card-app mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>Schedules</span>
+      <span class="badge bg-secondary">{{ schedules|length }}</span>
+    </div>
+    <div class="card-body">
+      {% if schedules %}
+      <div class="table-responsive">
+        <table class="table table-app table-hover table-striped" data-mobile-table="scroll">
+          <thead>
+            <tr>
+              <th scope="col">Client</th>
+              <th scope="col" class="text-num">Monthly amount</th>
+              <th scope="col" class="text-center">Day of month</th>
+              <th scope="col" class="text-center">Start</th>
+              <th scope="col" class="text-center">End</th>
+              <th scope="col" class="text-center">Status</th>
+              <th scope="col" class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for schedule in schedules %}
+            <tr>
+              <td>
+                <strong>{{ schedule.client.name if schedule.client else 'Client #' ~ schedule.client_id }}</strong>
+                {% if schedule.notes %}
+                <br><small class="text-muted">{{ schedule.notes[:80] }}{% if schedule.notes|length > 80 %}…{% endif %}</small>
+                {% endif %}
+              </td>
+              <td class="text-num">₹{{ "{:,.0f}".format(schedule.planned_amount) }}</td>
+              <td class="text-center">
+                <span class="badge bg-info text-dark">{{ schedule.day_of_month }}</span>
+              </td>
+              <td class="text-center">{{ schedule.start_date.strftime('%Y-%m-%d') if schedule.start_date else '—' }}</td>
+              <td class="text-center">
+                {% if schedule.end_date %}
+                {{ schedule.end_date.strftime('%Y-%m-%d') }}
+                {% else %}
+                <span class="text-muted">Ongoing</span>
+                {% endif %}
+              </td>
+              <td class="text-center">
+                {% if schedule.is_active %}
+                <span class="badge bg-success">Active</span>
+                {% else %}
+                <span class="badge bg-secondary">Inactive</span>
+                {% endif %}
+              </td>
+              <td class="text-end text-nowrap">
+                <a href="{{ url_for('clients.manage_monthly_schedule', client_id=schedule.client_id) }}"
+                   class="btn btn-sm btn-primary" aria-label="Edit schedule for {{ schedule.client.name if schedule.client else schedule.client_id }}">
+                  <i class="fas fa-edit"></i> Edit
+                </a>
+                <a href="{{ url_for('clients.client_details', client_id=schedule.client_id) }}"
+                   class="btn btn-sm btn-outline-info" aria-label="View client {{ schedule.client.name if schedule.client else schedule.client_id }}">
+                  <i class="fas fa-eye"></i>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-5">
+        <p class="text-muted mb-3">No schedules match these filters.</p>
+        <a href="{{ url_for('main.list_monthly_investments') }}" class="btn btn-outline-primary">Back to hub</a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
