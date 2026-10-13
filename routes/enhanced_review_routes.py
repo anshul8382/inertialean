@@ -1141,46 +1141,52 @@ def equity_model_vs_nifty():
 @enhanced_review_bp.route('/api/period-analysis-v2/clients/search', methods=['GET'])
 @login_required
 def search_accessible_clients():
-    """Search accessible clients by name for dynamic dropdown"""
+    """Search accessible clients by name for Select2 (empty q → first page of clients)."""
     try:
         from access_control import get_accessible_clients
-        
+
         search_term = request.args.get('q', '').strip()
         client_id_filter = request.args.get('client_id', type=int)
-        
-        # Get all accessible clients
+        try:
+            page = max(1, int(request.args.get('page') or 1))
+        except (TypeError, ValueError):
+            page = 1
+        page_size = 50
+
         accessible_clients = get_accessible_clients() or []
         if not isinstance(accessible_clients, list):
             accessible_clients = list(accessible_clients) if accessible_clients else []
-        
-        # If client_id is provided, filter by that first
+
         if client_id_filter:
             filtered_clients = [
                 client for client in accessible_clients
                 if client.id == client_id_filter
             ]
         elif search_term:
-            # Filter by search term (case-insensitive)
             search_lower = search_term.lower()
             filtered_clients = [
                 client for client in accessible_clients
                 if search_lower in (client.name or '').lower()
             ]
         else:
-            # No search term and no client_id - return empty (Select2 requires minimumInputLength)
-            return jsonify({'results': []})
-        
-        # Format for Select2
+            # Open dropdown with no typing: alphabetical first page
+            filtered_clients = list(accessible_clients)
+
+        filtered_clients = sorted(
+            filtered_clients,
+            key=lambda c: (c.name or '').lower(),
+        )
+        start = (page - 1) * page_size
+        page_clients = filtered_clients[start : start + page_size]
+        more = start + page_size < len(filtered_clients)
+
         results = [
-            {
-                'id': client.id,
-                'text': client.name
-            }
-            for client in filtered_clients
+            {'id': client.id, 'text': client.name or f'Client #{client.id}'}
+            for client in page_clients
         ]
-        
-        return jsonify({'results': results})
-        
+
+        return jsonify({'results': results, 'pagination': {'more': more}})
+
     except Exception as e:
         logger.error(f"Error searching accessible clients: {str(e)}", exc_info=True)
         return jsonify({'results': [], 'error': str(e)}), 500

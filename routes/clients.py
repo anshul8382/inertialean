@@ -1178,23 +1178,38 @@ def client_details(client_id):
             # Keep badge current with firm suppress JSON (prices only)
             from services.client_data_integrity_case_service import apply_live_price_refresh_to_case
 
+            chip_sections = [
+                {
+                    "id": c.get("id"),
+                    "status": c.get("status"),
+                    "title": c.get("title"),
+                    "open_count": c.get("open_count") or 0,
+                }
+                for c in (data_integrity_summary.get("section_chips") or [])
+            ]
+            # Ensure a prices slot exists so live refresh can replace it (chips omit matched ones).
+            if not any(s.get("id") == "prices" for s in chip_sections):
+                chip_sections.append(
+                    {"id": "prices", "status": "matched", "title": "Price accuracy", "open_count": 0}
+                )
             refreshed = apply_live_price_refresh_to_case(
                 {
                     "client_id": client_id,
                     "overall_status": data_integrity_summary.get("overall_status"),
                     "overall_label": data_integrity_summary.get("overall_label"),
                     "badge_class": data_integrity_summary.get("badge_class"),
-                    "sections": [
-                        {"id": c.get("id"), "status": c.get("status"), "title": c.get("title")}
-                        for c in (data_integrity_summary.get("section_chips") or [])
-                    ]
-                    + [{"id": "prices", "status": "matched"}],
+                    "sections": chip_sections,
                 }
             )
             data_integrity_summary = dict(data_integrity_summary)
             data_integrity_summary["overall_status"] = refreshed.get("overall_status")
             data_integrity_summary["overall_label"] = refreshed.get("overall_label")
             data_integrity_summary["badge_class"] = refreshed.get("badge_class")
+            # Nightly chips go stale after sheet-suppress; rebuild from live sections.
+            data_integrity_summary["section_chips"] = refreshed.get("section_chips") or []
+            data_integrity_summary["open_section_count"] = refreshed.get(
+                "open_section_count", 0
+            )
     except Exception as e:
         logger.warning("Data integrity summary skipped for client %s: %s", client_id, e)
 

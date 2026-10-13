@@ -113,6 +113,8 @@ class PeriodAnalysisV2Generator {
                 placeholder: 'Search for a client by name...',
                 allowClear: true,
                 width: '100%',
+                // Avoid clipping inside .card / overflow containers
+                dropdownParent: $(document.body),
                 ajax: {
                     url: '{{ url_for("enhanced_review.search_accessible_clients") }}',
                     dataType: 'json',
@@ -131,14 +133,18 @@ class PeriodAnalysisV2Generator {
                             page: params.page || 1
                         };
                     },
-                    processResults: function (data) {
+                    processResults: function (data, params) {
                         console.log('Select2 received data:', data);
+                        params.page = params.page || 1;
                         if (!data || !data.results) {
                             console.warn('Invalid response from server:', data);
-                            return { results: [] };
+                            return { results: [], pagination: { more: false } };
                         }
                         return {
-                            results: data.results || []
+                            results: data.results || [],
+                            pagination: {
+                                more: !!(data.pagination && data.pagination.more)
+                            }
                         };
                     },
                     cache: true,
@@ -149,16 +155,14 @@ class PeriodAnalysisV2Generator {
                         console.error('Request URL:', xhr.responseURL || '{{ url_for("enhanced_review.search_accessible_clients") }}');
                     }
                 },
-                minimumInputLength: 1,
+                // 0 = load first page of clients on open; typing still filters
+                minimumInputLength: 0,
                 language: {
                     noResults: function() {
                         return "No clients found";
                     },
                     searching: function() {
                         return "Searching...";
-                    },
-                    inputTooShort: function() {
-                        return "Please enter at least 1 character";
                     }
                 }
             });

@@ -183,6 +183,11 @@ def apply_live_price_refresh_to_case(case: Dict[str, Any]) -> Dict[str, Any]:
     case["overall_status"] = overall
     case["overall_label"] = OVERALL_LABELS.get(overall, overall)
     case["badge_class"] = OVERALL_BADGE_CLASS.get(overall, OVERALL_BADGE_CLASS["unknown"])
+    # Keep client-details chips in sync (nightly snapshot chips go stale after suppress).
+    case["section_chips"] = _section_chips_from_sections(sections)
+    case["open_section_count"] = sum(
+        1 for s in sections if s.get("status") in ("needs_review", "not_matched")
+    )
     case["price_refreshed_live"] = True
     return case
 
@@ -243,6 +248,24 @@ OVERALL_BADGE_CLASS = {
     "not_matched": "bg-danger",
     "unknown": "bg-light text-dark border",
 }
+
+
+def _section_chips_from_sections(sections: list) -> list:
+    """Client-card chips: always keep cashflow_trade; drop other matched sections."""
+    return [
+        {
+            "id": s["id"],
+            "title": s.get("title") or s["id"],
+            "status": s.get("status") or "unknown",
+            "label": OVERALL_LABELS.get(s.get("status") or "unknown", s.get("status") or "unknown"),
+            "badge_class": OVERALL_BADGE_CLASS.get(
+                s.get("status") or "unknown", "bg-secondary"
+            ),
+            "open_count": s.get("open_count") or 0,
+        }
+        for s in (sections or [])
+        if s.get("status") != "matched" or s.get("id") == "cashflow_trade"
+    ][:6]
 
 # Worst-wins rank
 _STATUS_RANK = {"matched": 0, "needs_review": 1, "not_matched": 2, "unknown": -1}
@@ -315,18 +338,7 @@ def build_client_summary(
         "badge_class": OVERALL_BADGE_CLASS.get(
             case.get("overall_status") or "unknown", OVERALL_BADGE_CLASS["unknown"]
         ),
-        "section_chips": [
-            {
-                "id": s["id"],
-                "title": s["title"],
-                "status": s["status"],
-                "label": OVERALL_LABELS.get(s["status"], s["status"]),
-                "badge_class": OVERALL_BADGE_CLASS.get(s["status"], "bg-secondary"),
-                "open_count": s.get("open_count") or 0,
-            }
-            for s in (case.get("sections") or [])
-            if s.get("status") != "matched" or s.get("id") == "cashflow_trade"
-        ][:6],
+        "section_chips": _section_chips_from_sections(case.get("sections") or []),
         "open_section_count": sum(
             1
             for s in (case.get("sections") or [])
