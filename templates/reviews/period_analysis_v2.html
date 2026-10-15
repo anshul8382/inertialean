@@ -5699,6 +5699,7 @@ class PeriodAnalysisV2Generator {
                 </tbody>
             </table>
             ${this.renderBasePortfolioGainsDetail(baseGains)}
+            ${this.renderGainsFromChangesDetail(gainsFromChanges)}
         `;
     }
 
@@ -5758,6 +5759,90 @@ class PeriodAnalysisV2Generator {
                 </table>
                 <div style="margin-top: 10px; padding: 10px; background-color: #e7f3ff; border-left: 4px solid #007bff; font-size: 0.85em; color: #004085;">
                     <strong>Note:</strong> Hypothetical Value = Adjusted Start Quantity × End Price. This represents what the portfolio value would be if you held the starting quantities (adjusted for corporate actions like splits/bonuses) with no trades during the period.
+                </div>
+            </div>
+        `;
+    }
+
+    renderGainsFromChangesDetail(gainsFromChangesData) {
+        if (!gainsFromChangesData || !gainsFromChangesData.detailed_breakdown || gainsFromChangesData.detailed_breakdown.length === 0) {
+            return '';
+        }
+
+        const breakdown = gainsFromChangesData.detailed_breakdown;
+        const collapseId = `gains-from-changes-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        let rows = '';
+        let totalChange = 0;
+        let totalNetCashflow = 0;
+
+        const typeLabel = (t) => {
+            if (t === 'new_position') return 'New position';
+            if (t === 'exited') return 'Exited';
+            return 'Rebalance';
+        };
+
+        breakdown.forEach(security => {
+            const change = this.safeNumber(security.portfolio_change || 0);
+            const netCf = this.safeNumber(security.net_cashflow || 0);
+            totalChange += change;
+            totalNetCashflow += netCf;
+            const changeClass = change >= 0 ? '#28a745' : '#dc3545';
+            rows += `
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">${security.symbol || 'Unknown'}</td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6; font-size: 0.85em; color: #6c757d;">${typeLabel(security.change_type)}</td>
+                    <td style="padding: 8px; text-align: right; border: 1px solid #dee2e6;">${this.formatNumber(security.adjusted_qty || 0)}</td>
+                    <td style="padding: 8px; text-align: right; border: 1px solid #dee2e6;">${this.formatNumber(security.actual_qty || 0)}</td>
+                    <td style="padding: 8px; text-align: right; border: 1px solid #dee2e6;">${this.formatNumber(security.qty_change || 0)}</td>
+                    <td style="padding: 8px; text-align: right; border: 1px solid #dee2e6;">₹${this.formatNumber(security.end_price || 0)}</td>
+                    <td style="padding: 8px; text-align: right; border: 1px solid #dee2e6;">₹${this.formatNumber(netCf)}</td>
+                    <td style="padding: 8px; text-align: right; border: 1px solid #dee2e6; font-weight: 600; color: ${changeClass};">₹${this.formatNumber(change)}</td>
+                </tr>
+            `;
+        });
+
+        const totalClass = totalChange >= 0 ? '#28a745' : '#dc3545';
+
+        return `
+            <div style="margin-top: 25px; margin-bottom: 20px;">
+                <h6 style="margin-bottom: 10px; color: #495057; font-weight: 600; cursor: pointer;"
+                    data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false" aria-controls="${collapseId}">
+                    <i class="fas fa-chevron-down me-1 warnings-chevron" style="transition: transform 0.2s;"></i>
+                    Gains from Changes - Trade / rebalance detail (${breakdown.length})
+                </h6>
+                <div class="collapse" id="${collapseId}">
+                    <div style="font-size: 0.9em; color: #6c757d; margin-bottom: 10px;">
+                        Security-level contribution to Gains from Changes: Actual End Value − (Adjusted Start Qty × End Price) − Net Cashflow (Buy − Sell).
+                    </div>
+                    <div class="table-responsive">
+                        <table style="width: 100%; border-collapse: collapse; background-color: #ffffff; border: 1px solid #dee2e6; font-size: 0.9em;">
+                            <thead>
+                                <tr style="background-color: #fff3cd;">
+                                    <th style="padding: 10px; text-align: left; border: 1px solid #dee2e6; font-weight: 600;">Symbol</th>
+                                    <th style="padding: 10px; text-align: left; border: 1px solid #dee2e6; font-weight: 600;">Type</th>
+                                    <th style="padding: 10px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">Adj Start Qty</th>
+                                    <th style="padding: 10px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">End Qty</th>
+                                    <th style="padding: 10px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">Qty Change</th>
+                                    <th style="padding: 10px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">End Price</th>
+                                    <th style="padding: 10px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">Net Cashflow</th>
+                                    <th style="padding: 10px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">Gain from Change</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows}
+                            </tbody>
+                            <tfoot style="background-color: #fff3cd;">
+                                <tr>
+                                    <td colspan="6" style="padding: 10px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">Total:</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #dee2e6; font-weight: 600;">₹${this.formatNumber(totalNetCashflow)}</td>
+                                    <td style="padding: 10px; text-align: right; border: 1px solid #dee2e6; font-weight: 600; color: ${totalClass};">₹${this.formatNumber(totalChange)}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    <div style="margin-top: 10px; padding: 10px; background-color: #fff8e1; border-left: 4px solid #ffc107; font-size: 0.85em; color: #664d03;">
+                        <strong>Note:</strong> Rows are rebalances, new positions, and full exits. Gain from Change = End value − (Adj start qty × End price) − Net cashflow (BUY − SELL). Exits use end value 0. Total should align with Pathway “Gains from Changes”.
+                    </div>
                 </div>
             </div>
         `;

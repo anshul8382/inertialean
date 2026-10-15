@@ -4610,6 +4610,15 @@ class PerformanceAnalysisEmail {
                     const baseGainsDetailContent = this.generateBasePortfolioGainsDetailTable(baseGains, periodData);
                     html += this.makeCollapsibleSection(baseGainsDetailContent, '📊 Base Portfolio Gains - Detailed Calculation (Click to expand/collapse)');
                 }
+
+                // Gains from Changes — trade/rebalance detail (Collapsible)
+                if (gainsFromChanges && gainsFromChanges.detailed_breakdown && gainsFromChanges.detailed_breakdown.length > 0) {
+                    const changesDetailContent = this.generateGainsFromChangesDetailTable(gainsFromChanges);
+                    html += this.makeCollapsibleSection(
+                        changesDetailContent,
+                        `📈 Gains from Changes - Trade / rebalance detail (${gainsFromChanges.detailed_breakdown.length}) (Click to expand/collapse)`
+                    );
+                }
             }
         } else {
             // Fallback to simple breakdown
@@ -4690,6 +4699,60 @@ class PerformanceAnalysisEmail {
         });
         
         return html;
+    }
+
+    generateGainsFromChangesDetailTable(gainsFromChangesData) {
+        if (!gainsFromChangesData || !gainsFromChangesData.detailed_breakdown || gainsFromChangesData.detailed_breakdown.length === 0) {
+            return '';
+        }
+
+        const breakdown = gainsFromChangesData.detailed_breakdown;
+        const headers = [
+            'Symbol', 'Type', 'Adj Start Qty', 'End Qty', 'Qty Change',
+            'End Price', 'Net Cashflow', 'Gain from Change'
+        ];
+        const rows = [];
+        let totalChange = 0;
+        let totalNetCashflow = 0;
+
+        const typeLabel = (t) => {
+            if (t === 'new_position') return 'New position';
+            if (t === 'exited') return 'Exited';
+            return 'Rebalance';
+        };
+
+        breakdown.forEach(security => {
+            const change = Number(security.portfolio_change || 0);
+            const netCf = Number(security.net_cashflow || 0);
+            totalChange += change;
+            totalNetCashflow += netCf;
+            rows.push([
+                security.symbol || 'Unknown',
+                typeLabel(security.change_type),
+                this.formatNumber(security.adjusted_qty || 0),
+                this.formatNumber(security.actual_qty || 0),
+                this.formatNumber(security.qty_change || 0),
+                this.formatNumber(security.end_price || 0),
+                this.formatCurrencyLakhs(netCf),
+                this.formatCurrencyLakhs(change)
+            ]);
+        });
+
+        rows.push([
+            '<strong>Total</strong>',
+            '',
+            '',
+            '',
+            '',
+            '',
+            `<strong>${this.formatCurrencyLakhs(totalNetCashflow)}</strong>`,
+            `<strong>${this.formatCurrencyLakhs(totalChange)}</strong>`
+        ]);
+
+        return this.generateFormattedTable(headers, rows, {
+            title: 'Gains from Changes - Trade / rebalance detail',
+            description: 'Security-level contribution: Actual End Value − (Adjusted Start Qty × End Price) − Net Cashflow (Buy − Sell). Aligns with Pathway Gains from Changes.'
+        });
     }
     
     generateSecurityOutperformanceTable(periodData, periodDates) {

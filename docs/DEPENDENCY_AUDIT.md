@@ -1,6 +1,6 @@
 # Dependency vulnerability audit
 
-Generated: 2026-10-05T14:48:42.586597+00:00
+Generated: 2026-10-15T12:17:17.478417+00:00
 Python runtime: 3.11.9
 Scanners: `pip-audit` (Python) + `npm audit --omit=dev` (Capacitor shell)
 
@@ -9,7 +9,7 @@ Scanners: `pip-audit` (Python) + `npm audit --omit=dev` (Capacitor shell)
 | Source | Available | Findings |
 |--------|-----------|----------|
 | Python (`requirements.txt`) | no | 0 |
-| Capacitor shell (`apps/capacitor-shell/`) | yes | 0 |
+| Capacitor shell (`apps/capacitor-shell/`) | yes | 2 |
 
 ## Python (`pip-audit`)
 
@@ -17,7 +17,10 @@ _Skipped: pip-audit not installed (run: python3 -m pip install pip-audit)_
 
 ## Capacitor shell (`npm audit`)
 
-No known vulnerabilities in production dependencies.
+| Package | Severity | Range | Fix available | Via |
+|---------|----------|-------|---------------|-----|
+| @capacitor/android | critical | 6.0.0 - 6.2.1 | yes | Capacitor Android and iOS: remote content can be loaded at the app origin via th |
+| @capacitor/ios | critical | 6.0.0 - 6.2.1 | yes | Capacitor Android and iOS: remote content can be loaded at the app origin via th |
 
 ---
 

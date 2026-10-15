@@ -5433,9 +5433,11 @@ def calculate_value_attribution(start_map, end_map, txns_in_period, start_date, 
                     'actual_qty': end_holding['quantity'],
                     'qty_change': end_holding['quantity'] - adjusted_qty,
                     'end_price': end_price,
+                    'net_cashflow': net_cashflow,
                     'portfolio_change': portfolio_change,
                     'hypothetical_value': hypothetical_end_value,
-                    'actual_value': actual_end_value
+                    'actual_value': actual_end_value,
+                    'change_type': 'rebalance',
                 })
     
     # ✅ CRITICAL FIX: Include exited positions in market_movement_by_security
@@ -5580,30 +5582,78 @@ def calculate_value_attribution(start_map, end_map, txns_in_period, start_date, 
         new_position_change = end_holding['current_value'] - net_cashflow
         new_positions_value_added += new_position_change
         portfolio_changes_attribution += new_position_change
+        if abs(new_position_change) > 0.01:
+            portfolio_changes_by_security.append({
+                'security_id': security_id,
+                'symbol': end_holding.get('symbol', 'Unknown'),
+                'adjusted_qty': 0,
+                'actual_qty': end_holding['quantity'],
+                'qty_change': end_holding['quantity'],
+                'end_price': end_holding.get('current_price', 0),
+                'net_cashflow': net_cashflow,
+                'portfolio_change': new_position_change,
+                'hypothetical_value': 0,
+                'actual_value': end_holding['current_value'],
+                'change_type': 'new_position',
+            })
     
     # Exited positions (securities in start but not in end)
-    # Calculate realized gain/loss from sale proceeds
+    # Diagnostic: sale − start value (not used in Pathway identity)
+    # Pathway Gains from Changes (EXIT ONLY): same residual as rebalance with end qty/value = 0
+    #   PC = 0 − (adj_start_qty × end_price) − net_cashflow
+    #   where net_cashflow already includes SELL proceeds (BUY − SELL). Do not change held/new paths.
+    mm_exit_by_id = {
+        m['security_id']: m
+        for m in market_movement_by_security
+        if m.get('exited') and m.get('security_id') is not None
+    }
     for security_id in set(start_map.keys()) - set(end_map.keys()):
         start_holding = start_map[security_id]
         start_value = start_holding['current_value']
-        
+        symbol = start_holding.get('symbol', 'Unknown')
+        net_cashflow = new_investments_by_security.get(security_id, 0)
+
         # Get sale proceeds from transactions (SELL transactions for this security in period)
         sale_proceeds = 0
         for txn in txns_in_period:
             if txn.security_id == security_id and txn.type == 'SELL':
                 sale_proceeds += float(txn.quantity) * float(txn.price)
-        
+
         # If no sale transactions found, use net_cashflow (which includes SELL)
-        if sale_proceeds == 0:
-            # Net cashflow for exited position would be negative (SELL only, no BUY)
-            net_cashflow = new_investments_by_security.get(security_id, 0)
-            if net_cashflow < 0:  # Negative means more sold than bought
-                sale_proceeds = abs(net_cashflow)
-        
-        # Realized gain/loss = Sale proceeds - Start value
+        if sale_proceeds == 0 and net_cashflow < 0:
+            sale_proceeds = abs(net_cashflow)
+
+        # Realized gain/loss = Sale proceeds - Start value (diagnostic / breakdown only)
         realized_gain_loss = sale_proceeds - start_value if sale_proceeds > 0 else -start_value
         exited_positions_value_added += realized_gain_loss
-    
+
+        # Gains from Changes residual — EXIT cases only
+        mm = mm_exit_by_id.get(security_id) or {}
+        adjusted_qty = float(mm.get('adjusted_qty', start_holding.get('quantity', 0) or 0))
+        end_price = float(mm.get('end_price', 0) or 0)
+        hypothetical_end_value = adjusted_qty * end_price
+        portfolio_change = 0.0 - hypothetical_end_value - float(net_cashflow)
+        portfolio_changes_attribution += portfolio_change
+
+        if abs(portfolio_change) > 0.01:
+            portfolio_changes_by_security.append({
+                'security_id': security_id,
+                'symbol': symbol,
+                'adjusted_qty': adjusted_qty,
+                'actual_qty': 0,
+                'qty_change': -adjusted_qty,
+                'end_price': end_price,
+                'net_cashflow': float(net_cashflow),
+                'portfolio_change': portfolio_change,
+                'hypothetical_value': hypothetical_end_value,
+                'actual_value': 0.0,
+                'change_type': 'exited',
+            })
+            logger.info(
+                f"Exited position included in Gains from Changes: {symbol}, "
+                f"Hyp={hypothetical_end_value:.2f}, NetCF={net_cashflow:.2f}, PC={portfolio_change:.2f}"
+            )
+   
     # Position sizing changes (securities in both)
     # This measures the gain/loss from changing position size (buying more or selling some)
     # Should not double-count net_cashflow since it's already subtracted in portfolio_change
@@ -5657,7 +5707,7 @@ def calculate_value_attribution(start_map, end_map, txns_in_period, start_date, 
         'market_movement_percent': market_movement_percent,
         'portfolio_changes_percent': portfolio_changes_percent,
         'market_movement_by_security': market_movement_by_security_sorted,  # All securities (for detailed breakdown)
-        'portfolio_changes_by_security': portfolio_changes_by_security_sorted[:10],  # Top 10 contributors
+        'portfolio_changes_by_security': portfolio_changes_by_security_sorted,  # All contributors (for pathway detail)
         'attribution_summary': {
             'market_movement': {
                 'value': market_movement_attribution,
@@ -5730,7 +5780,9 @@ def calculate_pathway_breakdown(client_id, start_date, end_date, mtm_analysis, g
         
         # Get detailed breakdown for base portfolio gains (all securities with start qty, adjusted qty, end price)
         market_movement_by_security = value_attribution.get('market_movement_by_security', [])
+        portfolio_changes_by_security = value_attribution.get('portfolio_changes_by_security', [])
         logger.info(f"Found {len(market_movement_by_security)} securities in market_movement_by_security for detailed breakdown")
+        logger.info(f"Found {len(portfolio_changes_by_security)} securities in portfolio_changes_by_security for gains-from-changes detail")
         if market_movement_by_security:
             logger.info(f"First security sample: {market_movement_by_security[0] if len(market_movement_by_security) > 0 else 'N/A'}")
         
@@ -5754,8 +5806,25 @@ def calculate_pathway_breakdown(client_id, start_date, end_date, mtm_analysis, g
                     'market_movement': float(sec.get('market_movement', 0)),
                     'corporate_actions': sec.get('corporate_actions') or '-'
                 })
+
+        # Gains from Changes: all securities with trade/rebalance contribution in the period
+        changes_detailed_breakdown = []
+        for sec in portfolio_changes_by_security or []:
+            changes_detailed_breakdown.append({
+                'symbol': sec.get('symbol', 'Unknown'),
+                'adjusted_qty': float(sec.get('adjusted_qty', 0)),
+                'actual_qty': float(sec.get('actual_qty', 0)),
+                'qty_change': float(sec.get('qty_change', 0)),
+                'end_price': float(sec.get('end_price', 0)),
+                'net_cashflow': float(sec.get('net_cashflow', 0)),
+                'hypothetical_value': float(sec.get('hypothetical_value', 0)),
+                'actual_value': float(sec.get('actual_value', 0)),
+                'portfolio_change': float(sec.get('portfolio_change', 0)),
+                'change_type': sec.get('change_type') or 'rebalance',
+            })
         
         logger.info(f"Built detailed_breakdown with {len(detailed_breakdown)} securities")
+        logger.info(f"Built gains-from-changes detailed_breakdown with {len(changes_detailed_breakdown)} securities")
         
         pathway_breakdown = {
             'start_value': float(start_value),
@@ -5772,7 +5841,8 @@ def calculate_pathway_breakdown(client_id, start_date, end_date, mtm_analysis, g
                 'gains_from_changes': {
                     'value': float(gains_from_changes),
                     'percent': float(gains_from_changes_percent),
-                    'description': 'Gains/losses from trades and rebalancing'
+                    'description': 'Gains/losses from trades and rebalancing',
+                    'detailed_breakdown': changes_detailed_breakdown,
                 },
                 'new_funds_added': {
                     'value': float(new_funds),

@@ -1,6 +1,6 @@
 # OWASP ZAP baseline report
 
-Generated: 2026-10-05T14:48:42.640659+00:00
+Generated: 2026-10-15T12:17:17.528526+00:00
 
 _Skipped: no target URL (set --target or ZAP_TARGET_URL); ZAP scan skipped_
 

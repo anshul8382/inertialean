@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-10-05T14:48:40.985257+00:00
+Generated: 2026-10-15T12:17:15.368436+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -9,15 +9,15 @@ Agent: `security_audit_agent` v1.0.0
 |----------|-------|
 | critical | 0 |
 | high | 21 |
-| medium | 16 |
+| medium | 23 |
 | low | 0 |
 | info | 0 |
-| **Total** | **37** |
+| **Total** | **44** |
 
 ## Threat themes
 
 - **EXTERNAL** — External attackers / public internet exposure (24 findings)
-- **INTERNAL** — Insider misuse / employee data theft (13 findings)
+- **INTERNAL** — Insider misuse / employee data theft (20 findings)
 - **COMPLIANCE** — SEBI / financial-data regulatory standards (0 findings)
 - **CONFIG** — Misconfiguration & operational hardening (0 findings)
 
@@ -330,6 +330,62 @@ SQL dumps inside the repo or working tree get copied to laptops, containers, and
 ### `SEC-CMP-004` — Database backup file in working tree: `backups/inertia_app2025_20260922_210003.sql.gz`
 
 **Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/inertia_app2025_20260922_210003.sql.gz`
+
+SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
+
+**Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
+
+### `SEC-CMP-004` — Database backup file in working tree: `backups/kvm_inertia_app2025_20261005_220551.sql.gz`
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/kvm_inertia_app2025_20261005_220551.sql.gz`
+
+SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
+
+**Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
+
+### `SEC-CMP-004` — Database backup file in working tree: `backups/kvm_inertia_app2025_20261014_221018.sql.gz`
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/kvm_inertia_app2025_20261014_221018.sql.gz`
+
+SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
+
+**Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
+
+### `SEC-CMP-004` — Database backup file in working tree: `backups/lean_inertia_app2025_20261005_215752.sql.gz`
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/lean_inertia_app2025_20261005_215752.sql.gz`
+
+SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
+
+**Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
+
+### `SEC-CMP-004` — Database backup file in working tree: `backups/lean_inertia_app2025_20261005_215935.sql.gz`
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/lean_inertia_app2025_20261005_215935.sql.gz`
+
+SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
+
+**Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
+
+### `SEC-CMP-004` — Database backup file in working tree: `backups/lean_inertia_app2025_20261005_220313.sql.gz`
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/lean_inertia_app2025_20261005_220313.sql.gz`
+
+SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
+
+**Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
+
+### `SEC-CMP-004` — Database backup file in working tree: `backups/lean_inertia_app2025_20261005_220418.sql.gz`
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/lean_inertia_app2025_20261005_220418.sql.gz`
+
+SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
+
+**Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
+
+### `SEC-CMP-004` — Database backup file in working tree: `backups/lean_inertia_app2025_20261005_220551.sql.gz`
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/lean_inertia_app2025_20261005_220551.sql.gz`
 
 SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
 
