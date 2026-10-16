@@ -23,6 +23,16 @@ def test_format_half_yearly_january_anchor():
     assert "Half-yearly" in text or "half" in text.lower()
 
 
+def test_format_half_yearly_november_anchor():
+    text = format_billing_period_description("half_yearly", 11)
+    assert "November" in text
+    assert "April" in text
+    assert "May" in text
+    assert "October" in text
+    assert "Half-yearly" in text
+    assert "Yearly" not in text
+
+
 def test_resolve_from_agreement_vars():
     text = resolve_billing_period_text(_Ag())
     assert "January" in text

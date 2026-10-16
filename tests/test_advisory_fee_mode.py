@@ -24,7 +24,7 @@ class _Ag:
 
 
 def test_advisory_model_label():
-    assert "AUA" in advisory_model_label("aua")
+    assert advisory_model_label("aua") == "AUA (Asset Under Advisory)"
     assert "Fixed Fee" in advisory_model_label("fixed_fee")
     assert "first year" in advisory_model_label("fixed_then_aua").lower()
 
@@ -37,7 +37,7 @@ def test_aua_mode_equity_includes_examples():
         ]
     )
     text = format_advisory_fee_mode_block(ag)
-    assert "Assets under Advice (AUA) mode" in text
+    assert "AUA (Asset Under Advisory)" in text
     assert "Equity" in text
     assert "Direct Stocks" in text or "REITs" in text
 

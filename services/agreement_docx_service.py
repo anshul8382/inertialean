@@ -10,7 +10,7 @@ import os
 import re
 import shutil
 import subprocess
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,22 @@ def substitute_placeholders(text: str, variables: Dict[str, str]) -> str:
                 re.IGNORECASE,
             )
             result = pattern.sub(str(value if value is not None else ''), result)
+    # Also clear leftover preview markers like [special_note] when value is empty
+    for name, value in variables.items():
+        if not name or (value or '').strip():
+            continue
+        result = re.sub(
+            r'\[\s*' + re.escape(str(name)) + r'\s*\]',
+            '',
+            result,
+            flags=re.IGNORECASE,
+        )
+    # Drop empty / placeholder-only Special Note lines (label + optional [special_note])
+    result = re.sub(
+        r'(?im)^[ \t]*Special\s*Note\s*:?\s*(\[[^\]]+\])?[ \t]*\r?\n?',
+        '',
+        result,
+    )
     return _strip_empty_legacy_rate_lines(result)
 
 
@@ -142,6 +158,41 @@ def analyze_uploaded_template(path: str, filename: str) -> List[str]:
     raise ValueError("Unsupported file type. Upload a .docx Word file.")
 
 
+def _force_paragraph_left_align(paragraph) -> None:
+    """Avoid Word justify stretching short substituted lines (huge word gaps)."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    try:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    except Exception:
+        pass
+
+
+def _apply_multiline_paragraph_text(paragraph, new_text: str) -> None:
+    """
+    Put substituted text into the paragraph; extra lines become new paragraphs.
+
+    Keeps left alignment and clears highlight so headings like
+    ``3.1 AUA (Asset Under Advisory):`` do not stretch across the page.
+    """
+    lines = (new_text or "").split("\n")
+    first = lines[0] if lines else ""
+    if paragraph.runs:
+        paragraph.runs[0].text = first
+        for run in paragraph.runs[1:]:
+            run.text = ""
+    else:
+        paragraph.add_run(first)
+    _clear_paragraph_highlight(paragraph)
+    _force_paragraph_left_align(paragraph)
+
+    anchor = paragraph
+    for line in lines[1:]:
+        anchor = _add_paragraph_after(anchor, line)
+        _clear_paragraph_highlight(anchor)
+        _force_paragraph_left_align(anchor)
+
+
 def replace_in_paragraph(paragraph, variables: Dict[str, str]) -> bool:
     """
     Replace placeholders in a paragraph, including when Word split tags across runs.
@@ -151,8 +202,7 @@ def replace_in_paragraph(paragraph, variables: Dict[str, str]) -> bool:
         if paragraph.text and '<<' in paragraph.text:
             new_text = substitute_placeholders(paragraph.text, variables)
             if new_text != paragraph.text:
-                paragraph.add_run(new_text)
-                _clear_paragraph_highlight(paragraph)
+                _apply_multiline_paragraph_text(paragraph, new_text)
                 return True
         return False
 
@@ -169,11 +219,7 @@ def replace_in_paragraph(paragraph, variables: Dict[str, str]) -> bool:
     if new_text == full_text:
         return False
 
-    first_run = paragraph.runs[0]
-    first_run.text = new_text
-    for run in paragraph.runs[1:]:
-        run.text = ''
-    _clear_paragraph_highlight(paragraph)
+    _apply_multiline_paragraph_text(paragraph, new_text)
     return True
 
 
@@ -212,22 +258,85 @@ def _clear_paragraph_highlight(paragraph) -> None:
 
 
 def _parse_fee_schedule_table_rows(text: str) -> Optional[List[Tuple[str, str]]]:
-    """Extract Assets|Rate rows from fee schedule plain text."""
-    if not text or '|' not in text:
+    """Extract first pipe-table body rows (legacy single-table helper)."""
+    blocks = _parse_fee_schedule_blocks(text)
+    for block in blocks:
+        if block.get('rows'):
+            return list(block['rows'])
+    return None
+
+
+def _parse_fee_schedule_blocks(text: str) -> List[Dict[str, Any]]:
+    """
+    Parse fee schedule text into ordered blocks of headings + optional 2-col tables.
+
+    Recognises header rows ``Assets | Rate`` and ``AUA band | Rate``.
+    """
+    if not text or not str(text).strip():
+        return []
+    blocks: List[Dict[str, Any]] = []
+    pending_lines: List[str] = []
+    current: Optional[Dict[str, Any]] = None
+
+    def _flush_pending():
+        nonlocal pending_lines
+        text_bits = [ln.strip() for ln in pending_lines if ln.strip()]
+        pending_lines = []
+        if not text_bits:
+            return
+        blocks.append({'kind': 'text', 'lines': text_bits, 'headers': None, 'rows': []})
+
+    def _is_rule(left: str, right: str) -> bool:
+        return (set(left) <= {'-'} or not left) and (set(right) <= {'-'} or not right)
+
+    def _is_header(left: str, right: str) -> Optional[Tuple[str, str]]:
+        l = left.strip().lower()
+        r = right.strip().lower()
+        if l in ('assets', 'asset', 'aua band', 'band', 'slab') and r.startswith('rate'):
+            return (left.strip(), right.strip())
         return None
-    rows: List[Tuple[str, str]] = []
-    for line in text.splitlines():
+
+    for raw in str(text).splitlines():
+        line = raw.rstrip()
         if '|' not in line:
+            # Blank line: end current table and flush pending text as its own block
+            if not line.strip():
+                if current and current.get('headers'):
+                    blocks.append(current)
+                    current = None
+                _flush_pending()
+                continue
+            if current and current.get('headers'):
+                blocks.append(current)
+                current = None
+            pending_lines.append(line)
             continue
         left, right = [p.strip() for p in line.split('|', 1)]
-        if not left or not right:
+        if _is_rule(left, right):
             continue
-        if left.lower() == 'assets' and right.lower().startswith('rate'):
+        header = _is_header(left, right)
+        if header:
+            _flush_pending()
+            if current and current.get('rows'):
+                blocks.append(current)
+            current = {
+                'kind': 'table',
+                'headers': header,
+                'rows': [],
+                'lines': [],
+            }
             continue
-        if set(left) <= {'-'} or set(right) <= {'-'}:
+        if current is not None and current.get('headers'):
+            if left or right:
+                current['rows'].append((left, right))
             continue
-        rows.append((left, right))
-    return rows or None
+        # pipe line without an active table header — treat as prose
+        pending_lines.append(line)
+
+    _flush_pending()
+    if current and (current.get('rows') or current.get('headers')):
+        blocks.append(current)
+    return blocks
 
 
 def _set_paragraph_text(paragraph, text: str) -> None:
@@ -274,8 +383,13 @@ def _set_cell_center_text(cell, text: str, *, bold: bool = False) -> None:
     _set_cell_borders(cell)
 
 
-def _insert_assets_rates_table_after(paragraph, rows: List[Tuple[str, str]]) -> None:
-    """Insert a bordered, center-aligned Assets / Rate Word table after *paragraph*."""
+def _insert_two_col_table_after(
+    paragraph,
+    rows: List[Tuple[str, str]],
+    *,
+    headers: Tuple[str, str] = ('Assets', 'Rate'),
+):
+    """Insert a bordered, center-aligned 2-column Word table after *paragraph*."""
     from docx.shared import Inches
 
     doc_part = paragraph._parent
@@ -284,37 +398,83 @@ def _insert_assets_rates_table_after(paragraph, rows: List[Tuple[str, str]]) -> 
         table.style = 'Table Grid'
     except Exception:
         pass
-    _set_cell_center_text(table.rows[0].cells[0], 'Assets', bold=True)
-    _set_cell_center_text(table.rows[0].cells[1], 'Rate', bold=True)
-    for i, (asset, rate) in enumerate(rows, start=1):
-        _set_cell_center_text(table.rows[i].cells[0], asset)
-        _set_cell_center_text(table.rows[i].cells[1], rate)
+    _set_cell_center_text(table.rows[0].cells[0], headers[0], bold=True)
+    _set_cell_center_text(table.rows[0].cells[1], headers[1], bold=True)
+    for i, (left, right) in enumerate(rows, start=1):
+        _set_cell_center_text(table.rows[i].cells[0], left)
+        _set_cell_center_text(table.rows[i].cells[1], right)
     paragraph._p.addnext(table._tbl)
+    return table
+
+
+def _insert_assets_rates_table_after(paragraph, rows: List[Tuple[str, str]]) -> None:
+    """Back-compat: Assets / Rate table."""
+    _insert_two_col_table_after(paragraph, rows, headers=('Assets', 'Rate'))
+
+
+def _add_paragraph_after(paragraph, text: str):
+    """Insert a new paragraph after *paragraph* and return it."""
+    from docx.oxml import OxmlElement
+
+    new_p = OxmlElement('w:p')
+    paragraph._p.addnext(new_p)
+    # Attach to same body/cell container
+    new_para = type(paragraph)(new_p, paragraph._parent)
+    _set_paragraph_text(new_para, text)
+    return new_para
 
 
 def _replace_fee_schedule_placeholder_with_table(paragraph, variables: Dict[str, str]) -> bool:
     """
-    Turn <<billing_fee_schedule>> into an intro line + real 2-column Word table.
+    Turn <<billing_fee_schedule>> into headings + real Word tables (Assets/Rate or AUA band/Rate).
 
-    Falls back to plain-text substitution when the value is not a table.
+    Falls back to plain-text substitution when the value has no pipe tables.
     """
     full_text = ''.join(run.text for run in paragraph.runs) if paragraph.runs else (paragraph.text or '')
     if not _FEE_SCHEDULE_PLACEHOLDER.search(full_text):
         return False
 
     fee_text = (variables.get('billing_fee_schedule') or '').strip()
-    rows = _parse_fee_schedule_table_rows(fee_text)
-    if not rows:
+    blocks = _parse_fee_schedule_blocks(fee_text)
+    table_blocks = [b for b in blocks if b.get('kind') == 'table' and b.get('rows')]
+    if not table_blocks:
         return False
 
-    intro = 'Advisory fee structure (annual % of portfolio value):'
     remainder = _FEE_SCHEDULE_PLACEHOLDER.sub('', full_text).strip()
-    # Drop duplicated intro if the template already had a heading nearby
     if remainder.lower().startswith('advisory fee'):
         remainder = ''
-    new_text = intro if not remainder else f'{remainder}\n{intro}'
-    _set_paragraph_text(paragraph, new_text)
-    _insert_assets_rates_table_after(paragraph, rows)
+
+    # Seed the placeholder paragraph with the first text heading (or a default intro)
+    first_text = next((b for b in blocks if b.get('kind') == 'text'), None)
+    intro_lines = list(first_text.get('lines') or []) if first_text else []
+    if not intro_lines:
+        intro_lines = ['Advisory fee structure (annual % of portfolio value):']
+    seed = '\n'.join(intro_lines)
+    if remainder:
+        seed = f'{remainder}\n{seed}'
+    _set_paragraph_text(paragraph, seed)
+
+    anchor = paragraph
+    consumed_first_text = bool(first_text)
+    for block in blocks:
+        if block.get('kind') == 'text':
+            if consumed_first_text and block is first_text:
+                continue
+            for line in block.get('lines') or []:
+                anchor = _add_paragraph_after(anchor, line)
+            continue
+        if block.get('kind') == 'table' and block.get('rows'):
+            headers = block.get('headers') or ('Assets', 'Rate')
+            table = _insert_two_col_table_after(
+                anchor, list(block['rows']), headers=(headers[0], headers[1])
+            )
+            # Next content goes after the table element
+            from docx.text.paragraph import Paragraph
+            from docx.oxml import OxmlElement
+
+            new_p = OxmlElement('w:p')
+            table._tbl.addnext(new_p)
+            anchor = Paragraph(new_p, paragraph._parent)
     return True
 
 
@@ -358,9 +518,32 @@ def prune_empty_legacy_rate_paragraphs(doc) -> int:
     return removed
 
 
+_EMPTY_SPECIAL_NOTE_PARA = re.compile(
+    r"^\s*Special\s*Note\s*:?\s*(\[[^\]]+\])?\s*$",
+    re.IGNORECASE,
+)
+
+
+def prune_empty_special_note_paragraphs(doc) -> int:
+    """Remove leftover 'Special Note :' headings when <<special_note>> is empty."""
+    removed = 0
+    for paragraph in list(iter_docx_paragraphs(doc)):
+        if not _EMPTY_SPECIAL_NOTE_PARA.match((paragraph.text or "").strip()):
+            continue
+        el = paragraph._element
+        parent = el.getparent()
+        if parent is not None:
+            parent.remove(el)
+            removed += 1
+    return removed
+
+
 def replace_placeholders_in_document(doc, variables: Dict[str, str]) -> int:
     """Substitute variables in all document parts. Returns paragraphs updated."""
     vars_norm = normalize_substitution_dict(variables)
+    # Ensure empty special_note is explicit so leftover labels can be pruned
+    if 'special_note' not in vars_norm or not (vars_norm.get('special_note') or '').strip():
+        vars_norm['special_note'] = ''
     count = 0
     for paragraph in list(iter_docx_paragraphs(doc)):
         if _replace_fee_schedule_placeholder_with_table(paragraph, vars_norm):
@@ -369,6 +552,7 @@ def replace_placeholders_in_document(doc, variables: Dict[str, str]) -> int:
         if replace_in_paragraph(paragraph, vars_norm):
             count += 1
     prune_empty_legacy_rate_paragraphs(doc)
+    prune_empty_special_note_paragraphs(doc)
     return count
 
 
@@ -387,6 +571,7 @@ def build_substitution_dict(
         BILLING_FEE_SCHEDULE_VAR,
         BILLING_PERIOD_VAR,
         PORTFOLIO_VALUATION_DATES_VAR,
+        VALUATION_DATE_BASIS_VAR,
     )
 
     keys = set(variables)
@@ -399,7 +584,10 @@ def build_substitution_dict(
         BILLING_FEE_PORTFOLIO_TEXT_VAR,
         BILLING_PERIOD_VAR,
         PORTFOLIO_VALUATION_DATES_VAR,
+        VALUATION_DATE_BASIS_VAR,
         ADVISORY_FEE_MODE_VAR,
+        "billing_start_date",
+        "advisory_model",
     ):
         if auto_key in keys and (existing_data.get(auto_key) or "").strip():
             data[auto_key] = existing_data[auto_key]

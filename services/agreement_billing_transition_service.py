@@ -171,16 +171,29 @@ def format_aua_billing_basis_summary(
 ) -> str:
     """
     Single sentence aligned with the AUA billing basis dropdown (pre-paid / post-paid).
+
+    Pre-paid default = last calendar day of the month before the period starts
+    (e.g. 31 October for a November–April half-year).
     """
     r = _normalize_valuation_rule(rule)
     freq = (frequency or "yearly").strip().lower()
     anchor = period_start_month if 1 <= period_start_month <= 12 else 1
     span_example = ""
-    if freq == "half_yearly" and anchor == 1:
+    period_months = {"yearly": 12, "half_yearly": 6, "quarterly": 3}.get(freq, 12)
+    starts = _period_starts_in_cycle(anchor, period_months)
+    if starts:
+        first_start = starts[0]
+        first_end = _period_end_from_start(first_start, period_months)
+        span = _period_label_long(first_start, first_end)
         if r == "prepaid":
-            span_example = " (e.g. 31 December for the January–June half-year)"
+            val_day = first_start - timedelta(days=1)
+            span_example = (
+                f" (e.g. {_format_valuation_calendar_day(val_day)} for the {span} period)"
+            )
         else:
-            span_example = " (e.g. 30 June for the January–June half-year)"
+            span_example = (
+                f" (e.g. {_format_valuation_calendar_day(first_end)} for the {span} period)"
+            )
 
     if r == "postpaid":
         return (
@@ -188,7 +201,7 @@ def format_aua_billing_basis_summary(
             f"(post-paid basis{span_example})."
         )
     return (
-        "AUA for each billing period is valued at the end of the month immediately "
+        "AUA for each billing period is valued at the last day of the month immediately "
         f"before the period starts (pre-paid basis{span_example})."
     )
 

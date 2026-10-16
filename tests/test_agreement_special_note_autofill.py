@@ -36,7 +36,38 @@ def test_autofill_injects_human_special_note():
     assert existing_data.get("special_note") == note
 
 
-def test_autofill_falls_back_to_fee_schedule_when_no_human_note():
+def test_autofill_does_not_duplicate_fee_schedule_into_special_note():
+    """When template has both placeholders, do not copy fee prose into Special Note."""
+    from routes.agreements import _autofill_structured_vars
+
+    schedule = "Fee will be calculated as 0.25% of the portfolio value of Equity Mutual Funds."
+    agreement = SimpleNamespace(
+        id=1,
+        variables=[
+            SimpleNamespace(
+                variable_name="billing_fee_schedule",
+                variable_value=schedule,
+                variable_type="billing_generated",
+            ),
+        ],
+        agreement_data="{}",
+        lead=None,
+        signed_date=None,
+        sent_date=None,
+        created_at=None,
+    )
+    existing_data = {}
+    _autofill_structured_vars(
+        agreement,
+        existing_data,
+        variables=[],
+        raw_variables=["special_note", "billing_fee_schedule"],
+    )
+    assert existing_data.get("billing_fee_schedule") == schedule
+    assert not (existing_data.get("special_note") or "").strip()
+
+
+def test_autofill_falls_back_to_fee_schedule_for_legacy_special_note_only_template():
     from routes.agreements import _autofill_structured_vars
 
     schedule = "Advisory fees are charged quarterly."
@@ -60,6 +91,6 @@ def test_autofill_falls_back_to_fee_schedule_when_no_human_note():
         agreement,
         existing_data,
         variables=[],
-        raw_variables=["special_note", "billing_fee_schedule"],
+        raw_variables=["special_note"],  # no billing_fee_schedule placeholder
     )
     assert existing_data.get("special_note") == schedule

@@ -106,6 +106,25 @@ def test_format_asset_class_flat_line():
     assert "Debt" in line
 
 
+def test_tiered_schedule_is_simple_band_rate_table():
+    line = format_asset_class_schedule(
+        "Equity, Equity ETF, and REIT / InvIT",
+        [
+            {"min_amount": 0, "max_amount": 2500000, "rate_pct": 2, "min_fee": 0, "max_fee": None},
+            {"min_amount": 2500000, "max_amount": 5000000, "rate_pct": 1.5, "min_fee": 0, "max_fee": None},
+            {"min_amount": 5000000, "max_amount": None, "rate_pct": 1, "min_fee": 0, "max_fee": None},
+        ],
+    )
+    assert "portion" not in line.lower()
+    assert "AUA band" in line
+    assert "|" in line
+    assert "Up to ₹25 lakh" in line
+    assert "2%" in line
+    assert "1.5%" in line
+    assert "Above ₹50 lakh" in line
+    assert "Only one rate applies" in line
+
+
 def test_validate_warns_empty_slabs():
     warnings = validate_rates({5: []})
     assert any("no billing slabs" in w for w in warnings)

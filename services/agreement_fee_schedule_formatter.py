@@ -31,13 +31,31 @@ def _format_inr(amount: float) -> str:
 
 
 def _format_band_label(min_amt: float, max_amt: Optional[float]) -> str:
+    """Short band range label (legacy slots / amount_range placeholders)."""
     if (min_amt or 0) <= 0 and max_amt is None:
         return "all assets under advice"
     if max_amt is None:
-        return f"the portion above {_format_inr(min_amt)}"
+        return f"above {_format_inr(min_amt)}"
     if (min_amt or 0) <= 0:
-        return f"assets under advice up to {_format_inr(max_amt)}"
-    return f"the portion from {_format_inr(min_amt)} to {_format_inr(max_amt)}"
+        return f"up to {_format_inr(max_amt)}"
+    return f"{_format_inr(min_amt)} to {_format_inr(max_amt)}"
+
+
+def _format_band_when_clause(min_amt: float, max_amt: Optional[float]) -> str:
+    """
+    Tier wording for slab (threshold) schedules — only one rate applies,
+    based on which band the total AUA falls into (not progressive portions).
+    """
+    if (min_amt or 0) <= 0 and max_amt is None:
+        return "when assets under advice are at any level"
+    if max_amt is None:
+        return f"when assets under advice exceed {_format_inr(min_amt)}"
+    if (min_amt or 0) <= 0:
+        return f"when assets under advice are up to {_format_inr(max_amt)}"
+    return (
+        f"when assets under advice are above {_format_inr(min_amt)} "
+        f"and up to {_format_inr(max_amt)}"
+    )
 
 
 def _slab_signature(slabs: Sequence[Dict[str, Any]]) -> Tuple:
@@ -138,14 +156,9 @@ def format_fee_schedule_table_text(rows: List[Tuple[str, str]]) -> str:
     """Plain-text two-column table for previews and non-DOCX templates."""
     if not rows:
         return ""
-    asset_w = max(len("Assets"), max(len(a) for a, _ in rows))
-    rate_w = max(len("Rate"), max(len(r) for _, r in rows))
-    header = f"{'Assets'.ljust(asset_w)} | {'Rate'.ljust(rate_w)}"
-    rule = f"{'-' * asset_w}-+-{'-' * rate_w}"
-    body = "\n".join(f"{a.ljust(asset_w)} | {r.ljust(rate_w)}" for a, r in rows)
     return (
         "Advisory fee structure (annual % of portfolio value):\n\n"
-        f"{header}\n{rule}\n{body}"
+        + _pipe_table(("Assets", "Rate"), rows)
     )
 
 
@@ -170,45 +183,81 @@ def format_portfolio_value_fee_schedule(agreement: Agreement) -> str:
     return format_fee_schedule_table_text(rows)
 
 
+def _format_slab_band_cell(min_amt: float, max_amt: Optional[float]) -> str:
+    """Short AUA-band cell for slab tables (threshold schedule, one rate at a time)."""
+    if (min_amt or 0) <= 0 and max_amt is None:
+        return "Any AUA"
+    if max_amt is None:
+        return f"Above {_format_inr(min_amt)}"
+    if (min_amt or 0) <= 0:
+        return f"Up to {_format_inr(max_amt)}"
+    return f"Above {_format_inr(min_amt)} to {_format_inr(max_amt)}"
+
+
+def _pipe_table(headers: Tuple[str, str], rows: List[Tuple[str, str]]) -> str:
+    if not rows:
+        return ""
+    col1_w = max(len(headers[0]), max(len(r[0]) for r in rows))
+    col2_w = max(len(headers[1]), max(len(r[1]) for r in rows))
+    head = f"{headers[0].ljust(col1_w)} | {headers[1].ljust(col2_w)}"
+    # Keep a pipe in the rule so DOCX parsers treat it as part of the table
+    rule = f"{'-' * col1_w} | {'-' * col2_w}"
+    body = "\n".join(f"{a.ljust(col1_w)} | {b.ljust(col2_w)}" for a, b in rows)
+    return f"{head}\n{rule}\n{body}"
+
+
 def format_asset_class_schedule(ac_name: str, slabs: List[Dict[str, Any]]) -> str:
-    """One asset class (or grouped name) as a sentence or bullet block."""
+    """
+    One asset class (or grouped name) as a simple pipe table.
+
+    Flat → Assets | Rate. Tiered → AUA band | Rate (one applicable band rate).
+    """
     if not slabs:
         return ""
-    if len(slabs) == 1 and (slabs[0].get("max_amount") is None) and (slabs[0].get("min_amount") or 0) <= 0:
+    is_flat = (
+        len(slabs) == 1
+        and (slabs[0].get("max_amount") is None)
+        and (slabs[0].get("min_amount") or 0) <= 0
+    )
+    if is_flat:
         rate = slabs[0]["rate_pct"]
-        names = [n.strip() for n in ac_name.split(" and ")] if " and " in ac_name else [ac_name]
-        if len(names) > 2 or ", and " in ac_name:
-            names = [
-                p.strip()
-                for p in ac_name.replace(", and ", "|").replace(" and ", "|").split("|")
-                if p.strip()
-            ]
-        line = f"Fee will be calculated as {rate:g}% of {portfolio_value_phrase(names)}."
+        rate_label = f"{rate:g}%"
         min_f = slabs[0].get("min_fee") or 0
         max_f = slabs[0].get("max_fee")
         extras = []
         if min_f and min_f > 0:
-            extras.append(f"minimum fee {_format_inr(min_f)} per billing period")
+            extras.append(f"min {_format_inr(min_f)}")
         if max_f is not None:
-            extras.append(f"maximum fee {_format_inr(max_f)} per billing period")
+            extras.append(f"max {_format_inr(max_f)}")
         if extras:
-            line += " (" + "; ".join(extras) + ")."
-        return line
+            rate_label = f"{rate_label} ({'; '.join(extras)})"
+        return (
+            f"{ac_name}\n"
+            + _pipe_table(("Assets", "Rate"), [(ac_name, rate_label)])
+        )
 
-    parts = []
-    for s in slabs:
-        band = _format_band_label(s.get("min_amount") or 0, s.get("max_amount"))
-        parts.append(f"{s['rate_pct']:g}% per annum on {band}")
-    return f"{ac_name}: " + "; ".join(parts) + "."
+    band_rows = [
+        (
+            _format_slab_band_cell(s.get("min_amount") or 0, s.get("max_amount")),
+            f"{s['rate_pct']:g}%",
+        )
+        for s in slabs
+    ]
+    return (
+        f"{ac_name}\n"
+        "(Only one rate applies — the band matching total AUA — to the full portfolio value.)\n"
+        + _pipe_table(("AUA band", "Rate"), band_rows)
+    )
 
 
 def format_fee_schedule_from_rates(
     rates: List[BillingRateStructure],
     *,
     billing_frequency: Optional[str] = None,
+    valuation_dates_text: Optional[str] = None,
 ) -> str:
     """
-    Build multi-line fee schedule prose from active BillingRateStructure rows.
+    Build fee schedule as simple pipe tables (parsed into Word tables on DOCX export).
     Groups asset classes that share identical slab sets.
     """
     by_ac: Dict[str, List[BillingRateStructure]] = defaultdict(list)
@@ -230,8 +279,16 @@ def format_fee_schedule_from_rates(
         sig_to_names[sig].append(ac_name)
         sig_to_slabs[sig] = slabs
 
-    lines: List[str] = []
-    for sig in sorted(sig_to_names.keys(), key=lambda s: (len(sig_to_slabs[s]), s[0][2] if s else 0)):
+    sections: List[str] = ["Advisory fee structure (annual % of portfolio value):"]
+    # Tiered groups first, then flat (by descending rate)
+    ordered = sorted(
+        sig_to_names.keys(),
+        key=lambda s: (
+            0 if len(sig_to_slabs[s]) > 1 else 1,
+            -float((sig_to_slabs[s][0].get("rate_pct") if sig_to_slabs[s] else 0) or 0),
+        ),
+    )
+    for sig in ordered:
         names = sorted(sig_to_names[sig])
         if len(names) == 1:
             label = names[0]
@@ -239,24 +296,23 @@ def format_fee_schedule_from_rates(
             label = f"{names[0]} and {names[1]}"
         else:
             label = ", ".join(names[:-1]) + f", and {names[-1]}"
-        lines.append(format_asset_class_schedule(label, sig_to_slabs[sig]))
+        sections.append(format_asset_class_schedule(label, sig_to_slabs[sig]))
 
-    footnote = ""
     freq = (billing_frequency or "yearly").strip().lower()
     if freq == "half_yearly":
-        footnote = (
-            " Stated rates are annual percentages; half-yearly invoices reflect "
-            "one-half of the annual rate applied to assets under advice for the period."
+        sections.append(
+            "Rates are annual; half-yearly invoices use one-half of the applicable annual rate."
         )
     elif freq == "quarterly":
-        footnote = (
-            " Stated rates are annual percentages; quarterly invoices reflect "
-            "one-quarter of the annual rate applied to assets under advice for the period."
+        sections.append(
+            "Rates are annual; quarterly invoices use one-quarter of the applicable annual rate."
         )
-    else:
-        footnote = " Stated rates are annual percentages applied to assets under advice."
 
-    return "\n".join(lines) + footnote
+    val = (valuation_dates_text or "").strip()
+    if val:
+        sections.append("Valuation dates:\n" + val)
+
+    return "\n\n".join(s for s in sections if s and s.strip())
 
 
 def _agreement_config(agreement: Agreement) -> Dict[str, Any]:
@@ -287,11 +343,34 @@ def _join_asset_names(names: List[str]) -> str:
     return ", ".join(names[:-1]) + f", and {names[-1]}"
 
 
+def _active_billing_rates(agreement: Agreement) -> List[BillingRateStructure]:
+    """
+    Active BillingRateStructure rows for an agreement.
+
+    Prefer a fresh DB query so fee text is correct after delete+insert saves
+    (the ORM ``agreement.billing_rates`` collection is often stale in-session).
+    """
+    agr_id = getattr(agreement, "id", None)
+    if agr_id:
+        try:
+            rows = (
+                BillingRateStructure.query.filter_by(agreement_id=agr_id, is_active=True)
+                .all()
+            )
+            if rows:
+                return rows
+        except Exception:
+            pass
+    return [
+        r
+        for r in (getattr(agreement, "billing_rates", None) or [])
+        if getattr(r, "is_active", True)
+    ]
+
+
 def _rates_by_asset_class(agreement: Agreement) -> Dict[str, List[BillingRateStructure]]:
     by_ac: Dict[str, List[BillingRateStructure]] = defaultdict(list)
-    for r in agreement.billing_rates or []:
-        if not getattr(r, "is_active", True):
-            continue
+    for r in _active_billing_rates(agreement):
         name = r.asset_class.name if r.asset_class else f"Asset class #{r.asset_class_id}"
         by_ac[name].append(r)
     for name in by_ac:
@@ -508,7 +587,14 @@ def legacy_template_slot_values(agreement: Agreement) -> Dict[str, str]:
         entries.append((_rate_pct_plain(sig), ac_name))
     for idx, (rate_pct, label) in enumerate(entries[:3], start=1):
         slots[f"rate_{idx}"] = rate_pct
-        if label.startswith("the portion") or label.startswith("above") or label.startswith("assets under advice up"):
+        if (
+            label.startswith("the portion")
+            or label.startswith("above")
+            or label.startswith("up to")
+            or label.startswith("assets under advice")
+            or " to ₹" in label
+            or " to Rs" in label
+        ):
             slots[f"amount_range{idx}"] = label
         else:
             slots[f"amount_range{idx}"] = portfolio_value_phrase([label])
@@ -530,19 +616,43 @@ def _drop_empty_legacy_slots(slots: Dict[str, str]) -> Dict[str, str]:
 
 
 def format_fee_schedule_for_agreement(agreement: Agreement) -> str:
-    """Load rates for agreement and format schedule text."""
-    if _all_flat_single_slab(agreement):
-        text = format_portfolio_value_fee_schedule(agreement)
-        if text:
-            return text
+    """Load rates for agreement and format schedule text (tables + valuation dates)."""
     freq = None
-    for v in agreement.variables or []:
+    for v in getattr(agreement, "variables", None) or []:
         if (v.variable_name or "").strip() == "billing_frequency":
             freq = v.variable_value
             break
-    rates = [
-        r
-        for r in (agreement.billing_rates or [])
-        if getattr(r, "is_active", True)
-    ]
-    return format_fee_schedule_from_rates(rates, billing_frequency=freq)
+
+    valuation_dates = ""
+    try:
+        from services.agreement_billing_config_service import (
+            resolve_portfolio_valuation_dates_text,
+        )
+
+        valuation_dates = resolve_portfolio_valuation_dates_text(agreement) or ""
+    except Exception:
+        valuation_dates = ""
+
+    # All-flat → compact Assets|Rate table; mixed/tiered → per-group slab tables
+    if _all_flat_single_slab(agreement):
+        text = format_portfolio_value_fee_schedule(agreement)
+        if text:
+            parts = [text.strip()]
+            if (freq or "").strip().lower() == "half_yearly":
+                parts.append(
+                    "Rates are annual; half-yearly invoices use one-half of the applicable annual rate."
+                )
+            elif (freq or "").strip().lower() == "quarterly":
+                parts.append(
+                    "Rates are annual; quarterly invoices use one-quarter of the applicable annual rate."
+                )
+            if valuation_dates.strip():
+                parts.append("Valuation dates:\n" + valuation_dates.strip())
+            return "\n\n".join(parts)
+
+    rates = _active_billing_rates(agreement)
+    return format_fee_schedule_from_rates(
+        rates,
+        billing_frequency=freq,
+        valuation_dates_text=valuation_dates,
+    )

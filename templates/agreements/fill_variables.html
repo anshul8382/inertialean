@@ -46,11 +46,54 @@
             <div class="row">
               {% for variable in variables %}
               {% set prefilled = existing_data.get(variable, '') %}
+              {% set is_client_name = variable in ['client', 'client_name', 'name_as_per_pan', 'client_signature'] %}
+              {% set is_pan = variable == 'pan' %}
               <div class="col-md-6 mb-3">
                 <label for="var_{{ variable }}" class="form-label fw-semibold">
-                  {{ variable | replace('_', ' ') | title }}
+                  {% if is_client_name %}Client name(s)
+                  {% elif is_pan %}Primary PAN
+                  {% else %}{{ variable | replace('_', ' ') | title }}{% endif %}
                   {% if not prefilled %}<span class="text-danger">*</span>{% endif %}
                 </label>
+                {% if is_client_name %}
+                <textarea
+                       class="form-control agreement-var-input {% if prefilled %}border-success{% endif %}"
+                       id="var_{{ variable }}"
+                       name="var_{{ variable }}"
+                       data-variable-name="{{ variable }}"
+                       rows="2"
+                       placeholder="e.g. Husband Name and Wife Name"
+                       {% if not prefilled %}required{% endif %}>{{ prefilled }}</textarea>
+                <small class="text-muted">
+                  Placeholder: <code>&lt;&lt;{{ variable }}&gt;&gt;</code>.
+                  Joint / husband–wife: type both names in this field (edit the green prefill).
+                </small>
+                {% elif is_pan %}
+                <input type="text"
+                       class="form-control agreement-var-input text-uppercase {% if prefilled %}border-success{% endif %}"
+                       id="var_pan"
+                       name="var_pan"
+                       data-variable-name="pan"
+                       data-pan-role="primary"
+                       value="{{ prefilled }}"
+                       maxlength="10"
+                       placeholder="ABCDE1234F"
+                       autocomplete="off"
+                       {% if not prefilled %}required{% endif %}>
+                <small class="text-muted">Placeholder: <code>&lt;&lt;pan&gt;&gt;</code> (primary / first applicant)</small>
+                <label for="var_pan_2" class="form-label fw-semibold mt-3 mb-1">Second PAN <span class="text-muted fw-normal">(optional — spouse / co-applicant)</span></label>
+                <input type="text"
+                       class="form-control agreement-var-input text-uppercase"
+                       id="var_pan_2"
+                       name="var_pan_2"
+                       data-variable-name="pan_2"
+                       data-pan-role="secondary"
+                       value="{{ existing_data.get('pan_2', '') }}"
+                       maxlength="10"
+                       placeholder="ABCDE1234F"
+                       autocomplete="off">
+                <small class="text-muted">Both PANs appear in the agreement as <code>PAN1 and PAN2</code>.</small>
+                {% else %}
                 <input type="text"
                        class="form-control agreement-var-input {% if prefilled %}border-success{% endif %}"
                        id="var_{{ variable }}"
@@ -60,6 +103,7 @@
                        placeholder="Enter {{ variable | replace('_', ' ') | lower }}"
                        {% if not prefilled %}required{% endif %}>
                 <small class="text-muted">Placeholder: <code>&lt;&lt;{{ variable }}&gt;&gt;</code></small>
+                {% endif %}
               </div>
               {% endfor %}
             </div>
@@ -137,6 +181,14 @@
   }
 
   function getSubstitutionValue(name) {
+    if (name === 'pan') {
+      var p1 = (document.getElementById('var_pan') || {}).value || '';
+      var p2 = (document.getElementById('var_pan_2') || {}).value || '';
+      p1 = String(p1).trim().toUpperCase();
+      p2 = String(p2).trim().toUpperCase();
+      if (p1 && p2) return p1 + ' and ' + p2;
+      if (p1 || p2) return p1 || p2;
+    }
     var inp = document.getElementById('var_' + name);
     if (inp) {
       return inp.value;
@@ -154,7 +206,13 @@
         return;
       }
       var val = getSubstitutionValue(name);
-      if (!val.trim()) {
+      // Leave optional/empty fields blank (never show [special_note] etc. in preview/doc)
+      var optionalEmpty = {
+        special_note: true,
+        valuation_date_basis: true,
+        billing_start_date: true
+      };
+      if (!val.trim() && !optionalEmpty[name]) {
         val = '[' + name + ']';
       }
       var pattern = new RegExp('<<\\s*' + escapeRegExp(name) + '\\s*>>', 'gi');

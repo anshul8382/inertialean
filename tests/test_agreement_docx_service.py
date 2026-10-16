@@ -86,27 +86,29 @@ def test_substitute_placeholders_allows_whitespace():
 def test_replace_clears_placeholder_highlight():
     docx = pytest.importorskip("docx")
     from docx import Document
-    from docx.enum.text import WD_COLOR_INDEX
+    from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR_INDEX
 
     from services.agreement_docx_service import replace_placeholders_in_document
 
     doc = Document()
     p = doc.add_paragraph("<<advisory_fee_mode>>")
+    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p.runs[0].font.highlight_color = WD_COLOR_INDEX.YELLOW
     replace_placeholders_in_document(
         doc,
         {
             "advisory_fee_mode": (
-                "3.1 Assets under Advice (AUA) mode:\n"
-                "Assets Under Advice (AUA): Market value of Equity assets under advice "
-                "covered by this arrangement."
+                "AUA (Asset Under Advisory):\n"
+                "Market value of Equity assets under advice covered by this arrangement."
             )
         },
     )
-    assert "Assets Under Advice (AUA)" in doc.paragraphs[0].text
+    assert "AUA (Asset Under Advisory)" in doc.paragraphs[0].text
     assert "<<" not in doc.paragraphs[0].text
+    assert doc.paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.LEFT
     for run in doc.paragraphs[0].runs:
         assert run.font.highlight_color is None
+    assert any("Market value of Equity" in (p.text or "") for p in doc.paragraphs)
 
 
 def test_replace_in_table_cell():

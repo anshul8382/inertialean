@@ -36,9 +36,9 @@ BILLING_FEE_PORTFOLIO_TEXT_VAR = "billing_fee_portfolio_text"
 ADVISORY_FEE_MODE_VAR = "advisory_fee_mode"
 
 ADVISORY_MODEL_LABELS = {
-    "aua": "Assets under Advice (AUA) mode",
+    "aua": "AUA (Asset Under Advisory)",
     "fixed_fee": "Fixed Fee mode",
-    "fixed_then_aua": "Fixed fee — first year, then Assets under Advice (AUA) mode",
+    "fixed_then_aua": "Fixed fee — first year, then AUA (Asset Under Advisory)",
 }
 
 # Illustrative inclusions when Equity (or similar) is selected for AUA wording.
@@ -47,6 +47,8 @@ _EQUITY_AUA_INCLUDES = (
 )
 
 # Filled from billing config — never manual fields on Fill Variables page.
+VALUATION_DATE_BASIS_VAR = "valuation_date_basis"
+
 AUTO_MANAGED_TEMPLATE_VARS = frozenset(
     {
         BILLING_FEE_SCHEDULE_VAR,
@@ -54,7 +56,9 @@ AUTO_MANAGED_TEMPLATE_VARS = frozenset(
         ADVISORY_FEE_MODE_VAR,
         "billing_rate_tiers",
         "portfolio_valuation_dates",
+        VALUATION_DATE_BASIS_VAR,
         "billing_period",
+        "billing_start_date",
         "asset_types",
         "advisory_model",
         "agreement_date",
@@ -106,20 +110,23 @@ def _format_inr_fee(raw: Optional[str]) -> str:
 
 
 def _aua_definition_lines(asset_names: List[str]) -> List[str]:
+    """
+    Definition under the AUA heading. Avoid repeating the full title line — the
+    <<advisory_fee_mode>> block already starts with ``AUA (Asset Under Advisory):``.
+    """
     if not asset_names:
         return [
-            "Assets Under Advice (AUA): Market value of assets under advice covered by this arrangement."
+            "Market value of assets under advice covered by this arrangement."
         ]
     joined = ", ".join(asset_names)
     only_equity = len(asset_names) == 1 and "equity" in asset_names[0].lower()
     if only_equity:
         return [
-            "Assets Under Advice (AUA): Market value of Equity assets under advice "
+            "Market value of Equity assets under advice "
             f"(Includes {_EQUITY_AUA_INCLUDES})."
         ]
     return [
-        f"Assets Under Advice (AUA): Market value of {joined} assets under advice "
-        "covered by this arrangement."
+        f"Market value of {joined} assets under advice covered by this arrangement."
     ]
 
 
@@ -173,7 +180,7 @@ def format_advisory_fee_mode_block(agreement: Agreement) -> str:
         lines.append(
             "First year: fixed fee"
             + (f" of {yr1} per annum" if yr1 else "")
-            + " (exclusive of taxes), then Assets under Advice (AUA) thereafter."
+            + " (exclusive of taxes), then AUA (Asset Under Advisory) thereafter."
         )
         lines.extend(_aua_definition_lines(assets))
         return "\n".join(lines)
@@ -204,11 +211,47 @@ def format_billing_period_description(
     return freq_labels.get(freq, freq.replace("_", "-").title())
 
 
+def _agreement_billing_vars(agreement: Agreement) -> Dict[str, str]:
+    """
+    Billing config from AgreementVariables, with agreement_data JSON fallback.
+
+    Queries the DB when possible so freshly flushed frequency/period vars are
+    visible even if the ORM ``agreement.variables`` collection is stale.
+    """
+    vm: Dict[str, str] = {}
+    agr_id = getattr(agreement, "id", None)
+    if agr_id:
+        try:
+            rows = AgreementVariables.query.filter_by(agreement_id=agr_id).all()
+            vm = {
+                (v.variable_name or "").strip(): (v.variable_value or "").strip()
+                for v in rows
+            }
+        except Exception:
+            vm = {}
+    if not vm:
+        vm = {
+            (v.variable_name or "").strip(): (v.variable_value or "").strip()
+            for v in (getattr(agreement, "variables", None) or [])
+        }
+    try:
+        raw_data = getattr(agreement, "agreement_data", None)
+        data = json.loads(raw_data) if raw_data else {}
+    except (json.JSONDecodeError, TypeError):
+        data = {}
+    for key in (
+        "billing_frequency",
+        "period_start_month",
+        "valuation_date_rule",
+        "billing_start_date",
+    ):
+        if not (vm.get(key) or "").strip() and data.get(key) not in (None, ""):
+            vm[key] = str(data.get(key)).strip()
+    return vm
+
+
 def resolve_billing_period_text(agreement: Agreement) -> str:
-    vm = {
-        (v.variable_name or "").strip(): (v.variable_value or "").strip()
-        for v in (getattr(agreement, "variables", None) or [])
-    }
+    vm = _agreement_billing_vars(agreement)
     try:
         anchor = int(vm.get("period_start_month") or "1")
     except (TypeError, ValueError):
@@ -351,10 +394,322 @@ def _parse_exceptions(form_data) -> Dict[int, Decimal]:
     return exceptions
 
 
+def _pct_from_form(form_data, key: str, default: Decimal) -> Decimal:
+    """Parse annual %; empty → default; explicit 0 is kept (Nil)."""
+    raw = (form_data.get(key) or "").strip()
+    if not raw:
+        return default
+    return _d(raw, default)
+
+
+def _parse_group_slabs(form_data, group_idx: int) -> List[Dict[str, Any]]:
+    """Slabs for one rate group (rate_percentage as fraction)."""
+    mode = (form_data.get(f"billing_group_{group_idx}_mode") or "flat").strip().lower()
+    if mode != "tiered":
+        rate_pct = _pct_from_form(form_data, f"billing_group_{group_idx}_rate_pct", Decimal("0"))
+        min_fee = _d((form_data.get(f"billing_group_{group_idx}_min_fee") or "0").strip(), Decimal("0"))
+        max_raw = (form_data.get(f"billing_group_{group_idx}_max_fee") or "").strip()
+        max_fee = _d(max_raw, None) if max_raw else None
+        return [_flat_slab(rate_pct, min_fee, max_fee)]
+
+    try:
+        count = int((form_data.get(f"billing_group_{group_idx}_slab_count") or "0").strip())
+    except ValueError:
+        count = 0
+    slabs: List[Dict[str, Any]] = []
+    for i in range(max(count, 0)):
+        raw_pct = (form_data.get(f"billing_group_{group_idx}_slab_{i}_rate_pct") or "").strip()
+        if raw_pct == "":
+            continue
+        raw_min = (form_data.get(f"billing_group_{group_idx}_slab_{i}_min_amount") or "0").strip()
+        raw_max = (form_data.get(f"billing_group_{group_idx}_slab_{i}_max_amount") or "").strip()
+        raw_min_fee = (form_data.get(f"billing_group_{group_idx}_slab_{i}_min_fee") or "0").strip()
+        raw_max_fee = (form_data.get(f"billing_group_{group_idx}_slab_{i}_max_fee") or "").strip()
+        slabs.append(
+            {
+                "min_amount": _d(raw_min, Decimal("0")),
+                "max_amount": _d(raw_max, None) if raw_max else None,
+                "rate_percentage": _d(raw_pct, Decimal("0")) / Decimal("100"),
+                "min_fee": _d(raw_min_fee, Decimal("0")),
+                "max_fee": _d(raw_max_fee, None) if raw_max_fee else None,
+            }
+        )
+    return slabs
+
+
+def _normalize_rate_group_dict(raw: Dict[str, Any], allowed: Set[int], seen: Set[int]) -> Optional[Dict[str, Any]]:
+    """Normalize one rate-group dict from JSON or form into canonical shape."""
+    ac_ids: List[int] = []
+    for x in raw.get("ac_ids") or []:
+        try:
+            ac_id = int(x)
+        except (TypeError, ValueError):
+            continue
+        if ac_id in allowed and ac_id not in seen and ac_id not in ac_ids:
+            ac_ids.append(ac_id)
+    if not ac_ids:
+        return None
+    for ac_id in ac_ids:
+        seen.add(ac_id)
+
+    mode = (raw.get("mode") or "flat").strip().lower()
+    if mode not in ("flat", "tiered"):
+        mode = "flat"
+
+    slabs_out: List[Dict[str, Any]] = []
+    if mode == "tiered":
+        for s in raw.get("slabs") or []:
+            if not isinstance(s, dict):
+                continue
+            rate_raw = s.get("rate_pct")
+            if rate_raw is None or str(rate_raw).strip() == "":
+                continue
+            max_amt = s.get("max_amount")
+            max_fee = s.get("max_fee")
+            slabs_out.append(
+                {
+                    "min_amount": float(_d(str(s.get("min_amount", 0)), Decimal("0"))),
+                    "max_amount": float(_d(str(max_amt), Decimal("0")))
+                    if max_amt not in (None, "")
+                    else None,
+                    "rate_pct": float(_d(str(rate_raw), Decimal("0"))),
+                    "min_fee": float(_d(str(s.get("min_fee", 0)), Decimal("0"))),
+                    "max_fee": float(_d(str(max_fee), Decimal("0")))
+                    if max_fee not in (None, "")
+                    else None,
+                }
+            )
+        if not slabs_out:
+            return None
+    else:
+        rate_raw = raw.get("rate_pct")
+        if rate_raw is None or str(rate_raw).strip() == "":
+            if raw.get("slabs"):
+                rate_raw = (raw["slabs"][0] or {}).get("rate_pct")
+        # Empty flat rate matches the UI default (0.25), not silent 0%
+        if rate_raw is None or str(rate_raw).strip() == "":
+            rate_raw = "0.25"
+        rate_pct = float(_d(str(rate_raw), Decimal("0.25")))
+        min_fee = float(_d(str(raw.get("min_fee", 0)), Decimal("0")))
+        max_fee_raw = raw.get("max_fee")
+        max_fee = (
+            float(_d(str(max_fee_raw), Decimal("0")))
+            if max_fee_raw not in (None, "")
+            else None
+        )
+        slabs_out = [
+            {
+                "min_amount": 0.0,
+                "max_amount": None,
+                "rate_pct": rate_pct,
+                "min_fee": min_fee,
+                "max_fee": max_fee,
+            }
+        ]
+
+    group: Dict[str, Any] = {"ac_ids": ac_ids, "mode": mode, "slabs": slabs_out}
+    if mode == "flat":
+        group["rate_pct"] = slabs_out[0]["rate_pct"]
+        group["min_fee"] = slabs_out[0]["min_fee"]
+        group["max_fee"] = slabs_out[0]["max_fee"]
+    return group
+
+
+def parse_rate_groups_from_form(form_data, asset_class_ids: List[int]) -> List[Dict[str, Any]]:
+    """
+    Parse billing_rate_groups from POST.
+    Prefers JSON in billing_rate_groups_json (written by the widget on submit).
+    Falls back to billing_group_* field names.
+    """
+    allowed = {int(x) for x in asset_class_ids}
+    seen: Set[int] = set()
+    groups: List[Dict[str, Any]] = []
+
+    raw_json = (form_data.get("billing_rate_groups_json") or "").strip()
+    if raw_json:
+        try:
+            payload = json.loads(raw_json)
+        except (json.JSONDecodeError, TypeError):
+            payload = None
+        if isinstance(payload, list):
+            for raw in payload:
+                if not isinstance(raw, dict):
+                    continue
+                group = _normalize_rate_group_dict(raw, allowed, seen)
+                if group:
+                    groups.append(group)
+            return groups
+
+    try:
+        count = int((form_data.get("billing_rate_group_count") or "0").strip())
+    except ValueError:
+        count = 0
+
+    for g in range(max(count, 0)):
+        ac_ids: List[int] = []
+        raw_list = (form_data.get(f"billing_group_{g}_ac_ids") or "").strip()
+        if raw_list:
+            for part in raw_list.replace(";", ",").split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                try:
+                    ac_ids.append(int(part))
+                except ValueError:
+                    continue
+        for ac_id in allowed:
+            # getlist: last checked value wins if duplicates
+            vals = []
+            try:
+                vals = list(form_data.getlist(f"billing_group_{g}_ac_{ac_id}"))
+            except Exception:
+                one = form_data.get(f"billing_group_{g}_ac_{ac_id}")
+                if one is not None:
+                    vals = [one]
+            if any(str(v).strip() in ("1", "on", "true") for v in vals):
+                ac_ids.append(ac_id)
+
+        mode = (form_data.get(f"billing_group_{g}_mode") or "flat").strip().lower()
+        rate_vals = []
+        try:
+            rate_vals = [x for x in form_data.getlist(f"billing_group_{g}_rate_pct") if str(x).strip() != ""]
+        except Exception:
+            one = form_data.get(f"billing_group_{g}_rate_pct")
+            if one is not None and str(one).strip() != "":
+                rate_vals = [one]
+        rate_pct = rate_vals[-1] if rate_vals else form_data.get(f"billing_group_{g}_rate_pct")
+
+        raw: Dict[str, Any] = {
+            "ac_ids": ac_ids,
+            "mode": mode,
+            "rate_pct": rate_pct,
+            "min_fee": form_data.get(f"billing_group_{g}_min_fee"),
+            "max_fee": form_data.get(f"billing_group_{g}_max_fee"),
+            "slabs": [],
+        }
+        if mode == "tiered":
+            try:
+                scount = int((form_data.get(f"billing_group_{g}_slab_count") or "0").strip())
+            except ValueError:
+                scount = 0
+            for i in range(max(scount, 0)):
+                raw["slabs"].append(
+                    {
+                        "min_amount": form_data.get(f"billing_group_{g}_slab_{i}_min_amount"),
+                        "max_amount": form_data.get(f"billing_group_{g}_slab_{i}_max_amount"),
+                        "rate_pct": form_data.get(f"billing_group_{g}_slab_{i}_rate_pct"),
+                        "min_fee": form_data.get(f"billing_group_{g}_slab_{i}_min_fee"),
+                        "max_fee": form_data.get(f"billing_group_{g}_slab_{i}_max_fee"),
+                    }
+                )
+        group = _normalize_rate_group_dict(raw, allowed, seen)
+        if group:
+            groups.append(group)
+    return groups
+
+
+def expand_rate_groups_to_rates(
+    groups: List[Dict[str, Any]],
+    asset_class_ids: List[int],
+    *,
+    fallback_pct: Decimal = Decimal("1.25"),
+) -> Dict[int, List[Dict[str, Any]]]:
+    """Expand rate groups to per-asset-class BillingRateStructure payloads."""
+    result: Dict[int, List[Dict[str, Any]]] = {}
+    for group in groups or []:
+        mode = (group.get("mode") or "flat").strip().lower()
+        ac_ids = [int(x) for x in (group.get("ac_ids") or [])]
+        if mode == "tiered":
+            raw_slabs = group.get("slabs") or []
+            slabs: List[Dict[str, Any]] = []
+            for s in raw_slabs:
+                rate_pct = Decimal(str(s.get("rate_pct", 0)))
+                max_amt = s.get("max_amount")
+                max_fee = s.get("max_fee")
+                slabs.append(
+                    {
+                        "min_amount": _d(str(s.get("min_amount", 0)), Decimal("0")),
+                        "max_amount": _d(str(max_amt), None) if max_amt not in (None, "") else None,
+                        "rate_percentage": rate_pct / Decimal("100"),
+                        "min_fee": _d(str(s.get("min_fee", 0)), Decimal("0")),
+                        "max_fee": _d(str(max_fee), None) if max_fee not in (None, "") else None,
+                    }
+                )
+            if not slabs:
+                slabs = [_flat_slab(Decimal("0"))]
+        else:
+            rate_pct = Decimal(str(group.get("rate_pct", fallback_pct)))
+            if group.get("slabs"):
+                rate_pct = Decimal(str(group["slabs"][0].get("rate_pct", rate_pct)))
+            slabs = [_flat_slab(rate_pct)]
+        for ac_id in ac_ids:
+            result[int(ac_id)] = [dict(s) for s in slabs]
+
+    # Unassigned selected classes: if any groups were defined, default Nil (0%) —
+    # do not silently apply 1.25%. Otherwise use fallback for legacy forms.
+    unassigned_pct = Decimal("0") if groups else fallback_pct
+    for ac_id in asset_class_ids:
+        ac_id = int(ac_id)
+        if ac_id not in result:
+            result[ac_id] = [_flat_slab(unassigned_pct)]
+    return result
+
+
+def infer_rate_groups_from_slabs(
+    existing_slabs: Dict[int, List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    """Group asset classes that share an identical slab signature."""
+    if not existing_slabs:
+        return []
+    sig_to_acs: Dict[str, List[int]] = {}
+    sig_to_slabs: Dict[str, List[Dict[str, Any]]] = {}
+    for ac_id, slabs in existing_slabs.items():
+        key = json.dumps(
+            [
+                {
+                    "min": s.get("min_amount"),
+                    "max": s.get("max_amount"),
+                    "rate": round(float(s.get("rate_pct") or 0), 6),
+                    "min_fee": s.get("min_fee"),
+                    "max_fee": s.get("max_fee"),
+                }
+                for s in sorted(slabs, key=lambda x: float(x.get("min_amount") or 0))
+            ],
+            sort_keys=True,
+        )
+        sig_to_acs.setdefault(key, []).append(int(ac_id))
+        sig_to_slabs[key] = slabs
+
+    groups: List[Dict[str, Any]] = []
+    for key, ac_ids in sig_to_acs.items():
+        slabs = sig_to_slabs[key]
+        mode = "tiered" if len(slabs) > 1 else "flat"
+        group: Dict[str, Any] = {
+            "ac_ids": sorted(ac_ids),
+            "mode": mode,
+            "slabs": [
+                {
+                    "min_amount": s.get("min_amount"),
+                    "max_amount": s.get("max_amount"),
+                    "rate_pct": s.get("rate_pct"),
+                    "min_fee": s.get("min_fee") or 0,
+                    "max_fee": s.get("max_fee"),
+                }
+                for s in slabs
+            ],
+        }
+        if mode == "flat" and slabs:
+            group["rate_pct"] = slabs[0].get("rate_pct")
+        groups.append(group)
+    # Stable order: tiered first, then by first ac_id
+    groups.sort(key=lambda g: (0 if g["mode"] == "tiered" else 1, g["ac_ids"][0] if g["ac_ids"] else 0))
+    return groups
+
+
 def parse_form_to_rates(form_data, asset_class_ids: List[int]) -> Dict[int, List[Dict[str, Any]]]:
     """
     Parse billing configuration from POST data using structure type wizard
-    or legacy per-class fields.
+    or rate-groups / legacy per-class fields.
     """
     if not asset_class_ids:
         return {}
@@ -363,17 +718,29 @@ def parse_form_to_rates(form_data, asset_class_ids: List[int]) -> Dict[int, List
     if structure not in VALID_STRUCTURES:
         structure = STRUCTURE_ADVANCED
 
+    raw_default = (form_data.get("default_rate_pct") or "").strip()
+    default_pct = _d(raw_default, Decimal("1.25")) if raw_default else Decimal("1.25")
+
+    # Posted rate groups (JSON or billing_group_* fields) always win for
+    # Advanced and AUM-tiered — including when equity_preset is still
+    # "standard_equity" after the user configured clubs in the UI.
+    if structure in (STRUCTURE_ADVANCED, STRUCTURE_AUM_TIERED):
+        groups = parse_rate_groups_from_form(form_data, asset_class_ids)
+        if groups:
+            fallback = default_pct
+            if structure == STRUCTURE_AUM_TIERED:
+                raw_other = (form_data.get("other_rate_pct") or "").strip()
+                fallback = _d(raw_other, default_pct) if raw_other else default_pct
+            return expand_rate_groups_to_rates(
+                groups, asset_class_ids, fallback_pct=fallback
+            )
+
     if structure == STRUCTURE_ADVANCED:
         return parse_legacy_per_class_form(form_data, asset_class_ids)
 
-    default_pct = _d((form_data.get("default_rate_pct") or "").strip(), Decimal("1.25"))
-    if default_pct <= 0:
-        default_pct = Decimal("1.25")
-
     if structure == STRUCTURE_UNIFORM:
-        uniform_pct = _d((form_data.get("uniform_rate_pct") or "").strip(), default_pct)
-        if uniform_pct <= 0:
-            uniform_pct = Decimal("1.25")
+        raw_u = (form_data.get("uniform_rate_pct") or "").strip()
+        uniform_pct = _d(raw_u, default_pct) if raw_u else default_pct
         min_fee = _d((form_data.get("uniform_min_fee") or "0").strip(), Decimal("0"))
         max_raw = (form_data.get("uniform_max_fee") or "").strip()
         max_fee = _d(max_raw, None) if max_raw else None
@@ -390,22 +757,19 @@ def parse_form_to_rates(form_data, asset_class_ids: List[int]) -> Dict[int, List
         return result
 
     if structure == STRUCTURE_AUM_TIERED:
-        tiered_ids = _selected_tiered_ac_ids(form_data, asset_class_ids)
         preset = (form_data.get("equity_preset") or "standard_equity").strip()
-        other_pct = _d((form_data.get("other_rate_pct") or "").strip(), default_pct)
-        if other_pct <= 0:
-            other_pct = default_pct
+        raw_other = (form_data.get("other_rate_pct") or "").strip()
+        other_pct = _d(raw_other, default_pct) if raw_other else default_pct
 
+        tiered_ids = _selected_tiered_ac_ids(form_data, asset_class_ids)
         result = {}
         for ac_id in asset_class_ids:
             ac_id = int(ac_id)
-            if ac_id in tiered_ids:
-                if preset == "standard_equity":
-                    result[ac_id] = _preset_to_slabs("standard_equity")
-                else:
-                    # Custom tiers for this class — use legacy slab rows for that id only
-                    legacy = parse_legacy_per_class_form(form_data, [ac_id])
-                    result[ac_id] = legacy.get(ac_id) or [_flat_slab(other_pct)]
+            if ac_id in tiered_ids and preset == "standard_equity":
+                result[ac_id] = _preset_to_slabs("standard_equity")
+            elif ac_id in tiered_ids:
+                legacy = parse_legacy_per_class_form(form_data, [ac_id])
+                result[ac_id] = legacy.get(ac_id) or [_flat_slab(other_pct)]
             else:
                 result[ac_id] = [_flat_slab(other_pct)]
         return result
@@ -423,7 +787,7 @@ def validate_rates(rates_by_ac: Dict[int, List[Dict[str, Any]]]) -> List[str]:
         sorted_slabs = sorted(slabs, key=lambda s: float(s["min_amount"]))
         for i, s in enumerate(sorted_slabs):
             rate = s.get("rate_percentage")
-            if rate is None or float(rate) <= 0:
+            if rate is None or float(rate) < 0:
                 warnings.append(f"Asset class #{ac_id}: slab {i + 1} has no valid rate.")
         if len(sorted_slabs) > 1:
             for i in range(len(sorted_slabs) - 1):
@@ -479,6 +843,7 @@ def load_widget_config(
         "equity_preset": "standard_equity",
         "tiered_ac_ids": [],
         "exceptions": [],
+        "billing_rate_groups": [],
     }
 
     if agreement and agreement.agreement_data:
@@ -493,6 +858,11 @@ def load_widget_config(
             config["equity_preset"] = data.get("equity_preset") or "standard_equity"
             config["tiered_ac_ids"] = data.get("tiered_ac_ids") or []
             config["exceptions"] = data.get("billing_exceptions") or []
+            saved_groups = data.get("billing_rate_groups") or []
+            if isinstance(saved_groups, list) and saved_groups:
+                config["billing_rate_groups"] = saved_groups
+                if st == STRUCTURE_AUM_TIERED and not data.get("equity_preset"):
+                    config["equity_preset"] = "custom"
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -533,6 +903,18 @@ def load_widget_config(
                         exc.append({"ac_id": ac_id, "rate_pct": slab.get("rate_pct")})
                 config["exceptions"] = exc
 
+    if not config.get("billing_rate_groups") and existing_slabs:
+        config["billing_rate_groups"] = infer_rate_groups_from_slabs(existing_slabs)
+        # Prefer Advanced UI when multiple distinct schedules exist
+        if (
+            len(config["billing_rate_groups"]) > 1
+            and config["billing_structure_type"] in (STRUCTURE_UNIFORM, STRUCTURE_ADVANCED)
+        ):
+            if config["billing_structure_type"] == STRUCTURE_UNIFORM and len(
+                config["billing_rate_groups"]
+            ) > 1:
+                config["billing_structure_type"] = STRUCTURE_ADVANCED
+
     return config
 
 
@@ -558,25 +940,35 @@ def merge_structure_into_agreement_data(
         exceptions.append({"ac_id": ac_id, "rate_pct": float(pct)})
     agreement_data["billing_exceptions"] = exceptions
 
+    if structure in (STRUCTURE_ADVANCED, STRUCTURE_AUM_TIERED):
+        groups = parse_rate_groups_from_form(form_data, asset_class_ids)
+        if groups:
+            agreement_data["billing_rate_groups"] = groups
+            if structure == STRUCTURE_AUM_TIERED:
+                # Clubs were posted — keep UI on Custom rate groups next load
+                agreement_data["equity_preset"] = "custom"
+        else:
+            try:
+                group_count = int((form_data.get("billing_rate_group_count") or "0").strip())
+            except ValueError:
+                group_count = 0
+            if group_count <= 0:
+                agreement_data.pop("billing_rate_groups", None)
+    elif structure not in (STRUCTURE_ADVANCED, STRUCTURE_AUM_TIERED):
+        agreement_data.pop("billing_rate_groups", None)
+
 
 def resolve_portfolio_valuation_dates_text(agreement: Agreement) -> str:
     """Period-first valuation lines for <<portfolio_valuation_dates>>."""
     from services.agreement_billing_transition_service import format_portfolio_valuation_dates_list
 
-    vm = {
-        (v.variable_name or "").strip(): (v.variable_value or "").strip()
-        for v in (getattr(agreement, "variables", None) or [])
-    }
+    vm = _agreement_billing_vars(agreement)
     try:
-        data = json.loads(agreement.agreement_data) if agreement.agreement_data else {}
-    except (json.JSONDecodeError, TypeError):
-        data = {}
-    try:
-        anchor = int(vm.get("period_start_month") or data.get("period_start_month") or 1)
+        anchor = int(vm.get("period_start_month") or 1)
     except (TypeError, ValueError):
         anchor = 1
-    freq = vm.get("billing_frequency") or data.get("billing_frequency") or "yearly"
-    rule = vm.get("valuation_date_rule") or data.get("valuation_date_rule") or "prepaid"
+    freq = vm.get("billing_frequency") or "yearly"
+    rule = vm.get("valuation_date_rule") or "prepaid"
     return format_portfolio_valuation_dates_list(
         rule,
         period_start_month=anchor,
@@ -586,28 +978,42 @@ def resolve_portfolio_valuation_dates_text(agreement: Agreement) -> str:
 
 def resolve_aua_billing_basis_summary(agreement: Agreement) -> str:
     """
-    One-line summary of pre-paid / post-paid (matches the AUA billing basis form field).
+    Concrete valuation dates for <<valuation_date_basis>> (pre-paid / post-paid).
 
-    Used only when a template still has <<valuation_date_basis>>; valuation timing is
-    otherwise taken from Agreement Details, not repeated in the fee paragraph.
+    Default pre-paid = last day of the month before each period starts
+    (e.g. 31 October for a November–April half-year).
     """
-    from services.agreement_billing_transition_service import format_aua_billing_basis_summary
+    from services.agreement_billing_transition_service import (
+        format_aua_billing_basis_summary,
+        format_portfolio_valuation_dates_list,
+    )
 
-    vm = {
-        (v.variable_name or "").strip(): (v.variable_value or "").strip()
-        for v in (getattr(agreement, "variables", None) or [])
-    }
+    vm = _agreement_billing_vars(agreement)
     try:
-        data = json.loads(agreement.agreement_data) if agreement.agreement_data else {}
-    except (json.JSONDecodeError, TypeError):
-        data = {}
-    try:
-        anchor = int(vm.get("period_start_month") or data.get("period_start_month") or 1)
+        anchor = int(vm.get("period_start_month") or 1)
     except (TypeError, ValueError):
         anchor = 1
-    freq = vm.get("billing_frequency") or data.get("billing_frequency") or "yearly"
-    rule = vm.get("valuation_date_rule") or data.get("valuation_date_rule") or "prepaid"
+    freq = vm.get("billing_frequency") or "yearly"
+    rule = vm.get("valuation_date_rule") or "prepaid"
+    # Prefer the period-by-period date list (includes Oct 31 for Nov start)
+    dates = format_portfolio_valuation_dates_list(
+        rule,
+        period_start_month=anchor,
+        frequency=freq,
+    )
+    if dates.strip():
+        return dates.strip()
     return format_aua_billing_basis_summary(rule, period_start_month=anchor, frequency=freq)
+
+
+def resolve_billing_start_date_display(agreement: Agreement) -> str:
+    """Human date for <<billing_start_date>> from vars / schedule / signed date."""
+    from services.agreement_billing_transition_service import billing_start_date as _bsd
+
+    d = _bsd(agreement)
+    if not d:
+        return ""
+    return d.strftime("%d %B %Y")
 
 
 def resolve_billing_fee_portfolio_text(agreement: Agreement) -> str:
@@ -731,7 +1137,14 @@ def persist_billing_fee_schedule(
 def is_auto_generated_special_note(text: Optional[str]) -> bool:
     if not text:
         return False
-    return text.strip().startswith(AUTO_GENERATED_NOTE_PREFIX)
+    t = text.strip()
+    if t.startswith(AUTO_GENERATED_NOTE_PREFIX):
+        return True
+    # Legacy: fee schedule was copied into <<special_note>> without the prefix
+    low = t.lower()
+    return low.startswith("fee will be calculated") or low.startswith(
+        "advisory fee structure"
+    )
 
 
 def save_billing_rates(agreement_id: int, rates_by_asset_class: Dict[int, List[Dict[str, Any]]]) -> None:
@@ -757,3 +1170,10 @@ def save_billing_rates(agreement_id: int, rates_by_asset_class: Dict[int, List[D
                     is_active=True,
                 )
             )
+    # Drop stale relationship so in-session formatters do not see pre-delete rows
+    agreement = Agreement.query.get(agreement_id)
+    if agreement is not None:
+        try:
+            db.session.expire(agreement, ["billing_rates"])
+        except Exception:
+            pass

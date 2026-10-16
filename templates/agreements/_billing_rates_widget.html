@@ -1,5 +1,5 @@
 {#
-  Billing configuration: structure wizard + optional per-class advanced editor.
+  Billing configuration: structure wizard + rate groups (club asset classes under flat/tiered schedules).
 
   Usage:
     {% from "agreements/_billing_rates_widget.html" import billing_rates_widget %}
@@ -16,6 +16,7 @@
 {% set _st = _cfg.get('billing_structure_type', 'uniform') %}
 {% set _tiered_ids = _cfg.get('tiered_ac_ids') or [] %}
 {% set _exceptions = _cfg.get('exceptions') or [] %}
+{% set _rate_groups = _cfg.get('billing_rate_groups') or [] %}
 
 <div class="card border-0 shadow-sm mb-4" id="billingRatesWidget">
   <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center py-2">
@@ -32,7 +33,7 @@
       <div class="row g-3 align-items-end">
         <div class="col-md-5">
           <label class="form-label fw-semibold">First-year fixed fee (₹/year) <span class="text-danger">*</span></label>
-          <input type="number" step="0.01" min="0" class="form-control" name="first_year_fixed_annual_fee"
+          <input type="number" step="any" min="0" inputmode="decimal" class="form-control" name="first_year_fixed_annual_fee"
                  value="{{ _fy_fee }}" placeholder="e.g. 25000">
         </div>
         <div class="col-md-4">
@@ -51,20 +52,19 @@
       <div class="row g-3 align-items-end">
         <div class="col-md-5">
           <label class="form-label fw-semibold">Fixed annual fee (₹) <span class="text-danger">*</span></label>
-          <input type="number" step="0.01" min="0" class="form-control" name="fixed_annual_fee"
+          <input type="number" step="any" min="0" inputmode="decimal" class="form-control" name="fixed_annual_fee"
                  value="{{ _ff_amount }}" placeholder="e.g. 120000">
           <small class="text-muted">Total fee for one full year (before escalation).</small>
         </div>
         <div class="col-md-4">
           <label class="form-label fw-semibold">Annual escalation (%)</label>
-          <input type="number" step="0.01" min="0" max="100" class="form-control" name="fixed_fee_escalation_pct"
+          <input type="number" step="any" min="0" max="100" inputmode="decimal" class="form-control" name="fixed_fee_escalation_pct"
                  value="{{ _ff_esc }}" placeholder="e.g. 5">
         </div>
       </div>
     </div>
 
     <div id="auaRatesSection">
-      <!-- Structure type -->
       <div class="mb-3" id="billingStructureSection">
         <label class="form-label fw-semibold small text-uppercase text-secondary">Fee structure</label>
         <div class="d-flex flex-wrap gap-2">
@@ -86,7 +86,7 @@
           <div class="form-check">
             <input class="form-check-input" type="radio" name="billing_structure_type" id="bst_advanced"
                    value="advanced" {% if _st == 'advanced' %}checked{% endif %}>
-            <label class="form-check-label" for="bst_advanced">Advanced (per class)</label>
+            <label class="form-check-label" for="bst_advanced">Advanced (rate groups)</label>
           </div>
         </div>
       </div>
@@ -96,21 +96,21 @@
         <div class="row g-2">
           <div class="col-md-4">
             <label class="form-label form-label-sm">Rate (% p.a.) <span class="text-danger">*</span></label>
-            <input type="number" step="0.0001" min="0" class="form-control form-control-sm" name="uniform_rate_pct"
+            <input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" name="uniform_rate_pct"
                    value="{{ _cfg.get('uniform_rate_pct') or _cfg.get('default_rate_pct') or '1.25' }}" placeholder="1.25">
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm">Min fee (₹)</label>
-            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="uniform_min_fee"
+            <input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" name="uniform_min_fee"
                    value="{{ _cfg.get('uniform_min_fee') or '' }}" placeholder="0">
           </div>
           <div class="col-md-4">
             <label class="form-label form-label-sm">Max fee (₹)</label>
-            <input type="number" step="0.01" min="0" class="form-control form-control-sm" name="uniform_max_fee"
+            <input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" name="uniform_max_fee"
                    value="{{ _cfg.get('uniform_max_fee') or '' }}" placeholder="(no cap)">
           </div>
         </div>
-        <small class="text-muted">Applies to every asset class selected above.</small>
+        <small class="text-muted">Applies to every asset class selected above. Use 0 for Nil.</small>
       </div>
 
       <!-- Differential -->
@@ -118,11 +118,11 @@
         <div class="row g-2 mb-2">
           <div class="col-md-4">
             <label class="form-label form-label-sm">Default rate (% p.a.)</label>
-            <input type="number" step="0.0001" min="0" class="form-control form-control-sm" name="default_rate_pct"
+            <input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" name="default_rate_pct"
                    value="{{ _cfg.get('default_rate_pct') or '1.25' }}">
           </div>
         </div>
-        <label class="form-label form-label-sm fw-semibold">Exceptions (higher or lower rate for specific classes)</label>
+        <label class="form-label form-label-sm fw-semibold">Exceptions (higher, lower, or 0% for specific classes)</label>
         <input type="hidden" name="billing_exception_count" id="billing_exception_count"
                value="{{ _exceptions|length if _exceptions else 0 }}">
         <div id="billing_exceptions_body">
@@ -136,7 +136,7 @@
               </select>
             </div>
             <div class="col-md-4">
-              <input type="number" step="0.0001" min="0" class="form-control form-control-sm"
+              <input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                      name="billing_exception_{{ loop.index0 }}_rate_pct" value="{{ ex.rate_pct }}" placeholder="% p.a.">
             </div>
             <div class="col-md-2">
@@ -150,57 +150,74 @@
         </button>
       </div>
 
-      <!-- AUM tiered -->
+      <!-- AUM tiered (standard preset fast path) -->
       <div class="billing-mode-panel border rounded p-3 mb-2" id="panel_aum_tiered" data-mode="aum_tiered" style="display:none;">
         <div class="row g-2 mb-2">
           <div class="col-md-5">
-            <label class="form-label form-label-sm">Preset for tiered classes</label>
+            <label class="form-label form-label-sm">Preset</label>
             <select class="form-select form-select-sm" name="equity_preset" id="equity_preset">
               <option value="standard_equity" {% if _cfg.get('equity_preset', 'standard_equity') == 'standard_equity' %}selected{% endif %}>
                 Standard equity: 0–25L 2%, 25–50L 1.5%, 50L+ 1%
               </option>
               <option value="custom" {% if _cfg.get('equity_preset') == 'custom' %}selected{% endif %}>
-                Custom (use Advanced per-class slabs for tiered classes)
+                Custom rate groups (define multiple clubs below)
               </option>
             </select>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-4" id="aumOtherRateWrap">
             <label class="form-label form-label-sm">Other classes — flat rate (% p.a.)</label>
-            <input type="number" step="0.0001" min="0" class="form-control form-control-sm" name="other_rate_pct"
+            <input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" name="other_rate_pct"
                    value="{{ _cfg.get('other_rate_pct') or _cfg.get('default_rate_pct') or '1.25' }}">
           </div>
         </div>
-        <label class="form-label form-label-sm fw-semibold">Asset classes with AUM bands</label>
-        <div class="d-flex flex-wrap gap-2" id="tieredAcCheckboxes">
-          {% for ac_id, ac_name in ac_choices %}
-          <div class="form-check">
-            <input class="form-check-input tiered-ac-cb" type="checkbox" name="tiered_ac_{{ ac_id }}" value="1"
-                   id="tiered_ac_{{ ac_id }}"
-                   {% if ac_id in _tiered_ids %}checked{% endif %}>
-            <label class="form-check-label small" for="tiered_ac_{{ ac_id }}">{{ ac_name }}</label>
+        <div id="aumStandardTierWrap">
+          <label class="form-label form-label-sm fw-semibold">Asset classes with AUM bands</label>
+          <div class="d-flex flex-wrap gap-2" id="tieredAcCheckboxes">
+            {% for ac_id, ac_name in ac_choices %}
+            <div class="form-check">
+              <input class="form-check-input tiered-ac-cb" type="checkbox" name="tiered_ac_{{ ac_id }}" value="1"
+                     id="tiered_ac_{{ ac_id }}"
+                     {% if ac_id in _tiered_ids %}checked{% endif %}>
+              <label class="form-check-label small" for="tiered_ac_{{ ac_id }}">{{ ac_name }}</label>
+            </div>
+            {% endfor %}
           </div>
-          {% endfor %}
+          <small class="text-muted d-block mt-1">Typical: Equity (+ ETF / REITs). Others use the flat rate (0 = Nil).</small>
         </div>
-        <small class="text-muted d-block mt-1">Typically Equity. Other selected classes use the flat rate above.</small>
       </div>
 
-      <!-- Generated schedule preview (read-only; saved on submit) -->
       <div class="alert alert-light border small mb-2" id="feeSchedulePreviewWrap" style="display:none;">
         <strong>Agreement fee table</strong> (auto-generated on save as Assets / Rate columns, placeholder <code>&lt;&lt;billing_fee_schedule&gt;&gt;</code>).
-        For debt at 0%, add an exception for <em>Fixed income / Debt</em> (and Debt ETF / Debt Mutual Funds) — the default rate alone will otherwise bill them at 1%.
+        Club asset classes into rate groups below so shared schedules appear as one Assets row.
         <pre class="mb-0 mt-1 small text-wrap" id="feeSchedulePreview" style="white-space: pre-wrap;"></pre>
       </div>
 
-      <!-- Advanced per-class (legacy) -->
-      <div id="billingAdvancedSection" style="display:none;">
+      <!-- Rate groups (Advanced + AUM custom) -->
+      <div id="billingRateGroupsSection" style="display:none;">
         <div class="d-flex justify-content-between align-items-center mb-2">
-          <span class="small fw-semibold text-secondary">Per asset class (advanced)</span>
+          <div>
+            <span class="small fw-semibold text-secondary">Rate groups</span>
+            <div class="small text-muted">Club asset classes under the same flat rate or AUM tier table. Add another group for a different schedule.</div>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-primary" onclick="billingAddRateGroup()">
+            <i class="fas fa-plus"></i> Add group
+          </button>
         </div>
+        <input type="hidden" name="billing_rate_group_count" id="billing_rate_group_count" value="{{ _rate_groups|length if _rate_groups else 0 }}">
+        <input type="hidden" name="billing_rate_groups_json" id="billing_rate_groups_json" value="">
+        <div id="billingRateGroupsBody"></div>
+        <p class="small text-muted mb-0" id="billingRateGroupsHint">
+          Select asset types above first. Each selected class should belong to exactly one group.
+          Put Debt / Gold etc. in their own group (use rate <strong>0</strong> for Nil).
+        </p>
+      </div>
+
+      <!-- Legacy per-class (hidden; kept for older drafts without groups) -->
+      <div id="billingAdvancedSection" style="display:none;" aria-hidden="true">
         <div id="billingRatesSections">
           {% for ac_id, ac_name in ac_choices %}
           {% set ac_slabs = (existing_slabs or {}).get(ac_id, []) %}
           {% set use_slab_mode = ac_slabs | length > 1 %}
-
           <div class="asset-rate-section border rounded mb-2 px-3 py-2"
                data-asset-class-id="{{ ac_id }}" style="display:none;">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -216,20 +233,20 @@
                  style="{{ 'display:none' if use_slab_mode else '' }}">
               <div class="col-md-4">
                 <label class="form-label form-label-sm mb-1 text-muted">Rate (%)</label>
-                <input type="number" step="0.0001" min="0" class="form-control form-control-sm"
+                <input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                        name="rate_pct_{{ ac_id }}"
                        value="{{ ac_slabs[0].rate_pct if (ac_slabs and not use_slab_mode) else '' }}"
                        placeholder="1.25">
               </div>
               <div class="col-md-4">
                 <label class="form-label form-label-sm mb-1 text-muted">Min fee (₹)</label>
-                <input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                <input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                        name="min_fee_{{ ac_id }}"
                        value="{{ ac_slabs[0].min_fee if (ac_slabs and not use_slab_mode) else '' }}" placeholder="0">
               </div>
               <div class="col-md-4">
                 <label class="form-label form-label-sm mb-1 text-muted">Max fee (₹)</label>
-                <input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                <input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                        name="max_fee_{{ ac_id }}"
                        value="{{ (ac_slabs[0].max_fee if ac_slabs[0].max_fee is not none else '') if (ac_slabs and not use_slab_mode) else '' }}"
                        placeholder="(no cap)">
@@ -251,16 +268,16 @@
                     {% if use_slab_mode %}
                       {% for slab in ac_slabs %}
                       <tr>
-                        <td><input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                        <td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                                    name="slab_{{ ac_id }}_{{ loop.index0 }}_min_amount" value="{{ slab.min_amount }}"></td>
-                        <td><input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                        <td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                                    name="slab_{{ ac_id }}_{{ loop.index0 }}_max_amount"
                                    value="{{ slab.max_amount if slab.max_amount is not none else '' }}"></td>
-                        <td><input type="number" step="0.0001" min="0" class="form-control form-control-sm"
+                        <td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                                    name="slab_{{ ac_id }}_{{ loop.index0 }}_rate_pct" value="{{ slab.rate_pct }}"></td>
-                        <td><input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                        <td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                                    name="slab_{{ ac_id }}_{{ loop.index0 }}_min_fee" value="{{ slab.min_fee }}"></td>
-                        <td><input type="number" step="0.01" min="0" class="form-control form-control-sm"
+                        <td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                                    name="slab_{{ ac_id }}_{{ loop.index0 }}_max_fee"
                                    value="{{ slab.max_fee if slab.max_fee is not none else '' }}"></td>
                         <td><button type="button" class="btn btn-sm btn-outline-danger px-2"
@@ -269,15 +286,15 @@
                       {% endfor %}
                     {% else %}
                       <tr>
-                        <td><input type="number" class="form-control form-control-sm"
+                        <td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                                    name="slab_{{ ac_id }}_0_min_amount" value="0"></td>
-                        <td><input type="number" class="form-control form-control-sm"
+                        <td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                                    name="slab_{{ ac_id }}_0_max_amount" value=""></td>
-                        <td><input type="number" class="form-control form-control-sm"
+                        <td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                                    name="slab_{{ ac_id }}_0_rate_pct" value=""></td>
-                        <td><input type="number" class="form-control form-control-sm"
+                        <td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                                    name="slab_{{ ac_id }}_0_min_fee" value="0"></td>
-                        <td><input type="number" class="form-control form-control-sm"
+                        <td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm"
                                    name="slab_{{ ac_id }}_0_max_fee" value=""></td>
                         <td><button type="button" class="btn btn-sm btn-outline-danger px-2"
                                     onclick="billingRatesRemoveSlab({{ ac_id }}, this)">×</button></td>
@@ -303,6 +320,25 @@
   window._billingRatesWidgetLoaded = true;
 
   var AC_CHOICES = {{ ac_choices | tojson }};
+  var INITIAL_GROUPS = {{ _rate_groups | tojson }};
+  var STANDARD_EQUITY_SLABS = [
+    { min_amount: 0, max_amount: 2500000, rate_pct: 2, min_fee: 0, max_fee: null },
+    { min_amount: 2500000, max_amount: 5000000, rate_pct: 1.5, min_fee: 0, max_fee: null },
+    { min_amount: 5000000, max_amount: null, rate_pct: 1, min_fee: 0, max_fee: null }
+  ];
+
+  function selectedAssetIds() {
+    var sel = document.getElementById('asset_types');
+    if (!sel) return [];
+    return Array.from(sel.selectedOptions || []).map(function (o) { return String(o.value); });
+  }
+
+  function acName(id) {
+    for (var i = 0; i < AC_CHOICES.length; i++) {
+      if (String(AC_CHOICES[i][0]) === String(id)) return AC_CHOICES[i][1];
+    }
+    return 'Asset #' + id;
+  }
 
   window.billingWidgetApplyAdvisoryModel = function (model) {
     var isFixed = (model === 'fixed_fee');
@@ -329,23 +365,275 @@
     return r ? r.value : 'uniform';
   }
 
+  function showRateGroups() {
+    var mode = billingStructureType();
+    var preset = document.getElementById('equity_preset');
+    if (mode === 'advanced') return true;
+    if (mode === 'aum_tiered' && preset && preset.value === 'custom') return true;
+    return false;
+  }
+
   window.billingApplyStructureMode = function () {
     var mode = billingStructureType();
     document.querySelectorAll('.billing-mode-panel').forEach(function (p) {
       p.style.display = (p.getAttribute('data-mode') === mode) ? '' : 'none';
     });
-    var adv = document.getElementById('billingAdvancedSection');
-    if (adv) adv.style.display = (mode === 'advanced' || (mode === 'aum_tiered' && document.getElementById('equity_preset') && document.getElementById('equity_preset').value === 'custom')) ? '' : 'none';
+    var preset = document.getElementById('equity_preset');
+    var stdWrap = document.getElementById('aumStandardTierWrap');
+    var otherWrap = document.getElementById('aumOtherRateWrap');
+    if (mode === 'aum_tiered') {
+      var isCustom = preset && preset.value === 'custom';
+      if (stdWrap) stdWrap.style.display = isCustom ? 'none' : '';
+      if (otherWrap) otherWrap.style.display = isCustom ? 'none' : '';
+    }
+    var groupsSec = document.getElementById('billingRateGroupsSection');
+    if (groupsSec) {
+      var show = showRateGroups();
+      groupsSec.style.display = show ? '' : 'none';
+      if (show) {
+        ensureInitialGroups();
+        billingRefreshGroupAcOptions();
+      }
+    }
     billingRatesRefreshSections();
   };
 
   window.billingRatesRefreshSections = function () {
-    var sel = document.getElementById('asset_types');
-    if (!sel) return;
-    var selected = new Set(Array.from(sel.selectedOptions || []).map(function (o) { return o.value; }));
+    var selected = new Set(selectedAssetIds());
     document.querySelectorAll('.asset-rate-section').forEach(function (div) {
       div.style.display = selected.has(div.getAttribute('data-asset-class-id')) ? '' : 'none';
     });
+    billingRefreshGroupAcOptions();
+  };
+
+  function groupCards() {
+    return Array.from(document.querySelectorAll('#billingRateGroupsBody .billing-rate-group'));
+  }
+
+  function renumberGroups() {
+    var cards = groupCards();
+    cards.forEach(function (card, g) {
+      card.setAttribute('data-group-index', String(g));
+      card.querySelectorAll('[data-group-field]').forEach(function (el) {
+        var field = el.getAttribute('data-group-field');
+        if (field === 'ac') {
+          var acId = el.getAttribute('data-ac-id');
+          el.name = 'billing_group_' + g + '_ac_' + acId;
+        } else if (field.indexOf('slab_') === 0) {
+          var parts = field.split('|');
+          el.name = 'billing_group_' + g + '_' + parts[0];
+        } else {
+          el.name = 'billing_group_' + g + '_' + field;
+        }
+      });
+      var title = card.querySelector('.billing-group-title');
+      if (title) title.textContent = 'Group ' + (g + 1);
+      renumberGroupSlabs(card);
+    });
+    var countEl = document.getElementById('billing_rate_group_count');
+    if (countEl) countEl.value = String(cards.length);
+  }
+
+  function renumberGroupSlabs(card) {
+    var g = card.getAttribute('data-group-index');
+    var rows = card.querySelectorAll('.billing-group-slab-body tr');
+    rows.forEach(function (row, i) {
+      row.querySelectorAll('input[data-slab-field]').forEach(function (inp) {
+        var f = inp.getAttribute('data-slab-field');
+        inp.name = 'billing_group_' + g + '_slab_' + i + '_' + f;
+        inp.setAttribute('data-group-field', 'slab_' + i + '_' + f + '|x');
+      });
+    });
+    var countInp = card.querySelector('.billing-group-slab-count');
+    if (countInp) {
+      countInp.value = String(rows.length);
+      countInp.name = 'billing_group_' + g + '_slab_count';
+      countInp.setAttribute('data-group-field', 'slab_count');
+    }
+  }
+
+  function assignedAcIdsExcept(exceptCard) {
+    var used = {};
+    groupCards().forEach(function (card) {
+      if (card === exceptCard) return;
+      card.querySelectorAll('input[type="checkbox"][data-group-field="ac"]:checked').forEach(function (cb) {
+        used[cb.getAttribute('data-ac-id')] = true;
+      });
+    });
+    return used;
+  }
+
+  window.billingRefreshGroupAcOptions = function () {
+    var selected = selectedAssetIds();
+    groupCards().forEach(function (card) {
+      var usedElse = assignedAcIdsExcept(card);
+      var wrap = card.querySelector('.billing-group-ac-list');
+      if (!wrap) return;
+      wrap.querySelectorAll('.form-check').forEach(function (div) {
+        var cb = div.querySelector('input[type="checkbox"]');
+        if (!cb) return;
+        var id = cb.getAttribute('data-ac-id');
+        var inSelected = selected.indexOf(String(id)) >= 0;
+        div.style.display = inSelected ? '' : 'none';
+        if (!inSelected) {
+          cb.checked = false;
+          return;
+        }
+        var taken = !!usedElse[id];
+        cb.disabled = taken && !cb.checked;
+        if (taken && !cb.checked) cb.checked = false;
+      });
+    });
+  };
+
+  function toggleGroupMode(card) {
+    var modeSel = card.querySelector('.billing-group-mode');
+    var mode = modeSel ? modeSel.value : 'flat';
+    var flat = card.querySelector('.billing-group-flat');
+    var tiered = card.querySelector('.billing-group-tiered');
+    if (flat) flat.style.display = mode === 'flat' ? '' : 'none';
+    if (tiered) tiered.style.display = mode === 'tiered' ? '' : 'none';
+  }
+
+  function buildGroupCard(groupData) {
+    groupData = groupData || { ac_ids: [], mode: 'flat', rate_pct: 1.25, slabs: [] };
+    var card = document.createElement('div');
+    card.className = 'billing-rate-group border rounded p-3 mb-2';
+    var mode = groupData.mode === 'tiered' ? 'tiered' : 'flat';
+    var ratePct = groupData.rate_pct != null ? groupData.rate_pct : (groupData.slabs && groupData.slabs[0] ? groupData.slabs[0].rate_pct : '');
+    var acChecks = AC_CHOICES.map(function (p) {
+      var id = p[0];
+      var name = p[1];
+      var checked = (groupData.ac_ids || []).map(String).indexOf(String(id)) >= 0 ? ' checked' : '';
+      return '<div class="form-check form-check-inline">' +
+        '<input class="form-check-input" type="checkbox" data-group-field="ac" data-ac-id="' + id + '" value="1"' + checked +
+        ' onchange="billingRefreshGroupAcOptions()">' +
+        '<label class="form-check-label small">' + name + '</label></div>';
+    }).join('');
+
+    var slabs = (groupData.slabs && groupData.slabs.length) ? groupData.slabs : [
+      { min_amount: 0, max_amount: '', rate_pct: '', min_fee: 0, max_fee: '' }
+    ];
+    var slabRows = slabs.map(function (s) {
+      return '<tr>' +
+        '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="min_amount" value="' + (s.min_amount != null ? s.min_amount : '') + '"></td>' +
+        '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="max_amount" value="' + (s.max_amount != null ? s.max_amount : '') + '"></td>' +
+        '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="rate_pct" value="' + (s.rate_pct != null ? s.rate_pct : '') + '"></td>' +
+        '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="min_fee" value="' + (s.min_fee != null ? s.min_fee : 0) + '"></td>' +
+        '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="max_fee" value="' + (s.max_fee != null ? s.max_fee : '') + '"></td>' +
+        '<td><button type="button" class="btn btn-sm btn-outline-danger px-2" onclick="billingRemoveGroupSlab(this)">×</button></td>' +
+        '</tr>';
+    }).join('');
+
+    card.innerHTML =
+      '<div class="d-flex justify-content-between align-items-center mb-2">' +
+      '<strong class="billing-group-title small">Group</strong>' +
+      '<button type="button" class="btn btn-sm btn-outline-danger" onclick="billingRemoveRateGroup(this)">Remove</button>' +
+      '</div>' +
+      '<div class="mb-2"><span class="form-label form-label-sm fw-semibold">Asset classes</span>' +
+      '<div class="billing-group-ac-list">' + acChecks + '</div></div>' +
+      '<div class="row g-2 mb-2">' +
+      '<div class="col-md-4"><label class="form-label form-label-sm">Schedule</label>' +
+      '<select class="form-select form-select-sm billing-group-mode" data-group-field="mode" onchange="billingGroupModeChanged(this)">' +
+      '<option value="flat"' + (mode === 'flat' ? ' selected' : '') + '>Flat rate</option>' +
+      '<option value="tiered"' + (mode === 'tiered' ? ' selected' : '') + '>Tiered AUM bands</option>' +
+      '</select></div></div>' +
+      '<div class="billing-group-flat row g-2"' + (mode === 'flat' ? '' : ' style="display:none"') + '>' +
+      '<div class="col-md-4"><label class="form-label form-label-sm">Rate (% p.a.)</label>' +
+      // Real default 0.25 (not a ghost placeholder) so untouched groups save 0.25%, not 0%
+      '<input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-group-field="rate_pct" value="' + (ratePct !== '' && ratePct != null ? ratePct : '0.25') + '" placeholder="0"></div>' +
+      '<div class="col-md-4"><label class="form-label form-label-sm">Min fee (₹)</label>' +
+      '<input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-group-field="min_fee" value="0"></div>' +
+      '<div class="col-md-4"><label class="form-label form-label-sm">Max fee (₹)</label>' +
+      '<input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-group-field="max_fee" value="" placeholder="(no cap)"></div>' +
+      '</div>' +
+      '<div class="billing-group-tiered"' + (mode === 'tiered' ? '' : ' style="display:none"') + '>' +
+      '<input type="hidden" class="billing-group-slab-count" data-group-field="slab_count" value="' + slabs.length + '">' +
+      '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-1">' +
+      '<thead class="table-light"><tr><th>Min AUM (₹)</th><th>Max AUM (₹)</th><th>Rate (%)</th><th>Min fee</th><th>Max fee</th><th></th></tr></thead>' +
+      '<tbody class="billing-group-slab-body">' + slabRows + '</tbody></table></div>' +
+      '<button type="button" class="btn btn-sm btn-outline-secondary me-1" onclick="billingAddGroupSlab(this)"><i class="fas fa-plus"></i> Add slab</button>' +
+      '<button type="button" class="btn btn-sm btn-outline-primary" onclick="billingLoadEquityPreset(this)">Load standard equity tiers</button>' +
+      '</div>';
+
+    return card;
+  }
+
+  function ensureInitialGroups() {
+    var body = document.getElementById('billingRateGroupsBody');
+    if (!body || body.children.length) return;
+    var groups = (INITIAL_GROUPS && INITIAL_GROUPS.length) ? INITIAL_GROUPS : [{ ac_ids: [], mode: 'flat', rate_pct: 1.25, slabs: [] }];
+    groups.forEach(function (g) { body.appendChild(buildGroupCard(g)); });
+    renumberGroups();
+    billingRefreshGroupAcOptions();
+  }
+
+  window.billingAddRateGroup = function () {
+    var body = document.getElementById('billingRateGroupsBody');
+    if (!body) return;
+    body.appendChild(buildGroupCard({ ac_ids: [], mode: 'flat', rate_pct: 0.25, slabs: [] }));
+    renumberGroups();
+    billingRefreshGroupAcOptions();
+  };
+
+  window.billingRemoveRateGroup = function (btn) {
+    var card = btn.closest('.billing-rate-group');
+    if (!card) return;
+    var body = document.getElementById('billingRateGroupsBody');
+    if (body && body.querySelectorAll('.billing-rate-group').length <= 1) {
+      card.querySelectorAll('input[type="checkbox"][data-group-field="ac"]').forEach(function (cb) { cb.checked = false; });
+      return;
+    }
+    card.remove();
+    renumberGroups();
+    billingRefreshGroupAcOptions();
+  };
+
+  window.billingGroupModeChanged = function (sel) {
+    toggleGroupMode(sel.closest('.billing-rate-group'));
+  };
+
+  window.billingAddGroupSlab = function (btn) {
+    var card = btn.closest('.billing-rate-group');
+    var tbody = card.querySelector('.billing-group-slab-body');
+    var tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="min_amount"></td>' +
+      '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="max_amount"></td>' +
+      '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="rate_pct"></td>' +
+      '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="min_fee" value="0"></td>' +
+      '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="max_fee"></td>' +
+      '<td><button type="button" class="btn btn-sm btn-outline-danger px-2" onclick="billingRemoveGroupSlab(this)">×</button></td>';
+    tbody.appendChild(tr);
+    renumberGroupSlabs(card);
+  };
+
+  window.billingRemoveGroupSlab = function (btn) {
+    var card = btn.closest('.billing-rate-group');
+    var tbody = card.querySelector('.billing-group-slab-body');
+    if (tbody.querySelectorAll('tr').length <= 1) return;
+    btn.closest('tr').remove();
+    renumberGroupSlabs(card);
+  };
+
+  window.billingLoadEquityPreset = function (btn) {
+    var card = btn.closest('.billing-rate-group');
+    var modeSel = card.querySelector('.billing-group-mode');
+    if (modeSel) { modeSel.value = 'tiered'; toggleGroupMode(card); }
+    var tbody = card.querySelector('.billing-group-slab-body');
+    tbody.innerHTML = '';
+    STANDARD_EQUITY_SLABS.forEach(function (s) {
+      var tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="min_amount" value="' + s.min_amount + '"></td>' +
+        '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="max_amount" value="' + (s.max_amount != null ? s.max_amount : '') + '"></td>' +
+        '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="rate_pct" value="' + s.rate_pct + '"></td>' +
+        '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="min_fee" value="0"></td>' +
+        '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" data-slab-field="max_fee" value=""></td>' +
+        '<td><button type="button" class="btn btn-sm btn-outline-danger px-2" onclick="billingRemoveGroupSlab(this)">×</button></td>';
+      tbody.appendChild(tr);
+    });
+    renumberGroupSlabs(card);
   };
 
   window.billingRatesToggleSlab = function (acId) {
@@ -358,11 +646,11 @@
     var tbody = document.getElementById('slab_body_' + acId);
     var count = tbody.querySelectorAll('tr').length;
     var row = document.createElement('tr');
-    row.innerHTML = '<td><input type="number" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_min_amount"></td>' +
-      '<td><input type="number" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_max_amount"></td>' +
-      '<td><input type="number" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_rate_pct"></td>' +
-      '<td><input type="number" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_min_fee"></td>' +
-      '<td><input type="number" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_max_fee"></td>' +
+    row.innerHTML = '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_min_amount"></td>' +
+      '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_max_amount"></td>' +
+      '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_rate_pct"></td>' +
+      '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_min_fee"></td>' +
+      '<td><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" name="slab_' + acId + '_' + count + '_max_fee"></td>' +
       '<td><button type="button" class="btn btn-sm btn-outline-danger" onclick="billingRatesRemoveSlab(' + acId + ', this)">×</button></td>';
     tbody.appendChild(row);
     billingRatesRenumber(acId);
@@ -395,7 +683,7 @@
     var row = document.createElement('div');
     row.className = 'row g-2 mb-1 billing-exception-row';
     row.innerHTML = '<div class="col-md-6"><select class="form-select form-select-sm" name="billing_exception_' + idx + '_ac_id">' + opts + '</select></div>' +
-      '<div class="col-md-4"><input type="number" step="0.0001" class="form-control form-control-sm" name="billing_exception_' + idx + '_rate_pct" placeholder="% p.a."></div>' +
+      '<div class="col-md-4"><input type="number" step="any" min="0" inputmode="decimal" class="form-control form-control-sm" name="billing_exception_' + idx + '_rate_pct" placeholder="% p.a."></div>' +
       '<div class="col-md-2"><button type="button" class="btn btn-sm btn-outline-danger w-100" onclick="billingRemoveException(this)">×</button></div>';
     tbody.appendChild(row);
     document.getElementById('billing_exception_count').value = idx + 1;
@@ -413,6 +701,70 @@
     document.getElementById('billing_exception_count').value = rows.length;
   };
 
+  function collectRateGroupsPayload() {
+    var groups = [];
+    groupCards().forEach(function (card) {
+      var modeSel = card.querySelector('.billing-group-mode');
+      var mode = modeSel ? modeSel.value : 'flat';
+      var acIds = [];
+      card.querySelectorAll('input[type="checkbox"][data-group-field="ac"]:checked').forEach(function (cb) {
+        // Include checked boxes even if disabled (exclusivity UI); form POST omits disabled.
+        var id = parseInt(cb.getAttribute('data-ac-id'), 10);
+        if (!isNaN(id)) acIds.push(id);
+      });
+      if (!acIds.length) return;
+      if (mode === 'tiered') {
+        var slabs = [];
+        card.querySelectorAll('.billing-group-slab-body tr').forEach(function (tr) {
+          var get = function (f) {
+            var inp = tr.querySelector('input[data-slab-field="' + f + '"]');
+            return inp ? inp.value : '';
+          };
+          var rate = get('rate_pct');
+          if (rate === '' || rate === null) return;
+          slabs.push({
+            min_amount: get('min_amount') || 0,
+            max_amount: get('max_amount') === '' ? null : get('max_amount'),
+            rate_pct: rate,
+            min_fee: get('min_fee') || 0,
+            max_fee: get('max_fee') === '' ? null : get('max_fee')
+          });
+        });
+        if (!slabs.length) return;
+        groups.push({ ac_ids: acIds, mode: 'tiered', slabs: slabs });
+      } else {
+        var rateInp = card.querySelector('.billing-group-flat input[data-group-field="rate_pct"]');
+        var minInp = card.querySelector('.billing-group-flat input[data-group-field="min_fee"]');
+        var maxInp = card.querySelector('.billing-group-flat input[data-group-field="max_fee"]');
+        // Empty input must not silently become 0% — use the same default as the UI (0.25)
+        var flatRate = rateInp && String(rateInp.value).trim() !== '' ? rateInp.value : '0.25';
+        groups.push({
+          ac_ids: acIds,
+          mode: 'flat',
+          rate_pct: flatRate,
+          min_fee: minInp ? minInp.value : 0,
+          max_fee: maxInp && maxInp.value !== '' ? maxInp.value : null,
+          slabs: [{ rate_pct: flatRate }]
+        });
+      }
+    });
+    return groups;
+  }
+
+  function syncRateGroupsJson() {
+    var hidden = document.getElementById('billing_rate_groups_json');
+    if (!hidden) return;
+    if (!showRateGroups()) {
+      hidden.value = '';
+      return;
+    }
+    renumberGroups();
+    var groups = collectRateGroupsPayload();
+    hidden.value = JSON.stringify(groups);
+    var countEl = document.getElementById('billing_rate_group_count');
+    if (countEl) countEl.value = String(groups.length);
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     var advisoryModelSel = document.getElementById('advisory_model');
     if (advisoryModelSel) {
@@ -428,6 +780,14 @@
     var sel = document.getElementById('asset_types');
     if (sel) sel.addEventListener('change', billingRatesRefreshSections);
     billingApplyStructureMode();
+
+    // Serialize rate groups into one JSON field so decimals / checkboxes never drop on POST
+    document.querySelectorAll('form').forEach(function (form) {
+      if (!form.querySelector('#billingRatesWidget') && !form.querySelector('#billingRateGroupsSection')) return;
+      form.addEventListener('submit', function () {
+        syncRateGroupsJson();
+      });
+    });
   });
 })();
 </script>

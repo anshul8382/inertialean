@@ -166,6 +166,15 @@ def _save_billing_frequency_var(agreement_id, lead_id, client_id, form_data):
             variable_value=freq,
             variable_type='billing_config',
         ))
+    # Keep JSON mirror so generated <<billing_period>> can fall back if ORM is stale
+    agreement = Agreement.query.get(agreement_id)
+    if agreement is not None:
+        try:
+            cfg = json.loads(agreement.agreement_data) if agreement.agreement_data else {}
+        except (json.JSONDecodeError, TypeError):
+            cfg = {}
+        cfg['billing_frequency'] = freq
+        agreement.agreement_data = json.dumps(cfg)
 
 
 def _upsert_billing_schedule(agreement_id, form_data, signed_date=None):
@@ -249,6 +258,21 @@ def _save_billing_period_vars(agreement_id, lead_id, client_id, form_data):
     from services.agreement_billing_config_service import persist_billing_period_text
 
     db.session.flush()
+    agreement = Agreement.query.get(agreement_id)
+    if agreement is not None:
+        try:
+            cfg = json.loads(agreement.agreement_data) if agreement.agreement_data else {}
+        except (json.JSONDecodeError, TypeError):
+            cfg = {}
+        cfg['period_start_month'] = period_start_month
+        cfg['valuation_date_rule'] = valuation_date_rule
+        if billing_start_date:
+            cfg['billing_start_date'] = billing_start_date
+        agreement.agreement_data = json.dumps(cfg)
+        try:
+            db.session.expire(agreement, ['variables'])
+        except Exception:
+            pass
     persist_billing_period_text(agreement_id, lead_id, client_id)
 
 
@@ -1436,11 +1460,30 @@ def record_existing_agreement_for_client(client_id):
         billing_structure_config=_billing_widget_context(),
     )
 
+def _compose_pan_for_document(pan: str | None, pan_2: str | None) -> str:
+    """Join primary + co-applicant PAN for <<pan>> when both are present."""
+    from services.regulatory_identity_capture_service import normalize_pan
+
+    p1 = normalize_pan(pan)
+    p2 = normalize_pan(pan_2)
+    if p1 and p2:
+        return f"{p1} and {p2}"
+    return p1 or p2 or ""
+
+
 def _agreement_data_for_pdf(variables: list, existing_data: dict, raw_variables: list) -> dict:
     """Build substitution dict for PDF/DOCX including auto-generated placeholders."""
     from services.agreement_docx_service import build_substitution_dict
 
-    return build_substitution_dict(variables, existing_data, raw_variables)
+    data = build_substitution_dict(variables, existing_data, raw_variables)
+    # Template usually has a single <<pan>>; show both when co-applicant PAN is set
+    composed = _compose_pan_for_document(
+        existing_data.get("pan") or data.get("pan"),
+        existing_data.get("pan_2"),
+    )
+    if composed and ("pan" in (raw_variables or []) or "pan" in (variables or []) or "pan" in data):
+        data["pan"] = composed
+    return data
 
 
 def _autofill_structured_vars(
@@ -1496,7 +1539,7 @@ def _autofill_structured_vars(
         for alias in ('client_name', 'client_signature', 'name_as_per_pan'):
             _set(alias, pan_name)
 
-    pan_number = (vars_map.get('pan') or '').strip()
+    pan_number = (vars_map.get('pan') or existing_data.get('pan') or '').strip()
     if not pan_number and lead and lead.id:
         try:
             from services.regulatory_identity_capture_service import get_lead_kyc_pan
@@ -1505,7 +1548,26 @@ def _autofill_structured_vars(
         except Exception:
             pan_number = ""
     if pan_number:
-        _set('pan', pan_number)
+        # Keep primary PAN only in the form field (co-applicant is pan_2).
+        # Older saves may have stored "PAN1 and PAN2" in a single pan value.
+        pan_parts = [
+            p.strip()
+            for p in re.split(r'\s+and\s+|/', pan_number, flags=re.IGNORECASE)
+            if p and p.strip()
+        ]
+        primary = pan_parts[0] if pan_parts else ''
+        existing_pan = (existing_data.get('pan') or '').strip()
+        if existing_pan and (' and ' in existing_pan.lower() or '/' in existing_pan):
+            existing_data['pan'] = primary
+        else:
+            _set('pan', primary)
+        if len(pan_parts) > 1 and not (existing_data.get('pan_2') or '').strip():
+            existing_data['pan_2'] = pan_parts[1]
+    pan_2 = (vars_map.get('pan_2') or '').strip()
+    if pan_2:
+        # Always expose for Fill Variables UI even if not a Word placeholder
+        if not existing_data.get('pan_2', '').strip():
+            existing_data['pan_2'] = pan_2.split(' and ')[0].strip()
 
     # ── special note (edited on Update Agreement Details; not on Fill Variables) ─
     # Must be injected here: fill/download paths omit special_note from existing_data
@@ -1566,23 +1628,48 @@ def _autofill_structured_vars(
     from services.agreement_billing_config_service import (
         BILLING_FEE_PORTFOLIO_TEXT_VAR,
         BILLING_FEE_SCHEDULE_VAR,
+        VALUATION_DATE_BASIS_VAR,
+        resolve_aua_billing_basis_summary,
         resolve_billing_fee_portfolio_text,
+        resolve_billing_start_date_display,
+        resolve_portfolio_valuation_dates_text,
     )
-    from services.agreement_billing_config_service import resolve_portfolio_valuation_dates_text
 
-    if 'portfolio_valuation_dates' in template_keys:
-        _set_generated(
-            'portfolio_valuation_dates',
-            resolve_portfolio_valuation_dates_text(agreement),
-        )
+    # Valuation dates (prepaid default = last day of month before each period)
+    val_dates = resolve_portfolio_valuation_dates_text(agreement)
+    if 'portfolio_valuation_dates' in template_keys and val_dates.strip():
+        _set_generated('portfolio_valuation_dates', val_dates)
+    if VALUATION_DATE_BASIS_VAR in template_keys:
+        basis = (resolve_aua_billing_basis_summary(agreement) or val_dates or '').strip()
+        existing_data[VALUATION_DATE_BASIS_VAR] = basis
 
-    schedule_text = vars_map.get(BILLING_FEE_SCHEDULE_VAR, '').strip()
-    if not schedule_text and agreement.id:
-        schedule_text = format_fee_schedule_for_agreement(agreement)
+    # Empty special note must not appear as [special_note]
+    if 'special_note' in template_keys:
+        sn = (existing_data.get('special_note') or vars_map.get('special_note') or '').strip()
+        if (not sn) or sn.lower() in ('[special_note]', 'special_note'):
+            existing_data['special_note'] = ''
+
+    if 'billing_start_date' in template_keys:
+        start_disp = resolve_billing_start_date_display(agreement)
+        if start_disp:
+            _set_generated('billing_start_date', start_disp)
+
+    # Always rebuild from DB rates (persisted schedule text can lag a stale ORM save)
+    schedule_text = ''
+    if agreement.id:
+        schedule_text = (format_fee_schedule_for_agreement(agreement) or '').strip()
+    if not schedule_text:
+        schedule_text = vars_map.get(BILLING_FEE_SCHEDULE_VAR, '').strip()
     if schedule_text:
         _set_generated(BILLING_FEE_SCHEDULE_VAR, schedule_text)
-        # Legacy templates may use special_note for fee wording — only when no human note
-        if 'special_note' in template_keys and not existing_data.get('special_note', '').strip():
+        # Legacy templates may use <<special_note>> for fee wording — only when:
+        # no human note, and the template does not already have <<billing_fee_schedule>>
+        # (copying would duplicate the same fee prose in Special Note).
+        if (
+            'special_note' in template_keys
+            and BILLING_FEE_SCHEDULE_VAR not in template_keys
+            and not existing_data.get('special_note', '').strip()
+        ):
             from services.agreement_billing_config_service import is_auto_generated_special_note
 
             human = (vars_map.get('special_note') or '').strip()
@@ -1682,9 +1769,22 @@ def fill_agreement_variables(agreement_id):
 
     if request.method == 'POST':
         try:
+            from services.regulatory_identity_capture_service import (
+                is_valid_pan,
+                normalize_pan,
+                save_pan_for_agreement,
+            )
+
             agreement_data = {}
             for var in variables:
                 value = request.form.get(f'var_{var}', '')
+                if var == 'pan':
+                    value = normalize_pan(value)
+                    if value and not is_valid_pan(value):
+                        flash('Primary PAN must be a valid 10-character PAN (e.g. ABCDE1234F).', 'error')
+                        return redirect(
+                            url_for('agreements.fill_agreement_variables', agreement_id=agreement.id)
+                        )
                 agreement_data[var] = value
                 existing_data[var] = value
 
@@ -1703,6 +1803,39 @@ def fill_agreement_variables(agreement_id):
                         variable_value=value,
                         variable_type='text',
                     ))
+
+            # Optional co-applicant / spouse PAN (not always a Word placeholder)
+            if 'pan' in variables:
+                pan_2_raw = normalize_pan(request.form.get('var_pan_2', ''))
+                if pan_2_raw and not is_valid_pan(pan_2_raw):
+                    flash('Second PAN must be a valid 10-character PAN (e.g. ABCDE1234F).', 'error')
+                    return redirect(
+                        url_for('agreements.fill_agreement_variables', agreement_id=agreement.id)
+                    )
+                existing_data['pan_2'] = pan_2_raw
+                pan_2_var = AgreementVariables.query.filter_by(
+                    agreement_id=agreement.id,
+                    variable_name='pan_2',
+                ).first()
+                if pan_2_var:
+                    pan_2_var.variable_value = pan_2_raw
+                elif pan_2_raw:
+                    db.session.add(AgreementVariables(
+                        agreement_id=agreement.id,
+                        lead_id=agreement.lead_id,
+                        client_id=agreement.lead.client_id if agreement.lead.client_id else None,
+                        variable_name='pan_2',
+                        variable_value=pan_2_raw,
+                        variable_type='text',
+                    ))
+                # Regulatory store keeps primary PAN only
+                if existing_data.get('pan'):
+                    save_pan_for_agreement(
+                        agreement,
+                        agreement.lead_id,
+                        agreement.lead.client_id if agreement.lead and agreement.lead.client_id else None,
+                        pan=existing_data.get('pan'),
+                    )
 
             _autofill_structured_vars(agreement, existing_data, variables, raw_variables)
             agreement_data = _agreement_data_for_pdf(variables, existing_data, raw_variables)
@@ -1900,10 +2033,17 @@ def update_agreement_details(agreement_id):
             new_asset_type_ids = set(form.asset_types.data)
             
             # Update agreement data JSON
+            from services.agreement_billing_config_service import is_auto_generated_special_note
+
             agreement_config = json.loads(agreement.agreement_data) if agreement.agreement_data else {}
             agreement_config['asset_types'] = form.asset_types.data
             agreement_config['advisory_model'] = form.advisory_model.data
-            agreement_config['special_note'] = form.special_note.data
+            # Do not persist fee-schedule copies into special_note (duplicates <<billing_fee_schedule>>)
+            note_raw = (form.special_note.data or '').strip()
+            if note_raw and not is_auto_generated_special_note(note_raw):
+                agreement_config['special_note'] = note_raw
+            else:
+                agreement_config.pop('special_note', None)
             _set_agreement_data_json(agreement, agreement_config)
             
             # Update basic fields
@@ -1955,14 +2095,14 @@ def update_agreement_details(agreement_id):
                 )
                 db.session.add(advisory_var)
             
-            # Add special note variable
-            if form.special_note.data:
+            # Add special note variable (skip fee-schedule duplicates)
+            if note_raw and not is_auto_generated_special_note(note_raw):
                 special_note_var = AgreementVariables(
                     agreement_id=agreement.id,
                     lead_id=agreement.lead_id,
                     client_id=agreement.lead.client_id if agreement.lead.client_id else None,
                     variable_name='special_note',
-                    variable_value=form.special_note.data,
+                    variable_value=note_raw,
                     variable_type='special_note'
                 )
                 db.session.add(special_note_var)
