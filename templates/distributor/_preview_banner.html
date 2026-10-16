@@ -1,0 +1,19 @@
+{% if preview_distributor %}
+<div class="alert alert-warning border-warning mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2" role="status">
+  <div>
+    <strong>Preview mode:</strong> viewing as distributor
+    <strong>{{ preview_distributor.username }}</strong>
+    <span class="text-muted small">(you remain logged in as {{ current_user.username }})</span>
+  </div>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-sm btn-outline-dark" href="{{ url_for('distributor.preview') }}">Change</a>
+    <a class="btn btn-sm btn-outline-dark" href="{{ url_for('distributor.dashboard') }}">Clients</a>
+    <a class="btn btn-sm btn-outline-dark" href="{{ url_for('distributor.payouts') }}">Payouts</a>
+    <a class="btn btn-sm btn-outline-dark" href="{{ url_for('notification_centre.centre') }}">Notifications</a>
+    <form method="POST" action="{{ url_for('distributor.preview_exit') }}" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-sm btn-dark">Exit preview</button>
+    </form>
+  </div>
+</div>
+{% endif %}

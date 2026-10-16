@@ -208,6 +208,26 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 {% set can_manage_ops = current_user.is_manager or current_user.is_advisor or current_user.is_ops_manager %}
                 <ul class="navbar-nav me-auto">
+                    {% if current_user.is_authenticated and current_user.is_distributor and not current_user.is_admin and not current_user.is_manager %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint and request.endpoint.startswith('distributor.') and request.endpoint != 'distributor.payouts' and request.endpoint != 'distributor.pitch_deck' %}active{% endif %}"
+                           href="{{ url_for('distributor.dashboard') }}">
+                            <i class="fas fa-handshake"></i> My clients
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'distributor.payouts' %}active{% endif %}"
+                           href="{{ url_for('distributor.payouts') }}">
+                            <i class="fas fa-rupee-sign"></i> Payouts
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'distributor.pitch_deck' %}active{% endif %}"
+                           href="{{ url_for('distributor.pitch_deck') }}">
+                            <i class="fas fa-file-powerpoint"></i> Pitch deck
+                        </a>
+                    </li>
+                    {% endif %}
                     <!-- Clients & CRM -->
                     {% if nav_group_visible('clients') %}
                     <li class="nav-item dropdown">
@@ -251,6 +271,15 @@
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('invoices.') %}active{% endif %}" href="{{ url_for('invoices.list_invoices') }}">
                                 <i class="fas fa-file-invoice-dollar"></i> Invoices
+                            </a></li>
+                            {% endif %}
+                            {% if current_user.is_admin or current_user.is_manager %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'distributor.preview' %}active{% endif %}" href="{{ url_for('distributor.preview') }}">
+                                <i class="fas fa-handshake"></i> Distributor preview
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'distributor.admin_payouts' %}active{% endif %}" href="{{ url_for('distributor.admin_payouts') }}">
+                                <i class="fas fa-rupee-sign"></i> Release distributor payouts
                             </a></li>
                             {% endif %}
                         </ul>
@@ -564,6 +593,12 @@
                             <li><a class="dropdown-item {% if request.endpoint and 'users' in request.endpoint %}active{% endif %}" href="{{ url_for('users.list_users') }}">
                                 <i class="fas fa-users-cog"></i> Manage Users
                             </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'distributor.preview' %}active{% endif %}" href="{{ url_for('distributor.preview') }}">
+                                <i class="fas fa-handshake"></i> Distributor preview
+                            </a></li>
+                            <li><a class="dropdown-item {% if request.endpoint == 'distributor.admin_payouts' %}active{% endif %}" href="{{ url_for('distributor.admin_payouts') }}">
+                                <i class="fas fa-rupee-sign"></i> Release distributor payouts
+                            </a></li>
                             {% if current_user.is_admin and nav_can('advisor_review.dashboard') %}
                             <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('advisor_review.') and request.endpoint != 'advisor_review.assignments_overview' %}active{% endif %}" href="{{ url_for('advisor_review.dashboard') }}">
                                 <i class="fas fa-user-tie"></i> Advisor Review
@@ -603,8 +638,9 @@
                     </li>
                     {% endif %}
 
-                    <!-- Help (lean: user manual only — no Ask INERTIA / Ollama) -->
-                    {% if nav_group_visible('assistant') %}
+                    {# Help / user manual is for main Inertia staff — hide for distributor-only users #}
+                    {% set _distributor_only = current_user.is_authenticated and current_user.is_distributor and not current_user.is_admin and not current_user.is_manager %}
+                    {% if not _distributor_only and nav_group_visible('assistant') %}
                     {% set assistant_nav_active = request.endpoint == 'main.user_manual_pdf' %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle {% if assistant_nav_active %}active{% endif %}" href="#" id="assistantDropdown" role="button" data-bs-toggle="dropdown" data-bs-popper="static" aria-expanded="false">
@@ -665,6 +701,10 @@
                 {% endfor %}
             {% endif %}
         {% endwith %}
+
+        {% if preview_distributor and request.endpoint and (request.endpoint.startswith('notification_centre') or request.endpoint.startswith('notification_centre_api')) %}
+        {% include "distributor/_preview_banner.html" %}
+        {% endif %}
 
         {% if pending_cashflow_review and pending_cashflow_review.transaction_id %}
         <div class="alert alert-warning border-warning sticky-top shadow-sm mb-3" role="alert" style="z-index: 1020;" id="pending-cashflow-review-banner">

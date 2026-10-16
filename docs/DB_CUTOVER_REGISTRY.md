@@ -382,6 +382,41 @@ Period invoice = `current_annual_fee / frequency_divisor` (yearly=1, half-yearly
 
 ---
 
+### Distributor support
+
+| Item | Detail |
+|------|--------|
+| **Status** | Pending migration on each host |
+| **Columns / table** | `user.distributor_revenue_share_percent`, `client.distributor_id`, `distributor_invoice_attribution` |
+| **Role** | `distributor` (seeded by migration) |
+| **Migration** | `migrations/add_distributor_support.py` |
+| **Docs** | `docs/DISTRIBUTOR_MODULE.md` |
+| **Code gate** | `services/distributor_service.distributor_schema_ready()` — UI/assign/attribution no-op until schema exists |
+| **User impact before migration** | Assign distributor / portal / attribution disabled with warning; rest of app unchanged |
+
+**Cutover:** run migration on local `_dev`, then `_test` + prod; restart app. Not added to default `DEFER_DB_FEATURES` (table-existence gate only).
+
+**Added:** 2026-10-15
+
+---
+
+### Distributor payout release
+
+| Item | Detail |
+|------|--------|
+| **Status** | Pending migration on each host |
+| **Columns / table** | `distributor_invoice_attribution.payout_status`, `released_at`, `released_by_id`, `clawback_amount`; table `distributor_payout_release` |
+| **Migration** | `migrations/add_distributor_payout_release.py` |
+| **Docs** | `docs/DISTRIBUTOR_MODULE.md` |
+| **Code gate** | `services/distributor_service.payout_release_schema_ready()` — Pending/Released UI + batch release no-op until schema exists; attribution still works |
+| **User impact before migration** | Attributions create without payout_status; admin release page shows migration warning |
+
+**Cutover:** after `add_distributor_support.py`, run payout-release migration on `_dev`, then `_test` + prod; restart app.
+
+**Added:** 2026-10-16
+
+---
+
 ## Adding a new deferral
 
 1. Add feature key to `services/db_cutover.py` `_REGISTRY`  

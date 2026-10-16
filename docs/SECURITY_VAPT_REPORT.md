@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-10-15T12:17:15.368436+00:00
+Generated: 2026-10-16T07:23:40.016358+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -9,15 +9,15 @@ Agent: `security_audit_agent` v1.0.0
 |----------|-------|
 | critical | 0 |
 | high | 21 |
-| medium | 23 |
+| medium | 25 |
 | low | 0 |
 | info | 0 |
-| **Total** | **44** |
+| **Total** | **46** |
 
 ## Threat themes
 
-- **EXTERNAL** — External attackers / public internet exposure (24 findings)
-- **INTERNAL** — Insider misuse / employee data theft (20 findings)
+- **EXTERNAL** — External attackers / public internet exposure (25 findings)
+- **INTERNAL** — Insider misuse / employee data theft (21 findings)
 - **COMPLIANCE** — SEBI / financial-data regulatory standards (0 findings)
 - **CONFIG** — Misconfiguration & operational hardening (0 findings)
 
@@ -289,7 +289,7 @@ L13: <pre style="background:#f5f5f5;padding:12px;overflow:auto;max-height:400px;
 
 ### `SEC-EXT-005` — CSRF protection disabled on a route/blueprint
 
-**Severity:** medium • **Theme:** EXTERNAL • **Category:** csrf_exempt • **CWE:** CWE-352 • **Location:** `api/v1/notification_centre.py:56`
+**Severity:** medium • **Theme:** EXTERNAL • **Category:** csrf_exempt • **CWE:** CWE-352 • **Location:** `api/v1/notification_centre.py:64`
 
 `csrf.exempt` removes CSRF protection. Browsers will send the user's session cookie automatically, so a forged form on another site can perform this action.
 
@@ -301,7 +301,7 @@ L13: <pre style="background:#f5f5f5;padding:12px;overflow:auto;max-height:400px;
 
 ### `SEC-EXT-005` — CSRF protection disabled on a route/blueprint
 
-**Severity:** medium • **Theme:** EXTERNAL • **Category:** csrf_exempt • **CWE:** CWE-352 • **Location:** `api/v1/notification_centre.py:117`
+**Severity:** medium • **Theme:** EXTERNAL • **Category:** csrf_exempt • **CWE:** CWE-352 • **Location:** `api/v1/notification_centre.py:135`
 
 `csrf.exempt` removes CSRF protection. Browsers will send the user's session cookie automatically, so a forged form on another site can perform this action.
 
@@ -310,6 +310,18 @@ L13: <pre style="background:#f5f5f5;padding:12px;overflow:auto;max-height:400px;
 ```
 
 **Fix:** Re-enable CSRF for any session-authenticated endpoint. For API endpoints used by mobile/JWT clients, leave exempt but ensure the route is registered under `/api/*` and protected by `api/v1/auth_guard.enforce_v1_api_auth` (or v2 equivalent). Add an entry to the documented allowlist.
+
+### `SEC-EXT-006` — Possible open redirect using request data
+
+**Severity:** medium • **Theme:** EXTERNAL • **Category:** open_redirect • **CWE:** CWE-601 • **Location:** `routes/distributor.py:116`
+
+Redirecting to a URL taken from the request (referrer / next / args) lets attackers craft phishing links that land on the trusted domain and then forward victims to a malicious site.
+
+```
+return redirect(request.referrer or url_for("distributor.dashboard"))
+```
+
+**Fix:** Wrap the value with `utils.internal_next.normalize_internal_next(...)` (already used in `routes/auth.py`) so only relative paths within this app are honoured.
 
 ### `SEC-CMP-004` — Database backup file in working tree: `.deploy_preserve/provision_20260921_193809/db.sql.gz`
 
@@ -429,7 +441,7 @@ def download_lead_proposal(
 
 ### `SEC-INT-002` — Export/download endpoint `download_regulatory_client_master_archive` is not audit-logged
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/main.py:1729`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/main.py:1733`
 
 Functions named export/download/csv/excel/backup typically return client data in bulk. Without an audit log entry, an internal user downloading the entire client base is invisible.
 
@@ -507,6 +519,18 @@ Routes that take `<int:client_id>` should verify the current user can see that c
 
 ```
 L77: @client_google_drive_bp.route(; L113: @client_google_drive_bp.route(; L154: @client_google_drive_bp.route(
+```
+
+**Fix:** Add `@client_access_required` (from `access_control`) to each route, OR add a `before_request` hook on this blueprint that calls `can_access_client(client_id)` and aborts 403 if not. Also call `services.audit_service.log_audit_event('client_view', client_id=client_id)` so internal access is recorded for SEBI.
+
+### `SEC-INT-005` — `routes/distributor.py` has 1 client-scoped route(s) without an explicit access check
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_client_scope • **CWE:** CWE-639 • **Location:** `routes/distributor.py:333`
+
+Routes that take `<int:client_id>` should verify the current user can see that client. Without it, an advisor can read other advisors' clients by guessing IDs.
+
+```
+L333: @distributor_bp.route("/assign/<int:client_id>", methods=["POST"])
 ```
 
 **Fix:** Add `@client_access_required` (from `access_control`) to each route, OR add a `before_request` hook on this blueprint that calls `can_access_client(client_id)` and aborts 403 if not. Also call `services.audit_service.log_audit_event('client_view', client_id=client_id)` so internal access is recorded for SEBI.

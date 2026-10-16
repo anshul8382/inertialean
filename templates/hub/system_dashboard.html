@@ -32,6 +32,13 @@
     {% endif %}
     {% if current_user.is_admin or current_user.is_manager or current_user.is_ops_manager %}
     <a href="{{ url_for('hub.price_accuracy_dashboard') }}" class="btn btn-outline-secondary">Price data accuracy</a>
+    <form method="post" action="{{ url_for('hub.price_update_run') }}" class="d-inline"
+          onsubmit="return confirm('Pull all prices from Google Sheet into the app DB now?');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <button type="submit" class="btn btn-primary">
+        <i class="fas fa-cloud-download-alt"></i> Run price update
+      </button>
+    </form>
     {% endif %}
   </div>
 </div>

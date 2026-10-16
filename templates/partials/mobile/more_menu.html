@@ -43,6 +43,14 @@
       <i class="fas fa-user-tag"></i> Assignments
     </a>
     {% endif %}
+    {% if current_user.is_admin or current_user.is_manager %}
+    <a href="{{ url_for('distributor.preview') }}" class="im-more-menu__link">
+      <i class="fas fa-handshake"></i> Distributor preview
+    </a>
+    <a href="{{ url_for('distributor.admin_payouts') }}" class="im-more-menu__link">
+      <i class="fas fa-rupee-sign"></i> Release distributor payouts
+    </a>
+    {% endif %}
     {% if (current_user.is_manager or current_user.is_advisor or current_user.is_ops_manager) and nav_can('advisor_review.assignments_overview') %}
     <a href="{{ url_for('advisor_review.assignments_overview') }}" class="im-more-menu__link">
       <i class="fas fa-user-friends"></i> Advisor assignments
@@ -109,11 +117,14 @@
       <i class="fas fa-clipboard-check"></i> Review Schedules
     </a>
     {% endif %}
+    {% set _distributor_only = current_user.is_authenticated and current_user.is_distributor and not current_user.is_admin and not current_user.is_manager %}
+    {% if not _distributor_only %}
     <p class="im-more-menu__section-title">Help</p>
     {% if nav_can('main.user_manual_pdf', 'universal') %}
     <a href="{{ url_for('main.user_manual_pdf') }}" class="im-more-menu__link" target="_blank" rel="noopener noreferrer">
       <i class="fas fa-file-pdf"></i> User manual (PDF)
     </a>
+    {% endif %}
     {% endif %}
     <hr class="im-more-menu__divider">
     {% if nav_can('auth.profile', 'universal') %}

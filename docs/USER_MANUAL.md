@@ -485,9 +485,21 @@ Use these dashboards to **triage automated issues** from agents (data integrity,
 | **My Claims** | Submit expense claims |
 | **Manage Attendance** | Team attendance |
 | **Manage Claims** | Approve or reject claims |
-| **Salary Calculation** | Run salary from attendance rules |
+| **Salary Calculation** | Run salary from attendance rules (includes distributor revenue share when applicable) |
 
 Non-admin users see a single **Attendance** link without the admin submenu.
+
+### Distributors
+
+| Item | Detail |
+|------|--------|
+| **Role** | Create a user with role **Distributor** and set **revenue share %** on Edit User |
+| **Assign** | On client details (admin/manager): choose distributor (max one; client must have an advisor) |
+| **Portal** | Distributor login → **My clients** (summary only) and **Payouts** (Pending vs Released) |
+| **Release** | Admin/manager → **Release distributor payouts**: batch mark a month’s Pending lines as Released; distributor is notified |
+| **Attribution** | When an invoice is marked **paid**, payout accrues; cancelled/unpaid reverses it |
+
+Full design: [`docs/DISTRIBUTOR_MODULE.md`](DISTRIBUTOR_MODULE.md).
 
 ---
 

@@ -13,20 +13,106 @@ logger = logging.getLogger(__name__)
 MAX_BODY = 280
 
 
-def list_recipients(exclude_user_id: int) -> List[Dict[str, Any]]:
-    from models import User
+def _is_distributor_only(user) -> bool:
+    if not user:
+        return False
+    if getattr(user, "is_admin", False) or getattr(user, "is_manager", False):
+        return False
+    return bool(getattr(user, "is_distributor", False))
 
-    users = (
-        User.query.filter(User.is_active == True, User.id != exclude_user_id)  # noqa: E712
-        .order_by(User.username.asc())
+
+def _recipient_label(u) -> str:
+    label = u.username
+    role_name = None
+    if getattr(u, "role_obj", None) and getattr(u.role_obj, "display_name", None):
+        role_name = u.role_obj.display_name
+    elif getattr(u, "role", None):
+        role_name = u.role
+    if getattr(u, "is_admin", False):
+        role_name = "Admin" if not role_name else f"{role_name}/Admin"
+    if role_name:
+        label = f"{u.username} ({role_name})"
+    return label
+
+
+def _distributor_allowed_recipient_ids(from_user) -> set:
+    """Admins + advisors on clients assigned to this distributor (never other distributors)."""
+    from models import Client, User
+
+    allowed = set()
+    # Active admins
+    for u in User.query.filter_by(is_active=True, is_admin=True).all():
+        if u.id != from_user.id:
+            allowed.add(int(u.id))
+
+    try:
+        from services.distributor_service import distributor_schema_ready
+
+        if not distributor_schema_ready():
+            return allowed
+    except Exception:
+        return allowed
+
+    advisor_ids = (
+        Client.query.filter(Client.distributor_id == int(from_user.id))
+        .with_entities(Client.advisor_id)
+        .distinct()
         .all()
     )
+    for (advisor_id,) in advisor_ids:
+        if not advisor_id or int(advisor_id) == int(from_user.id):
+            continue
+        adv = User.query.get(int(advisor_id))
+        if not adv or not adv.is_active:
+            continue
+        # Never allow messaging another distributor
+        if getattr(adv, "is_distributor", False) and not adv.is_admin:
+            continue
+        allowed.add(int(adv.id))
+    return allowed
+
+
+def can_message(*, from_user, to_user) -> bool:
+    """Server-side recipient policy."""
+    if not from_user or not to_user or not to_user.is_active:
+        return False
+    if int(from_user.id) == int(to_user.id):
+        return False
+    if not _is_distributor_only(from_user):
+        return True
+    # Distributor: no other distributors
+    if getattr(to_user, "is_distributor", False) and not getattr(to_user, "is_admin", False):
+        return False
+    return int(to_user.id) in _distributor_allowed_recipient_ids(from_user)
+
+
+def list_recipients(exclude_user_id: int, *, from_user=None) -> List[Dict[str, Any]]:
+    from models import User
+
+    # Prefer full user object when available (distributor filtering)
+    sender = from_user
+    if sender is None and exclude_user_id:
+        sender = User.query.get(int(exclude_user_id))
+
+    if sender is not None and _is_distributor_only(sender):
+        allowed_ids = _distributor_allowed_recipient_ids(sender)
+        if not allowed_ids:
+            return []
+        users = (
+            User.query.filter(User.is_active == True, User.id.in_(allowed_ids))  # noqa: E712
+            .order_by(User.username.asc())
+            .all()
+        )
+    else:
+        users = (
+            User.query.filter(User.is_active == True, User.id != exclude_user_id)  # noqa: E712
+            .order_by(User.username.asc())
+            .all()
+        )
+
     out = []
     for u in users:
-        label = u.username
-        if getattr(u, "role", None):
-            label = f"{u.username} ({u.role})"
-        out.append({"id": u.id, "username": u.username, "label": label})
+        out.append({"id": u.id, "username": u.username, "label": _recipient_label(u)})
     return out
 
 
@@ -48,6 +134,15 @@ def send_message(*, from_user, to_user_id: int, body: str) -> Dict[str, Any]:
     to_user = User.query.get(to_user_id)
     if not to_user or not to_user.is_active:
         return {"ok": False, "error": "recipient_not_found"}
+    if not can_message(from_user=from_user, to_user=to_user):
+        return {
+            "ok": False,
+            "error": "recipient_not_allowed",
+            "message": (
+                "Distributors can message admins and advisors on their clients only "
+                "(not other distributors)."
+            ),
+        }
 
     row = UserPeerMessage(
         from_user_id=from_user.id,

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Distributor — My clients{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  {% include "distributor/_preview_banner.html" %}
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <h1 class="h3 mb-0">My clients{% if preview_distributor %} <span class="text-muted fs-6">({{ preview_distributor.username }})</span>{% endif %}</h1>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary btn-sm" href="{{ url_for('distributor.pitch_deck') }}">
+        <i class="fas fa-file-powerpoint" aria-hidden="true"></i> Download latest pitch deck
+      </a>
+      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('distributor.payouts') }}">
+        <i class="fas fa-rupee-sign" aria-hidden="true"></i> Payout sheet
+      </a>
+    </div>
+  </div>
+
+  <div class="card card-app shadow mb-4 border-0 bg-light">
+    <div class="card-body py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <div>
+        <strong class="d-block">Client conversation kit</strong>
+        <span class="text-muted small">Download the latest pitch deck with everything you need to talk to a client.</span>
+      </div>
+      <a class="btn btn-outline-dark btn-sm" href="{{ url_for('distributor.pitch_deck') }}">
+        <i class="fas fa-download" aria-hidden="true"></i> Pitch deck (PPT)
+      </a>
+    </div>
+  </div>
+
+  {% if not schema_ready %}
+  <div class="alert alert-warning" role="alert">Distributor schema is not ready. Ask an admin to run the migration.</div>
+  {% elif not rows %}
+  <div class="card card-app shadow">
+    <div class="card-body text-center py-5">
+      <p class="text-muted mb-0">No clients are assigned to you yet.</p>
+    </div>
+  </div>
+  {% else %}
+  <div class="row">
+    {% for row in rows %}
+    <div class="col-xl-4 col-lg-6 mb-4">
+      <div class="card card-app shadow h-100">
+        <div class="card-header py-3 d-flex justify-content-between align-items-start gap-2">
+          <div>
+            <h2 class="h6 m-0 font-weight-bold text-primary">{{ row.client.name }}</h2>
+            <small class="text-muted">Advisor: {{ row.advisor_name }}</small>
+          </div>
+          <a class="btn btn-sm btn-primary"
+             href="{{ url_for('distributor.client_summary', client_id=row.client.id) }}"
+             aria-label="Open summary for {{ row.client.name }}">
+            Open
+          </a>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <div class="text-muted small">Portfolio AUM</div>
+            <div class="fs-4 text-primary fw-bold">₹{{ "{:,.0f}".format(row.aum) }}</div>
+          </div>
+          <div class="mb-3">
+            <div class="text-muted small">Investment cycle</div>
+            {% if row.cycle_status %}
+              <div>{{ row.cycle_status.description }}</div>
+              <span class="badge bg-secondary mt-1">{{ row.cycle_status.code }}</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </div>
+          <div class="row g-2 small">
+            <div class="col-6">
+              <div class="text-muted">Previous review</div>
+              <div>{{ row.last_review_date.strftime('%Y-%m-%d') if row.last_review_date else '—' }}</div>
+            </div>
+            <div class="col-6">
+              <div class="text-muted">Next review</div>
+              <div>{{ row.next_review_date.strftime('%Y-%m-%d') if row.next_review_date else '—' }}</div>
+            </div>
+          </div>
+          {% if row.last_invoice %}
+          <div class="mt-3 pt-2 border-top small">
+            <span class="text-muted">Last invoice</span>
+            {{ row.last_invoice.invoice_number }}
+            <span class="badge bg-secondary">{{ row.last_invoice.status }}</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

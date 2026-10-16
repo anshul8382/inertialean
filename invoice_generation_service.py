@@ -438,6 +438,13 @@ class InvoiceGenerationService:
                     invoice.payment_reference = payment_reference
                 if payment_method:
                     invoice.payment_method = payment_method
+
+            try:
+                from services.distributor_service import sync_attribution_for_invoice
+
+                sync_attribution_for_invoice(invoice)
+            except Exception as attr_err:
+                logger.warning("Distributor attribution sync failed: %s", attr_err)
                     
             db.session.commit()
             return True

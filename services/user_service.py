@@ -205,9 +205,14 @@ class UserService:
                 raise ValueError("Username already taken by another user")
             
             if role_id is not _UNSET:
-                if role_id is not None and not Role.query.get(role_id):
-                    raise ValueError("Invalid role selected")
-                user.role_id = role_id
+                if role_id is not None:
+                    role_row = Role.query.get(role_id)
+                    if not role_row:
+                        raise ValueError("Invalid role selected")
+                    user.role_id = role_id
+                    user.role = role_row.name  # keep legacy string in sync
+                else:
+                    user.role_id = None
             
             user.username = username
             user.email = email

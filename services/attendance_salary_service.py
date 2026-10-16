@@ -1,6 +1,7 @@
 """
 Attendance-based monthly salary breakdown for admin payroll views.
 total = base_stipend + approved_claims + sales_incentive + internal_incentive
+      + distributor_revenue_share (paid-invoice attributions for the month)
 """
 from __future__ import annotations
 
@@ -108,9 +109,32 @@ def build_month_breakdown(
 
     sales_inc = _money(sales_incentive)
     internal_inc = _money(internal_incentive)
-    total_salary = (base_stipend + claims_amount + sales_inc + internal_inc).quantize(
-        Decimal("0.01")
-    )
+
+    distributor_payout = Decimal("0.00")
+    distributor_rows: List[Dict[str, Any]] = []
+    try:
+        from services.distributor_service import month_payouts_for_distributor
+
+        dist_data = month_payouts_for_distributor(user_id, year, month)
+        distributor_payout = _money(dist_data.get("total_payout"))
+        for r in (dist_data.get("pending_rows") or []) + (dist_data.get("released_rows") or []):
+            distributor_rows.append(
+                {
+                    "paid_date": r.paid_date,
+                    "invoice_number": r.invoice.invoice_number if r.invoice else r.invoice_id,
+                    "client_name": r.client.name if r.client else r.client_id,
+                    "invoice_amount": _money(r.invoice_amount_paid),
+                    "share_percent": _money(r.revenue_share_percent),
+                    "payout": _money(r.payout_amount),
+                    "payout_status": getattr(r, "payout_status", None) or "pending",
+                }
+            )
+    except Exception:
+        pass
+
+    total_salary = (
+        base_stipend + claims_amount + sales_inc + internal_inc + distributor_payout
+    ).quantize(Decimal("0.01"))
 
     day_rows: List[Dict[str, Any]] = []
     for record in attendance_records:
@@ -176,6 +200,8 @@ def build_month_breakdown(
         "approved_claims_amount": claims_amount,
         "sales_incentive": sales_inc,
         "internal_incentive": internal_inc,
+        "distributor_payout": distributor_payout,
+        "distributor_rows": distributor_rows,
         "total_salary": total_salary,
         "day_rows": day_rows,
         "claim_rows": claim_rows,

@@ -57,6 +57,40 @@
                     <i class="fas fa-user-slash me-1" aria-hidden="true"></i>Advisor: Unassigned
                 </span>
                 {% endif %}
+                {% if client.distributor %}
+                <span class="badge bg-light text-dark border">
+                    <i class="fas fa-handshake me-1" aria-hidden="true"></i>Distributor: {{ client.distributor.username }}
+                </span>
+                {% endif %}
+                {% if (current_user.is_admin or current_user.is_manager) and distributors_for_assign is defined %}
+                <form method="post" action="{{ url_for('distributor.assign', client_id=client.id) }}"
+                      class="d-inline-flex align-items-center gap-1 flex-wrap">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <label class="form-label mb-0 small text-muted" for="distributor_id_{{ client.id }}">Distributor</label>
+                    <select name="distributor_id" id="distributor_id_{{ client.id }}"
+                            class="form-select form-select-sm" style="width: auto; min-width: 12rem;">
+                        <option value="0">No distributor</option>
+                        {% for d in distributors_for_assign %}
+                        <option value="{{ d.id }}" {% if client.distributor_id == d.id %}selected{% endif %}>
+                            {{ d.username }}{% if d.distributor_revenue_share_percent is not none %} ({{ d.distributor_revenue_share_percent }}%){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-outline-primary">Set distributor</button>
+                </form>
+                {% if not distributors_for_assign %}
+                <span class="small text-warning">No users with role Distributor yet.</span>
+                {% endif %}
+                {% if current_user.is_admin %}
+                <a class="btn btn-sm btn-link"
+                   href="{{ url_for('users.add_user', **{'for': 'distributor', 'next': request.path}) }}">
+                    Create new distributor user
+                </a>
+                {% elif not distributors_for_assign %}
+                <span class="small text-muted">Ask an admin to create a Distributor user, then assign here.</span>
+                {% endif %}
+                {% endif %}
                 {% if household_group %}
                 <a href="{{ url_for('households.household_details', group_id=household_group.id) }}"
                    class="badge bg-info text-dark text-decoration-none"
@@ -2675,20 +2709,34 @@
     async function generateInvoice(agreementId) {
         try {
             showLoading('Generating invoice...');
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
             const response = await fetch('/api/billing/invoice/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
                 },
                 body: JSON.stringify({
                     agreement_id: agreementId,
                     billing_date: new Date().toISOString().split('T')[0]
                 })
             });
-            
-            const data = await response.json();
+
+            const raw = await response.text();
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (parseErr) {
+                hideLoading();
+                showError(
+                    response.status === 400
+                        ? 'Request rejected (CSRF or validation). Refresh the page and try again.'
+                        : `Invoice generate failed (HTTP ${response.status}).`
+                );
+                return;
+            }
             hideLoading();
-            
+
             if (data.success) {
                 showSuccess(`Invoice ${data.data.invoice_number} generated successfully!`);
                 // Refresh the page to show the new invoice

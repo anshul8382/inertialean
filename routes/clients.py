@@ -1277,8 +1277,18 @@ def client_details(client_id):
     except Exception as e:
         logger.debug("Drive/suitability context skipped for client %s: %s", client_id, e)
 
+    distributors_for_assign = []
+    try:
+        if current_user.is_admin or current_user.is_manager:
+            from services.distributor_service import list_distributors
+
+            distributors_for_assign = list_distributors()
+    except Exception:
+        distributors_for_assign = []
+
     return render_template('clients/client_details.html',
                          client=client,
+                         distributors_for_assign=distributors_for_assign,
                          google_drive_folder_url=google_drive_folder_url,
                          google_drive_sa_email=google_drive_sa_email,
                          suitability_reports=suitability_reports,

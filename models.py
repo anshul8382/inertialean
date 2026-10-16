@@ -31,6 +31,7 @@ class Client(db.Model):
     created_at = db.Column(db.DateTime)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     advisor_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    distributor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)  # Active vs inactive client engagement
     google_drive_folder_id = db.Column(db.String(128), nullable=True)
     google_drive_folder_note = db.Column(db.String(255), nullable=True)
@@ -51,6 +52,9 @@ class Client(db.Model):
     recommendation_sessions = db.relationship('RecommendationSession', back_populates='client')
     reviews = db.relationship('Review', back_populates='client')
     advisor = db.relationship('User', back_populates='assigned_clients', foreign_keys=[advisor_id])
+    distributor = db.relationship(
+        'User', back_populates='distributed_clients', foreign_keys=[distributor_id]
+    )
     client_assignments = db.relationship('ClientAdvisorAssignment', back_populates='client')
     agreement_variables = db.relationship('AgreementVariables', back_populates='client', cascade='all, delete-orphan')
     review_schedules = db.relationship('ReviewSchedule', back_populates='client', cascade='all, delete-orphan')
@@ -728,10 +732,15 @@ class User(db.Model, UserMixin):
     two_factor_setup_reminder = db.Column(db.DateTime)  # Last reminder sent
     # Google Calendar (OAuth): used to create/update events when user is assignee on OpsTasks
     google_calendar_refresh_token = db.Column(db.Text, nullable=True)
+    # Distributor revenue share % of invoice amount paid (fixed per person; e.g. 20.00 = 20%)
+    distributor_revenue_share_percent = db.Column(db.Numeric(5, 2), nullable=True)
 
     # Relationships
     clients = db.relationship('Client', back_populates='user', foreign_keys='Client.user_id')
     assigned_clients = db.relationship('Client', back_populates='advisor', foreign_keys='Client.advisor_id')
+    distributed_clients = db.relationship(
+        'Client', back_populates='distributor', foreign_keys='Client.distributor_id'
+    )
     client_assignments = db.relationship('ClientAdvisorAssignment', back_populates='advisor', foreign_keys='ClientAdvisorAssignment.advisor_id')
     portfolios = db.relationship('Portfolio', back_populates='user', foreign_keys='Portfolio.created_by')
     monthly_investments = db.relationship('MonthlyInvestment', back_populates='creator', foreign_keys='MonthlyInvestment.created_by')
@@ -782,6 +791,13 @@ class User(db.Model, UserMixin):
         return self.role == 'advisor'
 
     @property
+    def is_distributor(self):
+        """True when role is distributor (view-only client book via distributor_id)."""
+        if self.role_obj:
+            return self.role_obj.name == 'distributor'
+        return (self.role or '').lower() == 'distributor'
+
+    @property
     def is_ops_manager(self):
         """True for ops_manager or sales_ops_manager (see access_control.user_is_ops_manager)."""
         from access_control import user_is_ops_manager
@@ -812,6 +828,8 @@ class User(db.Model, UserMixin):
         """Check if user can access a specific client"""
         if self.is_admin or self.is_manager or self.is_ops_manager:
             return True
+        if self.is_distributor:
+            return getattr(client, 'distributor_id', None) == self.id
         return client.advisor_id == self.id
 
     def get_accessible_clients(self):
@@ -819,6 +837,8 @@ class User(db.Model, UserMixin):
         try:
             if self.is_admin or self.is_manager or self.is_ops_manager:
                 clients = Client.query.all()
+            elif self.is_distributor:
+                clients = Client.query.filter_by(distributor_id=self.id).all()
             else:
                 clients = Client.query.filter_by(advisor_id=self.id).all()
             return list(clients) if clients else []
@@ -1781,6 +1801,73 @@ class Invoice(db.Model):
     client = db.relationship('Client', backref='invoices')
     creator = db.relationship('User', backref='created_invoices', foreign_keys=[created_by])
     line_items = db.relationship('InvoiceLineItem', back_populates='invoice', cascade='all, delete-orphan')
+
+class DistributorInvoiceAttribution(db.Model):
+    """Revenue share owed to a distributor when a client invoice is paid."""
+    __tablename__ = 'distributor_invoice_attribution'
+
+    id = db.Column(db.Integer, primary_key=True)
+    distributor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False, index=True)
+    invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'), nullable=False, unique=True)
+    revenue_share_percent = db.Column(db.Numeric(5, 2), nullable=False)
+    invoice_amount_paid = db.Column(db.Numeric(12, 2), nullable=False)
+    payout_amount = db.Column(db.Numeric(12, 2), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='active')  # active | reversed
+    # pending = owed, not yet paid to distributor; released = firm paid distributor
+    payout_status = db.Column(db.String(20), nullable=False, default='pending')
+    released_at = db.Column(db.DateTime, nullable=True)
+    released_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    clawback_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    paid_date = db.Column(db.Date, nullable=True, index=True)
+    attributed_at = db.Column(db.DateTime, default=datetime.utcnow)
+    reversed_at = db.Column(db.DateTime, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    distributor = db.relationship('User', foreign_keys=[distributor_id])
+    client = db.relationship('Client', foreign_keys=[client_id])
+    invoice = db.relationship('Invoice', foreign_keys=[invoice_id])
+    released_by = db.relationship('User', foreign_keys=[released_by_id])
+
+    def __repr__(self):
+        return (
+            f'<DistributorInvoiceAttribution inv={self.invoice_id} '
+            f'dist={self.distributor_id} {self.status}/{self.payout_status} {self.payout_amount}>'
+        )
+
+
+class DistributorPayoutRelease(db.Model):
+    """Month batch: firm marked distributor payouts as payment released."""
+    __tablename__ = 'distributor_payout_release'
+
+    id = db.Column(db.Integer, primary_key=True)
+    distributor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    year = db.Column(db.Integer, nullable=False)
+    month = db.Column(db.Integer, nullable=False)
+    row_count = db.Column(db.Integer, nullable=False, default=0)
+    total_payout = db.Column(db.Numeric(12, 2), nullable=False, default=0)
+    released_at = db.Column(db.DateTime, default=datetime.utcnow)
+    released_by_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    distributor = db.relationship('User', foreign_keys=[distributor_id])
+    released_by = db.relationship('User', foreign_keys=[released_by_id])
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'distributor_id', 'year', 'month', name='uq_dist_payout_release_period'
+        ),
+    )
+
+    def __repr__(self):
+        return (
+            f'<DistributorPayoutRelease dist={self.distributor_id} '
+            f'{self.year}-{self.month:02d} {self.total_payout}>'
+        )
+
 
 class InvoiceLineItem(db.Model):
     __tablename__ = 'invoice_line_item'

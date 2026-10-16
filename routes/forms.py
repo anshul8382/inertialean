@@ -57,7 +57,21 @@ class AddUserForm(FlaskForm):
     email = StringField('Email', validators=[DataRequired(), Email()])
     is_admin = BooleanField('Admin User')
     is_active = BooleanField('Active User', default=True)
+    role_id = SelectField('Role', coerce=int, validators=[Optional()])
+    distributor_revenue_share_percent = DecimalField(
+        'Distributor revenue share %',
+        places=2,
+        validators=[Optional()],
+        render_kw={"step": "0.01", "min": "0", "max": "100"},
+    )
     submit = SubmitField('Add User')
+
+    def __init__(self, *args, **kwargs):
+        super(AddUserForm, self).__init__(*args, **kwargs)
+        roles = Role.query.filter_by(is_active=True).order_by(Role.name).all()
+        self.role_id.choices = [(0, 'None (Use Legacy Role)')] + [
+            (role.id, role.display_name) for role in roles
+        ]
 
 class EditUserForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired(), Length(min=3, max=80)])
@@ -65,6 +79,12 @@ class EditUserForm(FlaskForm):
     is_admin = BooleanField('Admin User')
     is_active = BooleanField('Active User')
     role_id = SelectField('Role', coerce=int, validators=[Optional()])
+    distributor_revenue_share_percent = DecimalField(
+        'Distributor revenue share %',
+        places=2,
+        validators=[Optional()],
+        render_kw={"step": "0.01", "min": "0", "max": "100"},
+    )
     submit = SubmitField('Update User')
     
     def __init__(self, *args, **kwargs):

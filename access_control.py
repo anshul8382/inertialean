@@ -248,6 +248,8 @@ def scope_clients_query(query, user=None):
 
     if user_can_view_all_clients(user):
         return query
+    if getattr(user, "is_distributor", False):
+        return query.filter(Client.distributor_id == user.id)
     return query.filter(Client.advisor_id == user.id)
 
 

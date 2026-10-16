@@ -665,6 +665,88 @@ def price_accuracy_verify_from_sheets():
     return redirect(url_for("hub.price_accuracy_dashboard"))
 
 
+@hub_bp.route("/system/price-accuracy/run-price-update", methods=["POST"])
+@login_required
+@handle_errors
+def price_update_run():
+    """
+    Manual trigger for the daily price_updates job (Google Sheet Prices → Security.current_price).
+    Same logic as Airflow task price_updates / cron price_update_sheets.
+    Historical EOD rows still only save during the IST close window (16:00–16:59).
+    """
+    from api.v1.cron_jobs import run_nifty_price_update, run_price_update_sheets
+
+    if not _hub_price_accuracy_access_ok():
+        flash("Access denied.", "error")
+        return redirect(url_for("hub.system_dashboard"))
+
+    include_nifty = request.form.get("include_nifty") in ("1", "true", "on", "yes")
+
+    raw_out = run_price_update_sheets()
+    body = {}
+    status_code = 500
+    if isinstance(raw_out, tuple) and len(raw_out) >= 2:
+        status_code = int(raw_out[1])
+        try:
+            body = raw_out[0].get_json(silent=True) or {}
+        except Exception:
+            body = {}
+
+    sync_ok = status_code == 200 and (
+        body.get("success") is True
+        or (body.get("data") or {}).get("success") is True
+    )
+    pdata = body.get("data") or {}
+    if not isinstance(pdata, dict):
+        pdata = {}
+
+    if not sync_ok:
+        flash(
+            (
+                "Price update from Google Sheet failed: "
+                f"{body.get('message') or body.get('error') or status_code}"
+            ),
+            "error",
+        )
+        return redirect(url_for("hub.price_accuracy_dashboard"))
+
+    msg = (
+        f"Prices updated from Sheet: {pdata.get('updated_count', 0)} securities, "
+        f"{pdata.get('historical_saved_count', 0)} historical rows "
+        f"(history only in IST 16:00–16:59), "
+        f"{pdata.get('not_found_count', 0)} symbols not found in DB."
+    )
+
+    if include_nifty:
+        try:
+            nifty_out = run_nifty_price_update()
+            n_body = {}
+            n_code = 500
+            if isinstance(nifty_out, tuple) and len(nifty_out) >= 2:
+                n_code = int(nifty_out[1])
+                try:
+                    n_body = nifty_out[0].get_json(silent=True) or {}
+                except Exception:
+                    n_body = {}
+            if n_code == 200 and (
+                n_body.get("success") is True
+                or (n_body.get("data") or {}).get("success") is True
+            ):
+                nd = n_body.get("data") or {}
+                msg += f" Nifty: {nd.get('message') or 'updated'}."
+            else:
+                msg += (
+                    " Nifty update failed: "
+                    f"{n_body.get('message') or n_body.get('error') or n_code}."
+                )
+        except Exception as exc:
+            logger.error("manual nifty price update: %s", exc, exc_info=True)
+            msg += f" Nifty update error: {exc}."
+
+    flash(msg, "success")
+    return redirect(url_for("hub.price_accuracy_dashboard"))
+
+
 @hub_bp.route("/system/price-accuracy/full-sheets-pipeline", methods=["POST"])
 @login_required
 @handle_errors

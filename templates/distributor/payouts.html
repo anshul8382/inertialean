@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Distributor payouts{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  {% include "distributor/_preview_banner.html" %}
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h1 class="h3 mb-0">Payout sheet{% if preview_distributor %} <span class="text-muted fs-6">({{ preview_distributor.username }})</span>{% endif %}</h1>
+    <div class="d-flex flex-wrap gap-2">
+      {% if is_admin_view|default(false) %}
+      <a class="btn btn-outline-primary btn-sm" href="{{ url_for('distributor.admin_payouts', year=year, month=month) }}">
+        Release payouts
+      </a>
+      {% endif %}
+      <a class="btn btn-primary btn-sm" href="{{ url_for('distributor.pitch_deck') }}">
+        <i class="fas fa-file-powerpoint" aria-hidden="true"></i> Pitch deck
+      </a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('distributor.dashboard') }}">Clients</a>
+    </div>
+  </div>
+
+  <form method="get" class="row g-2 align-items-end mb-3">
+    {% if preview_distributor %}
+    <input type="hidden" name="distributor_id" value="{{ preview_distributor.id }}">
+    {% endif %}
+    <div class="col-auto">
+      <label class="form-label mb-0" for="year">Year</label>
+      <input class="form-control" type="number" name="year" id="year" value="{{ year }}" min="2020" max="2100">
+    </div>
+    <div class="col-auto">
+      <label class="form-label mb-0" for="month">Month</label>
+      <input class="form-control" type="number" name="month" id="month" value="{{ month }}" min="1" max="12">
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-primary" type="submit">Show</button>
+    </div>
+  </form>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-3">
+      <div class="border rounded p-3">
+        <div class="text-muted small">Invoice value (active)</div>
+        <div class="fs-5">₹{{ "{:,.2f}".format(data.total_invoice_amount) }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="border rounded p-3">
+        <div class="text-muted small">Pending payout</div>
+        <div class="fs-5 text-warning">₹{{ "{:,.2f}".format(data.total_pending) }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="border rounded p-3">
+        <div class="text-muted small">Released payout</div>
+        <div class="fs-5 text-success">₹{{ "{:,.2f}".format(data.total_released) }}</div>
+      </div>
+    </div>
+    <div class="col-md-3">
+      <div class="border rounded p-3">
+        <div class="text-muted small">Total (pending + released)</div>
+        <div class="fs-5">₹{{ "{:,.2f}".format(data.total_payout) }}</div>
+      </div>
+    </div>
+  </div>
+
+  {% if data.release_batch %}
+  <div class="alert alert-success py-2 small">
+    Last release batch for this month:
+    {{ data.release_batch.released_at.strftime('%Y-%m-%d %H:%M') if data.release_batch.released_at else '—' }} UTC
+    · {{ data.release_batch.row_count }} line(s)
+    · ₹{{ "{:,.2f}".format(data.release_batch.total_payout) }}
+  </div>
+  {% endif %}
+
+  {% if data.total_clawback and data.total_clawback > 0 %}
+  <div class="alert alert-secondary py-2 small">
+    Clawbacks this month (refunds / reverses): ₹{{ "{:,.2f}".format(data.total_clawback) }}
+  </div>
+  {% endif %}
+
+  {% macro payout_table(rows, empty_msg) %}
+  {% if rows %}
+  <div class="table-responsive mb-4">
+    <table class="table table-sm table-bordered">
+      <thead class="table-light">
+        <tr>
+          <th>Paid date</th>
+          <th>Invoice</th>
+          <th>Client</th>
+          <th class="text-end">Invoice amount</th>
+          <th class="text-end">Share %</th>
+          <th class="text-end">Payout</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.paid_date or '—' }}</td>
+          <td>{{ r.invoice.invoice_number if r.invoice else r.invoice_id }}</td>
+          <td>{{ r.client.name if r.client else r.client_id }}</td>
+          <td class="text-end">₹{{ "{:,.2f}".format(r.invoice_amount_paid) }}</td>
+          <td class="text-end">{{ "%.2f"|format(r.revenue_share_percent) }}%</td>
+          <td class="text-end">₹{{ "{:,.2f}".format(r.payout_amount) }}</td>
+          <td>
+            {% if r.status == 'reversed' %}
+            <span class="badge bg-secondary">Reversed</span>
+            {% elif (r.payout_status or 'pending') == 'released' %}
+            <span class="badge bg-success">Released</span>
+            {% else %}
+            <span class="badge bg-warning text-dark">Pending</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="alert alert-light border mb-4">{{ empty_msg }}</div>
+  {% endif %}
+  {% endmacro %}
+
+  {% if data.release_schema %}
+  <h2 class="h5">Pending</h2>
+  <p class="small text-muted">Client has paid; awaiting firm release to you.</p>
+  {{ payout_table(data.pending_rows, 'No pending payouts for this month.') }}
+
+  <h2 class="h5">Released</h2>
+  <p class="small text-muted">Marked as payment released by the firm.</p>
+  {{ payout_table(data.released_rows, 'No released payouts for this month.') }}
+  {% else %}
+  <h2 class="h5">Attributions</h2>
+  {{ payout_table(data.rows, 'No paid-invoice attributions for this month.') }}
+  {% endif %}
+
+  {% if data.reversed_rows %}
+  <h2 class="h5">Reversed / clawed back</h2>
+  {{ payout_table(data.reversed_rows, '') }}
+  {% endif %}
+</div>
+{% endblock %}

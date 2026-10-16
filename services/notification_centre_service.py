@@ -80,6 +80,10 @@ URGENCY_RANK = {
     "I1": 200,
     "D1": 210,
     "C2": 220,
+    "DIST_RECO": 100,
+    "DIST_REVIEW": 110,
+    "DIST_INVOICE": 120,
+    "DIST_PAYOUT": 125,
 }
 
 # Manager/admin firm radar — only these when not the assignee.
@@ -87,7 +91,24 @@ RADAR_SIGNALS: Set[str] = {"A2", "B1", "E1", "F1", "G7"}
 
 # Priority bands for collapsible UI (urgent is derived from item.urgent).
 IMPORTANT_SIGNALS: Set[str] = set(RADAR_SIGNALS) | {"A3", "G6", "T1", "K2"}
-INFO_SIGNALS: Set[str] = {"C2", "ATT1", "D1", "MSG"}
+INFO_SIGNALS: Set[str] = {
+    "C2",
+    "ATT1",
+    "D1",
+    "MSG",
+    "DIST_RECO",
+    "DIST_REVIEW",
+    "DIST_INVOICE",
+    "DIST_PAYOUT",
+}
+
+# Distributor-only feed: reco, review, invoice, payout release.
+DISTRIBUTOR_SIGNALS: Set[str] = {
+    "DIST_RECO",
+    "DIST_REVIEW",
+    "DIST_INVOICE",
+    "DIST_PAYOUT",
+}
 
 SECTION_META = (
     ("urgent", "Urgent", False),  # always expanded
@@ -232,6 +253,360 @@ def _stage_entered_at(workflow, stage: str) -> datetime:
     return workflow.updated_at or workflow.created_at or datetime.utcnow()
 
 
+def _is_distributor_only(user) -> bool:
+    """True for distributor role users who are not admin/manager."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(user, "is_admin", False) or getattr(user, "is_manager", False):
+        return False
+    return bool(getattr(user, "is_distributor", False))
+
+
+def _distributor_client_ids(user) -> Set[int]:
+    from models import Client
+
+    if not distributor_schema_ok():
+        return set()
+    rows = (
+        Client.query.filter(Client.distributor_id == int(user.id))
+        .with_entities(Client.id)
+        .all()
+    )
+    return {int(r[0]) for r in rows}
+
+
+def distributor_schema_ok() -> bool:
+    try:
+        from services.distributor_service import distributor_schema_ready
+
+        return bool(distributor_schema_ready())
+    except Exception:
+        return False
+
+
+def _distributor_client_path(client_id: int) -> str:
+    return f"/distributor/clients/{int(client_id)}"
+
+
+def _investment_month_label(investment_date) -> str:
+    """e.g. September 2026 from monthly investment date."""
+    if not investment_date:
+        return "this month"
+    try:
+        return investment_date.strftime("%B %Y")
+    except Exception:
+        return "this month"
+
+
+def _normalize_reco_stage(stage: Optional[str]) -> str:
+    s = (stage or "").upper().strip()
+    if s in ("ICR", "INVESTMENT/CHANGES/REDEMPTION"):
+        return "FUNDS"
+    return s
+
+
+def _distributor_reco_copy(stage: str, month_label: str) -> Dict[str, str]:
+    """Human-readable title + description for monthly reco cycle stages."""
+    stage = _normalize_reco_stage(stage)
+    copies = {
+        "FUNDS": {
+            "title": "Checking with client",
+            "nudge": (
+                f"We are checking with the client if we can share the investment "
+                f"recommendation for {month_label}."
+            ),
+        },
+        "RECOS": {
+            "title": "Preparing recommendations",
+            "nudge": (
+                f"We are preparing the investment recommendation for {month_label}."
+            ),
+        },
+        "NOTIFY": {
+            "title": "Recommendation sent",
+            "nudge": (
+                "Recommendation is sent — we will notify the client soon."
+            ),
+        },
+        "EXEC": {
+            "title": "Executing recommendations",
+            "nudge": (
+                f"Recommendations for {month_label} are being executed."
+            ),
+        },
+        "UPDATE": {
+            "title": "Updating portfolio",
+            "nudge": (
+                f"We are updating the portfolio after this month's recommendations "
+                f"({month_label})."
+            ),
+        },
+    }
+    return copies.get(
+        stage,
+        {
+            "title": f"Recommendation status: {stage or '—'}",
+            "nudge": f"Monthly recommendation cycle is at stage {stage or '—'} for {month_label}.",
+        },
+    )
+
+
+def _from_distributor_payout_releases(user, now: datetime) -> List[NotificationItem]:
+    """Notify distributor when a month batch was marked payment released."""
+    from datetime import timedelta
+
+    from models import DistributorPayoutRelease
+
+    out: List[NotificationItem] = []
+    try:
+        from services.distributor_service import payout_release_schema_ready
+
+        if not payout_release_schema_ready():
+            return out
+    except Exception:
+        return out
+
+    cutoff = now - timedelta(days=90)
+    batches = (
+        DistributorPayoutRelease.query.filter(
+            DistributorPayoutRelease.distributor_id == int(user.id),
+            DistributorPayoutRelease.released_at >= cutoff,
+        )
+        .order_by(DistributorPayoutRelease.released_at.desc())
+        .limit(12)
+        .all()
+    )
+    for batch in batches:
+        when = batch.released_at or now
+        age = wall_hours_since(when, now) if when else 0.0
+        total = float(batch.total_payout or 0)
+        period = f"{batch.year}-{int(batch.month):02d}"
+        out.append(
+            NotificationItem(
+                signal_id="DIST_PAYOUT",
+                entity_type="payout_release",
+                entity_id=int(batch.id),
+                title=f"Payout released — {period}",
+                nudge_text=(
+                    f"Your revenue-share payout for {period} was marked released "
+                    f"(₹{total:,.0f}, {int(batch.row_count or 0)} invoice line(s))."
+                ),
+                severity="info",
+                age_hours=age,
+                age_label=f"{age:.0f}h" if age < 48 else f"{age / 24:.1f}d",
+                app_path=f"/distributor/payouts?year={batch.year}&month={batch.month}",
+                ignore_allowed=True,
+                facts={
+                    "year": batch.year,
+                    "month": batch.month,
+                    "total_payout": total,
+                    "done_means": "acknowledged",
+                    "done_label": "Got it",
+                    "member_ids": [batch.id],
+                },
+                detail_lines=[
+                    f"Period: {period}",
+                    f"Amount: ₹{total:,.0f}",
+                    f"Lines: {int(batch.row_count or 0)}",
+                ],
+            )
+        )
+    return out
+
+
+def _from_distributor_events(user, now: datetime) -> List[NotificationItem]:
+    """Reco cycle status, review status, invoices raised, and payout releases."""
+    from models import Client, Invoice, ReviewWorkflow, Workflow
+    from sqlalchemy.orm import joinedload
+
+    out: List[NotificationItem] = []
+    out.extend(_from_distributor_payout_releases(user, now))
+
+    client_ids = _distributor_client_ids(user)
+    if not client_ids:
+        return out
+
+    clients = {
+        c.id: c
+        for c in Client.query.filter(Client.id.in_(client_ids)).all()
+    }
+
+    # 1) Recommendation / monthly cycle status changes (one card per client)
+    workflows = (
+        Workflow.query.options(joinedload(Workflow.monthly_investment))
+        .filter(
+            Workflow.is_archived == False,  # noqa: E712
+            Workflow.current_stage != "COMPLETED",
+        )
+        .all()
+    )
+    latest_wf_by_client: Dict[int, Any] = {}
+    for wf in workflows:
+        mi = wf.monthly_investment
+        if not mi or mi.client_id not in client_ids:
+            continue
+        stage = _normalize_reco_stage(wf.current_stage)
+        if stage not in ("FUNDS", "RECOS", "NOTIFY", "EXEC", "UPDATE"):
+            continue
+        prev = latest_wf_by_client.get(mi.client_id)
+        wf_ts = getattr(wf, "updated_at", None) or getattr(wf, "created_at", None)
+        prev_ts = (
+            getattr(prev, "updated_at", None) or getattr(prev, "created_at", None)
+            if prev
+            else None
+        )
+        if prev is None or (wf_ts and (prev_ts is None or wf_ts >= prev_ts)) or (
+            prev and int(wf.id) > int(prev.id) and prev_ts == wf_ts
+        ):
+            latest_wf_by_client[mi.client_id] = wf
+
+    for wf in latest_wf_by_client.values():
+        mi = wf.monthly_investment
+        client = clients.get(mi.client_id)
+        if client and hasattr(client, "is_active") and not client.is_active:
+            continue
+        cname = _client_name(client)
+        stage = _normalize_reco_stage(wf.current_stage)
+        month_label = _investment_month_label(getattr(mi, "investment_date", None))
+        copy = _distributor_reco_copy(stage, month_label)
+        entered = _stage_entered_at(wf, stage) or getattr(wf, "updated_at", None) or now
+        age = wall_hours_since(entered, now) if entered else 0.0
+        out.append(
+            NotificationItem(
+                signal_id="DIST_RECO",
+                entity_type="workflow",
+                entity_id=int(wf.id),
+                title=f"{cname} — {copy['title']}",
+                nudge_text=f"{cname} — {copy['nudge']}",
+                client_id=mi.client_id,
+                client_name=cname,
+                severity="info",
+                age_hours=age,
+                age_label=f"{age:.0f}h" if age < 48 else f"{age / 24:.1f}d",
+                app_path=_distributor_client_path(mi.client_id),
+                ignore_allowed=True,
+                facts={
+                    "stage": stage,
+                    "month_label": month_label,
+                    "workflow_id": wf.id,
+                    "done_means": "acknowledged",
+                    "done_label": "Got it",
+                    "member_ids": [wf.id],
+                },
+                detail_lines=[
+                    f"Stage: {stage}",
+                    f"Month: {month_label}",
+                ],
+            )
+        )
+
+    # 2) Review status — one card per client (latest open review)
+    reviews = ReviewWorkflow.query.filter(
+        ReviewWorkflow.client_id.in_(client_ids),
+        ReviewWorkflow.status.in_(["initiated", "sent", "meeting"]),
+    ).all()
+    status_labels = {
+        "initiated": "Review initiated",
+        "sent": "Review pack sent",
+        "meeting": "Review meeting scheduled / in progress",
+    }
+    latest_review_by_client: Dict[int, Any] = {}
+    for rw in reviews:
+        prev = latest_review_by_client.get(rw.client_id)
+        rw_ts = rw.updated_at or rw.created_at
+        prev_ts = (prev.updated_at or prev.created_at) if prev else None
+        if prev is None or (rw_ts and (prev_ts is None or rw_ts >= prev_ts)):
+            latest_review_by_client[rw.client_id] = rw
+    for rw in latest_review_by_client.values():
+        client = clients.get(rw.client_id)
+        if client and hasattr(client, "is_active") and not client.is_active:
+            continue
+        cname = _client_name(client)
+        status = (rw.status or "initiated").lower()
+        when = rw.updated_at or rw.created_at or now
+        age = wall_hours_since(when, now) if when else 0.0
+        label = status_labels.get(status, f"Review status: {status}")
+        out.append(
+            NotificationItem(
+                signal_id="DIST_REVIEW",
+                entity_type="review",
+                entity_id=int(rw.id),
+                title=f"{cname} — {label}",
+                nudge_text=(
+                    f"{cname} — review status is now '{status}'. "
+                    f"Review date: {rw.review_date.isoformat() if rw.review_date else '—'}."
+                ),
+                client_id=rw.client_id,
+                client_name=cname,
+                severity="info",
+                age_hours=age,
+                age_label=f"{age:.0f}h" if age < 48 else f"{age / 24:.1f}d",
+                app_path=_distributor_client_path(rw.client_id),
+                ignore_allowed=True,
+                facts={
+                    "review_id": rw.id,
+                    "status": status,
+                    "done_means": "acknowledged",
+                    "done_label": "Got it",
+                    "member_ids": [rw.id],
+                },
+                detail_lines=[f"Status: {status}"],
+            )
+        )
+
+    # 3) Invoice raised (draft / sent / overdue — not yet paid/cancelled)
+    invoices = (
+        Invoice.query.filter(
+            Invoice.client_id.in_(client_ids),
+            Invoice.status.in_(["draft", "sent", "overdue"]),
+        )
+        .order_by(Invoice.invoice_date.desc(), Invoice.id.desc())
+        .all()
+    )
+    for inv in invoices:
+        client = clients.get(inv.client_id)
+        if client and hasattr(client, "is_active") and not client.is_active:
+            continue
+        cname = _client_name(client)
+        when = inv.created_at or now
+        age = wall_hours_since(when, now) if when else 0.0
+        amount = float(inv.total_amount or 0)
+        out.append(
+            NotificationItem(
+                signal_id="DIST_INVOICE",
+                entity_type="invoice",
+                entity_id=int(inv.id),
+                title=f"{cname} — invoice raised",
+                nudge_text=(
+                    f"{cname} — invoice {inv.invoice_number} raised "
+                    f"(₹{amount:,.0f}, status: {inv.status})."
+                ),
+                client_id=inv.client_id,
+                client_name=cname,
+                severity="info",
+                age_hours=age,
+                age_label=f"{age:.0f}h" if age < 48 else f"{age / 24:.1f}d",
+                app_path=_distributor_client_path(inv.client_id),
+                ignore_allowed=True,
+                facts={
+                    "invoice_id": inv.id,
+                    "invoice_number": inv.invoice_number,
+                    "status": inv.status,
+                    "done_means": "acknowledged",
+                    "done_label": "Got it",
+                    "member_ids": [inv.id],
+                },
+                detail_lines=[
+                    f"Invoice: {inv.invoice_number}",
+                    f"Status: {inv.status}",
+                    f"Amount: ₹{amount:,.0f}",
+                ],
+            )
+        )
+
+    return out
+
+
 def _is_oversight_user(user) -> bool:
     return bool(getattr(user, "is_admin", False) or getattr(user, "is_manager", False))
 
@@ -302,6 +677,9 @@ def collect_live_items(
 ) -> List[NotificationItem]:
     """Build undecided notification candidates from live DB state (ungrouped)."""
     now = now or datetime.utcnow()
+    # Distributors only see reco / review / invoice events for their clients.
+    if _is_distributor_only(user):
+        return _from_distributor_events(user, now)
     scope = _normalize_scope(user, scope)
     items: List[NotificationItem] = []
     items.extend(_from_workflows(user, now, scope=scope))
@@ -1250,14 +1628,21 @@ def list_for_user(
     view = (view or "open").lower().strip()
     if view not in ("open", "snoozed", "messages"):
         view = "open"
-    scope = _normalize_scope(user, scope)
-    can_firm = _is_oversight_user(user)
+    distributor_mode = _is_distributor_only(user)
+    if distributor_mode:
+        scope = "mine"
+        can_firm = False
+    else:
+        scope = _normalize_scope(user, scope)
+        can_firm = _is_oversight_user(user)
 
     from services import peer_message_service as pms
     from services.db_cutover import peer_messages_enabled
 
+    # Distributors keep messaging, but recipients are filtered (admins + client advisors).
     msg_open = pms.list_inbox(user, view="open")
     message_count = msg_open.get("count", 0) if msg_open.get("enabled") else 0
+    peer_on = peer_messages_enabled()
 
     if view == "messages":
         return {
@@ -1265,11 +1650,12 @@ def list_for_user(
             "view": "messages",
             "scope": scope,
             "can_firm_scope": can_firm,
+            "distributor_mode": distributor_mode,
             "count": 0,
             "urgent_count": 0,
             "snoozed_count": 0,
             "message_count": message_count,
-            "peer_enabled": peer_messages_enabled(),
+            "peer_enabled": peer_on,
             "sections": [],
             "items": msg_open.get("items") or [],
             "message": None
@@ -1283,11 +1669,12 @@ def list_for_user(
             "view": view,
             "scope": scope,
             "can_firm_scope": can_firm,
+            "distributor_mode": distributor_mode,
             "count": 0,
             "urgent_count": 0,
             "snoozed_count": 0,
             "message_count": message_count,
-            "peer_enabled": peer_messages_enabled(),
+            "peer_enabled": peer_on,
             "sections": [],
             "items": [],
             "message": "Notification centre waiting on finding_notification_decision table.",
@@ -1376,11 +1763,12 @@ def list_for_user(
         "view": view,
         "scope": scope,
         "can_firm_scope": can_firm,
+        "distributor_mode": distributor_mode,
         "count": len(open_items),
         "urgent_count": sum(1 for x in open_items if x.urgent),
         "snoozed_count": len(snoozed_items),
         "message_count": message_count,
-        "peer_enabled": peer_messages_enabled(),
+        "peer_enabled": peer_on,
         "sections": sections,
         "items": [x.to_dict() for x in chosen],
     }
@@ -1410,6 +1798,10 @@ def apply_decision(
     decision = (decision or "").lower().strip()
     if decision not in ("snoozed", "ignored", "committed", "unsnooze"):
         return {"ok": False, "error": "invalid_decision"}
+
+    # Distributors acknowledge events only — never spawn OpsTasks.
+    if _is_distributor_only(user):
+        create_task = False
 
     if decision == "ignored" and signal_id and signal_id in IGNORE_NOT_ALLOWED:
         return {

@@ -29,6 +29,28 @@
     · {{ token_hint }}
   </div>
 
+  <div class="card border-primary mb-4">
+    <div class="card-body py-3">
+      <h6 class="card-title mb-2"><i class="fas fa-sync-alt"></i> Update prices from Google Sheet</h6>
+      <p class="card-text small text-muted mb-2">
+        Same job as Airflow <code>price_updates</code> / cron <code>price_update_sheets</code>:
+        pull the <code>Prices</code> tab into <code>Security.current_price</code>.
+        Dated historical closes save only during <strong>16:00–16:59 IST</strong>.
+      </p>
+      <form method="post" action="{{ url_for('hub.price_update_run') }}" class="d-flex flex-wrap align-items-center gap-3"
+            onsubmit="return confirm('Pull all prices from Google Sheet into the app DB now?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <button type="submit" class="btn btn-primary">
+          <i class="fas fa-cloud-download-alt"></i> Run price update now
+        </button>
+        <label class="small text-muted mb-0 d-flex align-items-center gap-1">
+          <input type="checkbox" name="include_nifty" value="1"/>
+          also update Nifty
+        </label>
+      </form>
+    </div>
+  </div>
+
   <div class="d-flex flex-wrap gap-2 mb-4">
     <form method="post" action="{{ url_for('hub.price_accuracy_run_scan') }}" class="d-flex flex-wrap gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>

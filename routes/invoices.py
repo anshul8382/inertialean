@@ -967,6 +967,13 @@ def edit_invoice(invoice_id):
             invoice.payment_method = request.form.get('payment_method', '')
             invoice.notes = request.form.get('notes', '')
             
+            try:
+                from services.distributor_service import sync_attribution_for_invoice
+
+                sync_attribution_for_invoice(invoice)
+            except Exception as attr_err:
+                logger.warning("Distributor attribution sync failed: %s", attr_err)
+
             db.session.commit()
             flash('Invoice updated successfully.', 'success')
             return redirect(url_for('invoices.view_invoice', invoice_id=invoice_id))
@@ -1015,6 +1022,13 @@ def update_invoice_status(invoice_id):
                 invoice.paid_date = date.today()
         else:
             invoice.paid_date = None
+
+        try:
+            from services.distributor_service import sync_attribution_for_invoice
+
+            sync_attribution_for_invoice(invoice)
+        except Exception as attr_err:
+            logger.warning("Distributor attribution sync failed: %s", attr_err)
         
         db.session.commit()
         return jsonify({'success': True, 'message': 'Status updated successfully'})

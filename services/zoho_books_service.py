@@ -374,6 +374,12 @@ def sync_invoice_status_from_zoho(invoice, *, apply_local: bool = True) -> Dict[
                     invoice.paid_date = date.today()
             else:
                 invoice.paid_date = date.today()
+    try:
+        from services.distributor_service import sync_attribution_for_invoice
+
+        sync_attribution_for_invoice(invoice)
+    except Exception:
+        pass
     db.session.commit()
     out["applied"] = True
     out["previous_local_status"] = prev

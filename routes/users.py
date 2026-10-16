@@ -49,7 +49,16 @@ def list_users():
 def add_user():
     """Add a new user"""
     form = AddUserForm()
-    
+    for_distributor = (request.args.get("for") or request.form.get("for") or "").strip().lower() == "distributor"
+    next_url = (request.args.get("next") or request.form.get("next") or "").strip()
+
+    if request.method == "GET" and for_distributor:
+        from models import Role
+
+        dist_role = Role.query.filter_by(name="distributor", is_active=True).first()
+        if dist_role:
+            form.role_id.data = dist_role.id
+
     if form.validate_on_submit():
         try:
             user, temp_password, email_sent = UserService.create_user(
@@ -58,12 +67,37 @@ def add_user():
                 is_admin=form.is_admin.data,
                 is_active=form.is_active.data
             )
-            
+            role_id_value = form.role_id.data
+            role_id = role_id_value if role_id_value and role_id_value != 0 else None
+            from models import Role
+
+            if role_id is not None:
+                user.role_id = role_id
+                role_row = Role.query.get(role_id)
+                if role_row:
+                    user.role = role_row.name
+            if hasattr(user, "distributor_revenue_share_percent"):
+                from decimal import Decimal
+
+                dist_role = Role.query.filter_by(name="distributor").first()
+                is_dist = bool(dist_role and role_id == dist_role.id)
+                if is_dist:
+                    pct = form.distributor_revenue_share_percent.data
+                    user.distributor_revenue_share_percent = (
+                        Decimal(str(pct)) if pct is not None else None
+                    )
+                else:
+                    user.distributor_revenue_share_percent = None
+            db.session.commit()
+
             if email_sent:
                 flash(f'User {user.username} created successfully with temporary password: {temp_password}', 'success')
             else:
                 flash(f'User {user.username} created successfully with default password: {temp_password} (email sending failed)', 'warning')
-            
+
+            if next_url and next_url.startswith("/"):
+                flash("You can now assign this distributor on the client page.", "info")
+                return redirect(next_url)
             return redirect(url_for('users.list_users'))
             
         except ValueError as e:
@@ -71,7 +105,23 @@ def add_user():
         except Exception as e:
             flash(f'Error creating user: {str(e)}', 'error')
     
-    return render_template('users/add.html', form=form)
+    distributor_role_id = 0
+    try:
+        from models import Role
+
+        dist_role = Role.query.filter_by(name="distributor", is_active=True).first()
+        if dist_role:
+            distributor_role_id = dist_role.id
+    except Exception:
+        pass
+
+    return render_template(
+        'users/add.html',
+        form=form,
+        for_distributor=for_distributor,
+        next_url=next_url,
+        distributor_role_id=distributor_role_id,
+    )
 
 @users.route('/<int:user_id>')
 @login_required
@@ -100,52 +150,76 @@ def edit_user(user_id):
         return redirect(url_for('users.list_users'))
     
     form = EditUserForm(obj=user)
-    # Set current role_id - handle both None and existing values
-    # This must be done after form creation to ensure choices are populated
-    if user.role_id:
-        form.role_id.data = user.role_id
-    else:
-        form.role_id.data = 0  # Set to 0 (None) if no role_id
-    
-    # Ensure role_id is properly bound to choices
-    # If the current value doesn't match any choice, reset it
-    valid_choice_values = [choice[0] for choice in form.role_id.choices]
-    if form.role_id.data not in valid_choice_values:
-        form.role_id.data = 0  # Default to "None" if invalid
-    
+    # Only seed role from DB on GET. On POST, overwriting role_id here discarded the
+    # submitted role (e.g. changing Swati → Distributor never stuck).
+    if request.method == "GET":
+        if user.role_id:
+            form.role_id.data = user.role_id
+        else:
+            form.role_id.data = 0  # None / legacy role
+        valid_choice_values = [choice[0] for choice in form.role_id.choices]
+        if form.role_id.data not in valid_choice_values:
+            form.role_id.data = 0
+
     if form.validate_on_submit():
         try:
             # Handle role_id: 0 means None (use legacy role)
-            # Always pass role_id explicitly, even if None, so it can be updated
             role_id_value = form.role_id.data
             role_id = role_id_value if role_id_value and role_id_value != 0 else None
-            
+
             updated_user = UserService.update_user(
                 user_id=user_id,
                 username=form.username.data,
                 email=form.email.data,
                 is_admin=form.is_admin.data,
                 is_active=form.is_active.data,
-                role_id=role_id  # Explicitly pass None if 0, so it can clear the role
+                role_id=role_id,
             )
-            
+            if hasattr(updated_user, "distributor_revenue_share_percent"):
+                from decimal import Decimal
+                from models import Role
+
+                dist_role = Role.query.filter_by(name="distributor").first()
+                is_dist = bool(dist_role and role_id == dist_role.id)
+                if is_dist:
+                    pct = form.distributor_revenue_share_percent.data
+                    updated_user.distributor_revenue_share_percent = (
+                        Decimal(str(pct)) if pct is not None else None
+                    )
+                else:
+                    updated_user.distributor_revenue_share_percent = None
+                db.session.commit()
+
             flash(f'User {updated_user.username} updated successfully.', 'success')
             return redirect(url_for('users.view_user', user_id=user_id))
-            
+
         except ValueError as e:
             flash(str(e), 'error')
         except Exception as e:
             flash(f'Error updating user: {str(e)}', 'error')
             logger.error(f"Error updating user {user_id}: {str(e)}", exc_info=True)
-    else:
-        # Log validation errors for debugging
-        if request.method == 'POST':
-            logger.warning(f"Form validation failed for user {user_id}: {form.errors}")
-            for field, errors in form.errors.items():
-                for error in errors:
-                    flash(f'{field}: {error}', 'error')
-    
-    return render_template('users/edit.html', form=form, user=user)
+    elif request.method == "POST":
+        logger.warning(f"Form validation failed for user {user_id}: {form.errors}")
+        for field, errors in form.errors.items():
+            for error in errors:
+                flash(f'{field}: {error}', 'error')
+
+    distributor_role_id = 0
+    try:
+        from models import Role
+
+        dist_role = Role.query.filter_by(name="distributor", is_active=True).first()
+        if dist_role:
+            distributor_role_id = dist_role.id
+    except Exception:
+        pass
+
+    return render_template(
+        'users/edit.html',
+        form=form,
+        user=user,
+        distributor_role_id=distributor_role_id,
+    )
 
 @users.route('/<int:user_id>/delete', methods=['POST'])
 @login_required

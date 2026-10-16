@@ -396,6 +396,12 @@ def create_app(config_class=ProductionConfig):
     app.register_blueprint(rec_exec_bp)
     app.register_blueprint(attendance_bp)
     try:
+        from routes.distributor import distributor_bp
+
+        app.register_blueprint(distributor_bp)
+    except Exception as _dist_e:
+        app.logger.warning("Distributor blueprint not registered: %s", _dist_e)
+    try:
         from routes.notification_centre import notification_centre_ui_bp
 
         app.register_blueprint(notification_centre_ui_bp)
@@ -742,6 +748,17 @@ def create_app(config_class=ProductionConfig):
         from flask_login import current_user as cu
 
         is_auth = bool(getattr(cu, "is_authenticated", False))
+        preview_distributor = None
+        try:
+            from services.distributor_service import (
+                can_use_distributor_preview,
+                get_preview_distributor,
+            )
+
+            if is_auth and can_use_distributor_preview(cu):
+                preview_distributor = get_preview_distributor()
+        except Exception:
+            preview_distributor = None
         return {
             "current_user": cu,
             "user_is_admin": bool(is_auth and getattr(cu, "is_admin", False)),
@@ -756,6 +773,8 @@ def create_app(config_class=ProductionConfig):
                     or getattr(cu, "is_ops_manager", False)
                 )
             ),
+            "preview_distributor": preview_distributor,
+            "is_preview": bool(preview_distributor),
         }
 
     @app.context_processor

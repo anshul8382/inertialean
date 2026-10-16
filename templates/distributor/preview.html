@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Distributor preview{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h1 class="h3 mb-2">Distributor preview</h1>
+  <p class="text-muted mb-4">
+    Select a distributor to see their portal the way they do — clients, payouts, and notifications.
+    This is a preview only (you stay logged in as yourself).
+  </p>
+
+  {% if active_preview %}
+  <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      Currently previewing as <strong>{{ active_preview.username }}</strong>
+      (id {{ active_preview.id }}).
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-sm btn-primary" href="{{ url_for('distributor.dashboard') }}">Open their clients</a>
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('distributor.payouts') }}">Payouts</a>
+      <a class="btn btn-sm btn-outline-primary" href="{{ url_for('notification_centre.centre') }}">Notifications</a>
+      <form method="POST" action="{{ url_for('distributor.preview') }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="exit">
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Exit preview</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="card card-app shadow">
+    <div class="card-header py-3">
+      <h2 class="h6 mb-0">Choose distributor</h2>
+    </div>
+    <div class="card-body">
+      {% if not distributors %}
+      <p class="text-muted mb-0">No active distributor users found. Create a user with role Distributor first.</p>
+      {% else %}
+      <form method="POST" action="{{ url_for('distributor.preview') }}" class="row g-3 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="start">
+        <div class="col-md-6">
+          <label class="form-label" for="distributor_id">Distributor</label>
+          <select class="form-select" name="distributor_id" id="distributor_id" required>
+            <option value="">Select…</option>
+            {% for d in distributors %}
+            <option value="{{ d.id }}" {% if active_preview and active_preview.id == d.id %}selected{% endif %}>
+              {{ d.username }}{% if d.email %} — {{ d.email }}{% endif %}
+              {% if d.distributor_revenue_share_percent is not none %} ({{ d.distributor_revenue_share_percent }}%){% endif %}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <button type="submit" class="btn btn-primary">
+            <i class="fas fa-eye" aria-hidden="true"></i> View as distributor
+          </button>
+        </div>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

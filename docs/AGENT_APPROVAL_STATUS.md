@@ -1,6 +1,6 @@
 # Agent approval status
 
-Generated: 2026-10-15T12:17:30.830103+00:00
+Generated: 2026-10-16T07:23:53.584847+00:00
 
 | Agent | Status | Detail |
 |-------|--------|--------|
@@ -8,7 +8,7 @@ Generated: 2026-10-15T12:17:30.830103+00:00
 | Guideline Manager | PASS | Audit status: pass (1 findings) |
 | DB cutover | PASS | registry: 4 feature(s); DEFER_DB_FEATURES=audit_log |
 | SEBI regulatory | PASS | see audit_sebi_compliance.py output |
-| Security (VAPT) | PARTIAL | VAPT (total    44) → docs/SECURITY_VAPT_REPORT.md |
+| Security (VAPT) | PARTIAL | VAPT (total    46) → docs/SECURITY_VAPT_REPORT.md |
 | Security (deps) | FAIL | deps: 0 Python, 2 Node → docs/DEPENDENCY_AUDIT.md |
 | Security (ZAP) | SKIP | set ZAP_TARGET_URL=http://<staging> to enable |
 | Mobile Optimiser | PARTIAL | Capacitor shell + mobile-ui stack; Expo scaffold: no; JWT: yes; template audit: 3 high (standalone UIs expected) |

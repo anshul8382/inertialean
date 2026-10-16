@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+{% block title %}{{ client.name }} — Client summary{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  {% include "distributor/_preview_banner.html" %}
+  <nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb mb-0">
+      <li class="breadcrumb-item"><a href="{{ url_for('distributor.dashboard') }}">My clients</a></li>
+      <li class="breadcrumb-item active" aria-current="page">{{ client.name }}</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-4">
+    <div>
+      <h1 class="h3 mb-1">{{ client.name }}</h1>
+      <p class="text-muted mb-0">Advisor: {{ d.advisor_name }} · View-only</p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-primary btn-sm" href="{{ url_for('distributor.pitch_deck') }}">
+        <i class="fas fa-file-powerpoint" aria-hidden="true"></i> Pitch deck
+      </a>
+      <a href="{{ url_for('distributor.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left"></i> Back to clients
+      </a>
+    </div>
+  </div>
+
+  <div class="row">
+    {# —— Monthly investment + cycle (left column card) —— #}
+    <div class="col-xl-3 col-lg-4 col-md-6 mb-4">
+      <div class="card card-app shadow h-100">
+        <div class="card-header py-3">
+          <h2 class="h6 m-0 font-weight-bold text-primary">Monthly investment</h2>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <h3 class="h6 font-weight-bold">Monthly Investment Date</h3>
+            {% if d.latest_monthly_investment and d.latest_monthly_investment.investment_date %}
+              <p class="mb-1">{{ d.latest_monthly_investment.investment_date.strftime('%Y-%m-%d') }}</p>
+              {% if d.latest_monthly_investment.planned_amount %}
+                <p class="text-muted small mb-1">Planned: ₹{{ "{:,.2f}".format(d.latest_monthly_investment.planned_amount) }}</p>
+              {% endif %}
+            {% else %}
+              <p class="text-muted mb-1">Not set</p>
+            {% endif %}
+            {% if d.schedule_label %}
+              <div class="alert alert-info small py-2 px-2 mt-2 mb-0">
+                <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                <strong>Recurring Schedule:</strong> {{ d.schedule_label }}
+                {% if d.monthly_schedule and not d.monthly_schedule.is_active %}
+                  <span class="badge bg-warning text-dark ms-1">Inactive</span>
+                {% endif %}
+              </div>
+            {% endif %}
+          </div>
+          <div class="mb-0">
+            <h3 class="h6 font-weight-bold">Current Monthly Investment Cycle Status</h3>
+            {% if d.cycle_status %}
+              <p class="mb-1">{{ d.cycle_status.description }}</p>
+              <span class="badge {% if d.cycle_status.code in ['COMPLETED', 'completed'] %}bg-success{% elif d.cycle_status.code in ['FUNDS', 'PENDING', 'pending'] %}bg-warning text-dark{% elif d.cycle_status.code in ['RECOS', 'EXEC', 'ACTIVE', 'active'] %}bg-info{% elif d.cycle_status.code == 'NOTIFY' %}bg-primary{% elif d.cycle_status.code == 'UPDATE' %}bg-secondary{% elif d.cycle_status.code in ['CANCELLED', 'cancelled'] %}bg-danger{% else %}bg-secondary{% endif %}">
+                {{ d.cycle_status.code }}
+              </span>
+            {% else %}
+              <p class="text-muted mb-0">No active cycle</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# —— Investment Summary —— #}
+    <div class="col-xl-3 col-lg-4 col-md-6 mb-4">
+      <div class="card card-app shadow h-100">
+        <div class="card-header py-3">
+          <h2 class="h6 m-0 font-weight-bold text-primary">Investment Summary</h2>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <h3 class="h6 font-weight-bold">Current Value</h3>
+            <p class="text-primary fw-bold mb-0">₹{{ "{:,.0f}".format(d.current_value) }}</p>
+            <small class="text-muted">Total current market value of portfolio</small>
+          </div>
+          <div class="mb-3">
+            <h3 class="h6 font-weight-bold">Advisory AUA</h3>
+            <p class="text-info fw-bold mb-0">₹{{ "{:,.0f}".format(d.advisory_aua_value) }}</p>
+            <small class="text-muted">Used for billing</small>
+            {% if d.excluded_advisory_aua_value and d.excluded_advisory_aua_value > 0 %}
+              <small class="text-muted d-block">₹{{ "{:,.0f}".format(d.excluded_advisory_aua_value) }} excluded from scope</small>
+            {% endif %}
+          </div>
+          <div class="mb-3">
+            <h3 class="h6 font-weight-bold">Net Investment</h3>
+            <p class="mb-0 {% if d.net_investment >= 0 %}text-success{% else %}text-danger{% endif %}">
+              ₹{{ "{:,.0f}".format(d.net_investment) }}
+            </p>
+            <small class="text-muted">Invested minus withdrawals</small>
+          </div>
+          <div class="mb-3">
+            <h3 class="h6 font-weight-bold">Gross Investments</h3>
+            <p class="mb-0">₹{{ "{:,.0f}".format(d.gross_invested) }}</p>
+          </div>
+          <div class="mb-3">
+            <h3 class="h6 font-weight-bold">Gross Withdrawals</h3>
+            <p class="mb-0">₹{{ "{:,.0f}".format(d.gross_withdrawn) }}</p>
+          </div>
+          <div class="mb-3">
+            <h3 class="h6 font-weight-bold">Absolute Return</h3>
+            <p class="mb-0 {% if d.absolute_return >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {{ "%.2f"|format(d.absolute_return) }}%
+            </p>
+          </div>
+          <div class="mb-0">
+            <h3 class="h6 font-weight-bold">XIRR</h3>
+            <p class="mb-0 {% if d.xirr >= 0 %}text-success{% else %}text-danger{% endif %}">
+              {{ "%.2f"|format(d.xirr * 100) if d.xirr is not none else "0.00" }}%
+            </p>
+            <small class="text-muted">Portfolio XIRR</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# —— Nifty Benchmark —— #}
+    <div class="col-xl-3 col-lg-4 col-md-6 mb-4">
+      <div class="card card-app shadow h-100">
+        <div class="card-header py-3">
+          <h2 class="h6 m-0 font-weight-bold text-info">
+            <i class="fas fa-chart-line" aria-hidden="true"></i> Nifty Benchmark Comparison
+          </h2>
+        </div>
+        <div class="card-body">
+          <div class="mb-3 pb-3 border-bottom">
+            <h3 class="h6 font-weight-bold text-info">Current Nifty 50</h3>
+            {% if d.nifty_index_price is not none %}
+              <p class="h5 mb-0">₹{{ "%.2f"|format(d.nifty_index_price) }}</p>
+              <small class="text-muted">Latest benchmark close{% if d.nifty_index_date %} · {{ d.nifty_index_date.strftime('%Y-%m-%d') }}{% endif %}</small>
+            {% else %}
+              <p class="text-muted small mb-0">No benchmark price available.</p>
+            {% endif %}
+          </div>
+          <div class="mb-2">
+            <h3 class="h6 font-weight-bold">Portfolio vs capital</h3>
+            <p class="mb-0 {% if d.absolute_return >= 0 %}text-success{% else %}text-danger{% endif %}">
+              Absolute return {{ "%.2f"|format(d.absolute_return) }}%
+            </p>
+            <p class="mb-0 {% if d.xirr >= 0 %}text-success{% else %}text-danger{% endif %}">
+              XIRR {{ "%.2f"|format(d.xirr * 100) if d.xirr is not none else "0.00" }}%
+            </p>
+            <small class="text-muted">Full cashflow-vs-Nifty simulation is available on the advisor client page.</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# —— Review Schedule (previous + next only) —— #}
+    <div class="col-xl-3 col-lg-4 col-md-6 mb-4">
+      <div class="card card-app shadow h-100">
+        <div class="card-header py-3">
+          <h2 class="h6 m-0 font-weight-bold text-warning">
+            <i class="fas fa-calendar-check" aria-hidden="true"></i> Review Schedule
+          </h2>
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <h3 class="h6 font-weight-bold">Previous Review</h3>
+            {% if d.previous_review_date %}
+              <p class="mb-1">{{ d.previous_review_date.strftime('%Y-%m-%d') }}</p>
+              <span class="badge bg-success">Closed</span>
+            {% else %}
+              <p class="text-muted mb-0">No previous reviews</p>
+            {% endif %}
+          </div>
+          <div class="mb-0">
+            <h3 class="h6 font-weight-bold">Next Review</h3>
+            {% if d.next_review_date %}
+              <p class="mb-1">{{ d.next_review_date.strftime('%Y-%m-%d') }}</p>
+              <span class="badge {% if d.next_review_status == 'meeting' %}bg-warning text-dark{% elif d.next_review_status == 'sent' %}bg-info{% else %}bg-secondary{% endif %}">
+                {{ (d.next_review_status or '')|title }}
+              </span>
+            {% else %}
+              <p class="text-muted mb-0">No upcoming reviews</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {# —— Portfolio Holdings —— #}
+  <div class="card card-app shadow mb-4">
+    <div class="card-header py-3">
+      <h2 class="h6 m-0 font-weight-bold text-primary">Portfolio Holdings</h2>
+      <small class="text-muted">{{ d.holdings_count }} holding{% if d.holdings_count != 1 %}s{% endif %}</small>
+    </div>
+    <div class="card-body">
+      {% if d.asset_class_grouped %}
+        {% for asset_class, items in d.asset_class_grouped.items() %}
+        <div class="mb-3">
+          <div class="table-responsive" data-mobile-table="scroll">
+            <table class="table table-app table-bordered mb-0">
+              <thead>
+                <tr class="table-active">
+                  <th colspan="6" scope="colgroup">
+                    <strong>{{ asset_class }}</strong>
+                    <span class="text-muted"> — Total: ₹{{ "{:,.0f}".format((d.asset_class_holdings.get(asset_class, 0) or 0)|float) }}</span>
+                  </th>
+                </tr>
+                <tr>
+                  <th scope="col">Security</th>
+                  <th scope="col" class="text-end">Quantity</th>
+                  <th scope="col" class="text-end">Price</th>
+                  <th scope="col" class="text-end">Market Value</th>
+                  <th scope="col" class="text-end">% of class</th>
+                  <th scope="col" class="text-end">Unrealized P&amp;L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for h in items %}
+                <tr>
+                  <td>
+                    <strong>{{ h.symbol }}</strong><br>
+                    <small class="text-muted">{{ h.name }}</small>
+                  </td>
+                  <td class="text-end text-num">{{ "{:,.2f}".format(h.quantity or 0) }}</td>
+                  <td class="text-end text-num">₹{{ "{:,.2f}".format(h.current_price or 0) }}</td>
+                  <td class="text-end text-num">₹{{ "{:,.0f}".format(h.value or 0) }}</td>
+                  <td class="text-end text-num">{{ "%.0f"|format(h.percent_in_class or 0) }}%</td>
+                  <td class="text-end text-num {% if (h.unrealized_pnl or 0) >= 0 %}text-success{% else %}text-danger{% endif %}">
+                    ₹{{ "{:,.0f}".format(h.unrealized_pnl or 0) }}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p class="text-muted text-center mb-0 py-4">No holdings available</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# —— Monthly Investment History —— #}
+  <div class="card card-app shadow mb-4">
+    <div class="card-header py-3">
+      <h2 class="h6 m-0 font-weight-bold text-primary">Monthly Investment History</h2>
+    </div>
+    <div class="card-body">
+      {% if d.monthly_cashflows %}
+      <div class="table-responsive" data-mobile-table="scroll">
+        <table class="table table-app table-bordered table-striped mb-0">
+          <thead>
+            <tr>
+              <th scope="col">Month</th>
+              <th scope="col" class="text-end">Investments</th>
+              <th scope="col" class="text-end">Withdrawals</th>
+              <th scope="col" class="text-end">Net Cashflow</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for month, data in d.monthly_cashflows.items() %}
+            <tr>
+              <td>{{ month }}</td>
+              <td class="text-end text-num {% if data.investments < 0 %}text-danger{% else %}text-success{% endif %}">
+                ₹{{ "{:,.0f}".format(data.investments) }}
+              </td>
+              <td class="text-end text-num {% if data.withdrawals > 0 %}text-success{% else %}text-muted{% endif %}">
+                ₹{{ "{:,.0f}".format(data.withdrawals) }}
+              </td>
+              <td class="text-end text-num {% if data.net >= 0 %}text-success{% else %}text-danger{% endif %}">
+                ₹{{ "{:,.0f}".format(data.net) }}
+              </td>
+            </tr>
+            {% endfor %}
+            {% set total_investments = d.monthly_cashflows.values() | sum(attribute='investments') %}
+            {% set total_withdrawals = d.monthly_cashflows.values() | sum(attribute='withdrawals') %}
+            {% set total_net = d.monthly_cashflows.values() | sum(attribute='net') %}
+            <tr class="table-dark fw-bold">
+              <td>TOTAL</td>
+              <td class="text-end text-num">₹{{ "{:,.0f}".format(total_investments) }}</td>
+              <td class="text-end text-num">₹{{ "{:,.0f}".format(total_withdrawals) }}</td>
+              <td class="text-end text-num">₹{{ "{:,.0f}".format(total_net) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <p class="text-muted text-center mb-0 py-4">No cashflow data available</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# —— Allocation charts —— #}
+  <div class="row">
+    <div class="col-xl-6 mb-4">
+      <div class="card card-app shadow h-100">
+        <div class="card-header py-3">
+          <h2 class="h6 m-0 font-weight-bold text-primary">Current Allocation</h2>
+        </div>
+        <div class="card-body">
+          {% if d.allocation_labels %}
+            <canvas id="distCurrentAllocationChart" height="220" aria-label="Current allocation chart"></canvas>
+            <ul class="list-unstyled small mt-3 mb-0">
+              {% for m in d.asset_mix %}
+              <li class="d-flex justify-content-between py-1 border-bottom">
+                <span>{{ m.asset_class }}</span>
+                <span class="text-num">₹{{ "{:,.0f}".format(m.value) }} · {{ "%.1f"|format(m.percent) }}%</span>
+              </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-muted text-center mb-0 py-4">No allocation data</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-xl-6 mb-4">
+      <div class="card card-app shadow h-100">
+        <div class="card-header py-3">
+          <h2 class="h6 m-0 font-weight-bold text-primary">Industry Allocation</h2>
+        </div>
+        <div class="card-body">
+          {% if d.industry_holdings %}
+            <canvas id="distIndustryAllocationChart" height="220" aria-label="Industry allocation chart"></canvas>
+            <ul class="list-unstyled small mt-3 mb-0">
+              {% for industry, value in d.industry_holdings.items() %}
+              <li class="d-flex justify-content-between py-1 border-bottom">
+                <span>{{ industry }}</span>
+                <span class="text-num">₹{{ "{:,.0f}".format(value) }} · {{ "%.1f"|format(d.industry_percentages.get(industry, 0)) }}%</span>
+              </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="text-muted text-center mb-0 py-4">No industry data</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if d.allocation_labels or d.industry_holdings %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function () {
+  var colors = ['#4e73df', '#1cc88a', '#36b9cc', '#f6c23e', '#e74a3b', '#858796', '#5a5c69', '#fd7e14', '#20c997', '#6f42c1'];
+  {% if d.allocation_labels %}
+  var allocCtx = document.getElementById('distCurrentAllocationChart');
+  if (allocCtx && typeof Chart !== 'undefined') {
+    new Chart(allocCtx.getContext('2d'), {
+      type: 'pie',
+      data: {
+        labels: {{ d.allocation_labels|tojson_safe }},
+        datasets: [{
+          data: {{ d.allocation_pcts|tojson_safe }},
+          backgroundColor: colors
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12 } },
+          title: { display: false }
+        }
+      }
+    });
+  }
+  {% endif %}
+  {% if d.industry_holdings %}
+  var indCtx = document.getElementById('distIndustryAllocationChart');
+  if (indCtx && typeof Chart !== 'undefined') {
+    new Chart(indCtx.getContext('2d'), {
+      type: 'doughnut',
+      data: {
+        labels: {{ d.industry_labels|tojson_safe }},
+        datasets: [{
+          data: {{ d.industry_pcts|tojson_safe }},
+          backgroundColor: colors
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: 'bottom', labels: { boxWidth: 12 } },
+          title: { display: false }
+        }
+      }
+    });
+  }
+  {% endif %}
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -63,6 +63,36 @@
                             </div>
                         </div>
 
+                        {% if for_distributor %}
+                        <input type="hidden" name="for" value="distributor">
+                        {% endif %}
+                        {% if next_url %}
+                        <input type="hidden" name="next" value="{{ next_url }}">
+                        {% endif %}
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    {{ form.role_id.label(class="form-label") }}
+                                    {{ form.role_id(class="form-select", id="role_id") }}
+                                    <div class="form-text">
+                                        {% if for_distributor %}
+                                        Pre-selected <strong>Distributor</strong> for client assignment.
+                                        {% else %}
+                                        Optional. Use Distributor for revenue-share partners.
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6" id="distributor-share-row" style="display: none;">
+                                <div class="mb-3">
+                                    {{ form.distributor_revenue_share_percent.label(class="form-label") }}
+                                    {{ form.distributor_revenue_share_percent(class="form-control") }}
+                                    <div class="form-text">Shown only for Distributor role (e.g. 20 = 20% of paid invoice total).</div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="mb-3">
@@ -85,7 +115,7 @@
                         </div>
 
                         <div class="d-flex justify-content-between">
-                            <a href="{{ url_for('users.list_users') }}" class="btn btn-secondary">
+                            <a href="{{ next_url if next_url else url_for('users.list_users') }}" class="btn btn-secondary">
                                 <i class="fas fa-times"></i> Cancel
                             </a>
                             {{ form.submit(class="btn btn-primary") }}
@@ -126,12 +156,35 @@
                         <h6><i class="fas fa-user-check"></i> User Roles</h6>
                         <ul class="mb-0 small">
                             <li><strong>Admin:</strong> Full system access, can manage users</li>
-                            <li><strong>User:</strong> Standard access to system features</li>
+                            <li><strong>Distributor:</strong> View-only client portal + revenue share on paid invoices</li>
+                            <li><strong>Advisor / Manager:</strong> Standard advisory access</li>
                         </ul>
                     </div>
+                    {% if for_distributor %}
+                    <div class="alert alert-primary">
+                        <h6>Creating a distributor</h6>
+                        <p class="mb-0 small">Set role to Distributor and enter the revenue share %. After save you will return to the client page to assign them.</p>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </div>
-{% endblock %} 
+<script>
+(function () {
+  var roleSelect = document.getElementById('role_id');
+  var shareRow = document.getElementById('distributor-share-row');
+  var distributorRoleId = {{ distributor_role_id|default(0)|int }};
+  function syncShareVisibility() {
+    if (!roleSelect || !shareRow) return;
+    var show = distributorRoleId && String(roleSelect.value) === String(distributorRoleId);
+    shareRow.style.display = show ? '' : 'none';
+  }
+  if (roleSelect) {
+    roleSelect.addEventListener('change', syncShareVisibility);
+    syncShareVisibility();
+  }
+})();
+</script>
+{% endblock %}

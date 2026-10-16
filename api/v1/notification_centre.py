@@ -10,6 +10,7 @@ from flask_login import current_user, login_required
 from extensions import csrf
 from services import notification_centre_service as ncs
 from services import peer_message_service as pms
+from services.distributor_preview import notification_subject_user, preview_blocks_mutates
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,11 @@ notification_centre_bp = Blueprint("notification_centre_api", __name__)
 def list_notifications():
     view = (request.args.get("view") or "open").lower().strip()
     scope = (request.args.get("scope") or "mine").lower().strip()
-    payload = ncs.list_for_user(current_user, view=view, scope=scope)
+    subject, is_preview = notification_subject_user(current_user)
+    payload = ncs.list_for_user(subject, view=view, scope=scope)
+    payload["preview_readonly"] = is_preview
+    if is_preview and subject:
+        payload["preview_as"] = subject.username
     return jsonify(payload)
 
 
@@ -30,8 +35,9 @@ def list_notifications():
 def notification_count():
     from services.db_cutover import finding_notification_enabled, peer_messages_enabled
 
+    subject, is_preview = notification_subject_user(current_user)
     # Bell always uses mine scope so managers are not flooded by firm radar.
-    payload = ncs.list_for_user(current_user, view="open", scope="mine")
+    payload = ncs.list_for_user(subject, view="open", scope="mine")
     urgent = payload.get("urgent_count") or 0
     messages = payload.get("message_count") or 0
     open_count = payload.get("count") or 0
@@ -47,6 +53,8 @@ def notification_count():
             "urgent_count": urgent,
             "message_count": messages,
             "bell_count": bell,
+            "preview_readonly": is_preview,
+            "preview_as": subject.username if is_preview and subject else None,
         }
     )
 
@@ -55,6 +63,10 @@ def notification_count():
 @login_required
 @csrf.exempt
 def decide_notification():
+    blocked = preview_blocks_mutates(current_user)
+    if blocked:
+        return jsonify({"ok": False, "error": "preview_readonly", "message": blocked}), 403
+
     data = request.get_json(silent=True) or {}
     entity_type = (data.get("entity_type") or "").strip()
     entity_id = data.get("entity_id")
@@ -109,13 +121,23 @@ def decide_notification():
 @notification_centre_bp.route("/notifications/peers", methods=["GET"])
 @login_required
 def list_peers():
-    return jsonify({"ok": True, "users": pms.list_recipients(current_user.id)})
+    subject, _ = notification_subject_user(current_user)
+    return jsonify(
+        {
+            "ok": True,
+            "users": pms.list_recipients(subject.id, from_user=subject),
+        }
+    )
 
 
 @notification_centre_bp.route("/notifications/message", methods=["POST"])
 @login_required
 @csrf.exempt
 def send_peer_message():
+    blocked = preview_blocks_mutates(current_user)
+    if blocked:
+        return jsonify({"ok": False, "error": "preview_readonly", "message": blocked}), 403
+
     data = request.get_json(silent=True) or {}
     to_user_id = data.get("to_user_id")
     body = data.get("body") or ""

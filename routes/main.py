@@ -285,6 +285,10 @@ def trade_edit_cashflow_guide():
 def dashboard():
     from models import Client, Workflow, ReviewWorkflow
     from access_control import get_accessible_clients
+    if getattr(current_user, "is_distributor", False) and not (
+        current_user.is_admin or current_user.is_manager
+    ):
+        return redirect(url_for("distributor.dashboard"))
     try:
         accessible = get_accessible_clients()
         total_clients = len(accessible) if accessible else 0

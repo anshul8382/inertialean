@@ -74,7 +74,7 @@
                             <div class="col-md-6">
                                 <div class="mb-3">
                                     {{ form.role_id.label(class="form-label") }}
-                                    {{ form.role_id(class="form-select" + (" is-invalid" if form.role_id.errors else "")) }}
+                                    {{ form.role_id(class="form-select" + (" is-invalid" if form.role_id.errors else ""), id="role_id") }}
                                     {% if form.role_id.errors %}
                                         <div class="invalid-feedback">
                                             {% for error in form.role_id.errors %}
@@ -92,6 +92,22 @@
                                         {{ form.is_active.label(class="form-check-label") }}
                                     </div>
                                     <div class="form-text">Inactive users cannot log into the system.</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row" id="distributor-share-row" style="display: none;">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    {{ form.distributor_revenue_share_percent.label(class="form-label") }}
+                                    {{ form.distributor_revenue_share_percent(class="form-control" + (" is-invalid" if form.distributor_revenue_share_percent.errors else "")) }}
+                                    {% if form.distributor_revenue_share_percent.errors %}
+                                        <div class="invalid-feedback">
+                                            {% for error in form.distributor_revenue_share_percent.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    <div class="form-text">% of paid invoice total attributed to this distributor.</div>
                                 </div>
                             </div>
                         </div>
@@ -195,4 +211,20 @@
         </div>
     </div>
 </div>
-{% endblock %} 
+<script>
+(function () {
+  var roleSelect = document.getElementById('role_id');
+  var shareRow = document.getElementById('distributor-share-row');
+  var distributorRoleId = {{ distributor_role_id|default(0)|int }};
+  function syncShareVisibility() {
+    if (!roleSelect || !shareRow) return;
+    var show = distributorRoleId && String(roleSelect.value) === String(distributorRoleId);
+    shareRow.style.display = show ? '' : 'none';
+  }
+  if (roleSelect) {
+    roleSelect.addEventListener('change', syncShareVisibility);
+    syncShareVisibility();
+  }
+})();
+</script>
+{% endblock %}

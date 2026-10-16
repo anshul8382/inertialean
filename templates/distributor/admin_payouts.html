@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Release distributor payouts{% endblock %}
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <div>
+      <h1 class="h3 mb-1">Release distributor payouts</h1>
+      <p class="text-muted mb-0 small">
+        Mark pending revenue-share lines as payment released for a calendar month (batch per distributor).
+      </p>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('distributor.preview') }}">Distributor preview</a>
+    </div>
+  </div>
+
+  {% if not overview.release_schema %}
+  <div class="alert alert-warning">
+    Payout release columns are not on this database yet.
+    Run <code>python3 migrations/add_distributor_payout_release.py</code> then refresh.
+  </div>
+  {% endif %}
+
+  <form method="get" class="row g-2 align-items-end mb-3">
+    <div class="col-auto">
+      <label class="form-label mb-0" for="year">Year</label>
+      <input class="form-control" type="number" name="year" id="year" value="{{ year }}" min="2020" max="2100">
+    </div>
+    <div class="col-auto">
+      <label class="form-label mb-0" for="month">Month</label>
+      <input class="form-control" type="number" name="month" id="month" value="{{ month }}" min="1" max="12">
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-primary" type="submit">Show</button>
+    </div>
+  </form>
+
+  <div class="row g-3 mb-3">
+    <div class="col-md-4">
+      <div class="border rounded p-3">
+        <div class="text-muted small">Pending (all distributors)</div>
+        <div class="fs-4">₹{{ "{:,.2f}".format(overview.grand_pending) }}</div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="border rounded p-3">
+        <div class="text-muted small">Released (all distributors)</div>
+        <div class="fs-4 text-success">₹{{ "{:,.2f}".format(overview.grand_released) }}</div>
+      </div>
+    </div>
+  </div>
+
+  {% if overview.items %}
+  <div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>Distributor</th>
+          <th class="text-end">Pending</th>
+          <th class="text-end">Released</th>
+          <th class="text-end">Clawbacks</th>
+          <th>Last batch</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in overview.items %}
+        <tr>
+          <td>
+            <strong>{{ item.distributor.username }}</strong>
+            {% if item.distributor.email %}<div class="small text-muted">{{ item.distributor.email }}</div>{% endif %}
+            <div class="small">
+              <a href="{{ url_for('distributor.payouts', distributor_id=item.distributor.id, year=year, month=month) }}">View sheet</a>
+            </div>
+          </td>
+          <td class="text-end">
+            ₹{{ "{:,.2f}".format(item.total_pending) }}
+            <div class="small text-muted">{{ item.pending_rows|length }} line(s)</div>
+          </td>
+          <td class="text-end">
+            ₹{{ "{:,.2f}".format(item.total_released) }}
+            <div class="small text-muted">{{ item.released_rows|length }} line(s)</div>
+          </td>
+          <td class="text-end">₹{{ "{:,.2f}".format(item.total_clawback) }}</td>
+          <td class="small">
+            {% if item.release_batch %}
+              {{ item.release_batch.released_at.strftime('%Y-%m-%d %H:%M') if item.release_batch.released_at else '—' }} UTC
+              <div class="text-muted">{{ item.release_batch.row_count }} row(s) · ₹{{ "{:,.2f}".format(item.release_batch.total_payout) }}</div>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          <td class="text-end">
+            {% if item.can_release and overview.release_schema %}
+            <form method="post" class="d-inline" onsubmit="return confirm('Release {{ item.pending_rows|length }} pending payout(s) totaling ₹{{ '{:,.2f}'.format(item.total_pending) }} for {{ item.distributor.username }} ({{ year }}-{{ '%02d'|format(month) }})?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="year" value="{{ year }}">
+              <input type="hidden" name="month" value="{{ month }}">
+              <input type="hidden" name="distributor_id" value="{{ item.distributor.id }}">
+              <button type="submit" class="btn btn-success btn-sm">Release pending</button>
+            </form>
+            {% elif item.total_pending == 0 and item.total_released > 0 %}
+            <span class="badge bg-success">All released</span>
+            {% else %}
+            <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="alert alert-info mb-0">No distributor attributions for {{ year }}-{{ '%02d'|format(month) }}.</div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -69,6 +69,10 @@
                                     <td>Internal incentive</td>
                                     <td class="text-end text-num">{{ "%.2f"|format(breakdown.internal_incentive) }}</td>
                                 </tr>
+                                <tr>
+                                    <td>Distributor revenue share</td>
+                                    <td class="text-end text-num">{{ "%.2f"|format(breakdown.distributor_payout|default(0)) }}</td>
+                                </tr>
                                 <tr class="table-success">
                                     <th>Total salary</th>
                                     <th class="text-end text-num">₹{{ "%.2f"|format(breakdown.total_salary) }}</th>
@@ -76,8 +80,28 @@
                             </tbody>
                         </table>
                     </div>
+                    {% if breakdown.distributor_rows %}
+                    <h6 class="mt-3">Distributor attributions (paid invoices)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead><tr><th>Paid</th><th>Invoice</th><th>Client</th><th class="text-end">Invoice ₹</th><th class="text-end">%</th><th class="text-end">Payout</th></tr></thead>
+                            <tbody>
+                            {% for r in breakdown.distributor_rows %}
+                                <tr>
+                                    <td>{{ r.paid_date }}</td>
+                                    <td>{{ r.invoice_number }}</td>
+                                    <td>{{ r.client_name }}</td>
+                                    <td class="text-end">{{ "%.2f"|format(r.invoice_amount) }}</td>
+                                    <td class="text-end">{{ "%.2f"|format(r.share_percent) }}</td>
+                                    <td class="text-end">{{ "%.2f"|format(r.payout) }}</td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
                     <p class="small text-muted mt-3 mb-0">
-                        Formula: base stipend + approved claims + sales incentive + internal incentive
+                        Formula: base stipend + approved claims + sales incentive + internal incentive + distributor revenue share
                     </p>
                     {% if breakdown.status %}
                     <p class="mt-2 mb-0">
