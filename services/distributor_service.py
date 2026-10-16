@@ -575,12 +575,13 @@ def release_month_payouts(
 def admin_month_payout_overview(year: int, month: int) -> Dict[str, Any]:
     """All distributors with pending/released totals for a calendar month (admin UI)."""
     release_ready = payout_release_schema_ready()
-    items: List[Dict[str, Any]] = []
+    # Key must not be "items" — Jinja resolves overview.items to dict.items().
+    rows: List[Dict[str, Any]] = []
     if not distributor_schema_ready():
         return {
             "year": year,
             "month": month,
-            "items": items,
+            "rows": rows,
             "release_schema": release_ready,
             "grand_pending": Decimal("0.00"),
             "grand_released": Decimal("0.00"),
@@ -594,7 +595,7 @@ def admin_month_payout_overview(year: int, month: int) -> Dict[str, Any]:
             continue
         grand_pending += _money(data["total_pending"])
         grand_released += _money(data["total_released"])
-        items.append(
+        rows.append(
             {
                 "distributor": dist,
                 "pending_rows": data["pending_rows"],
@@ -611,7 +612,7 @@ def admin_month_payout_overview(year: int, month: int) -> Dict[str, Any]:
     return {
         "year": year,
         "month": month,
-        "items": items,
+        "rows": rows,
         "release_schema": release_ready,
         "grand_pending": grand_pending.quantize(Decimal("0.01")),
         "grand_released": grand_released.quantize(Decimal("0.01")),
