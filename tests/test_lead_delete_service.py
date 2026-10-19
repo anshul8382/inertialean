@@ -37,6 +37,13 @@ def test_delete_lead_record_clears_children_then_deletes(monkeypatch):
     )
     monkeypatch.setattr(svc, "_has_table", lambda name: True)
 
+    billing_cleared = {}
+
+    def _clear_billing(lead_id):
+        billing_cleared["lead_id"] = lead_id
+
+    monkeypatch.setattr(svc, "_clear_agreement_billing_for_lead", _clear_billing)
+
     session_deleted = {}
 
     class _Session:
@@ -52,4 +59,5 @@ def test_delete_lead_record_clears_children_then_deletes(monkeypatch):
     assert kyc["deleted"] is True
     assert proposal["deleted"] is True
     assert risk["updated"] == {"lead_id": None}
+    assert billing_cleared["lead_id"] == 602
     assert session_deleted["lead"] is lead

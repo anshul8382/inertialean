@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-10-16T07:23:40.016358+00:00
+Generated: 2026-10-19T16:27:54.919932+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -265,7 +265,7 @@ uploaded = request.files.get(key)
 
 ### `SEC-EXT-009` — File upload without `secure_filename` / path normalization
 
-**Severity:** high • **Theme:** EXTERNAL • **Category:** path_traversal • **CWE:** CWE-22 • **Location:** `routes/leads.py:371`
+**Severity:** high • **Theme:** EXTERNAL • **Category:** path_traversal • **CWE:** CWE-22 • **Location:** `routes/leads.py:364`
 
 Saving an uploaded file using its original filename (`document.filename`) allows path traversal (`../../etc/passwd`) and overwrite of arbitrary files the process can write.
 
@@ -429,7 +429,7 @@ def download_invoice_portfolio_excel(
 
 ### `SEC-INT-002` — Export/download endpoint `download_lead_proposal` is not audit-logged
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/leads.py:1339`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/leads.py:1332`
 
 Functions named export/download/csv/excel/backup typically return client data in bulk. Without an audit log entry, an internal user downloading the entire client base is invisible.
 

@@ -94,6 +94,63 @@ def test_onboarding_checklist_incomplete(monkeypatch):
     assert "paid invoice" in missing
 
 
+def test_finalize_deactivates_lead_after_client_link(monkeypatch):
+    """Converted leads must leave the active sales list (is_active=False)."""
+    from services.lead_conversion_service import _finalize_lead_conversion
+
+    lead = type(
+        "L",
+        (),
+        {
+            "id": 629,
+            "client_id": None,
+            "is_active": True,
+            "status": "open",
+            "referral_by": None,
+        },
+    )()
+    client = type("C", (), {"id": 169})()
+
+    monkeypatch.setattr(
+        "services.lead_conversion_service.onboarding_checklist_incomplete",
+        lambda _lead: ["KYC"],
+    )
+    monkeypatch.setattr(
+        "services.lead_conversion_service.Meeting",
+        type("M", (), {"query": type("Q", (), {"filter_by": staticmethod(lambda **k: type("R", (), {"all": lambda self: []})())})()}),
+    )
+    monkeypatch.setattr(
+        "services.lead_conversion_service.AgreementVariables",
+        type(
+            "AV",
+            (),
+            {
+                "query": type(
+                    "Q",
+                    (),
+                    {
+                        "filter_by": staticmethod(
+                            lambda **k: type(
+                                "R", (), {"update": lambda self, *a, **kw: 0}
+                            )()
+                        )
+                    },
+                )()
+            },
+        ),
+    )
+    monkeypatch.setattr(
+        "services.lead_conversion_service.lead_convertible_agreements",
+        lambda _lead: [],
+    )
+
+    _finalize_lead_conversion(lead, client, referral_by=None)
+
+    assert lead.client_id == 169
+    assert lead.is_active is False
+    assert lead.status == "onboarding_started"
+
+
 def test_convert_blocked_for_career_application(monkeypatch):
     from services import lead_conversion_service as svc
 

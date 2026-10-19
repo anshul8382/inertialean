@@ -80,16 +80,9 @@ def list_leads():
             except ValueError:
                 pass  # Invalid user_id, ignore filter
         
-        # Hide fully converted leads; keep client-shell leads visible until onboarding_completed
-        from sqlalchemy import or_
-
-        query = query.filter(
-            or_(
-                Lead.client_id.is_(None),
-                Lead.status.is_(None),
-                Lead.status != "onboarding_completed",
-            )
-        )
+        # Hide leads already linked to a client (convert or invoice shell).
+        # Finish KYC/agreement from the client profile or lead detail URL — not the sales list.
+        query = query.filter(Lead.client_id.is_(None))
 
         from services.lead_classification_service import apply_category_filter
         query = apply_category_filter(query, category_filter)

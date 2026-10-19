@@ -1582,6 +1582,17 @@ class Agreement(db.Model):
     template = db.relationship('AgreementTemplate', back_populates='agreements')
     creator = db.relationship('User', back_populates='created_agreements', foreign_keys=[created_by])
     variables = db.relationship('AgreementVariables', back_populates='agreement', cascade='all, delete-orphan')
+    # Must delete-orphan: agreement_id is NOT NULL; default cascade nulls FK → IntegrityError 1048
+    billing_rates = db.relationship(
+        'BillingRateStructure',
+        back_populates='agreement',
+        cascade='all, delete-orphan',
+    )
+    billing_schedules = db.relationship(
+        'BillingSchedule',
+        back_populates='agreement',
+        cascade='all, delete-orphan',
+    )
 
 class AgreementVariables(db.Model):
     __tablename__ = 'agreement_variables'
@@ -1751,7 +1762,7 @@ class BillingSchedule(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    agreement = db.relationship('Agreement', backref='billing_schedules')
+    agreement = db.relationship('Agreement', back_populates='billing_schedules')
 
 class BillingRateStructure(db.Model):
     __tablename__ = 'billing_rate_structure'
@@ -1768,7 +1779,7 @@ class BillingRateStructure(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    agreement = db.relationship('Agreement', backref='billing_rates')
+    agreement = db.relationship('Agreement', back_populates='billing_rates')
     asset_class = db.relationship('AssetClass', backref='billing_rates')
 
 class Invoice(db.Model):

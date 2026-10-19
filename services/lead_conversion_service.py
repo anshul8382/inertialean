@@ -236,6 +236,8 @@ def _finalize_lead_conversion(
     referral_by: Optional[str],
 ) -> None:
     lead.client_id = client.id
+    # Leave the active sales pipeline; client work continues under Clients / onboarding hub.
+    lead.is_active = False
     if referral_by:
         lead.referral_by = referral_by
     if hasattr(lead, "converted_at"):
