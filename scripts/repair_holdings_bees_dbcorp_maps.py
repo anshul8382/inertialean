@@ -19,21 +19,28 @@ def main() -> int:
         print(f"No maps file at {MAPS}")
         return 0
     data = json.loads(MAPS.read_text(encoding="utf-8"))
-    by_name = dict(data.get("by_name") or {})
     removed = []
-    for key in list(by_name.keys()):
-        kl = str(key).lower()
-        if any(t in kl for t in ("bees", "gold bee", "liquid bee", "goldbees", "liquidbees")):
-            removed.append((key, by_name.pop(key)))
+    for section in ("by_name", "by_isin", "by_nse", "by_broker_code"):
+        bucket = dict(data.get(section) or {})
+        for key in list(bucket.keys()):
+            kl = str(key).lower()
+            if section == "by_name" and any(
+                t in kl
+                for t in ("bees", "gold bee", "liquid bee", "goldbees", "liquidbees")
+            ):
+                removed.append((section, key, bucket.pop(key)))
+            elif section == "by_isin" and kl.startswith("inf204kb"):
+                # Nippon Bees ISINs — drop if mapped (often wrongly to DBCORP)
+                removed.append((section, key, bucket.pop(key)))
+        data[section] = bucket
     if not removed:
-        print("No Bees-related by_name entries found.")
+        print("No Bees-related map entries found.")
         return 0
-    data["by_name"] = by_name
     MAPS.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"Removed {len(removed)} by_name entr(y/ies) from {MAPS}:")
-    for k, v in removed:
-        print(f"  {k!r} -> {v}")
-    print("Re-load statement from Drive (or Refresh after deploying preserve fix), then rematch.")
+    print(f"Removed {len(removed)} entr(y/ies) from {MAPS}:")
+    for section, k, v in removed:
+        print(f"  {section} {k!r} -> {v}")
+    print("Map Gold→GOLDBEES and Liquid→LIQUIDBEES on confirm, then rematch.")
     return 0
 
 

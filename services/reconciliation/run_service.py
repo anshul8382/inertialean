@@ -667,12 +667,15 @@ def _is_user_owned_map(row: Dict[str, Any]) -> bool:
 def _preserve_confirmations(
     old_rows: List[Dict[str, Any]],
     new_review: List[Dict[str, Any]],
+    *,
+    lock_maps: bool = False,
 ) -> List[Dict[str, Any]]:
     """
     Re-apply prior maps/ignores onto freshly parsed review rows.
 
-    Rule: user-owned maps (confirm form / Remember) are overwritten only by the user
-    on a later confirm — never by name-match or other auto-resolve on reload/match.
+    Rule: user-owned maps are overwritten only by a later user confirm.
+    When ``lock_maps`` is True (confirm/match/refresh after confirm), *any* prior
+    security_id on the same ISIN/NSE/name is kept — auto-resolve cannot replace it.
     """
     by_isin: Dict[str, Dict[str, Any]] = {}
     by_sym: Dict[str, Dict[str, Any]] = {}
@@ -707,8 +710,8 @@ def _preserve_confirmations(
         if not prev.get("security_id"):
             out.append(nr)
             continue
-        if _is_user_owned_map(prev):
-            # User data — keep exactly; auto-resolve must not replace
+        keep = lock_maps or _is_user_owned_map(prev)
+        if keep:
             nr["security_id"] = prev.get("security_id")
             nr["security_symbol"] = prev.get("security_symbol") or nr.get(
                 "security_symbol"
@@ -774,6 +777,10 @@ def reload_statement_fresh(
 
     broker = run.get("broker")
     old_confirmed = list(run.get("confirmed_rows") or run.get("review_rows") or [])
+    # After the user has confirmed, never let auto-resolve replace their maps
+    lock_maps = run.get("status") in ("confirmed", "matched") or any(
+        _is_user_owned_map(r) for r in old_confirmed
+    )
     is_combined = (
         run.get("format_id") == "combined_statements"
         or bool(run.get("combined_from"))
@@ -797,9 +804,12 @@ def reload_statement_fresh(
             path = upload_abs(rel)
             parsed = detect_and_parse(path, filename=fname)
             review = resolve_lines(parsed.to_dict()["lines"], broker=broker)
+            child_old = child.get("confirmed_rows") or child.get("review_rows") or []
+            child_lock = child.get("status") in ("confirmed", "matched") or any(
+                _is_user_owned_map(r) for r in child_old
+            )
             review = _preserve_confirmations(
-                child.get("confirmed_rows") or child.get("review_rows") or [],
-                review,
+                child_old, review, lock_maps=child_lock
             )
             child["upload_path"] = rel
             child["filename"] = fname
@@ -830,7 +840,7 @@ def reload_statement_fresh(
             run["staging_lines"] = []
             run["review_rows"] = sort_review_rows_for_confirm(list(only))
             run["confirmed_rows"] = _preserve_confirmations(
-                old_confirmed, run["review_rows"]
+                old_confirmed, run["review_rows"], lock_maps=lock_maps
             )
             run["combined_from"] = None
             run["format_id"] = "single_from_combined"
@@ -838,7 +848,9 @@ def reload_statement_fresh(
         else:
             merged = sort_review_rows_for_confirm(merge_statement_rows(sources))
             run["review_rows"] = merged
-            run["confirmed_rows"] = _preserve_confirmations(old_confirmed, merged)
+            run["confirmed_rows"] = _preserve_confirmations(
+                old_confirmed, merged, lock_maps=lock_maps
+            )
             run["staging_lines"] = []
             run["format_id"] = "combined_statements"
             run["parse_meta"] = {
@@ -855,7 +867,9 @@ def reload_statement_fresh(
         path = upload_abs(rel)
         parsed = detect_and_parse(path, filename=fname)
         review = resolve_lines(parsed.to_dict()["lines"], broker=broker)
-        review = _preserve_confirmations(old_confirmed, review)
+        review = _preserve_confirmations(
+            old_confirmed, review, lock_maps=lock_maps
+        )
         run["upload_path"] = rel
         run["filename"] = fname
         run["format_id"] = parsed.format_id

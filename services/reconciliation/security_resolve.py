@@ -24,16 +24,37 @@ def _norm_name(raw: str) -> str:
     return " ".join(s.split())
 
 
+# Distinctive tokens that must not be crossed (HDFC Life ≠ HDFC Bank ≠ HDFC AMC).
+_CONFLICT_TOKEN_GROUPS = (
+    frozenset({"life"}),
+    frozenset({"bank"}),
+    frozenset({"amc"}),
+    frozenset({"gold"}),
+    frozenset({"liquid"}),
+)
+
+
+def _has_token_conflict(ta: set, tb: set) -> bool:
+    for group in _CONFLICT_TOKEN_GROUPS:
+        in_a = bool(ta & group)
+        in_b = bool(tb & group)
+        if in_a != in_b:
+            return True
+    return False
+
+
 def _name_score(a: str, b: str) -> float:
     na, nb = _norm_name(a), _norm_name(b)
     if not na or not nb:
         return 0.0
     if na == nb:
         return 1.0
+    ta, tb = set(na.split()), set(nb.split())
+    if _has_token_conflict(ta, tb):
+        return 0.0
     # Substring containment is unsafe for short norms after noise stripping
     # (e.g. "D.B.Corp Limited" → "d b", which sits inside "gol**d b**ees").
     # Require whole-token containment and a meaningful shorter side.
-    ta, tb = set(na.split()), set(nb.split())
     shorter_toks, longer_toks = (ta, tb) if len(ta) <= len(tb) else (tb, ta)
     shorter_s, longer_s = (na, nb) if len(na) <= len(nb) else (nb, na)
     meaningful = sum(1 for t in shorter_toks if len(t) >= 3)
@@ -320,20 +341,26 @@ def apply_confirmations(
                 if sid:
                     filled = _fill_security(int(sid), "user_confirm", status="mapped")
                     row = {**row, **filled}
-                    if conf.get("remember"):
-                        if row.get("isin"):
-                            maps.setdefault("by_isin", {})[row["isin"]] = int(sid)
-                        if row.get("nse_symbol"):
-                            maps.setdefault("by_nse", {})[row["nse_symbol"]] = int(sid)
-                        if row.get("broker_code"):
-                            maps.setdefault("by_broker_code", {})[
-                                f"{broker_key}:{row['broker_code']}"
-                            ] = int(sid)
-                        # remember name → security for demat script names
-                        if row.get("raw_name"):
-                            maps.setdefault("by_name", {})[_norm_name(row["raw_name"])] = int(
-                                sid
-                            )
+                    # Always bind ISIN/NSE to the user's choice so a prior wrong
+                    # "Remember" (e.g. Gold Bees → DBCORP) cannot win on reload.
+                    if row.get("isin"):
+                        maps.setdefault("by_isin", {})[row["isin"]] = int(sid)
+                    if row.get("nse_symbol"):
+                        maps.setdefault("by_nse", {})[row["nse_symbol"]] = int(sid)
+                    if row.get("broker_code"):
+                        maps.setdefault("by_broker_code", {})[
+                            f"{broker_key}:{row['broker_code']}"
+                        ] = int(sid)
+                    if conf.get("remember") and row.get("raw_name"):
+                        maps.setdefault("by_name", {})[_norm_name(row["raw_name"])] = int(
+                            sid
+                        )
+                    elif row.get("raw_name"):
+                        # Drop a poisoned name→security map when user picks a new id
+                        nk = _norm_name(row["raw_name"])
+                        by_name = maps.setdefault("by_name", {})
+                        if nk in by_name and int(by_name[nk]) != int(sid):
+                            by_name.pop(nk, None)
         elif row.get("security_id") and row.get("status") == "suggested":
             # auto-accept suggestion if left unchanged in form (sec_* still posted)
             pass

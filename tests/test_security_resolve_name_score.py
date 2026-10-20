@@ -24,3 +24,12 @@ def test_liquid_bees_does_not_match_dbcorp():
 def test_gold_bees_matches_true_name():
     sc = _name_score("NIP IND ETF GOLD BEES", "NIPPON INDIA ETF GOLD BEES")
     assert sc >= 0.85
+
+
+def test_hdfc_life_does_not_match_hdfc_bank_or_shell():
+    assert _name_score("HDFC LIFE INSURANCE COMPANY LIMITED", "HDFC Bank Limited") == 0.0
+    assert _name_score("HDFC LIFE", "HDFC (Historical - Merged/Delisted)") < 0.78
+
+
+def test_gold_bees_does_not_match_liquid_bees():
+    assert _name_score("NIP IND ETF GOLD BEES", "NIP IND ETF LIQUID BEES") == 0.0

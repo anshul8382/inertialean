@@ -335,8 +335,7 @@
                       {% endif %}
                     </td>
                     <td class="text-center">
-                      <input type="checkbox" name="remember_{{ row.line_index }}" value="1"
-                             {% if row.status != 'mapped' and row.status != 'ignored' %}checked{% endif %}>
+                      <input type="checkbox" name="remember_{{ row.line_index }}" value="1">
                     </td>
                   </tr>
                   {% endfor %}
