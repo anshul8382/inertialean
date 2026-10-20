@@ -341,26 +341,47 @@ def apply_confirmations(
                 if sid:
                     filled = _fill_security(int(sid), "user_confirm", status="mapped")
                     row = {**row, **filled}
-                    # Always bind ISIN/NSE to the user's choice so a prior wrong
-                    # "Remember" (e.g. Gold Bees → DBCORP) cannot win on reload.
-                    if row.get("isin"):
-                        maps.setdefault("by_isin", {})[row["isin"]] = int(sid)
-                    if row.get("nse_symbol"):
-                        maps.setdefault("by_nse", {})[row["nse_symbol"]] = int(sid)
-                    if row.get("broker_code"):
-                        maps.setdefault("by_broker_code", {})[
-                            f"{broker_key}:{row['broker_code']}"
-                        ] = int(sid)
-                    if conf.get("remember") and row.get("raw_name"):
-                        maps.setdefault("by_name", {})[_norm_name(row["raw_name"])] = int(
-                            sid
+                    sid_i = int(sid)
+                    if conf.get("remember"):
+                        # Remember checked → overwrite durable maps every time
+                        if row.get("isin"):
+                            maps.setdefault("by_isin", {})[row["isin"]] = sid_i
+                        if row.get("nse_symbol"):
+                            maps.setdefault("by_nse", {})[row["nse_symbol"]] = sid_i
+                        if row.get("broker_code"):
+                            maps.setdefault("by_broker_code", {})[
+                                f"{broker_key}:{row['broker_code']}"
+                            ] = sid_i
+                        if row.get("raw_name"):
+                            maps.setdefault("by_name", {})[
+                                _norm_name(row["raw_name"])
+                            ] = sid_i
+                    else:
+                        # No Remember: keep this confirm for the run only, but drop
+                        # durable entries that would revive a wrong prior Remember.
+                        def _clear_if_other(bucket: Dict[str, Any], key: Optional[str]) -> None:
+                            if not key or key not in bucket:
+                                return
+                            try:
+                                if int(bucket[key]) != sid_i:
+                                    bucket.pop(key, None)
+                            except (TypeError, ValueError):
+                                bucket.pop(key, None)
+
+                        _clear_if_other(maps.setdefault("by_isin", {}), row.get("isin"))
+                        _clear_if_other(
+                            maps.setdefault("by_nse", {}), row.get("nse_symbol")
                         )
-                    elif row.get("raw_name"):
-                        # Drop a poisoned name→security map when user picks a new id
-                        nk = _norm_name(row["raw_name"])
-                        by_name = maps.setdefault("by_name", {})
-                        if nk in by_name and int(by_name[nk]) != int(sid):
-                            by_name.pop(nk, None)
+                        if row.get("broker_code"):
+                            _clear_if_other(
+                                maps.setdefault("by_broker_code", {}),
+                                f"{broker_key}:{row['broker_code']}",
+                            )
+                        if row.get("raw_name"):
+                            _clear_if_other(
+                                maps.setdefault("by_name", {}),
+                                _norm_name(row["raw_name"]),
+                            )
         elif row.get("security_id") and row.get("status") == "suggested":
             # auto-accept suggestion if left unchanged in form (sec_* still posted)
             pass

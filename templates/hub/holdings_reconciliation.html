@@ -286,7 +286,7 @@
                     <th>Name</th>
                     <th>Status</th>
                     <th>Map to security</th>
-                    <th>Remember</th>
+                    <th title="Save this map for future statements (overwrites any prior Remember for the same ISIN/name)">Remember</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -335,7 +335,8 @@
                       {% endif %}
                     </td>
                     <td class="text-center">
-                      <input type="checkbox" name="remember_{{ row.line_index }}" value="1">
+                      <input type="checkbox" name="remember_{{ row.line_index }}" value="1"
+                             title="Overwrite saved map for this ISIN/name on future statements">
                     </td>
                   </tr>
                   {% endfor %}
