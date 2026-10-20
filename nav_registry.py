@@ -171,6 +171,8 @@ NAV_GROUPS: Tuple[NavGroup, ...] = (
         items=(
             NavItem("hub.operational_dashboard", "Operational intelligence", "fas fa-cogs",
                     active_match=("hub.operational_dashboard", "rec_execution.")),
+            NavItem("hub.holdings_reconciliation", "Holdings recon", "fas fa-balance-scale",
+                    active_match=("hub.holdings_reconciliation",)),
             NavItem("hub.investment_dashboard", "Investment intelligence", "fas fa-chart-line",
                     active_match=("hub.investment_dashboard",)),
             NavItem("hub.system_dashboard", "System intelligence", "fas fa-microchip",
