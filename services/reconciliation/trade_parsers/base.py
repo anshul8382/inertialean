@@ -21,6 +21,7 @@ class TradeFill:
     exchange: Optional[str] = None
     broker_symbol: Optional[str] = None  # as printed (e.g. LTIM before → LTM)
     status: Optional[str] = None  # executed | ordered | pending | …
+    company_name: Optional[str] = None  # Groww Orders UI prints names, not tickers
 
     def ensure_amount(self) -> "TradeFill":
         """Fill amount from qty × price when missing."""
@@ -37,6 +38,9 @@ class TradeFill:
         d["trade_type"] = self.side  # alias for UI / advisors
         if not d.get("broker_symbol"):
             d["broker_symbol"] = self.symbol
+        if self.company_name:
+            d["raw_name"] = self.company_name
+            d["company_name"] = self.company_name
         return d
 
 

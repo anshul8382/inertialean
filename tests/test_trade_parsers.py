@@ -247,6 +247,55 @@ def test_icici_smashed_goldbees_price():
     assert 90.0 <= g.price <= 91.0
 
 
+def test_groww_orders_history_company_name_order_value():
+    """Groww Orders tab: company names + Order value (not ticker Order Report)."""
+    text = (
+        "MAY-2024  13 Orders\n"
+        "29-MAY-2024  3 Orders\n"
+        "23-MAY-2024  6 Orders\n"
+        "ULTRATECH CEMENT LIM Deétivery © 4 SELL\n"
+        "Order value %39,505.00\n"
+        "Brokerage $118.52 Charges %62.39\n"
+        "BAJAJ FINANCE LIMITE DEtivery (© 3 BUY\n"
+        "Order value ~20,324.40\n"
+        "Brokerage $60.97 Charges %35.14\n"
+        "INFOSYS LIMITED  DELivery (© 11 BUY\n"
+        "Order value =16,108.95\n"
+        "Brokerage 48.33 Charges ¥27.87\n"
+        "TATA MOTORS LIMITED DELIvery © 45 SELL\n"
+        "Order value 242,680.25\n"
+        "Brokerage €128.04 Charges %68.21\n"
+        "HDFC BANK LTD  DELiveryY ( 15 BUY\n"
+        "Order value $21,911.25\n"
+        "Brokerage $65.73 Charges %37.89\n"
+        "PIDILITE INDUSTRIES DEtivery (© 4 BUY\n"
+        "Order value 12,086.80\n"
+        "Brokerage 36.25 Charges %20.90\n"
+        "22-MAY-2024  2 Orders\n"
+    )
+    from services.reconciliation.trade_parsers.order_book_screenshot import (
+        parse_order_book_ocr_text,
+    )
+
+    r = parse_order_book_ocr_text(text, source_name="abhinav_orders.jpg")
+    assert r.format_id == "groww_orders_history_screenshot"
+    assert len(r.fills) == 6
+    by = {f.symbol: f for f in r.fills}
+    assert by["ULTRACEMCO"].side == "sell"
+    assert by["ULTRACEMCO"].quantity == 4
+    assert by["ULTRACEMCO"].amount == 39505.0
+    assert abs(by["ULTRACEMCO"].price - 9876.25) < 0.01
+    assert by["ULTRACEMCO"].trade_date == "2024-05-23"
+    assert by["BAJFINANCE"].side == "buy" and by["BAJFINANCE"].quantity == 3
+    assert by["INFY"].quantity == 11
+    assert by["TATAMOTORS"].side == "sell" and by["TATAMOTORS"].quantity == 45
+    # OCR glued 42,680 → 242,680; brokerage ~0.3% recovers true order value
+    assert by["TATAMOTORS"].amount == 42680.25
+    assert by["HDFCBANK"].quantity == 15
+    assert by["PIDILITIND"].quantity == 4
+    assert by["INFY"].company_name and "INFOSYS" in by["INFY"].company_name
+
+
 def test_groww_divislab_executed_without_qty_line():
     """Truncated last Groww row: EXECUTED but Shares line cut off — still emit."""
     text = (

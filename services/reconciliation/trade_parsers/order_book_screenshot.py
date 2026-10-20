@@ -27,8 +27,26 @@ from services.reconciliation.trade_parsers.base import (
 FORMAT_ANGEL = "angel_order_book_screenshot"
 FORMAT_ICICI = "icici_order_book_screenshot"
 FORMAT_GROWW = "groww_order_report_screenshot"
+FORMAT_GROWW_ORDERS = "groww_orders_history_screenshot"
 FORMAT_POSITIONS = "broker_positions_screenshot"
 FORMAT_GENERIC = "order_book_screenshot"
+
+# Groww Orders tab prints company names (often truncated). Map common OCR
+# labels → NSE tickers so fills work even before DB name-match.
+_GROWW_COMPANY_TICKERS = {
+    "ULTRATECH CEMENT LIM": "ULTRACEMCO",
+    "ULTRATECH CEMENT": "ULTRACEMCO",
+    "BAJAJ FINANCE LIMITE": "BAJFINANCE",
+    "BAJAJ FINANCE": "BAJFINANCE",
+    "INFOSYS LIMITED": "INFY",
+    "INFOSYS": "INFY",
+    "TATA MOTORS LIMITED": "TATAMOTORS",
+    "TATA MOTORS": "TATAMOTORS",
+    "HDFC BANK LTD": "HDFCBANK",
+    "HDFC BANK": "HDFCBANK",
+    "PIDILITE INDUSTRIES": "PIDILITIND",
+    "PIDILITE": "PIDILITIND",
+}
 
 # NSE / broker renames + common OCR misreads
 _SYMBOL_ALIASES = {
@@ -106,6 +124,17 @@ def classify_order_book_text(text: str) -> str:
     # Groww Holdings (portfolio) — ATP avg, not order fills
     if "HOLDINGS" in u and "ATP" in u and "ORDER REPORT" not in u:
         return FORMAT_POSITIONS
+    # Groww Orders history: company name + DELIVERY + qty + BUY/SELL + Order value
+    if (
+        "ORDER VALUE" in u
+        and (
+            "BROKERAGE" in u
+            or "CHARGES" in u
+            or re.search(r"\d+\s+ORDERS?\b", u)
+            or re.search(r"DE[LT]IVERY", u)
+        )
+    ):
+        return FORMAT_GROWW_ORDERS
     # Groww Order Report: "ORDER AGAIN" / "Order Report" / "Share ORDER"
     if (
         "ORDER REPORT" in u
@@ -338,6 +367,113 @@ _GROWW_DATE_RE = re.compile(
     r"^(?P<d>\d{1,2})\s+(?P<mon>[A-Za-z]{3})\s+(?P<y>20\d{2})\s*$",
     re.I,
 )
+# Groww Orders history date headers: "23-MAY-2024 | 6 Orders" (OCR: MAY-ZUZ4)
+_GROWW_ORDERS_DATE_RE = re.compile(
+    r"(?P<d>\d{1,2})\s*[-/| ]\s*(?P<mon>[A-Za-z]{3})\s*[-/| ]\s*(?P<y>20\d{2}|ZU\d{2}|Z0\d{2})",
+    re.I,
+)
+# Company + Delivery + qty + BUY/SELL on one OCR line
+# OCR variants: Delivery / Detivery / Deétivery / DELiveryY
+_GROWW_ORDERS_ROW_RE = re.compile(
+    r"^(?P<name>[A-Za-z][A-Za-z0-9 &.'/-]{1,48}?)\s+"
+    r"D[EÉeé][A-Za-zéÉ]{3,10}\s*"
+    r"[^\dA-Za-z]{0,10}(?P<qty>\d+)\s+"
+    r"(?P<side>BUY|SELL)\b",
+    re.I,
+)
+_GROWW_ORDER_VALUE_RE = re.compile(
+    r"Order\s*value\s*[^\d]{0,6}(?P<val>[\d,]+(?:\.\d+)?)",
+    re.I,
+)
+_GROWW_BROKERAGE_RE = re.compile(
+    r"Brokerage\s*[^\d]{0,4}(?P<val>[\d,]+(?:\.\d+)?)",
+    re.I,
+)
+
+
+def _sanitize_groww_order_value(
+    order_value: Optional[float],
+    qty: float,
+    brokerage: Optional[float] = None,
+) -> Optional[float]:
+    """Fix OCR digit-glue on Order value (e.g. 42,680 → 242,680) using brokerage ~0.3%."""
+    if order_value is None or order_value <= 0 or qty <= 0:
+        return order_value
+    ov = float(order_value)
+    if brokerage and brokerage > 0:
+        ratio = brokerage / ov
+        # Groww delivery brokerage is typically ~0.3% (sometimes flat ₹20)
+        if ratio < 0.0008 or (ratio > 0.02 and ov > 5000):
+            intpart = str(int(ov)) if abs(ov - int(ov)) < 1e-9 else f"{ov:.2f}".split(".")[0]
+            frac = None if abs(ov - int(ov)) < 1e-9 else f"{ov:.2f}".split(".")[1]
+            best = ov
+            best_err = abs(ratio - 0.003)
+            for cut in range(1, min(3, len(intpart))):
+                try:
+                    cand_s = intpart[cut:] + (("." + frac) if frac else "")
+                    cand = float(cand_s)
+                except Exception:
+                    continue
+                if cand < 1:
+                    continue
+                r2 = brokerage / cand
+                if 0.001 <= r2 <= 0.01 and abs(r2 - 0.003) < best_err:
+                    best, best_err = cand, abs(r2 - 0.003)
+            ov = best
+    # Per-share price sanity — strip a leading digit if absurdly high
+    px = ov / qty
+    if px > 50_000 and len(str(int(ov))) >= 5:
+        intpart = str(int(ov))
+        for cut in range(1, min(3, len(intpart))):
+            try:
+                cand = float(intpart[cut:]) if abs(ov - int(ov)) < 1e-9 else float(
+                    intpart[cut:] + "." + f"{ov:.2f}".split(".")[1]
+                )
+            except Exception:
+                continue
+            if 1.0 <= cand / qty <= 50_000:
+                ov = cand
+                break
+    return round(ov, 2)
+
+
+def _groww_orders_fix_year(y_raw: str) -> Optional[int]:
+    """OCR often turns 2024 → ZUZ4 / Z024."""
+    s = (y_raw or "").upper().strip()
+    if re.fullmatch(r"20\d{2}", s):
+        return int(s)
+    m = re.fullmatch(r"Z[U0O]?(\d{2})", s)
+    if m:
+        return 2000 + int(m.group(1))
+    digits = "".join(ch for ch in s if ch.isdigit())
+    if len(digits) == 2:
+        return 2000 + int(digits)
+    if len(digits) == 4:
+        return int(digits)
+    return None
+
+
+def _groww_company_to_ticker(name: str) -> Tuple[str, str]:
+    """Return (ticker_or_slug, cleaned_company_name)."""
+    raw = re.sub(r"\s+", " ", (name or "").upper()).strip(" .,-")
+    raw = re.sub(r"\bDE[LT]IVERY\b.*$", "", raw, flags=re.I).strip()
+    if raw in _GROWW_COMPANY_TICKERS:
+        return _GROWW_COMPANY_TICKERS[raw], raw
+    # Strip truncated LIMITED / LTD / LIM suffixes and retry
+    stripped = re.sub(
+        r"\s+(LIMITED|LIMITE|LIMIT|LTD\.?|LIM|INDUSTRIES|INDUSTRIE)\s*$",
+        "",
+        raw,
+        flags=re.I,
+    ).strip()
+    if stripped in _GROWW_COMPANY_TICKERS:
+        return _GROWW_COMPANY_TICKERS[stripped], raw
+    for key, ticker in _GROWW_COMPANY_TICKERS.items():
+        if raw.startswith(key) or key.startswith(stripped):
+            return ticker, raw
+    # Fallback slug for UI until name-match maps it
+    slug = normalize_trade_symbol(stripped or raw)[:16] or "UNKNOWN"
+    return slug, raw
 
 
 def apply_broker_symbol_alias(sym: str) -> str:
@@ -378,6 +514,9 @@ def _ocr_image(data: bytes) -> Tuple[str, Optional[str]]:
                 u.count("QTY")
                 + u.count("EXECUTED")
                 + u.count("ORDER AGAIN")
+                + u.count("ORDER VALUE")
+                + u.count("BROKERAGE")
+                + u.count("DELIVERY")
                 + len(re.findall(r"\b[A-Z]{3,12}\s+\d", t))
             )
 
@@ -398,6 +537,121 @@ def _parse_trade_date(mon: str, d: str, y: str) -> Optional[str]:
         return f"{int(y):04d}-{month:02d}-{int(d):02d}"
     except Exception:
         return None
+
+
+def parse_groww_orders_history_text(
+    text: str, *, source_name: str = ""
+) -> TradeParseResult:
+    """
+    Groww **Orders** tab (history cards), not Order Report::
+
+        23-MAY-2024 | 6 Orders
+        ULTRATECH CEMENT LIM  Delivery  4  SELL
+        Order value  ₹39,505.00
+        Brokerage ₹118.52  Charges ₹62.39
+
+    Price is derived as order_value / qty. Company names are mapped via
+    ``company_name`` → security_maps / static ticker aliases.
+    """
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip()]
+    fills: List[TradeFill] = []
+    section_date: Optional[str] = None
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+        dm = _GROWW_ORDERS_DATE_RE.search(ln)
+        if dm and re.search(r"(?i)orders?\b", ln):
+            y = _groww_orders_fix_year(dm.group("y"))
+            if y:
+                section_date = _parse_trade_date(
+                    dm.group("mon"), dm.group("d"), str(y)
+                )
+            i += 1
+            continue
+        # Month-only header without day (MAY-2024) — keep prior day unset
+        if re.match(r"(?i)^[A-Za-z]{3}\s*[-/]\s*(?:20\d{2}|ZU\d{2})\b", ln) and re.search(
+            r"(?i)orders?\b", ln
+        ):
+            i += 1
+            continue
+
+        rm = _GROWW_ORDERS_ROW_RE.search(ln)
+        if not rm:
+            i += 1
+            continue
+        try:
+            qty = float(rm.group("qty"))
+        except Exception:
+            i += 1
+            continue
+        if qty <= 0:
+            i += 1
+            continue
+        side = "sell" if rm.group("side").upper() == "SELL" else "buy"
+        ticker, company = _groww_company_to_ticker(rm.group("name"))
+        # Look ahead for Order value (and optional Brokerage line)
+        end = min(len(lines), i + 4)
+        block = " | ".join(lines[i:end])
+        vm = _GROWW_ORDER_VALUE_RE.search(block)
+        order_value = parse_money(vm.group("val")) if vm else None
+        bm = _GROWW_BROKERAGE_RE.search(block)
+        brokerage = parse_money(bm.group("val")) if bm else None
+        order_value = _sanitize_groww_order_value(order_value, qty, brokerage)
+        price: Optional[float] = None
+        amount: Optional[float] = None
+        if order_value is not None and order_value > 0 and qty > 0:
+            amount = round(float(order_value), 2)
+            price = _plausible_price(round(float(order_value) / qty, 4))
+        broker_sym = ticker
+        canon = apply_broker_symbol_alias(broker_sym)
+        key = (canon, qty, price, section_date, side)
+        if key in {(f.symbol, f.quantity, f.price, f.trade_date, f.side) for f in fills}:
+            i = end
+            continue
+        fills.append(
+            TradeFill(
+                symbol=canon,
+                quantity=qty,
+                side=side,
+                price=price,
+                amount=amount,
+                trade_date=section_date,
+                source_file=source_name,
+                format_id=FORMAT_GROWW_ORDERS,
+                raw=block[:240],
+                broker_symbol=broker_sym,
+                status="executed",
+                company_name=company,
+            ).ensure_amount()
+        )
+        # Advance past order-value / brokerage lines when present
+        nxt = i + 1
+        while nxt < end:
+            if _GROWW_ORDER_VALUE_RE.search(lines[nxt]) or re.search(
+                r"(?i)^brokerage\b", lines[nxt]
+            ):
+                nxt += 1
+                continue
+            if _GROWW_ORDERS_ROW_RE.search(lines[nxt]) or _GROWW_ORDERS_DATE_RE.search(
+                lines[nxt]
+            ):
+                break
+            nxt += 1
+            break
+        i = max(nxt, i + 1)
+
+    warnings = []
+    if not fills:
+        warnings.append(f"{FORMAT_GROWW_ORDERS}: no order-history rows parsed")
+    missing_px = sum(1 for f in fills if f.price is None)
+    if missing_px:
+        warnings.append(f"{missing_px} row(s) missing Order value (price unknown)")
+    return TradeParseResult(
+        format_id=FORMAT_GROWW_ORDERS,
+        fills=fills,
+        warnings=warnings,
+        meta={"ocr_lines": len(lines)},
+    )
 
 
 def parse_groww_order_report_text(
@@ -709,6 +963,11 @@ def parse_order_book_ocr_text(
         or ("HOLDINGS" in (text or "").upper() and "ATP" in (text or "").upper())
     ):
         return parse_positions_ocr_text(text, source_name=source_name)
+    if fmt == FORMAT_GROWW_ORDERS or (
+        "ORDER VALUE" in (text or "").upper()
+        and re.search(r"(?i)de[lt]ivery", text or "")
+    ):
+        return parse_groww_orders_history_text(text, source_name=source_name)
     if fmt == FORMAT_GROWW or (
         "ORDER AGAIN" in (text or "").upper() or "ORDER REPORT" in (text or "").upper()
     ):
