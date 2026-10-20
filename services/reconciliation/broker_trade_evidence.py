@@ -90,19 +90,29 @@ def build_booking_gap_story(
     pipeline = [
         {
             "key": "recommended",
-            "label": "Recommended",
+            "label": "Reco found",
             "ok": recommended_ok,
             "text": reco_text,
         },
         {
-            "key": "trade",
-            "label": "Trade in our books",
+            "key": "trade_books",
+            "label": "Trade in books",
             "ok": trade_ok,
             "text": "Recorded" if trade_ok else "Missing",
         },
         {
+            "key": "trade_statement",
+            "label": "Trade statement",
+            "ok": bool(trade_details_has),
+            "text": (
+                (trade_details_file or "Matched")
+                if trade_details_has
+                else "Not found"
+            ),
+        },
+        {
             "key": "holding",
-            "label": "Holding",
+            "label": "Holding sync",
             "ok": holding_ok,
             "text": hold_text,
         },
@@ -215,6 +225,100 @@ def _dedupe_keep_order(values: List[Any]) -> List[Any]:
         seen.add(key)
         out.append(v)
     return out
+
+
+def build_reco_trade_map_rows(
+    per_symbol: Optional[List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    """
+    Flat rows for a collapsible Reco → Trade → Holding detail table.
+
+    Columns: reco found, trade in books, trade statement match, holding in sync.
+    """
+    rows: List[Dict[str, Any]] = []
+    for p in per_symbol or []:
+        sym = (p.get("symbol") or "").strip().upper()
+        if not sym:
+            continue
+        recos = list(p.get("recommendations") or [])
+        books = list(p.get("system_trades") or [])
+        fills = list(p.get("broker_fills") or [])
+        missing = list(p.get("missing_from_books") or p.get("unexecuted_recos") or [])
+        try:
+            delta = float(p["delta"]) if p.get("delta") is not None else None
+        except (TypeError, ValueError):
+            delta = None
+
+        reco_bits = []
+        for r in recos[:4]:
+            act = (r.get("action") or "").strip().upper()
+            q = r.get("quantity")
+            bit = act or "RECO"
+            if q is not None:
+                try:
+                    bit = f"{bit} {float(q):g}"
+                except (TypeError, ValueError):
+                    pass
+            when = (r.get("sent_at") or r.get("when_label") or "")[:10]
+            if when:
+                bit = f"{bit} ({when})"
+            reco_bits.append(bit)
+
+        stmt_ok = bool(fills) or any(bool(m.get("broker_match")) for m in missing)
+        stmt_file = next(
+            (
+                str(m.get("trade_details_file") or "").strip()
+                for m in missing
+                if m.get("broker_match") and m.get("trade_details_file")
+            ),
+            None,
+        )
+        if not stmt_file and fills:
+            stmt_file = str(
+                fills[0].get("file") or fills[0].get("filename") or ""
+            ).strip() or None
+
+        sync_ok = delta is not None and abs(delta) < 0.011
+        verdict = None
+        for m in missing:
+            if m.get("verdict"):
+                verdict = m.get("verdict")
+                break
+        if not verdict:
+            verdict = "IN_SYNC" if sync_ok else ("HAS_RECO" if recos else "OPEN")
+
+        rows.append(
+            {
+                "symbol": sym,
+                "statement_qty": p.get("statement_qty"),
+                "book_qty": p.get("book_qty"),
+                "delta": delta,
+                "reco_found": bool(recos),
+                "reco_text": ", ".join(reco_bits) if reco_bits else "—",
+                "trade_books_found": bool(books),
+                "trade_books_text": (
+                    f"{len(books)} in books" if books else "None in books"
+                ),
+                "trade_statement_match": stmt_ok,
+                "trade_statement_text": (
+                    (stmt_file or (f"{len(fills)} fill(s)" if fills else "Matched"))
+                    if stmt_ok
+                    else "Not in Trade details"
+                ),
+                "holding_in_sync": sync_ok,
+                "holding_text": (
+                    "In sync"
+                    if sync_ok
+                    else (
+                        f"Δ {delta:g}"
+                        if delta is not None
+                        else "—"
+                    )
+                ),
+                "verdict": verdict,
+            }
+        )
+    return rows
 
 
 def _canonical_next_steps(*, verdict: str, trade_details_has: bool) -> List[str]:
@@ -451,6 +555,42 @@ def save_trade_drive_link(
     return row
 
 
+def remember_client_pdf_password(client_id: int, password: str) -> bool:
+    """Append a working PDF password for this client (not displayed in UI).
+
+    Skips empty values and passwords already stored. Also skips values that
+    match KYC/agreement PAN (those are resolved separately).
+    """
+    pw = (password or "").strip()
+    if not pw:
+        return False
+    try:
+        from services.regulatory_identity_capture_service import (
+            get_client_document_passwords,
+        )
+
+        if pw in get_client_document_passwords(client_id):
+            return False
+    except Exception:
+        pass
+    link = load_trade_drive_link(client_id)
+    existing = [
+        str(p).strip() for p in (link.get("pdf_passwords") or []) if str(p).strip()
+    ]
+    if pw in existing:
+        return False
+    existing.append(pw)
+    save_trade_drive_link(client_id, pdf_passwords=existing)
+    return True
+
+
+def client_saved_pdf_passwords(client_id: int) -> List[str]:
+    link = load_trade_drive_link(client_id)
+    return [
+        str(p).strip() for p in (link.get("pdf_passwords") or []) if str(p).strip()
+    ]
+
+
 def _guess_date_from_name(name: str) -> Optional[date]:
     m = _DATE_IN_NAME_RE.search(name or "")
     if not m:
@@ -670,6 +810,17 @@ def collect_broker_fills_from_drive(
     link = load_trade_drive_link(client_id)
     folder_id = (link.get("folder_id") or "").strip()
     passwords = list(link.get("pdf_passwords") or [])
+    # Default: KYC / agreement PAN (server-side only; not stored back into links JSON)
+    try:
+        from services.regulatory_identity_capture_service import (
+            get_client_document_passwords,
+        )
+
+        for pan in get_client_document_passwords(client_id):
+            if pan not in passwords:
+                passwords.append(pan)
+    except Exception:
+        pass
     if not folder_id:
         return {
             "ok": False,
@@ -701,61 +852,86 @@ def collect_broker_fills_from_drive(
     decrypt_ok = 0
     decrypt_fail = 0
 
+    from services.reconciliation.trade_parsers import detect_and_parse_trade
+
+    format_counts: Dict[str, int] = {}
+    parse_warnings: List[str] = []
+
     for f in files:
         name = f.get("name") or ""
         mime = (f.get("mimeType") or "").lower()
         fid = f.get("id")
         if not fid:
             continue
-        if mime.startswith("image/") or name.lower().endswith(
+        is_image = mime.startswith("image/") or name.lower().endswith(
             (".jpeg", ".jpg", ".png", ".webp")
-        ):
-            screenshots.append(
-                {
-                    "name": name,
-                    "id": fid,
-                    "mimeType": mime,
-                    "note": "Order-status screenshot — open in Drive to review (OCR optional).",
-                }
-            )
-            continue
+        )
         dl = download_file_bytes(fid)
         if not dl.get("ok"):
             continue
         data = dl.get("content") or b""
         scanned += 1
-        tdate = _guess_date_from_name(name)
-        if name.lower().endswith(".xlsx") or "sheet" in mime:
-            fills.extend(_parse_xlsx_fills(data, name))
-            continue
-        if data[:5] != b"%PDF-" and "pdf" not in mime and not name.lower().endswith(
-            ".pdf"
+        parsed = detect_and_parse_trade(
+            data, filename=name or "trade.bin", passwords=passwords
+        )
+        format_counts[parsed.format_id] = format_counts.get(parsed.format_id, 0) + 1
+        for w in parsed.warnings or []:
+            parse_warnings.append(f"{name}: {w}")
+        if is_image:
+            screenshots.append(
+                {
+                    "name": name,
+                    "id": fid,
+                    "mimeType": mime,
+                    "format_id": parsed.format_id,
+                    "fills_parsed": len(parsed.fills),
+                    "note": (
+                        f"Screenshot parsed ({len(parsed.fills)} fills)."
+                        if parsed.fills
+                        else (
+                            parsed.warnings[0]
+                            if parsed.warnings
+                            else "Screenshot — OCR required to extract fills."
+                        )
+                    ),
+                }
+            )
+        if parsed.format_id in ("pdf_unreadable",) or (
+            not parsed.fills
+            and parsed.format_id.startswith("zerodha_contract")
+            and parsed.warnings
         ):
-            # nameless PDF exports
-            if data[:5] != b"%PDF-":
-                continue
-        text, used = _extract_text_from_pdf(data, passwords)
-        if not text:
             decrypt_fail += 1
-            continue
-        decrypt_ok += 1
-        # Prefer Trade Date inside PDF
-        m = re.search(
-            r"Trade\s*Date\s*:\s*(\d{1,2})/(\d{1,2})/(20\d{2})",
-            text,
-            re.I,
-        )
-        if m:
-            try:
-                tdate = date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
-            except Exception:
-                pass
-        fills.extend(
-            _parse_fills_from_text(text, source_name=name, trade_date=tdate)
-        )
+        elif parsed.fills or parsed.format_id in (
+            "zerodha_contract_note",
+            "zerodha_tradebook_xlsx",
+        ):
+            decrypt_ok += 1
+        fills.extend(parsed.fills_as_dicts())
+
+    # Positions screens are not executed trades — drop from recon evidence
+    fills = [
+        x
+        for x in fills
+        if (x.get("status") or "executed").lower() == "executed"
+        and (x.get("format_id") or "") != "broker_positions_screenshot"
+    ]
+
+    # Same security_maps.json as holdings recon → canonical Security.symbol
+    try:
+        from services.reconciliation.security_resolve import map_trade_fills
+
+        fills = map_trade_fills(fills)
+    except Exception as exc:
+        logger.warning("map_trade_fills skipped: %s", exc)
 
     if want:
-        fills = [x for x in fills if _norm(x.get("symbol")) in want]
+        fills = [
+            x
+            for x in fills
+            if _norm(x.get("symbol")) in want
+            or _norm(x.get("broker_symbol")) in want
+        ]
 
     return {
         "ok": True,
@@ -766,6 +942,8 @@ def collect_broker_fills_from_drive(
         "fills": fills,
         "screenshots": screenshots,
         "passwords_configured": bool(passwords),
+        "format_counts": format_counts,
+        "parse_warnings": parse_warnings[:40],
     }
 
 
@@ -905,9 +1083,13 @@ def analyze_reco_vs_broker_and_books(
 
     broker_by_sym: Dict[str, List[Dict[str, Any]]] = {s: [] for s in syms}
     for f in broker.get("fills") or []:
-        s = _norm(f.get("symbol"))
-        if s in broker_by_sym:
-            broker_by_sym[s].append(f)
+        keys = {
+            _norm(f.get("symbol")),
+            _norm(f.get("broker_symbol")),
+        }
+        for s in keys:
+            if s and s in broker_by_sym:
+                broker_by_sym[s].append(f)
 
     per_symbol: List[Dict[str, Any]] = []
     findings: List[str] = []
@@ -1251,6 +1433,7 @@ def analyze_reco_vs_broker_and_books(
             st.setdefault("symbol", p.get("symbol"))
             flat_stories.append(st)
     story_groups = group_booking_gap_stories(flat_stories)
+    trade_map = build_reco_trade_map_rows(per_symbol)
 
     # Prefer group titles for summary (one line per conclusion), not per-name findings
     if story_groups:
@@ -1294,6 +1477,7 @@ def analyze_reco_vs_broker_and_books(
             )
         },
         "per_symbol": per_symbol,
+        "trade_map": trade_map,
         "story_groups": story_groups,
         # Findings kept for non-UI / legacy; UI prefers story_groups
         "findings": _dedupe_keep_order(list(findings or []))[:40],

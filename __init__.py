@@ -517,6 +517,8 @@ def create_app(config_class=ProductionConfig):
         ("routes.data_integrity", "data_integrity_bp", None, "NAV_DATA_INTEGRITY_ENABLED"),
         ("routes.orchestrator_dashboard", "orchestrator_bp", None, "NAV_ORCHESTRATOR_ENABLED"),
         ("routes.intelligence_hub", "hub_bp", None, "NAV_INTELLIGENCE_HUB_ENABLED"),
+        # TEMP: trade statement OCR / parser side-by-side lab (Hub → Trade parser lab)
+        ("routes.trade_parser_lab", "trade_parser_lab_bp", None, "NAV_TRADE_PARSER_LAB_ENABLED"),
     ]
     for _mod, _attr, _prefix, _flag in _optional_nav_blueprints:
         app.config[_flag] = False

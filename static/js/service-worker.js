@@ -3,11 +3,11 @@
  * Provides offline capability and asset caching
  */
 
-const CACHE_NAME = 'inertia-app-v3';
-const RUNTIME_CACHE = 'inertia-runtime-v3';
+const CACHE_NAME = 'inertia-app-v4';
+const RUNTIME_CACHE = 'inertia-runtime-v4';
 
 // App paths that must always hit network (never serve cached 404/error)
-const NETWORK_ONLY_PATHS = /^\/unified-recommendations\/|^\/auth\/|^\/clients\/|^\/dashboard|^\/tools\//;
+const NETWORK_ONLY_PATHS = /^\/unified-recommendations\/|^\/auth\/|^\/clients\/|^\/dashboard|^\/tools\/|^\/hub\//;
 
 // Assets to cache on install
 const STATIC_ASSETS = [

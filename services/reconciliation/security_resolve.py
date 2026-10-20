@@ -316,6 +316,136 @@ def mark_ignored(row: Dict[str, Any], *, reason: str = "out_of_scope") -> Dict[s
     }
 
 
+def map_trade_fills(
+    fills: List[Dict[str, Any]],
+    *,
+    broker: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Resolve broker trade-statement symbols via the **same** ``security_maps.json``
+    (and DB / name fallbacks) used for holdings staging lines.
+
+    Each fill keeps ``broker_symbol`` (as printed on the statement) and, when
+    mapped, uses ``symbol`` = canonical ``Security.symbol`` so trade evidence
+    lines up with holdings recon.
+    """
+    if not fills:
+        return []
+    # Apply broker ticker aliases (LTIM→LTM) before map lookup
+    try:
+        from services.reconciliation.trade_parsers.order_book_screenshot import (
+            apply_broker_symbol_alias,
+        )
+    except Exception:
+
+        def apply_broker_symbol_alias(s: str) -> str:
+            return (s or "").upper().strip()
+
+    lines: List[Dict[str, Any]] = []
+    for f in fills:
+        broker_sym = (
+            (f.get("broker_symbol") or f.get("symbol") or "").strip().upper() or None
+        )
+        canon = apply_broker_symbol_alias(broker_sym or "") or broker_sym
+        lines.append(
+            {
+                "qty": float(f.get("quantity") or 0),
+                "isin": f.get("isin"),
+                # Prefer modern/canonical ticker for NSE + map lookup
+                "nse_symbol": canon,
+                "broker_code": broker_sym,
+                "raw_name": f.get("raw_name") or f.get("company_name") or broker_sym,
+            }
+        )
+    resolved = resolve_lines(lines, broker=broker)
+    by_i = {int(r["line_index"]): r for r in resolved}
+    out: List[Dict[str, Any]] = []
+    for i, f in enumerate(fills):
+        nf = dict(f)
+        broker_sym = (
+            (f.get("broker_symbol") or f.get("symbol") or "").strip().upper() or None
+        )
+        nf["broker_symbol"] = broker_sym
+        r = by_i.get(i) or {}
+        if r.get("security_symbol"):
+            nf["symbol"] = str(r["security_symbol"]).upper().strip()
+            nf["security_id"] = r.get("security_id")
+            nf["map_status"] = r.get("status") or "mapped"
+            nf["match_method"] = r.get("match_method")
+            nf["match_score"] = r.get("match_score")
+        else:
+            # Leave broker ticker as symbol so existing filters still work
+            if broker_sym and not nf.get("symbol"):
+                nf["symbol"] = broker_sym
+            nf.setdefault("security_id", None)
+            nf["map_status"] = r.get("status") or "unmapped"
+            nf["match_method"] = r.get("match_method")
+            nf["match_score"] = r.get("match_score")
+        out.append(nf)
+
+    # Re-score OCR prices against Security.current_price (digit / ₹-glue fixes)
+    _refine_fill_prices_with_current(out)
+    return out
+
+
+def _refine_fill_prices_with_current(fills: List[Dict[str, Any]]) -> None:
+    """In-place: nudge fill prices toward Security.current_price when OCR is off."""
+    ids = [
+        int(f["security_id"])
+        for f in fills
+        if f.get("security_id") is not None and f.get("price") is not None
+    ]
+    if not ids:
+        return
+    try:
+        from models import Security
+    except Exception:
+        return
+    try:
+        rows = (
+            Security.query.filter(Security.id.in_(ids))
+            .filter(Security.current_price.isnot(None))
+            .all()
+        )
+    except Exception:
+        return
+    by_id = {
+        int(s.id): float(s.current_price)
+        for s in rows
+        if s.current_price is not None and float(s.current_price) > 0
+    }
+    if not by_id:
+        return
+    try:
+        from services.reconciliation.trade_parsers.order_book_screenshot import (
+            refine_ocr_price,
+        )
+    except Exception:
+        return
+    for f in fills:
+        sid = f.get("security_id")
+        if sid is None or sid not in by_id:
+            continue
+        raw_px = f.get("price")
+        if raw_px is None:
+            continue
+        try:
+            old = float(raw_px)
+        except Exception:
+            continue
+        new = refine_ocr_price(old, by_id[int(sid)])
+        if new is None or abs(new - old) < 1e-9:
+            continue
+        f["price"] = new
+        f["price_refined_from"] = old
+        qty = f.get("quantity")
+        try:
+            if qty is not None and float(qty) > 0:
+                f["amount"] = round(float(qty) * float(new), 2)
+        except Exception:
+            pass
+
+
 def apply_confirmations(
     review_rows: List[Dict[str, Any]],
     confirmations: List[Dict[str, Any]],

@@ -7,6 +7,7 @@ from services.reconciliation.broker_trade_evidence import (
     _parse_fills_from_text,
     analyze_reco_vs_broker_and_books,
     build_booking_gap_story,
+    build_reco_trade_map_rows,
 )
 
 pytestmark = pytest.mark.no_app
@@ -109,9 +110,12 @@ def test_unexecuted_reco_when_no_book_no_broker(monkeypatch):
     u0 = row["unexecuted_recos"][0]
     assert u0["verdict"] == "EXECUTED_NOT_RECORDED"
     assert u0.get("pipeline")
-    assert any(s["key"] == "trade" and s["ok"] is False for s in u0["pipeline"])
+    assert any(s["key"] == "trade_books" and s["ok"] is False for s in u0["pipeline"])
     assert "books" in (u0.get("headline") or u0["detail"]).lower()
     assert "fill" not in (u0.get("headline") or "").lower()
+    assert out.get("trade_map")
+    assert out["trade_map"][0]["symbol"] == "MARICO"
+    assert out["trade_map"][0]["reco_found"] is True
 
     # No holdings context / not ahead → may still be not executed
     out2 = analyze_reco_vs_broker_and_books(
@@ -275,9 +279,10 @@ def test_booking_gap_story_plain_language_when_not_in_trade_details():
     )
     assert story["verdict"] == "EXECUTED_NOT_RECORDED"
     assert "fill" not in story["headline"].lower()
-    assert story["pipeline"][0]["ok"] is True
-    assert story["pipeline"][1]["ok"] is False
-    assert story["pipeline"][2]["ok"] is True
+    assert story["pipeline"][0]["key"] == "recommended" and story["pipeline"][0]["ok"] is True
+    assert story["pipeline"][1]["key"] == "trade_books" and story["pipeline"][1]["ok"] is False
+    assert story["pipeline"][2]["key"] == "trade_statement" and story["pipeline"][2]["ok"] is False
+    assert story["pipeline"][3]["key"] == "holding" and story["pipeline"][3]["ok"] is True
     assert any("client" in s.lower() for s in story["next_steps"])
 
 

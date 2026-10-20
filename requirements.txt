@@ -85,6 +85,7 @@ weasyprint>=66.0
 pyotp>=2.9.0
 qrcode[pil]>=8.0
 Pillow>=11.3.0
+pytesseract>=0.3.10
 appdirs==1.4.4
 
 # Optional AI (ENABLE_AI_SERVICES=true). Hybrid report imports anthropic lazily.

@@ -177,33 +177,75 @@ def _sync_pan_to_kyc_if_empty(lead_id: Optional[int], pan: str) -> None:
         logger.debug("KYC PAN backfill skipped lead=%s", lead_id, exc_info=True)
 
 
-def _client_has_stored_pan(client_id: int) -> bool:
+def _pans_from_raw(raw: Optional[str]) -> List[str]:
+    """Split stored pan fields ('PAN1 and PAN2', 'PAN1/PAN2') into valid PANs."""
+    out: List[str] = []
+    seen = set()
+    for part in re.split(r"\s+and\s+|[/|,;]+", raw or "", flags=re.IGNORECASE):
+        pan = normalize_pan(part)
+        if is_valid_pan(pan) and pan not in seen:
+            seen.add(pan)
+            out.append(pan)
+    return out
+
+
+def get_client_document_passwords(client_id: int) -> List[str]:
+    """PAN(s) from KYC / agreement variables for opening broker PDFs.
+
+    Intended as **server-side only** defaults — never render these in HTML/JSON.
+    Order: agreement vars (client) → KYC → agreement vars (lead).
+    """
     from models import AgreementVariables, Lead
 
-    row = (
-        AgreementVariables.query.filter(
-            AgreementVariables.client_id == client_id,
-            AgreementVariables.variable_name == "pan",
-        )
-        .order_by(AgreementVariables.id.desc())
-        .first()
-    )
-    if row and is_valid_pan(row.variable_value):
-        return True
-    for L in Lead.query.filter_by(client_id=client_id).all():
-        if get_lead_kyc_pan(L.id):
-            return True
-        lead_row = (
+    out: List[str] = []
+    seen = set()
+
+    def _add_raw(raw: Optional[str]) -> None:
+        for pan in _pans_from_raw(raw):
+            if pan not in seen:
+                seen.add(pan)
+                out.append(pan)
+
+    try:
+        rows = (
             AgreementVariables.query.filter(
-                AgreementVariables.lead_id == L.id,
+                AgreementVariables.client_id == int(client_id),
                 AgreementVariables.variable_name == "pan",
             )
             .order_by(AgreementVariables.id.desc())
-            .first()
+            .all()
         )
-        if lead_row and is_valid_pan(lead_row.variable_value):
-            return True
-    return False
+        for row in rows:
+            _add_raw(row.variable_value)
+    except Exception:
+        logger.debug("client agreement PAN lookup skipped", exc_info=True)
+
+    try:
+        for L in Lead.query.filter_by(client_id=int(client_id)).all():
+            _add_raw(get_lead_kyc_pan(L.id))
+            lead_rows = (
+                AgreementVariables.query.filter(
+                    AgreementVariables.lead_id == L.id,
+                    AgreementVariables.variable_name == "pan",
+                )
+                .order_by(AgreementVariables.id.desc())
+                .all()
+            )
+            for row in lead_rows:
+                _add_raw(row.variable_value)
+    except Exception:
+        logger.debug("lead KYC/agreement PAN lookup skipped", exc_info=True)
+
+    return out
+
+
+def _client_has_stored_pan(client_id: int) -> bool:
+    return bool(get_client_document_passwords(client_id))
+
+
+def client_has_document_password(client_id: int) -> bool:
+    """True when a KYC/agreement PAN is available to try as a PDF password."""
+    return _client_has_stored_pan(client_id)
 
 
 def refresh_client_identity_from_agreement(

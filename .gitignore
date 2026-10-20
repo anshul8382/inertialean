@@ -86,6 +86,7 @@ id_ed25519
 # Local-only tooling (deployment agent, SSH config) — never commit or deploy
 .local/
 .deploy_preserve/
+.tools/
 
 # Debug scripts with hardcoded credentials
 debug*.py

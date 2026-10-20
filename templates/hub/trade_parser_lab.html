@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}Trade parser lab (temp){% endblock %}
+{% block content %}
+<div class="container-fluid mt-3 mb-5">
+  <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3">
+    <div>
+      <h2 class="mb-1">
+        <i class="fas fa-vial text-warning"></i> Trade parser lab
+        <span class="badge bg-warning text-dark ms-1">TEMP</span>
+      </h2>
+      <p class="text-muted small mb-0">
+        Upload or pick a preloaded Drive sample — compare the file with extracted fills side by side.
+        Local / debug only (<code>TRADE_PARSER_LAB=1</code>).
+      </p>
+    </div>
+    <div class="small">
+      {% if ocr.ready %}
+        <span class="badge bg-success">OCR ready</span>
+        <span class="text-muted">{{ ocr.tesseract_cmd }}</span>
+      {% else %}
+        <span class="badge bg-danger">OCR not ready</span>
+        <span class="text-muted">{{ ocr.resolve_error or ocr.pytesseract_error }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-3">
+    {# ---- left: samples + upload ---- #}
+    <div class="col-lg-3">
+      <div class="border rounded p-3 bg-light">
+        <div class="fw-semibold mb-2">Upload</div>
+        <form method="post" enctype="multipart/form-data" class="mb-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="upload">
+          <input type="file" name="trade_file" class="form-control form-control-sm mb-2"
+                 accept=".pdf,.xlsx,.xls,.csv,.jpg,.jpeg,.png,.webp,image/*,application/pdf">
+          <label class="form-label small mb-0">PDF passwords (optional, comma-sep)</label>
+          <input type="text" name="passwords" class="form-control form-control-sm mb-2"
+                 value="{{ passwords }}" placeholder="PAN / client id">
+          <button type="submit" class="btn btn-primary btn-sm w-100">Parse upload</button>
+        </form>
+
+        <div class="fw-semibold mb-2">Preloaded samples
+          <span class="text-muted fw-normal">({{ samples|length }})</span>
+        </div>
+        <div class="list-group list-group-flush small" style="max-height: 70vh; overflow: auto;">
+          {% for s in samples %}
+          <a href="{{ url_for('trade_parser_lab.lab_home', fixture=s.id) }}"
+             class="list-group-item list-group-item-action px-2 py-2 {% if preview and preview.fixture_id == s.id %}active{% endif %}">
+            <div class="d-flex justify-content-between gap-1">
+              <span class="text-truncate" title="{{ s.name }}">{{ s.name }}</span>
+              <span class="badge bg-{% if s.kind == 'image' %}info{% elif s.kind == 'pdf' %}secondary{% else %}success{% endif %} text-dark">{{ s.kind }}</span>
+            </div>
+            <div class="text-muted" style="font-size: 0.7rem;">{{ s.folder }} · {{ (s.bytes / 1024)|round(0)|int }} KB</div>
+          </a>
+          {% else %}
+          <div class="text-muted">No fixtures under tests/fixtures/trade_statements/</div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    {# ---- right: side by side ---- #}
+    <div class="col-lg-9">
+      {% if not result %}
+      <div class="alert alert-light border">
+        Pick a preloaded sample (images are best for OCR compare) or upload a trade file.
+      </div>
+      {% else %}
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <strong class="text-truncate">{{ preview.name if preview else result.filename }}</strong>
+        <span class="badge bg-dark">{{ result.format_id }}</span>
+        <span class="badge bg-primary">{{ result.fill_count }} fills</span>
+        {% for w in result.warnings[:3] %}
+          <span class="badge bg-warning text-dark text-truncate" style="max-width: 28rem;" title="{{ w }}">{{ w }}</span>
+        {% endfor %}
+      </div>
+
+      <div class="row g-2" style="min-height: 70vh;">
+        <div class="col-md-6">
+          <div class="border rounded h-100 p-2 bg-white">
+            <div class="small text-muted mb-1">Source</div>
+            {% if preview and preview.kind == 'image' %}
+              <img src="{{ preview.url }}" alt="trade screenshot"
+                   class="img-fluid border" style="max-height: 75vh; width: 100%; object-fit: contain;">
+            {% elif preview and preview.kind == 'pdf' %}
+              <iframe src="{{ preview.url }}" title="PDF" class="w-100 border" style="height: 75vh;"></iframe>
+            {% elif preview %}
+              <div class="p-3">
+                <p class="mb-2">Spreadsheet / file — preview not rendered.</p>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ preview.url }}" target="_blank" rel="noopener">Download / open</a>
+              </div>
+            {% else %}
+              <div class="text-muted p-3">No preview</div>
+            {% endif %}
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="border rounded h-100 p-2 bg-white d-flex flex-column">
+            <div class="small mb-1">
+              <span class="fw-semibold">
+                {% if result.format_id == 'broker_positions_screenshot' %}Open positions{% else %}Extracted fills{% endif %}
+              </span>
+              {% if result.maps_note %}
+                <span class="badge bg-dark ms-1">{{ result.maps_note }}</span>
+              {% endif %}
+            </div>
+            {% if result.format_id == 'broker_positions_screenshot' %}
+            <div class="alert alert-info py-2 small">
+              This is a <strong>Positions</strong> screen (open qty + avg), not executed orders.
+              For trade fills use <strong>Order Report / EXECUTED</strong> order book or a contract note.
+            </div>
+            {% endif %}
+            {% if result.fills %}
+            <div class="table-responsive flex-grow-1" style="max-height: 45vh; overflow: auto;">
+              <table class="table table-sm table-striped mb-0">
+                <thead class="table-light sticky-top">
+                  <tr>
+                    <th>Broker symbol</th>
+                    <th>Mapped (holdings)</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th class="text-end">Qty</th>
+                    <th class="text-end">Price</th>
+                    <th class="text-end">Amount</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for f in result.fills %}
+                  <tr>
+                    <td>
+                      <code>{{ f.broker_symbol or f.symbol }}</code>
+                      {% if f.isin %}<div class="text-muted" style="font-size:0.65rem;">{{ f.isin }}</div>{% endif %}
+                    </td>
+                    <td>
+                      {% if f.map_status == 'mapped' or f.map_status == 'suggested' %}
+                        <code>{{ f.symbol }}</code>
+                        <div class="text-muted" style="font-size:0.65rem;">{{ f.match_method or f.map_status }}{% if f.security_id %} · id {{ f.security_id }}{% endif %}</div>
+                      {% elif f.broker_symbol and f.broker_symbol != f.symbol %}
+                        <code>{{ f.symbol }}</code>
+                        <div class="text-muted" style="font-size:0.65rem;">alias</div>
+                      {% else %}
+                        <span class="text-muted">unmapped</span>
+                      {% endif %}
+                    </td>
+                    <td>
+                      {% if f.side == 'sell' %}
+                        <span class="badge bg-danger">SELL</span>
+                      {% else %}
+                        <span class="badge bg-success">BUY</span>
+                      {% endif %}
+                    </td>
+                    <td class="small">{{ f.status or 'executed' }}</td>
+                    <td class="text-end">{{ f.quantity }}</td>
+                    <td class="text-end">{% if f.price is not none %}{{ '%.2f'|format(f.price) }}{% else %}—{% endif %}</td>
+                    <td class="text-end">{% if f.amount is not none %}{{ '%.2f'|format(f.amount) }}{% else %}—{% endif %}</td>
+                    <td>{{ f.trade_date or '—' }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <div class="alert alert-warning py-2 small">No fills extracted.</div>
+            {% endif %}
+
+            {% if result.ocr_text %}
+            <div class="mt-2 flex-grow-1 d-flex flex-column" style="min-height: 0;">
+              <div class="small text-muted mb-1">Raw OCR text</div>
+              <pre class="small border rounded p-2 bg-light mb-0 flex-grow-1"
+                   style="max-height: 28vh; overflow: auto; white-space: pre-wrap;">{{ result.ocr_text }}</pre>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

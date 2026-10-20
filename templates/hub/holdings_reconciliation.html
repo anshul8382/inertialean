@@ -592,7 +592,7 @@
           {% endif %}
           {% set be = ov.broker_evidence or {} %}
           {% set hvr = ov.holdings_vs_reco or {} %}
-          {% if be and (be.story_groups or be.summary or be.broker or be.per_symbol) %}
+          {% if be and (be.story_groups or be.summary or be.broker or be.per_symbol or be.trade_map) %}
           <div class="border rounded p-2 small mb-3">
             <div class="fw-semibold mb-1">Recommended → Trade → Holding</div>
             {% if be.broker and be.broker.reason == 'trade_folder_not_linked' %}
@@ -641,6 +641,65 @@
               {% endfor %}
             {% elif be.summary %}
               <div class="text-muted mb-0">{{ be.summary }}</div>
+            {% endif %}
+            {% if be.trade_map %}
+            <details class="mt-2">
+              <summary class="text-muted" style="cursor:pointer;">
+                Reco / trade map ({{ be.trade_map|length }} name{{ 's' if be.trade_map|length != 1 else '' }})
+              </summary>
+              <div class="table-responsive mt-2">
+                <table class="table table-sm table-bordered mb-0 align-middle" style="font-size:0.75rem;">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Reco found</th>
+                      <th>Trade in books</th>
+                      <th>Trade statement</th>
+                      <th>Holding sync</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in be.trade_map[:40] %}
+                    <tr>
+                      <td>
+                        <code>{{ row.symbol }}</code>
+                        {% if row.verdict and row.verdict != 'IN_SYNC' %}
+                        <div class="text-muted" style="font-size:0.65rem;">{{ row.verdict }}</div>
+                        {% endif %}
+                      </td>
+                      <td>
+                        <span class="badge {% if row.reco_found %}text-bg-success{% else %}text-bg-secondary{% endif %}">
+                          {% if row.reco_found %}Yes{% else %}No{% endif %}
+                        </span>
+                        <div class="text-muted mt-1">{{ row.reco_text }}</div>
+                      </td>
+                      <td>
+                        <span class="badge {% if row.trade_books_found %}text-bg-success{% else %}text-bg-danger{% endif %}">
+                          {% if row.trade_books_found %}Yes{% else %}No{% endif %}
+                        </span>
+                        <div class="text-muted mt-1">{{ row.trade_books_text }}</div>
+                      </td>
+                      <td>
+                        <span class="badge {% if row.trade_statement_match %}text-bg-success{% else %}text-bg-secondary{% endif %}">
+                          {% if row.trade_statement_match %}Match{% else %}No{% endif %}
+                        </span>
+                        <div class="text-muted mt-1">{{ row.trade_statement_text }}</div>
+                      </td>
+                      <td>
+                        <span class="badge {% if row.holding_in_sync %}text-bg-success{% else %}text-bg-warning text-dark{% endif %}">
+                          {% if row.holding_in_sync %}In sync{% else %}Gap{% endif %}
+                        </span>
+                        <div class="text-muted mt-1">{{ row.holding_text }}</div>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+              {% if be.trade_map|length > 40 %}
+              <div class="text-muted mt-1">+{{ be.trade_map|length - 40 }} more</div>
+              {% endif %}
+            </details>
             {% endif %}
           </div>
           {% endif %}

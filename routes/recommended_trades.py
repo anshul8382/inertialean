@@ -339,6 +339,15 @@ def client_recommended_trades(client_id):
     securities = Security.query.all()
     date_session_blocks = _build_date_session_trade_blocks(trades_by_date)
     hold_line_count = sum(1 for t in recommended_trades if t.is_hold_line)
+    broker_upload_has_saved_pan = False
+    try:
+        from services.regulatory_identity_capture_service import (
+            client_has_document_password,
+        )
+
+        broker_upload_has_saved_pan = client_has_document_password(client_id)
+    except Exception:
+        broker_upload_has_saved_pan = False
 
     return render_template('recommended_trades/client_trades.html',
                          client=client,
@@ -347,7 +356,267 @@ def client_recommended_trades(client_id):
                          date_session_blocks=date_session_blocks,
                          recommended_trades=recommended_trades,  # Keep for backward compatibility
                          hold_line_count=hold_line_count,
-                         securities=securities)
+                         securities=securities,
+                         broker_upload_has_saved_pan=broker_upload_has_saved_pan)
+
+
+@recommended_trades_bp.route('/client/<int:client_id>/parse-broker-upload', methods=['POST'])
+@login_required
+@handle_errors
+def client_parse_broker_upload(client_id):
+    """Parse an uploaded broker screenshot / contract / tradebook into editable fills.
+
+    Does **not** write trades — the client page prefills qty / actual price for
+    matching recommendation rows after the user reviews the editable preview.
+    """
+    Client.query.get_or_404(client_id)
+    f = request.files.get("file") or request.files.get("upload")
+    if not f or not getattr(f, "filename", None):
+        return jsonify({"success": False, "error": "Choose a file to upload"}), 400
+    data = f.read()
+    if not data:
+        return jsonify({"success": False, "error": "Empty file"}), 400
+    if len(data) > 25 * 1024 * 1024:
+        return jsonify({"success": False, "error": "File too large (max 25MB)"}), 400
+
+    # User override first, then saved PDF passwords, then KYC/agreement PAN.
+    # Never echo any of these values back to the browser.
+    user_pw = (
+        request.form.get("passwords") or request.form.get("password") or ""
+    ).strip()
+    passwords: list = []
+    if user_pw:
+        passwords = [p.strip() for p in re.split(r"[,;\s]+", user_pw) if p.strip()]
+
+    try:
+        from services.reconciliation.broker_trade_evidence import (
+            client_saved_pdf_passwords,
+        )
+
+        for pw in client_saved_pdf_passwords(client_id):
+            if pw not in passwords:
+                passwords.append(pw)
+    except Exception:
+        logger.debug("saved pdf password lookup skipped", exc_info=True)
+
+    used_saved_identity = False
+    try:
+        from services.regulatory_identity_capture_service import (
+            get_client_document_passwords,
+        )
+
+        for pan in get_client_document_passwords(client_id):
+            if pan not in passwords:
+                passwords.append(pan)
+                used_saved_identity = True
+    except Exception:
+        logger.debug("client document password lookup skipped", exc_info=True)
+
+    try:
+        from services.reconciliation.trade_parser_lab import parse_trade_bytes
+
+        result = parse_trade_bytes(
+            data,
+            filename=f.filename or "upload.bin",
+            passwords=passwords,
+            include_fixture_passwords=False,
+        )
+    except Exception as exc:
+        logger.exception("broker upload parse failed client=%s", client_id)
+        return jsonify({"success": False, "error": f"Parse failed: {exc}"}), 500
+
+    format_id = result.get("format_id") or ""
+    meta = result.get("meta") or {}
+    fills = result.get("fills") or []
+    fname_low = (f.filename or "").lower()
+    looks_pdf = fname_low.endswith(".pdf") or data[:5] == b"%PDF-"
+
+    needs_password = (
+        format_id == "pdf_password_required"
+        or bool(meta.get("password_required"))
+        # Empty extract on a PDF after trying PAN/saved passwords — ask user
+        or (looks_pdf and format_id == "pdf_unreadable" and not fills)
+    )
+    if needs_password:
+        if user_pw:
+            err = (
+                "Could not open this PDF with that password "
+                "(wrong password, or the file is a scanned image with no text). "
+                "Check the password and try again."
+            )
+        elif used_saved_identity:
+            err = (
+                "Saved identity (KYC/agreement) did not unlock this PDF. "
+                "Enter the PDF password below and parse again — "
+                "it will be saved for this client."
+            )
+        else:
+            err = (
+                "This PDF needs a password (or has no extractable text). "
+                "Enter the PDF password and try again — it will be saved for this client."
+            )
+        return jsonify(
+            {
+                "success": False,
+                "password_required": True,
+                "error": err,
+                "filename": f.filename,
+                "format_id": format_id,
+                "used_saved_identity_password": used_saved_identity,
+            }
+        ), 401
+
+    # Remember user-supplied password when parse unlocked a usable PDF/trade file
+    password_saved = False
+    usable = bool(fills) or format_id in (
+        "zerodha_contract_note",
+        "zerodha_tradebook_xlsx",
+        "zerodha_holdings_soa",
+    )
+    if user_pw and usable:
+        try:
+            from services.reconciliation.broker_trade_evidence import (
+                remember_client_pdf_password,
+            )
+
+            for p in re.split(r"[,;\s]+", user_pw):
+                p = p.strip()
+                if p and remember_client_pdf_password(client_id, p):
+                    password_saved = True
+        except Exception:
+            logger.debug("remember pdf password skipped", exc_info=True)
+
+    # Compact editable rows for the UI (no password / PAN fields)
+    preview = []
+    for row in fills:
+        preview.append(
+            {
+                "symbol": (row.get("symbol") or row.get("broker_symbol") or "").upper(),
+                "broker_symbol": (row.get("broker_symbol") or row.get("symbol") or "").upper(),
+                "side": (row.get("side") or row.get("trade_type") or "buy").lower(),
+                "quantity": row.get("quantity"),
+                "price": row.get("price"),
+                "trade_date": row.get("trade_date"),
+                "status": row.get("status"),
+                "security_id": row.get("security_id"),
+                "map_status": row.get("map_status"),
+            }
+        )
+
+    return jsonify(
+        {
+            "success": True,
+            "filename": f.filename,
+            "format_id": format_id,
+            "fills": preview,
+            "fill_count": len(preview),
+            "warnings": result.get("warnings") or [],
+            "ocr_text": (result.get("ocr_text") or "")[:8000],
+            "maps_note": result.get("maps_note") or "",
+            "used_saved_identity_password": used_saved_identity,
+            "password_saved_for_client": password_saved,
+        }
+    )
+
+
+@recommended_trades_bp.route('/client/<int:client_id>/record-broker-fill', methods=['POST'])
+@login_required
+@handle_errors
+def client_record_broker_fill(client_id):
+    """Create a pending recommendation from an unmatched broker-extracted fill.
+
+    Used when the statement has a trade that is not in the open recommendation list.
+    """
+    from access_control import can_access_client
+
+    if not can_access_client(int(client_id)):
+        return jsonify({"success": False, "error": "Access denied"}), 403
+    Client.query.get_or_404(client_id)
+
+    symbol = (request.form.get("symbol") or "").strip().upper()
+    side = (request.form.get("side") or request.form.get("action") or "buy").strip().lower()
+    if side not in ("buy", "sell"):
+        side = "buy"
+    qty_raw = (request.form.get("quantity") or "").strip()
+    px_raw = (request.form.get("price") or "").strip().replace(",", "")
+    trade_date = (request.form.get("trade_date") or "").strip()
+    security_id = request.form.get("security_id", type=int)
+
+    if not symbol:
+        return jsonify({"success": False, "error": "Symbol is required"}), 400
+    try:
+        quantity = int(float(qty_raw))
+    except Exception:
+        return jsonify({"success": False, "error": "Valid quantity is required"}), 400
+    if quantity <= 0:
+        return jsonify({"success": False, "error": "Quantity must be positive"}), 400
+    try:
+        price = Decimal(px_raw) if px_raw else None
+    except Exception:
+        return jsonify({"success": False, "error": "Invalid price"}), 400
+    if price is None or price <= 0:
+        return jsonify({"success": False, "error": "Price is required"}), 400
+
+    if not security_id:
+        sec = Security.query.filter(Security.symbol == symbol).first()
+        if not sec:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": f"No security mapped for {symbol}. Map it in holdings recon first.",
+                }
+            ), 400
+        security_id = sec.id
+    else:
+        sec = Security.query.get(security_id)
+        if not sec:
+            return jsonify({"success": False, "error": "Security not found"}), 400
+
+    notes = f"Recorded from broker extract"
+    if trade_date:
+        notes += f" ({trade_date})"
+    notes += f" · {symbol} {side.upper()} {quantity} @ {price}"
+
+    try:
+        rec = Recommendation(
+            client_id=int(client_id),
+            security_id=int(security_id),
+            action=side,
+            quantity=quantity,
+            target_price=price,
+            actual_price=price,
+            notes=notes[:500],
+            created_by=current_user.id,
+            status="pending",
+        )
+        if trade_date:
+            try:
+                # YYYY-MM-DD → executed_at hint only after save; keep pending for now
+                y, m, d = [int(x) for x in trade_date.split("-")[:3]]
+                rec.batch_created_at = datetime(y, m, d, 12, 0, 0)
+            except Exception:
+                pass
+        from services.recommendation_trade_normalizer import sync_recommendation_trade_action
+
+        sync_recommendation_trade_action(rec)
+        db.session.add(rec)
+        db.session.commit()
+        return jsonify(
+            {
+                "success": True,
+                "trade_id": rec.id,
+                "symbol": sec.symbol,
+                "action": side,
+                "quantity": quantity,
+                "price": float(price),
+                "reload": True,
+                "message": f"Added {sec.symbol} {side.upper()} as a pending recommendation.",
+            }
+        )
+    except Exception as exc:
+        db.session.rollback()
+        logger.exception("record broker fill failed client=%s", client_id)
+        return jsonify({"success": False, "error": str(exc)}), 500
 
 
 @recommended_trades_bp.route('/client/<int:client_id>/quick-update', methods=['POST'])
