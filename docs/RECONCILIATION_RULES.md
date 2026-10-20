@@ -127,6 +127,8 @@ return, weight) → Preview → Approve.
 | Id | Samples |
 |----|---------|
 | `zerodha_kite_csv` | Kite CSV `Instrument` / `Qty.` |
+| `zerodha_kite_xlsx` | Kite Excel export `Instrument` / `Qty.` / `Avg. cost` |
+| `axis_direct_holdings_xlsx` | Axis Direct Portfolio Holdings Statement (`Stock Name` + `ISIN` + `Open Qty`) |
 | `groww_holdings_xlsx` | Groww / similar Symbol+ISIN xlsx |
 | `cdsl_demat_xlsx` | Demat holdings with header + ISIN table |
 | `broker_shortcode_xlsx` | Broker short codes + ISIN |

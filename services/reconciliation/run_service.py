@@ -7,7 +7,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from access_control import can_access_client
 from services.reconciliation.match_engine import run_position_match
 from services.reconciliation.parsers import detect_and_parse
-from services.reconciliation.security_resolve import apply_confirmations, resolve_lines
+from services.reconciliation.security_resolve import (
+    apply_confirmations,
+    resolve_lines,
+    sort_review_rows_for_confirm,
+)
 from services.reconciliation.store import (
     list_runs,
     load_run,
@@ -240,7 +244,7 @@ def combine_statement_runs(
                 "rows": rows,
             }
         )
-    merged = merge_statement_rows(sources)
+    merged = sort_review_rows_for_confirm(merge_statement_rows(sources))
     if not merged:
         raise ValueError("No lines to combine from the selected statements.")
 

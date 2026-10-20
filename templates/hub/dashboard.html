@@ -27,6 +27,15 @@
         <i class="fas fa-chevron-right text-muted"></i>
       </div>
     </a>
+    <a href="{{ url_for('rec_execution.dashboard') }}" class="im-list-card">
+      <div class="im-list-card__header">
+        <div>
+          <h2 class="im-list-card__title"><i class="fas fa-check-double me-2"></i>Reco execution</h2>
+          <p class="im-list-card__meta">Recommendation flags, SLAs, by-client triage</p>
+        </div>
+        <i class="fas fa-chevron-right text-muted"></i>
+      </div>
+    </a>
     <a href="{{ url_for('hub.investment_dashboard') }}" class="im-list-card">
       <div class="im-list-card__header">
         <div>
@@ -75,6 +84,7 @@
           <div class="mt-auto d-flex flex-wrap gap-2">
             <a href="{{ url_for('hub.operational_dashboard') }}" class="btn btn-primary">Open operational intelligence</a>
             <a href="{{ url_for('hub.holdings_reconciliation') }}" class="btn btn-outline-primary">Holdings recon</a>
+            <a href="{{ url_for('rec_execution.dashboard') }}" class="btn btn-outline-primary">Reco execution</a>
           </div>
         </div>
       </div>
@@ -87,6 +97,19 @@
           <p class="text-muted small mb-3">Upload demat statements, match vs books, investigate mismatches with emails and broker notes.</p>
           <div class="mt-auto">
             <a href="{{ url_for('hub.holdings_reconciliation') }}" class="btn btn-outline-primary">Open holdings recon</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <div class="card shadow-sm h-100">
+        <div class="card-body d-flex flex-column">
+          <h4 class="mb-2"><i class="fas fa-check-double text-primary me-2"></i>Reco execution</h4>
+          <p class="text-muted small mb-3">Recommendation execution monitor — open issues, SLAs, and by-client triage.</p>
+          <div class="mt-auto d-flex flex-wrap gap-2">
+            <a href="{{ url_for('rec_execution.dashboard') }}" class="btn btn-outline-primary">Open dashboard</a>
+            <a href="{{ url_for('rec_execution.sla_settings') }}" class="btn btn-outline-secondary">SLA settings</a>
           </div>
         </div>
       </div>

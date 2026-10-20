@@ -5,9 +5,35 @@ from unittest.mock import patch
 import pytest
 
 from services.reconciliation.run_service import confirm_run
-from services.reconciliation.security_resolve import apply_confirmations, mark_ignored
+from services.reconciliation.security_resolve import (
+    apply_confirmations,
+    mark_ignored,
+    sort_review_rows_for_confirm,
+)
 
 pytestmark = pytest.mark.no_app
+
+
+def test_sort_review_rows_unmapped_first():
+    rows = [
+        {"line_index": 0, "status": "mapped", "raw_name": "Zee"},
+        {"line_index": 1, "status": "unmapped", "raw_name": "Beta"},
+        {"line_index": 2, "status": "suggested", "raw_name": "Alpha"},
+        {"line_index": 3, "status": "ignored", "raw_name": "Own"},
+        {"line_index": 4, "status": "unmapped", "raw_name": "Aaa"},
+    ]
+    out = sort_review_rows_for_confirm(rows)
+    assert [r["status"] for r in out] == [
+        "unmapped",
+        "unmapped",
+        "suggested",
+        "mapped",
+        "ignored",
+    ]
+    assert out[0]["raw_name"] == "Aaa"
+    assert out[1]["raw_name"] == "Beta"
+    # Form indices unchanged
+    assert {r["line_index"] for r in out} == {0, 1, 2, 3, 4}
 
 
 def test_mark_ignored_clears_security():

@@ -38,6 +38,365 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def build_booking_gap_story(
+    *,
+    symbol: str,
+    action: str,
+    quantity: float,
+    when: str,
+    book_has_trade: bool,
+    trade_details_has: bool,
+    trade_details_file: Optional[str] = None,
+    trade_folder_linked: bool = True,
+    has_screenshots: bool = False,
+    holdings_ok: bool = True,
+    held_qty: Optional[float] = None,
+    partial: bool = False,
+) -> Dict[str, Any]:
+    """
+    Plain-language story for advisor UI.
+
+    Pipeline: Recommended → Trade (our books) → Holding
+    Green = ok, Red = missing / problem.
+    """
+    sym = (symbol or "").upper().strip()
+    act = (action or "buy").strip().lower()
+    act_label = "BUY" if act in ("buy", "b") else "SELL"
+    qty = float(quantity or 0)
+    held = float(held_qty) if held_qty is not None else None
+    when_s = (when or "").strip()
+    # Dates stay short; session names must not be sliced to "Portfolio "
+    if when_s and len(when_s) >= 8 and when_s[4:5] == "-" and when_s[7:8] == "-":
+        when_bit = f" ({when_s[:10]})"
+    elif when_s:
+        when_bit = f" ({when_s})"
+    else:
+        when_bit = ""
+
+    recommended_ok = True
+    trade_ok = bool(book_has_trade)
+    holding_ok = bool(holdings_ok)
+
+    hold_text = "Shown on statement" if holding_ok else "Not on statement"
+    if holding_ok and partial and held is not None:
+        hold_text = f"{held:g} of {qty:g} on statement"
+    elif holding_ok and held is not None:
+        hold_text = f"{held:g} on statement"
+
+    reco_text = f"{act_label} {qty:g}{when_bit}"
+    if partial and held is not None:
+        reco_text = f"{act_label} {qty:g}{when_bit} — {held:g} done so far"
+
+    pipeline = [
+        {
+            "key": "recommended",
+            "label": "Recommended",
+            "ok": recommended_ok,
+            "text": reco_text,
+        },
+        {
+            "key": "trade",
+            "label": "Trade in our books",
+            "ok": trade_ok,
+            "text": "Recorded" if trade_ok else "Missing",
+        },
+        {
+            "key": "holding",
+            "label": "Holding",
+            "ok": holding_ok,
+            "text": hold_text,
+        },
+    ]
+
+    # Short headline — no jargon
+    if holding_ok and not trade_ok and partial and held is not None:
+        headline = (
+            f"{sym}: recommended {act_label} {qty:g}{when_bit}; "
+            f"holdings show {held:g} of that (partial). "
+            f"Those {held:g} are not in our books yet."
+        )
+        verdict = "EXECUTED_NOT_RECORDED"
+        book_qty = held
+    elif holding_ok and not trade_ok:
+        headline = (
+            f"{sym}: we recommended {act_label} {qty:g}{when_bit}, "
+            f"the client holds it, but this trade is not in our books."
+        )
+        verdict = "EXECUTED_NOT_RECORDED"
+        book_qty = qty
+    elif not holding_ok and not trade_ok:
+        headline = (
+            f"{sym}: we recommended {act_label} {qty:g}{when_bit}, "
+            f"but it does not show in holdings and is not in our books."
+        )
+        verdict = "RECO_NOT_EXECUTED"
+        book_qty = qty
+    else:
+        headline = f"{sym}: {act_label} {qty:g}{when_bit}"
+        verdict = "OK" if trade_ok else "EXECUTED_NOT_RECORDED"
+        book_qty = qty
+
+    next_steps: List[str] = []
+    evidence_note = None
+
+    if holding_ok and not trade_ok:
+        look_qty = book_qty
+        if trade_details_has:
+            fname = trade_details_file or "the Trade details folder"
+            evidence_note = f"Found this buy/sell in: {fname}"
+            next_steps = [
+                f"Open {fname} and confirm {sym} {act_label} ~{look_qty:g}.",
+                f"Add {act_label} {look_qty:g} into our books "
+                f"(trade happened; we did not record it).",
+            ]
+            if partial and held is not None and held + 0.51 < qty:
+                next_steps.append(
+                    f"Remaining {qty - held:g} of the {qty:g} recommendation is still open."
+                )
+        elif not trade_folder_linked:
+            next_steps = [
+                "Link the client’s Trade details Drive folder (Upload / trade evidence), then refresh.",
+                "Or ask the client to share broker trade statements for this period.",
+            ]
+        else:
+            next_steps = [
+                f"Look in Trade details for {sym} {act_label} ~{look_qty:g}"
+                + (" (partial of the larger reco)." if partial else "."),
+                "Check order screenshots or other PDFs in that folder.",
+                "Check any multi-month trade Excel (broker export) if available.",
+                "If still nothing — ask the client to share trades for this period.",
+            ]
+            if has_screenshots:
+                next_steps.insert(
+                    1,
+                    "There are order screenshots in Trade details — open them and look for this name.",
+                )
+            if partial and held is not None and held + 0.51 < qty:
+                next_steps.append(
+                    f"Remaining {qty - held:g} of recommended {qty:g} still looks open."
+                )
+    elif not holding_ok and not trade_ok:
+        next_steps = [
+            "Looks like this recommendation was not done (or not yet).",
+            "Confirm with the advisor / client before booking anything.",
+        ]
+
+    detail = headline
+    if evidence_note:
+        detail = f"{headline} {evidence_note}."
+    if next_steps:
+        detail = detail + " Next: " + " ".join(next_steps[:2])
+
+    return {
+        "verdict": verdict,
+        "headline": headline,
+        "detail": detail,
+        "evidence_note": evidence_note,
+        "next_steps": next_steps,
+        "pipeline": pipeline,
+        "trade_details_has": bool(trade_details_has),
+        "trade_details_file": trade_details_file,
+        "symbol": sym,
+        "action": act_label,
+        "quantity": qty,
+        "held_qty": held,
+        "partial": bool(partial),
+        "sent_at": when_s,
+    }
+
+
+def _dedupe_keep_order(values: List[Any]) -> List[Any]:
+    seen: Set[str] = set()
+    out: List[Any] = []
+    for v in values or []:
+        key = str(v).strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(v)
+    return out
+
+
+def _canonical_next_steps(*, verdict: str, trade_details_has: bool) -> List[str]:
+    """One shared instruction list per conclusion (no per-name variants)."""
+    if verdict == "EXECUTED_NOT_RECORDED":
+        if trade_details_has:
+            return [
+                "Open the Trade details file named for each line and confirm the trade.",
+                "Add that trade into our books (it happened; we did not record it).",
+            ]
+        return [
+            "Look in Trade details (PDFs / Excel / screenshots) for these names.",
+            "If found — add the trade to books.",
+            "If not — ask the client to share trades for this period.",
+        ]
+    if verdict == "RECO_NOT_EXECUTED":
+        return [
+            "Confirm with advisor/client whether these recommendations were executed.",
+            "Do not book until trade proof exists.",
+        ]
+    return []
+
+
+def group_booking_gap_stories(
+    stories: List[Dict[str, Any]],
+    *,
+    remaining_symbols: Optional[Set[str]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Collapse many same-conclusion rows into one card.
+
+    Group key is coarse: verdict + whether Trade details found the trade.
+    Names are listed once; instructions appear once per group.
+    """
+    remaining = {
+        str(s or "").upper().strip() for s in (remaining_symbols or set()) if s
+    }
+    buckets: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
+    order: List[Tuple[Any, ...]] = []
+    item_seen: Dict[Tuple[Any, ...], Set[str]] = {}
+
+    for raw in stories or []:
+        s = raw.get("story") if isinstance(raw.get("story"), dict) else raw
+        if not isinstance(s, dict):
+            continue
+        verdict = s.get("verdict") or raw.get("verdict") or "EXECUTED_NOT_RECORDED"
+        has_td = bool(s.get("trade_details_has") or raw.get("broker_match"))
+        key = (verdict, has_td)
+        if key not in buckets:
+            buckets[key] = {
+                "verdict": verdict,
+                "trade_details_has": has_td,
+                "evidence_note": s.get("evidence_note") or raw.get("evidence_note"),
+                "items": [],
+                "reco_dates": [],
+            }
+            order.append(key)
+            item_seen[key] = set()
+        elif not buckets[key].get("evidence_note"):
+            buckets[key]["evidence_note"] = s.get("evidence_note") or raw.get(
+                "evidence_note"
+            )
+
+        sym = (s.get("symbol") or raw.get("symbol") or "").upper().strip()
+        act = s.get("action") or raw.get("action") or "BUY"
+        qty = s.get("quantity")
+        if qty is None:
+            qty = raw.get("quantity")
+        when_raw = s.get("sent_at") or raw.get("sent_at") or ""
+        when = str(when_raw)[:10] if when_raw else ""
+        # Prefer date-looking when; drop truncated session junk like "Portfolio "
+        if when and not (len(when) >= 8 and when[4:5] == "-"):
+            when = ""
+        held = s.get("held_qty")
+        if held is None:
+            held = raw.get("held_qty")
+        partial = bool(s.get("partial") or raw.get("partial"))
+        label = f"{sym} {act}"
+        if qty is not None:
+            try:
+                qf = float(qty)
+                if partial and held is not None:
+                    label = f"{sym} {act} {float(held):g} of {qf:g}"
+                else:
+                    label = f"{sym} {act} {qf:g}"
+            except (TypeError, ValueError):
+                label = f"{sym} {act} {qty}"
+        if when:
+            label = f"{label} ({when})"
+        dedupe_key = f"{sym}|{act}|{qty}|{when}|{held}"
+        if dedupe_key in item_seen[key]:
+            continue
+        item_seen[key].add(dedupe_key)
+        buckets[key]["items"].append(
+            {
+                "symbol": sym,
+                "action": act,
+                "quantity": qty,
+                "sent_at": when,
+                "label": label,
+                "in_remaining": (not remaining) or (sym in remaining),
+            }
+        )
+        if when and when not in buckets[key]["reco_dates"]:
+            buckets[key]["reco_dates"].append(when)
+
+    groups: List[Dict[str, Any]] = []
+    for key in order:
+        g = buckets[key]
+        items = g["items"]
+        items.sort(
+            key=lambda it: (0 if it.get("in_remaining") else 1, it.get("label") or "")
+        )
+        n = len(items)
+        verdict = g["verdict"]
+        has_td = bool(g.get("trade_details_has"))
+        dates = g["reco_dates"]
+        date_bit = ""
+        if len(dates) == 1:
+            date_bit = f" · reco {dates[0]}"
+        elif len(dates) > 1:
+            date_bit = f" · {len(dates)} reco dates"
+
+        if verdict == "EXECUTED_NOT_RECORDED":
+            title = (
+                f"{n} name(s): recommended + in holdings, "
+                f"trade missing from books{date_bit}"
+            )
+            badge = "Trade missing from books"
+            pipe = [
+                {"key": "recommended", "label": "Recommended", "ok": True, "text": "Yes"},
+                {
+                    "key": "trade",
+                    "label": "Trade in our books",
+                    "ok": False,
+                    "text": "Missing",
+                },
+                {"key": "holding", "label": "Holding", "ok": True, "text": "On statement"},
+            ]
+        elif verdict == "RECO_NOT_EXECUTED":
+            title = f"{n} name(s): recommendation may not have been done{date_bit}"
+            badge = "May not be done"
+            pipe = [
+                {"key": "recommended", "label": "Recommended", "ok": True, "text": "Yes"},
+                {
+                    "key": "trade",
+                    "label": "Trade in our books",
+                    "ok": False,
+                    "text": "Missing",
+                },
+                {
+                    "key": "holding",
+                    "label": "Holding",
+                    "ok": False,
+                    "text": "Not on statement",
+                },
+            ]
+        else:
+            title = f"{n} name(s): {verdict}{date_bit}"
+            badge = str(verdict)
+            pipe = []
+
+        groups.append(
+            {
+                "verdict": verdict,
+                "badge": badge,
+                "title": title,
+                "pipeline": pipe,
+                "items": items,
+                "item_labels": _dedupe_keep_order([it["label"] for it in items]),
+                "next_steps": _canonical_next_steps(
+                    verdict=verdict, trade_details_has=has_td
+                ),
+                "evidence_note": g.get("evidence_note") if has_td else None,
+                "count": n,
+                "reco_dates": dates,
+                "symbols": _dedupe_keep_order([it["symbol"] for it in items]),
+            }
+        )
+    return groups
+
+
 def links_path() -> Path:
     root = _repo_root() / "var" / "holdings_reconciliation"
     root.mkdir(parents=True, exist_ok=True)
@@ -488,18 +847,27 @@ def _recos_for_symbols(
         if not sym:
             continue
         sent = r.sent_at.date() if r.sent_at else None
+        status = (r.status or "").strip().lower()
+        sess_name = names.get(int(r.session_id)) if r.session_id else None
+        # Prefer a real send date; else keep full session name (not truncated later).
+        when_label = sent.isoformat() if sent else (sess_name or None)
         out.setdefault(sym, []).append(
             {
                 "sent_at": sent.isoformat() if sent else None,
+                "when_label": when_label,
                 "action": (r.action or "").lower(),
                 "quantity": float(r.quantity) if r.quantity is not None else None,
-                "status": r.status,
+                "status": status,
                 "executed_at": (
                     r.executed_at.isoformat() if r.executed_at else None
                 ),
                 "session_id": r.session_id,
-                "session_name": names.get(int(r.session_id)) if r.session_id else None,
+                "session_name": sess_name,
                 "id": r.id,
+                "source": "system_reco",
+                # Draft/pending with no send date are not emailed advice yet.
+                "emailed": bool(sent)
+                or status in ("sent", "executed", "closed", "partial"),
             }
         )
     return out
@@ -587,77 +955,58 @@ def analyze_reco_vs_broker_and_books(
         if sys_f is None:
             sys_f = book_qty
 
-        missing_from_books = []
-        for r in rs:
-            st = (r.get("status") or "").lower()
-            if st in ("executed", "closed", "cancelled"):
-                continue
-            if r.get("executed_at"):
-                continue
-            act = (r.get("action") or "").lower()
-            qty = r.get("quantity")
-            if act not in ("buy", "sell") or qty is None:
-                continue
-            # Matching book trade near sent_at (±45d)
-            sent = None
+        def _side_ok_book(tt: str, act: str) -> bool:
+            tt = (tt or "").lower()
+            if act == "buy":
+                return tt in ("buy", "b")
+            if act == "sell":
+                return tt in ("sell", "s")
+            return False
+
+        def _near(
+            d_iso: Optional[str], center: Optional[date], days: int = 45
+        ) -> bool:
+            if not center or not d_iso:
+                return True
             try:
-                sent = date.fromisoformat(str(r.get("sent_at") or "")[:10])
+                td = date.fromisoformat(str(d_iso)[:10])
+                return abs((td - center).days) <= days
             except Exception:
-                sent = None
-            def _side_ok_book(tt: str) -> bool:
-                tt = (tt or "").lower()
-                if act == "buy":
-                    return tt in ("buy", "b")
-                if act == "sell":
-                    return tt in ("sell", "s")
-                return False
+                return True
 
-            def _near(d_iso: Optional[str], center: Optional[date], days: int = 45) -> bool:
-                if not center or not d_iso:
-                    return True
-                try:
-                    td = date.fromisoformat(str(d_iso)[:10])
-                    return abs((td - center).days) <= days
-                except Exception:
-                    return True
-
-            matched_book = False
-            # Single fill
+        def _book_covers(act: str, qty: float, sent: Optional[date]) -> bool:
             for t in books:
-                if not _side_ok_book(t.get("type") or ""):
+                if not _side_ok_book(t.get("type") or "", act):
                     continue
                 if not _near(t.get("date"), sent):
                     continue
                 if _qty_close(float(t.get("quantity") or 0), float(qty)):
-                    matched_book = True
-                    break
-            # Split fills same day / ±3d (e.g. PAYTM 24+6 = 30)
-            if not matched_book:
-                window = []
+                    return True
+            window = []
+            for t in books:
+                if not _side_ok_book(t.get("type") or "", act):
+                    continue
+                if not _near(t.get("date"), sent, days=45):
+                    continue
+                window.append(float(t.get("quantity") or 0))
+            if window and _qty_close(sum(window), float(qty), tol=1.0):
+                return True
+            if sent:
+                by_day: Dict[str, float] = {}
                 for t in books:
-                    if not _side_ok_book(t.get("type") or ""):
+                    if not _side_ok_book(t.get("type") or "", act):
                         continue
-                    if not _near(t.get("date"), sent, days=45):
+                    if not _near(t.get("date"), sent, days=3):
                         continue
-                    window.append(float(t.get("quantity") or 0))
-                if window and _qty_close(sum(window), float(qty), tol=1.0):
-                    matched_book = True
-                elif sent:
-                    # cluster by calendar day
-                    by_day: Dict[str, float] = {}
-                    for t in books:
-                        if not _side_ok_book(t.get("type") or ""):
-                            continue
-                        if not _near(t.get("date"), sent, days=3):
-                            continue
-                        day = str(t.get("date") or "")[:10]
-                        by_day[day] = by_day.get(day, 0.0) + float(
-                            t.get("quantity") or 0
-                        )
-                    if any(_qty_close(v, float(qty), tol=1.0) for v in by_day.values()):
-                        matched_book = True
+                    day = str(t.get("date") or "")[:10]
+                    by_day[day] = by_day.get(day, 0.0) + float(t.get("quantity") or 0)
+                if any(_qty_close(v, float(qty), tol=1.0) for v in by_day.values()):
+                    return True
+            return False
 
-            matched_broker = False
+        def _broker_covers(
+            act: str, qty: float, sent: Optional[date]
+        ) -> Tuple[bool, Optional[str]]:
             for f in bfs:
                 side = (f.get("side") or "buy").lower()
                 if act != side:
@@ -665,10 +1014,10 @@ def analyze_reco_vs_broker_and_books(
                 if not _near(f.get("trade_date"), sent):
                     continue
                 if _qty_close(float(f.get("quantity") or 0), float(qty)):
-                    matched_broker = True
-                    break
-            if not matched_broker and sent:
+                    return True, f.get("source_file") or f.get("name")
+            if sent:
                 by_day_b: Dict[str, float] = {}
+                by_day_file: Dict[str, str] = {}
                 for f in bfs:
                     side = (f.get("side") or "buy").lower()
                     if act != side:
@@ -679,72 +1028,194 @@ def analyze_reco_vs_broker_and_books(
                     by_day_b[day] = by_day_b.get(day, 0.0) + float(
                         f.get("quantity") or 0
                     )
-                if any(_qty_close(v, float(qty), tol=1.0) for v in by_day_b.values()):
-                    matched_broker = True
-            if matched_book or matched_broker:
+                    if day not in by_day_file:
+                        by_day_file[day] = f.get("source_file") or f.get("name") or ""
+                for day, v in by_day_b.items():
+                    if _qty_close(v, float(qty), tol=1.0):
+                        return True, by_day_file.get(day)
+            return False, None
+
+        # Positive gap on statement vs books (shares ahead).
+        gap_pos = (
+            float(delta_f)
+            if delta_f is not None and delta_f > 0.01
+            else (
+                float(stmt_f) - float(sys_f)
+                if stmt_f is not None
+                and sys_f is not None
+                and float(stmt_f) > float(sys_f) + 0.01
+                else 0.0
+            )
+        )
+
+        # Build open emailed/sent candidates only (skip drafts like Aug BUY 5).
+        candidates: List[Dict[str, Any]] = []
+        for r in rs:
+            st = (r.get("status") or "").lower()
+            if st in ("executed", "closed", "cancelled"):
+                continue
+            if r.get("executed_at"):
+                continue
+            if not r.get("emailed") and st in ("pending", "draft", ""):
+                continue
+            act = (r.get("action") or "").lower()
+            qty = r.get("quantity")
+            if act not in ("buy", "sell") or qty is None:
+                continue
+            sent = None
+            try:
+                sent = date.fromisoformat(str(r.get("sent_at") or "")[:10])
+            except Exception:
+                sent = None
+            if _book_covers(act, float(qty), sent):
+                continue
+            matched_broker, broker_file = _broker_covers(act, float(qty), sent)
+            # Also treat broker match on partial held qty
+            if (
+                not matched_broker
+                and act == "buy"
+                and gap_pos > 0.01
+                and gap_pos + 0.51 < float(qty)
+            ):
+                matched_broker, broker_file = _broker_covers(act, gap_pos, sent)
+            candidates.append(
+                {
+                    "r": r,
+                    "act": act,
+                    "qty": float(qty),
+                    "sent": sent,
+                    "matched_broker": matched_broker,
+                    "broker_file": broker_file,
+                }
+            )
+
+        missing_from_books = []
+        attributed = False  # one gap → one BUY story
+
+        # Prefer: full qty match to gap, else largest emailed BUY that covers gap as partial
+        buy_cands = [c for c in candidates if c["act"] == "buy"]
+        buy_cands.sort(
+            key=lambda c: (
+                0 if gap_pos > 0 and _qty_close(gap_pos, c["qty"]) else 1,
+                0 if c["r"].get("emailed") else 1,
+                -c["qty"],
+            )
+        )
+
+        for c in buy_cands:
+            if attributed and gap_pos > 0.01:
+                # Gap already explained by a better reco — do not invent more stories
+                continue
+            r = c["r"]
+            qty = c["qty"]
+            when = (
+                r.get("when_label")
+                or r.get("sent_at")
+                or r.get("session_name")
+                or "reco"
+            )
+            full = gap_pos > 0.01 and _qty_close(gap_pos, qty)
+            partial = bool(
+                gap_pos > 0.01 and (not full) and gap_pos + 0.51 < qty
+            )
+            if gap_pos <= 0.01:
+                # No holdings ahead — reco may simply be undone
+                holdings_ok = False
+                partial = False
+                held = None
+            elif full:
+                holdings_ok = True
+                held = gap_pos
+            elif partial:
+                # e.g. holdings +3 belong to June BUY 30 — not to a draft BUY 5
+                holdings_ok = True
+                held = gap_pos
+            else:
+                # Gap larger than this reco or unrelated — skip this reco for booking story
                 continue
 
-            # Holdings vs books decides the story for missing book/broker fill.
-            # BUY + holdings ahead of books → executed, missed recording.
-            # BUY + holdings not ahead → may not have been executed.
-            # SELL + holdings still high → sell likely not executed.
-            # SELL + holdings lower / books still long → sell executed, not booked.
-            when = r.get("sent_at") or r.get("session_name") or "reco"
-            holdings_ahead = bool(
-                delta_f is not None
-                and delta_f > 0.01
-                or (
-                    stmt_f is not None
-                    and sys_f is not None
-                    and stmt_f > sys_f + 0.01
-                )
+            story = build_booking_gap_story(
+                symbol=sym,
+                action="buy",
+                quantity=qty,
+                when=str(when),
+                book_has_trade=False,
+                trade_details_has=c["matched_broker"],
+                trade_details_file=c["broker_file"],
+                trade_folder_linked=bool(broker.get("ok")),
+                has_screenshots=bool(broker.get("screenshots")),
+                holdings_ok=holdings_ok,
+                held_qty=held,
+                partial=partial,
             )
-            gap_matches = bool(
-                delta_f is not None and _qty_close(abs(delta_f), float(qty))
-            )
-
-            if act == "buy" and (holdings_ahead or gap_matches):
-                verdict = "EXECUTED_NOT_RECORDED"
-                detail = (
-                    f"{sym} {act.upper()} {qty:g} ({when}): recommended and appears "
-                    f"in holdings, but no matching system trade"
-                    f"{'' if matched_broker else ' (and no fill in linked contract notes)'}"
-                    f" — likely executed; we missed recording it. "
-                    f"Add BUY {qty:g} to books (or confirm booking)."
-                )
-            elif act == "sell" and holdings_ahead:
-                # Still long on statement vs books expecting a sell
-                verdict = "RECO_NOT_EXECUTED"
-                detail = (
-                    f"{sym} {act.upper()} {qty:g} ({when}): recommended sell, "
-                    f"holdings still look long / no matching system trade — "
-                    f"looks not executed."
-                )
-            elif act == "sell" and delta_f is not None and delta_f < -0.01:
-                verdict = "EXECUTED_NOT_RECORDED"
-                detail = (
-                    f"{sym} {act.upper()} {qty:g} ({when}): books still long vs "
-                    f"holdings with no matching system trade — likely sell was "
-                    f"executed; we missed recording it. Add SELL {qty:g} to books."
-                )
-            else:
-                verdict = "RECO_NOT_EXECUTED"
-                detail = (
-                    f"{sym} {act.upper()} {qty:g} ({when}): no matching system trade "
-                    f"and no matching fill in linked contract notes, and holdings "
-                    f"do not show the extra qty — looks not executed."
-                )
-
             missing_from_books.append(
                 {
                     **r,
-                    "book_match": matched_book,
-                    "broker_match": matched_broker,
-                    "verdict": verdict,
-                    "detail": detail,
+                    "book_match": False,
+                    "broker_match": c["matched_broker"],
+                    "verdict": story["verdict"],
+                    "detail": story["detail"],
+                    "headline": story["headline"],
+                    "next_steps": story["next_steps"],
+                    "pipeline": story["pipeline"],
+                    "evidence_note": story.get("evidence_note"),
+                    "trade_details_file": c["broker_file"],
+                    "partial": partial,
+                    "held_qty": held,
+                    "story": story,
                 }
             )
-            findings.append(detail)
+            findings.append(story["detail"])
+            if holdings_ok:
+                attributed = True
+
+        # SELL candidates (unchanged idea; one story each if relevant)
+        for c in candidates:
+            if c["act"] != "sell":
+                continue
+            r = c["r"]
+            qty = c["qty"]
+            when = (
+                r.get("when_label")
+                or r.get("sent_at")
+                or r.get("session_name")
+                or "reco"
+            )
+            holdings_ahead = gap_pos > 0.01
+            if holdings_ahead:
+                holdings_ok = False
+            elif delta_f is not None and delta_f < -0.01:
+                holdings_ok = True
+            else:
+                holdings_ok = False
+            story = build_booking_gap_story(
+                symbol=sym,
+                action="sell",
+                quantity=qty,
+                when=str(when),
+                book_has_trade=False,
+                trade_details_has=c["matched_broker"],
+                trade_details_file=c["broker_file"],
+                trade_folder_linked=bool(broker.get("ok")),
+                has_screenshots=bool(broker.get("screenshots")),
+                holdings_ok=holdings_ok,
+            )
+            missing_from_books.append(
+                {
+                    **r,
+                    "book_match": False,
+                    "broker_match": c["matched_broker"],
+                    "verdict": story["verdict"],
+                    "detail": story["detail"],
+                    "headline": story["headline"],
+                    "next_steps": story["next_steps"],
+                    "pipeline": story["pipeline"],
+                    "evidence_note": story.get("evidence_note"),
+                    "trade_details_file": c["broker_file"],
+                    "story": story,
+                }
+            )
+            findings.append(story["detail"])
 
         per_symbol.append(
             {
@@ -763,25 +1234,47 @@ def analyze_reco_vs_broker_and_books(
 
     n_missed = sum(
         1
-        for f in findings
-        if "missed recording" in f.lower() or "missed recording" in f
+        for p in per_symbol
+        for u in (p.get("missing_from_books") or [])
+        if (u.get("verdict") or "") == "EXECUTED_NOT_RECORDED"
     )
-    n_not_exec = len(findings) - n_missed
-    if findings:
+    n_not_exec = sum(
+        1
+        for p in per_symbol
+        for u in (p.get("missing_from_books") or [])
+        if (u.get("verdict") or "") == "RECO_NOT_EXECUTED"
+    )
+    flat_stories: List[Dict[str, Any]] = []
+    for p in per_symbol:
+        for u in p.get("missing_from_books") or []:
+            st = dict(u.get("story") or u)
+            st.setdefault("symbol", p.get("symbol"))
+            flat_stories.append(st)
+    story_groups = group_booking_gap_stories(flat_stories)
+
+    # Prefer group titles for summary (one line per conclusion), not per-name findings
+    if story_groups:
+        summary = " · ".join(
+            str(g.get("title") or "").rstrip(".") for g in story_groups if g.get("title")
+        )
+        if summary:
+            summary = summary + "."
+        else:
+            summary = ""
+    elif findings:
         parts = []
         if n_missed:
             parts.append(
-                f"{n_missed} reco(s) look executed but not recorded in books"
+                f"{n_missed} name(s): recommended + in holdings, but trade missing from our books"
             )
         if n_not_exec:
-            parts.append(f"{n_not_exec} reco(s) look not executed")
+            parts.append(f"{n_not_exec} name(s): recommendation may not have been done")
         summary = "; ".join(parts) + "."
     else:
         summary = (
-            "No reco/book/broker gaps for focus symbols "
-            "(or trade folder not linked / empty)."
+            "No gaps for these names (or Trade details folder not linked / empty)."
             if broker.get("ok")
-            else (broker.get("message") or "Trade folder not linked.")
+            else (broker.get("message") or "Trade details folder not linked.")
         )
 
     return {
@@ -801,7 +1294,9 @@ def analyze_reco_vs_broker_and_books(
             )
         },
         "per_symbol": per_symbol,
-        "findings": findings[:40],
+        "story_groups": story_groups,
+        # Findings kept for non-UI / legacy; UI prefers story_groups
+        "findings": _dedupe_keep_order(list(findings or []))[:40],
         "summary": summary,
     }
 
@@ -852,7 +1347,8 @@ def run_broker_evidence_for_breaks(
         as_of=as_of,
         break_context=break_context,
     )
-    # Attach short note onto each break diagnosis
+    # Attach short note onto each break diagnosis (no full headline dump —
+    # overview story_groups already show the shared narrative).
     by_sym = {p["symbol"]: p for p in pack.get("per_symbol") or []}
     for b in breaks or []:
         sym = _norm(b.get("symbol"))
@@ -861,13 +1357,18 @@ def run_broker_evidence_for_breaks(
             continue
         d = dict(b.get("diagnosis") or {})
         notes = list(d.get("investigation_notes") or [])
+        stories = []
+        short_labels: List[str] = []
         for u in info.get("missing_from_books") or info.get("unexecuted_recos") or []:
-            notes.append(u.get("detail"))
+            stories.append(u.get("story") or u)
             verdict = u.get("verdict") or "EXECUTED_NOT_RECORDED"
-            label = (
-                f"{verdict} — {u.get('sent_at') or u.get('session_name') or 'reco'}"
-            )
-            # Prefer executed-not-recorded over timing / generic
+            if verdict == "EXECUTED_NOT_RECORDED":
+                label = "Trade missing from books"
+            elif verdict == "RECO_NOT_EXECUTED":
+                label = "Recommendation may not be done"
+            else:
+                label = str(verdict)
+            short_labels.append(label)
             hyp = str(d.get("top_hypothesis") or "")
             if (
                 not hyp
@@ -875,26 +1376,132 @@ def run_broker_evidence_for_breaks(
                 or hyp.startswith("TIMING")
                 or hyp.startswith("RECO_NOT_EXECUTED")
                 or verdict == "EXECUTED_NOT_RECORDED"
+                or "not recorded" in hyp.lower()
+                or "EXECUTED_NOT_RECORDED" in hyp
             ):
                 if hyp and not d.get("prior_hypothesis") and hyp != label:
                     d["prior_hypothesis"] = hyp
                 d["top_hypothesis"] = label
+        for lab in _dedupe_keep_order(short_labels):
+            if lab not in notes:
+                notes.append(lab)
         if info.get("broker_fills"):
-            notes.append(
-                f"Broker contract notes: {len(info['broker_fills'])} fill(s) for {sym}."
+            note = (
+                f"Trade details: found {len(info['broker_fills'])} broker trade(s) for {sym}."
             )
-        elif pack.get("broker", {}).get("ok"):
-            notes.append(
-                f"No {sym} fill found in linked Drive contract notes "
-                f"(scanned {pack['broker'].get('files_scanned')} file(s))."
+            if note not in notes:
+                notes.append(note)
+        elif pack.get("broker", {}).get("ok") and stories:
+            note = (
+                f"No {sym} trade found in linked Trade details "
+                f"(checked {pack['broker'].get('files_scanned')} file(s))."
             )
+            if note not in notes:
+                notes.append(note)
         d["broker_evidence"] = {
             "broker_fills": info.get("broker_fills") or [],
             "unexecuted_recos": info.get("unexecuted_recos") or [],
             "missing_from_books": info.get("missing_from_books") or [],
+            "stories": stories,
             "system_trade_count": len(info.get("system_trades") or []),
         }
-        d["investigation_notes"] = notes
+        if stories:
+            d["booking_gap_stories"] = stories
+        d["investigation_notes"] = _dedupe_keep_order(notes)
         b["diagnosis"] = d
     pack["symbols"] = ordered
     return pack
+
+
+def symbols_covered_by_story_groups(
+    story_groups: Optional[List[Dict[str, Any]]],
+    *,
+    verdicts: Optional[Set[str]] = None,
+) -> Set[str]:
+    """Symbols already explained by Recommended→Trade→Holding groups."""
+    out: Set[str] = set()
+    want = verdicts
+    for g in story_groups or []:
+        if want is not None and (g.get("verdict") or "") not in want:
+            continue
+        for s in g.get("symbols") or []:
+            if s:
+                out.add(str(s).upper().strip())
+        for it in g.get("items") or []:
+            sym = (it.get("symbol") or "").upper().strip()
+            if sym:
+                out.add(sym)
+    return out
+
+
+def filter_hvr_hits_against_broker(
+    hvr_pack: Dict[str, Any],
+    broker_pack: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Drop Confirm-with-client rows already covered by broker story groups
+    (same EXECUTED_NOT_RECORDED / trade-missing conclusion).
+    """
+    if not isinstance(hvr_pack, dict):
+        return hvr_pack
+    covered = symbols_covered_by_story_groups(
+        broker_pack.get("story_groups") if isinstance(broker_pack, dict) else None,
+        verdicts={"EXECUTED_NOT_RECORDED"},
+    )
+    if not covered:
+        return hvr_pack
+    hits = list(hvr_pack.get("hits") or [])
+    kept = []
+    for h in hits:
+        sym = str(h.get("symbol") or "").upper().strip()
+        hyp = str(h.get("hypothesis") or "")
+        # Same story as Recommended→Trade→Holding — hide duplicate card line
+        if sym in covered and hyp in (
+            "EXECUTED_NOT_RECORDED",
+            "POSSIBLE_DUPLICATE_CLIENT_ORDER",
+        ):
+            continue
+        kept.append(h)
+    out = dict(hvr_pack)
+    out["hits"] = kept
+    if kept:
+        out["summary"] = (
+            f"{len(kept)} name(s) need advisor confirmation with client "
+            f"(not already covered by trade-missing groups)."
+        )
+    else:
+        out["summary"] = (
+            "No extra Confirm-with-client cues "
+            "(covered by Recommended → Trade → Holding)."
+            if hits
+            else hvr_pack.get("summary")
+        )
+    out["deduped_against_broker"] = len(hits) - len(kept)
+    return out
+
+
+def slim_remaining_notes_against_broker(
+    remaining_notes: List[Dict[str, Any]],
+    broker_pack: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """
+    Keep pending expanders for qty, but drop repeated “what to do” prose
+    when Recommended→Trade→Holding already covers the name.
+    """
+    covered = symbols_covered_by_story_groups(
+        broker_pack.get("story_groups") if isinstance(broker_pack, dict) else None,
+        verdicts={"EXECUTED_NOT_RECORDED", "RECO_NOT_EXECUTED"},
+    )
+    if not covered or not remaining_notes:
+        return remaining_notes
+    out: List[Dict[str, Any]] = []
+    for n in remaining_notes:
+        row = dict(n)
+        sym = str(row.get("symbol") or "").upper().strip()
+        if sym in covered:
+            row["summary"] = "Covered above (Recommended → Trade → Holding)."
+            row["potential_issues"] = []
+            row["checks"] = []
+            # Keep delta / gap / suspects for qty drill-down
+        out.append(row)
+    return out

@@ -27,6 +27,31 @@
         "Qty."
       ]
     },
+    "zerodha_kite_xlsx": {
+      "id": "zerodha_kite_xlsx",
+      "extensions": [
+        ".xlsx",
+        ".xls"
+      ],
+      "fingerprints": [
+        "Instrument",
+        "Qty.",
+        "Avg. cost"
+      ]
+    },
+    "axis_direct_holdings_xlsx": {
+      "id": "axis_direct_holdings_xlsx",
+      "extensions": [
+        ".xlsx",
+        ".xls"
+      ],
+      "fingerprints": [
+        "Portfolio Holdings Statement as on",
+        "Stock Name",
+        "Open Qty",
+        "As on Date"
+      ]
+    },
     "groww_holdings_xlsx": {
       "id": "groww_holdings_xlsx",
       "extensions": [

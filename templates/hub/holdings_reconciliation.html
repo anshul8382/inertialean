@@ -287,6 +287,7 @@
         <div class="card-header py-2"><strong class="small text-uppercase text-muted">1. Confirm as-of &amp; security maps</strong></div>
         <div class="card-body">
           <p class="small text-muted mb-2">
+            Rows are sorted <strong>unmapped → suggested → mapped</strong> so open maps stay at the top.
             Blue <span class="badge bg-info text-dark">suggested</span> rows are pre-selected from a name match.
             Change the dropdown if wrong, then Confirm (tick Remember to reuse next time).
             Unmapped lines that are the client's own / outside advisory scope: choose
@@ -440,19 +441,26 @@
       {% set ov = mr.overall or {} %}
 
       <div class="card shadow-sm mb-3">
-        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+        <div class="card-header py-2">
           <strong class="small text-uppercase text-muted">2. Match results</strong>
-          <form method="post" class="mb-0" data-recon-long="1">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="action" value="refresh_investigation">
-            <input type="hidden" name="run_id" value="{{ run.id }}">
-            <button type="submit" class="btn btn-outline-secondary btn-sm"
-                    title="Re-run match + investigation from this upload. Emails reused if already archived.">
-              Refresh investigation
-            </button>
-          </form>
         </div>
         <div class="card-body">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 p-2 border rounded bg-light">
+            <div class="small text-muted mb-0">
+              Re-run match + diagnosis after new emails, Trade details, or map fixes.
+              Emails are reused if already archived.
+            </div>
+            <form method="post" class="mb-0 flex-shrink-0" data-recon-long="1">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="action" value="refresh_investigation">
+              <input type="hidden" name="run_id" value="{{ run.id }}">
+              <button type="submit" class="btn btn-primary"
+                      style="min-height:44px;min-width:12rem;"
+                      title="Re-run match + investigation from this upload. Emails reused if already archived.">
+                Refresh investigation
+              </button>
+            </form>
+          </div>
           <p class="mb-3">
             As-of <strong>{{ mr.as_of }}</strong> ·
             matched <strong>{{ mr.matched_count }}</strong> ·
@@ -609,7 +617,60 @@
             </ul>
           </div>
           {% endif %}
+          {% set be = ov.broker_evidence or {} %}
           {% set hvr = ov.holdings_vs_reco or {} %}
+          {% if be and (be.story_groups or be.summary or be.broker or be.per_symbol) %}
+          <div class="border rounded p-2 small mb-3">
+            <div class="fw-semibold mb-1">Recommended → Trade → Holding</div>
+            {% if be.broker and be.broker.reason == 'trade_folder_not_linked' %}
+            <div class="text-warning mb-2">No Trade details folder linked — add it under Upload / trade evidence, then refresh.</div>
+            {% endif %}
+            {% if be.broker and be.broker.files_scanned %}
+            <div class="text-muted mb-2">Checked {{ be.broker.files_scanned }} Trade details file(s)
+              {% if be.broker.screenshots %} · {{ be.broker.screenshots|length }} screenshot(s){% endif %}
+            </div>
+            {% endif %}
+            {% if be.story_groups %}
+              {% for g in be.story_groups[:8] %}
+              <div class="border rounded p-2 mb-2 bg-white">
+                <div class="fw-semibold mb-1">
+                  <span class="badge {% if g.verdict == 'EXECUTED_NOT_RECORDED' %}text-bg-danger{% else %}text-bg-secondary{% endif %}">{{ g.badge }}</span>
+                  <span class="ms-1">{{ g.title }}</span>
+                </div>
+                {% if g.pipeline %}
+                <div class="d-flex flex-wrap align-items-center gap-1 mb-2" style="font-size:0.8rem;">
+                  {% for step in g.pipeline %}
+                  <span class="badge {% if step.ok %}text-bg-success{% else %}text-bg-danger{% endif %}">
+                    {{ step.label }}{% if step.text %}: {{ step.text }}{% endif %}
+                  </span>
+                  {% if not loop.last %}<span class="text-muted">→</span>{% endif %}
+                  {% endfor %}
+                </div>
+                {% endif %}
+                <div class="mb-1">
+                  {% for lab in g.item_labels[:20] %}
+                  <code class="me-1">{{ lab }}</code>{% if not loop.last %}<span class="text-muted">·</span>{% endif %}
+                  {% endfor %}
+                  {% if g.item_labels|length > 20 %}<span class="text-muted">+{{ g.item_labels|length - 20 }} more</span>{% endif %}
+                </div>
+                {% if g.evidence_note %}
+                <div class="text-success mb-1">{{ g.evidence_note }}</div>
+                {% endif %}
+                {% if g.next_steps %}
+                <div class="text-muted mb-0">What to do:</div>
+                <ol class="mb-0 ps-3">
+                  {% for s in g.next_steps[:5] %}
+                  <li>{{ s }}</li>
+                  {% endfor %}
+                </ol>
+                {% endif %}
+              </div>
+              {% endfor %}
+            {% elif be.summary %}
+              <div class="text-muted mb-0">{{ be.summary }}</div>
+            {% endif %}
+          </div>
+          {% endif %}
           {% if hvr.hits %}
           <div class="border rounded p-2 small mb-3">
             <div class="fw-semibold mb-1">Confirm with client</div>
@@ -623,30 +684,6 @@
               </li>
               {% endfor %}
             </ul>
-          </div>
-          {% endif %}
-          {% set be = ov.broker_evidence or {} %}
-          {% if be and (be.findings or be.summary or be.broker) %}
-          <div class="border rounded p-2 small mb-3">
-            <div class="fw-semibold mb-1">Broker / reco evidence (Drive contract notes)</div>
-            <div class="text-muted mb-1">{{ be.summary }}</div>
-            {% if be.broker and be.broker.reason == 'trade_folder_not_linked' %}
-            <div class="text-warning">Link the trade-details Drive folder under Upload / trade evidence, then refresh.</div>
-            {% endif %}
-            {% if be.broker and be.broker.files_scanned %}
-            <div class="text-muted">Scanned {{ be.broker.files_scanned }} file(s)
-              · decrypted {{ be.broker.decrypt_ok or 0 }}
-              {% if be.broker.decrypt_fail %} · {{ be.broker.decrypt_fail }} failed decrypt{% endif %}
-              {% if be.broker.screenshots %} · {{ be.broker.screenshots|length }} order screenshot(s){% endif %}
-            </div>
-            {% endif %}
-            {% if be.findings %}
-            <ul class="mb-0 mt-1">
-              {% for f in be.findings[:12] %}
-              <li>{{ f }}</li>
-              {% endfor %}
-            </ul>
-            {% endif %}
           </div>
           {% endif %}
           {% set es = ov.email_sync or mr.email_sync or {} %}

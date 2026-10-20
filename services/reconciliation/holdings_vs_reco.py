@@ -203,10 +203,9 @@ def assess_holdings_vs_reco(
             when_bit = f" ({when})" if when else ""
             if book_has:
                 msg = (
-                    f"{sym}: gap {gap:g} matches reco BUY {q:g}{when_bit}, and books "
-                    f"already show a BUY of that qty — possible duplicate order by "
-                    f"the client (extra fill beyond the booked trade). Ask the "
-                    f"advisor to confirm with the client."
+                    f"{sym}: we already have BUY {q:g} in books, but holdings are "
+                    f"still higher by {gap:g} (same as the recommendation{when_bit}). "
+                    f"Client may have bought twice — please confirm with the client."
                 )
                 findings.append(msg)
                 hypotheses.append("POSSIBLE_DUPLICATE_CLIENT_ORDER")
@@ -219,17 +218,25 @@ def assess_holdings_vs_reco(
                         "sent_at": when,
                         "detail": msg,
                         "advisor_action": (
-                            "Confirm with client whether they placed a duplicate buy "
-                            f"of ~{q:g} in addition to the trade already in books."
+                            "Ask the client if they bought this twice "
+                            f"(extra BUY ~{q:g} on top of what is already in books)."
                         ),
+                        "pipeline": [
+                            {"key": "recommended", "label": "Recommended", "ok": True,
+                             "text": f"BUY {q:g}{when_bit}"},
+                            {"key": "trade", "label": "Trade in our books", "ok": True,
+                             "text": "Already recorded (once)"},
+                            {"key": "holding", "label": "Holding", "ok": True,
+                             "text": f"Still +{gap:g} vs books"},
+                        ],
                     }
                 )
             else:
                 msg = (
-                    f"{sym}: gap {gap:g} matches reco BUY {q:g}{when_bit}, but books "
-                    f"have no matching BUY — likely executed and not recorded. "
-                    f"Check linked trade statements / contract notes for a fill of "
-                    f"~{q:g}, then add the trade to books."
+                    f"{sym}: recommended BUY {q:g}{when_bit} and holdings show it, "
+                    f"but this trade is not in our books. "
+                    f"Check Trade details for this buy; if found, add the trade. "
+                    f"If not found, check screenshots / trade Excel, or ask the client."
                 )
                 findings.append(msg)
                 hypotheses.append("EXECUTED_NOT_RECORDED")
@@ -242,11 +249,24 @@ def assess_holdings_vs_reco(
                         "sent_at": when,
                         "detail": msg,
                         "advisor_action": (
-                            "Search trade statements / contract notes for "
-                            f"{sym} BUY ~{q:g}{when_bit}; if found, book the trade "
-                            "(not a duplicate — nothing is in books yet)."
+                            f"Find {sym} BUY {q:g} in Trade details (or ask client), "
+                            "then add that trade to books."
                         ),
                         "next_check": "trade_statements",
+                        "next_steps": [
+                            "Check Trade details Drive folder for this buy.",
+                            "If found — add the trade to books.",
+                            "If not — check screenshots / multi-month trade Excel.",
+                            "If still nothing — ask the client to share trades.",
+                        ],
+                        "pipeline": [
+                            {"key": "recommended", "label": "Recommended", "ok": True,
+                             "text": f"BUY {q:g}{when_bit}"},
+                            {"key": "trade", "label": "Trade in our books", "ok": False,
+                             "text": "Missing"},
+                            {"key": "holding", "label": "Holding", "ok": True,
+                             "text": "Shown on statement"},
+                        ],
                     }
                 )
             break

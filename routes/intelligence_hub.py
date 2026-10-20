@@ -2051,6 +2051,18 @@ def holdings_reconciliation():
         except Exception:
             holdings_notes_approved = None
 
+    # Unmapped / suggested first so Confirm maps is easy to review
+    if run and run.get("review_rows"):
+        try:
+            from services.reconciliation.security_resolve import (
+                sort_review_rows_for_confirm,
+            )
+
+            run = dict(run)
+            run["review_rows"] = sort_review_rows_for_confirm(run["review_rows"])
+        except Exception:
+            pass
+
     return render_template(
         "hub/holdings_reconciliation.html",
         clients=clients,

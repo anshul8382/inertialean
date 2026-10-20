@@ -235,7 +235,26 @@ def resolve_lines(
                 }
             )
         out.append(row)
-    return out
+    return sort_review_rows_for_confirm(out)
+
+
+def sort_review_rows_for_confirm(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Unmapped first (needs mapping), then suggested, mapped, ignored.
+    Keeps line_index stable for form fields.
+    """
+    rank = {"unmapped": 0, "suggested": 1, "mapped": 2, "ignored": 3}
+
+    def _key(r: Dict[str, Any]) -> Tuple[int, str, int]:
+        st = str(r.get("status") or "unmapped").lower()
+        name = str(r.get("raw_name") or r.get("nse_symbol") or "").lower()
+        try:
+            idx = int(r.get("line_index") if r.get("line_index") is not None else 0)
+        except (TypeError, ValueError):
+            idx = 0
+        return (rank.get(st, 9), name, idx)
+
+    return sorted(list(rows or []), key=_key)
 
 
 def _fill_security(

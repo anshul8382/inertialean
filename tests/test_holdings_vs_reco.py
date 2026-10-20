@@ -69,7 +69,7 @@ def test_delta_matches_reco_duplicate_only_when_books_already_have_trade():
     )
     assert "POSSIBLE_DUPLICATE_CLIENT_ORDER" in out["hypotheses"]
     assert "EXECUTED_NOT_RECORDED" not in out["hypotheses"]
-    assert "duplicate" in (out["summary"] or "").lower()
+    assert "bought twice" in (out["summary"] or "").lower()
     assert out["advisor_confirm"] is True
 
 
@@ -93,9 +93,10 @@ def test_ather_gap_matches_reco_no_trade_is_executed_not_recorded():
     assert out["top_hypothesis"] == "EXECUTED_NOT_RECORDED"
     assert "POSSIBLE_DUPLICATE_CLIENT_ORDER" not in out["hypotheses"]
     assert "duplicate" not in (out["summary"] or "").lower()
-    assert "not recorded" in (out["summary"] or "").lower()
-    assert "trade statement" in (out["summary"] or "").lower()
+    assert "not in our books" in (out["summary"] or "").lower()
+    assert "fill" not in (out["summary"] or "").lower()
     assert out["suspects"][0].get("next_check") == "trade_statements"
+    assert out["suspects"][0].get("pipeline")
 
 
 def test_reco_marked_executed_but_no_book_trade_is_not_duplicate():

@@ -35,6 +35,28 @@ def test_zerodha_csv():
     assert any(ln.nse_symbol == "HDFCBANK" for ln in r.lines)
 
 
+def test_zerodha_kite_xlsx():
+    r = detect_and_parse(
+        FIXTURES / "zerodha_kite_sample.xlsx",
+        filename="Aug 2026 holding .xlsx",
+    )
+    assert r.format_id == "zerodha_kite_xlsx"
+    assert len(r.lines) >= 3
+    assert any(ln.nse_symbol == "HDFCBANK" for ln in r.lines)
+    assert any(ln.nse_symbol == "APLAPOLLO" for ln in r.lines)
+    # as-of from filename month
+    assert r.as_of and r.as_of.month == 8 and r.as_of.year == 2026
+
+
+def test_axis_direct_holdings_xlsx():
+    r = detect_and_parse(FIXTURES / "axis_direct_holdings_sample.xlsx")
+    assert r.format_id == "axis_direct_holdings_xlsx"
+    assert r.as_of and r.as_of.isoformat() == "2026-09-01"
+    assert len(r.lines) >= 3
+    assert any(ln.isin == "INE040A01034" for ln in r.lines)
+    assert any("Ather" in (ln.raw_name or "") for ln in r.lines)
+
+
 def test_groww_xlsx():
     r = detect_and_parse(FIXTURES / "groww_sample.xlsx")
     assert r.format_id == "groww_holdings_xlsx"

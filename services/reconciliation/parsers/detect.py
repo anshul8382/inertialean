@@ -2,15 +2,17 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 from services.reconciliation.as_of_guess import merge_as_of
 from services.reconciliation.parsers import (
     angel_dp_pdf,
+    axis_direct_xlsx,
     broker_shortcode_xlsx,
     cdsl_demat_xlsx,
     groww_xlsx,
     zerodha_csv,
+    zerodha_kite_xlsx,
 )
 from services.reconciliation.parsers.base import ParseResult, iter_xlsx_rows
 
@@ -28,21 +30,33 @@ def detect_and_parse(path: Union[str, Path], filename: str = "") -> ParseResult:
             raise ValueError("Unrecognized CSV holdings format (expected Zerodha Kite)")
     elif ext in (".xlsx", ".xls"):
         rows = iter_xlsx_rows(path, max_rows=25)
-        if cdsl_demat_xlsx.can_parse_rows(rows):
+        if zerodha_kite_xlsx.can_parse_rows(rows):
+            result = zerodha_kite_xlsx.parse(path)
+        elif axis_direct_xlsx.can_parse_rows(rows):
+            result = axis_direct_xlsx.parse(path)
+        elif cdsl_demat_xlsx.can_parse_rows(rows):
             result = cdsl_demat_xlsx.parse(path)
         elif broker_shortcode_xlsx.can_parse_rows(rows):
             result = broker_shortcode_xlsx.parse(path)
         elif groww_xlsx.can_parse_rows(rows):
             result = groww_xlsx.parse(path)
         else:
-            # try full parse groww/cdsl as fallback order
-            try:
-                result = groww_xlsx.parse(path)
-            except Exception:
+            # try full parse in priority order
+            last_exc: Optional[Exception] = None
+            for parser in (
+                zerodha_kite_xlsx,
+                axis_direct_xlsx,
+                groww_xlsx,
+                broker_shortcode_xlsx,
+                cdsl_demat_xlsx,
+            ):
                 try:
-                    result = broker_shortcode_xlsx.parse(path)
-                except Exception as exc:
-                    raise ValueError("Unrecognized Excel holdings format") from exc
+                    result = parser.parse(path)
+                    break
+                except Exception as exc:  # noqa: BLE001 — try next format
+                    last_exc = exc
+            else:
+                raise ValueError("Unrecognized Excel holdings format") from last_exc
     elif ext == ".pdf":
         # peek text
         from PyPDF2 import PdfReader

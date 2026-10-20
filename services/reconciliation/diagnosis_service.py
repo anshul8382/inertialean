@@ -2676,6 +2676,23 @@ def diagnose_breaks(
             "error": str(exc),
             "summary": f"Holdings-vs-reco check skipped: {exc}",
         }
+    # Dedupe: hide Confirm-with-client / pending prose already shown in story_groups
+    try:
+        from services.reconciliation.broker_trade_evidence import (
+            filter_hvr_hits_against_broker,
+            slim_remaining_notes_against_broker,
+        )
+
+        holdings_vs_reco_pack = filter_hvr_hits_against_broker(
+            holdings_vs_reco_pack, broker_evidence
+        )
+        remaining_notes = slim_remaining_notes_against_broker(
+            remaining_notes, broker_evidence
+        )
+        if isinstance(advisor_story, dict):
+            advisor_story["remaining_notes"] = remaining_notes
+    except Exception:
+        pass
     overall["holdings_vs_reco"] = holdings_vs_reco_pack
 
     # Tentative ₹ buckets: matched / found sources / still need check
