@@ -1254,6 +1254,7 @@ def client_details(client_id):
     google_drive_folder_url = ""
     google_drive_sa_email = ""
     suitability_reports = []
+    email_archive_status = {}
     try:
         from services.client_google_drive_service import (
             client_drive_columns_ready,
@@ -1274,6 +1275,9 @@ def client_details(client_id):
                 .limit(20)
                 .all()
             )
+        from services.client_email_archive_service import archive_status
+
+        email_archive_status = archive_status(client_id)
     except Exception as e:
         logger.debug("Drive/suitability context skipped for client %s: %s", client_id, e)
 
@@ -1292,6 +1296,7 @@ def client_details(client_id):
                          google_drive_folder_url=google_drive_folder_url,
                          google_drive_sa_email=google_drive_sa_email,
                          suitability_reports=suitability_reports,
+                         email_archive_status=email_archive_status,
                          ic_person_id=client.id,
                          ic_profile_seed=ic_profile_seed,
                          model_assignment=model_assignment,

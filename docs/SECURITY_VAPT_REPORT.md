@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-10-19T16:28:44.115457+00:00
+Generated: 2026-10-20T09:15:02.269765+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -8,15 +8,15 @@ Agent: `security_audit_agent` v1.0.0
 | Severity | Count |
 |----------|-------|
 | critical | 0 |
-| high | 21 |
+| high | 22 |
 | medium | 25 |
 | low | 0 |
 | info | 0 |
-| **Total** | **46** |
+| **Total** | **47** |
 
 ## Threat themes
 
-- **EXTERNAL** — External attackers / public internet exposure (25 findings)
+- **EXTERNAL** — External attackers / public internet exposure (26 findings)
 - **INTERNAL** — Insider misuse / employee data theft (21 findings)
 - **COMPLIANCE** — SEBI / financial-data regulatory standards (0 findings)
 - **CONFIG** — Misconfiguration & operational hardening (0 findings)
@@ -265,6 +265,18 @@ uploaded = request.files.get(key)
 
 ### `SEC-EXT-009` — File upload without `secure_filename` / path normalization
 
+**Severity:** high • **Theme:** EXTERNAL • **Category:** path_traversal • **CWE:** CWE-22 • **Location:** `routes/intelligence_hub.py:1578`
+
+Saving an uploaded file using its original filename (`document.filename`) allows path traversal (`../../etc/passwd`) and overwrite of arbitrary files the process can write.
+
+```
+files = [f for f in request.files.getlist("statement") if f and f.filename]
+```
+
+**Fix:** Always wrap with `werkzeug.utils.secure_filename(name)`, validate the extension against an allowlist (e.g. `{'.pdf', '.png', '.jpg', '.csv'}`), and store under a UUID-based path inside a dedicated `instance/uploads/` directory that is **not** served as static content.
+
+### `SEC-EXT-009` — File upload without `secure_filename` / path normalization
+
 **Severity:** high • **Theme:** EXTERNAL • **Category:** path_traversal • **CWE:** CWE-22 • **Location:** `routes/leads.py:364`
 
 Saving an uploaded file using its original filename (`document.filename`) allows path traversal (`../../etc/passwd`) and overwrite of arbitrary files the process can write.
@@ -347,17 +359,17 @@ SQL dumps inside the repo or working tree get copied to laptops, containers, and
 
 **Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
 
-### `SEC-CMP-004` — Database backup file in working tree: `backups/kvm_inertia_app2025_20261005_220551.sql.gz`
+### `SEC-CMP-004` — Database backup file in working tree: `backups/kvm_inertia_app2025_20261020_111734.sql.gz`
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/kvm_inertia_app2025_20261005_220551.sql.gz`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/kvm_inertia_app2025_20261020_111734.sql.gz`
 
 SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
 
 **Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
 
-### `SEC-CMP-004` — Database backup file in working tree: `backups/kvm_inertia_app2025_20261014_221018.sql.gz`
+### `SEC-CMP-004` — Database backup file in working tree: `backups/kvm_inertia_app2025_20261020_112009.sql.gz`
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/kvm_inertia_app2025_20261014_221018.sql.gz`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/kvm_inertia_app2025_20261020_112009.sql.gz`
 
 SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
 
@@ -511,14 +523,14 @@ logger.debug("KYC PAN backfill skipped lead=%s", lead_id, exc_info=True)
 
 **Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
 
-### `SEC-INT-005` — `routes/client_google_drive.py` has 3 client-scoped route(s) without an explicit access check
+### `SEC-INT-005` — `routes/client_google_drive.py` has 4 client-scoped route(s) without an explicit access check
 
 **Severity:** medium • **Theme:** INTERNAL • **Category:** missing_client_scope • **CWE:** CWE-639 • **Location:** `routes/client_google_drive.py:77`
 
 Routes that take `<int:client_id>` should verify the current user can see that client. Without it, an advisor can read other advisors' clients by guessing IDs.
 
 ```
-L77: @client_google_drive_bp.route(; L113: @client_google_drive_bp.route(; L154: @client_google_drive_bp.route(
+L77: @client_google_drive_bp.route(; L113: @client_google_drive_bp.route(; L156: @client_google_drive_bp.route( (+1 more)
 ```
 
 **Fix:** Add `@client_access_required` (from `access_control`) to each route, OR add a `before_request` hook on this blueprint that calls `can_access_client(client_id)` and aborts 403 if not. Also call `services.audit_service.log_audit_event('client_view', client_id=client_id)` so internal access is recorded for SEBI.

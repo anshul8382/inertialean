@@ -1475,3 +1475,591 @@ def ai_skip():
     except Exception:
         pass
     return jsonify({"success": True})
+
+
+def _can_use_holdings_recon() -> bool:
+    u = current_user
+    return bool(
+        getattr(u, "is_admin", False)
+        or getattr(u, "is_manager", False)
+        or getattr(u, "is_ops_manager", False)
+        or getattr(u, "is_advisor", False)
+    )
+
+
+@hub_bp.route("/holdings-reconciliation/progress/<run_id>", methods=["GET"])
+@login_required
+@handle_errors
+def holdings_reconciliation_progress(run_id):
+    """JSON progress for long confirm/match/refresh (polled by overlay UI)."""
+    from access_control import can_access_client
+    from flask import jsonify
+    from services.reconciliation.store import get_run_progress, load_run
+
+    if not _can_use_holdings_recon():
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+    run = load_run(run_id)
+    if not run:
+        return jsonify({"ok": False, "error": "Run not found"}), 404
+    if not can_access_client(int(run["client_id"])):
+        return jsonify({"ok": False, "error": "Access denied"}), 403
+    return jsonify(get_run_progress(run_id))
+
+
+@hub_bp.route("/holdings-reconciliation", methods=["GET", "POST"])
+@login_required
+@handle_errors
+def holdings_reconciliation():
+    """Upload holding statements, confirm mappings, match vs as-of portfolio."""
+    from access_control import can_access_client, user_can_view_all_clients
+    from services.reconciliation import (
+        confirm_run,
+        create_run_from_upload,
+        get_run,
+        run_match,
+    )
+
+    if not _can_use_holdings_recon():
+        flash("Access denied.", "error")
+        return redirect(url_for("hub.operational_dashboard"))
+
+    from services.reconciliation.run_service import refresh_review_rows
+
+    run = None
+    run_id = request.args.get("run_id") or request.form.get("run_id")
+    if run_id:
+        run = get_run(run_id)
+        if run and not can_access_client(int(run["client_id"])):
+            flash("Access denied for that client.", "error")
+            return redirect(url_for("hub.holdings_reconciliation"))
+        if run and run.get("status") == "awaiting_confirm" and request.method == "GET":
+            run = refresh_review_rows(run_id) or run
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip()
+        try:
+            if action == "save_trade_evidence":
+                client_id = request.form.get("client_id", type=int)
+                if not client_id or not can_access_client(client_id):
+                    raise ValueError("Client required / access denied.")
+                from services.reconciliation.broker_trade_evidence import (
+                    save_trade_drive_link,
+                )
+                from services.client_google_drive_service import normalize_folder_id
+
+                folder_raw = (
+                    request.form.get("trade_folder_id")
+                    or request.form.get("trade_folder_url")
+                    or ""
+                )
+                pw_raw = (request.form.get("pdf_passwords") or "").replace(
+                    ";", ","
+                ).replace(" ", ",")
+                passwords = [p.strip() for p in pw_raw.split(",") if p.strip()]
+                save_trade_drive_link(
+                    client_id,
+                    folder_id=normalize_folder_id(folder_raw) or folder_raw,
+                    pdf_passwords=passwords,
+                )
+                flash(
+                    "Trade evidence Drive folder saved. Refresh investigation to scan contract notes.",
+                    "success",
+                )
+                return redirect(
+                    url_for(
+                        "hub.holdings_reconciliation",
+                        client_id=client_id,
+                        run_id=run_id,
+                    )
+                )
+            if action == "upload":
+                client_id = request.form.get("client_id", type=int)
+                broker = (request.form.get("broker") or "default").strip()
+                files = [f for f in request.files.getlist("statement") if f and f.filename]
+                if not files:
+                    single = request.files.get("statement")
+                    if single and single.filename:
+                        files = [single]
+                if not client_id or not files:
+                    raise ValueError("Client and at least one statement file are required.")
+                if not can_access_client(client_id):
+                    raise ValueError("Access denied for that client.")
+                runs_created = []
+                for f in files:
+                    runs_created.append(
+                        create_run_from_upload(
+                            client_id=client_id,
+                            file_storage=f,
+                            broker=broker,
+                            user_id=current_user.id,
+                        )
+                    )
+                multi_mode = (request.form.get("multi_mode") or "combine").strip().lower()
+                if len(runs_created) == 1:
+                    run = runs_created[0]
+                    flash(
+                        f"Parsed as {run.get('format_id')} — review mappings and as-of before matching.",
+                        "success",
+                    )
+                    return redirect(
+                        url_for("hub.holdings_reconciliation", run_id=run["id"])
+                    )
+                if multi_mode == "date_bracket":
+                    flash(
+                        f"Uploaded {len(runs_created)} statements as separate runs for date-bracket. "
+                        "Confirm & match each (different as-of dates), then under Prior runs choose "
+                        "“Find when break appeared”.",
+                        "success",
+                    )
+                    return redirect(
+                        url_for(
+                            "hub.holdings_reconciliation",
+                            client_id=client_id,
+                            run_id=runs_created[-1]["id"],
+                        )
+                    )
+                # Multiple files → combine qtys (10+30=40) into one recon run
+                from services.reconciliation.run_service import combine_statement_runs
+
+                combined = combine_statement_runs(
+                    [r["id"] for r in runs_created],
+                    user_id=current_user.id,
+                    broker=broker,
+                )
+                flash(
+                    f"Uploaded {len(runs_created)} statements and combined them into one run "
+                    f"(qtys summed per security — use when holdings are split across accounts). "
+                    "Confirm maps, then match.",
+                    "success",
+                )
+                return redirect(
+                    url_for(
+                        "hub.holdings_reconciliation",
+                        client_id=client_id,
+                        run_id=combined["id"],
+                    )
+                )
+
+            if action == "combine_runs":
+                from services.reconciliation.run_service import (
+                    bracket_breaks_across_runs,
+                    combine_statement_runs,
+                )
+
+                client_id = request.form.get("client_id", type=int)
+                broker = (request.form.get("broker") or "default").strip()
+                multi_mode = (request.form.get("multi_mode") or "combine").strip().lower()
+                source_ids = request.form.getlist("combine_run_id")
+                if not client_id:
+                    raise ValueError("Client is required.")
+                if not can_access_client(client_id):
+                    raise ValueError("Access denied for that client.")
+                if len(source_ids) < 2:
+                    raise ValueError("Select at least two statements.")
+                if multi_mode == "date_bracket":
+                    bracket = bracket_breaks_across_runs(
+                        source_ids, user_id=current_user.id
+                    )
+                    db_summary = (bracket.get("date_bracket") or {}).get("summary") or ""
+                    flash(f"Date-bracket: {db_summary}", "success")
+                    return redirect(
+                        url_for(
+                            "hub.holdings_reconciliation",
+                            client_id=client_id,
+                            run_id=bracket["id"],
+                        )
+                    )
+                combined = combine_statement_runs(
+                    source_ids,
+                    user_id=current_user.id,
+                    broker=broker,
+                )
+                flash(
+                    f"Combined {len(source_ids)} statements — qtys summed per security. "
+                    "Confirm maps, then match.",
+                    "success",
+                )
+                return redirect(
+                    url_for(
+                        "hub.holdings_reconciliation",
+                        client_id=client_id,
+                        run_id=combined["id"],
+                    )
+                )
+
+            if action == "use_drive_file":
+                from services.reconciliation.holdings_drive_service import (
+                    create_run_from_drive_file,
+                )
+                from services.reconciliation.run_service import combine_statement_runs
+
+                client_id = request.form.get("client_id", type=int)
+                multi_mode = (request.form.get("multi_mode") or "combine").strip().lower()
+                file_ids = [
+                    (fid or "").strip()
+                    for fid in request.form.getlist("drive_file_id")
+                    if (fid or "").strip()
+                ]
+                # Back-compat: single field
+                if not file_ids:
+                    one = (request.form.get("drive_file_id") or "").strip()
+                    if one:
+                        file_ids = [one]
+                broker = (request.form.get("broker") or "default").strip()
+                if not client_id or not file_ids:
+                    raise ValueError("Client and at least one Drive file are required.")
+                if not can_access_client(client_id):
+                    raise ValueError("Access denied for that client.")
+                runs_created = []
+                for file_id in file_ids:
+                    runs_created.append(
+                        create_run_from_drive_file(
+                            client_id=client_id,
+                            file_id=file_id,
+                            broker=broker,
+                            user_id=current_user.id,
+                        )
+                    )
+                if len(runs_created) == 1:
+                    run = runs_created[0]
+                    flash(
+                        f"Loaded from Drive Holdings/: {run.get('filename')} "
+                        f"({run.get('format_id')}) — confirm mappings.",
+                        "success",
+                    )
+                    return redirect(
+                        url_for(
+                            "hub.holdings_reconciliation",
+                            run_id=run["id"],
+                            client_id=client_id,
+                        )
+                    )
+                if multi_mode == "date_bracket":
+                    flash(
+                        f"Loaded {len(runs_created)} Drive files as separate runs for date-bracket. "
+                        "Confirm & match each (different as-of dates), then under Prior runs choose "
+                        "“Find when break appeared”.",
+                        "success",
+                    )
+                    return redirect(
+                        url_for(
+                            "hub.holdings_reconciliation",
+                            run_id=runs_created[-1]["id"],
+                            client_id=client_id,
+                        )
+                    )
+                combined = combine_statement_runs(
+                    [r["id"] for r in runs_created],
+                    user_id=current_user.id,
+                    broker=broker,
+                )
+                flash(
+                    f"Loaded {len(runs_created)} files from Drive and combined qtys "
+                    "per security (split across accounts) — confirm maps, then match.",
+                    "success",
+                )
+                return redirect(
+                    url_for(
+                        "hub.holdings_reconciliation",
+                        run_id=combined["id"],
+                        client_id=client_id,
+                    )
+                )
+
+            if action == "confirm" and run_id:
+                from datetime import date as date_cls
+                from services.reconciliation.store import set_run_progress
+
+                as_of_raw = (request.form.get("as_of") or "").strip()
+                if not as_of_raw:
+                    raise ValueError("As-of date is required.")
+                as_of = date_cls.fromisoformat(as_of_raw[:10])
+                set_run_progress(
+                    run_id,
+                    pct=2,
+                    label="Request in progress — saving mappings…",
+                    stage="confirm",
+                )
+                confirmations = []
+                for key, val in request.form.items():
+                    if not key.startswith("sec_") or not val:
+                        continue
+                    idx = int(key.split("_", 1)[1])
+                    remember = request.form.get(f"remember_{idx}") == "1"
+                    if val == "__ignore__":
+                        confirmations.append(
+                            {
+                                "line_index": idx,
+                                "ignore": True,
+                                "remember": False,
+                            }
+                        )
+                    else:
+                        confirmations.append(
+                            {
+                                "line_index": idx,
+                                "security_id": int(val),
+                                "remember": remember,
+                            }
+                        )
+                ignore_unmapped = request.form.get("ignore_unmapped") == "1"
+                run = confirm_run(
+                    run_id,
+                    as_of=as_of,
+                    confirmations=confirmations,
+                    user_id=current_user.id,
+                    ignore_unmapped=ignore_unmapped,
+                )
+                if run.get("status") == "confirmed":
+                    ignored_n = int(run.get("ignored_count") or 0)
+                    if ignored_n:
+                        flash(
+                            f"Mappings confirmed ({ignored_n} unmapped line(s) ignored / out of scope). "
+                            "Running match…",
+                            "success",
+                        )
+                    else:
+                        flash("Mappings confirmed. Running match…", "success")
+                    run = run_match(run_id)
+                    flash(
+                        f"Match complete: {run.get('match_result', {}).get('matched_count', 0)} matched, "
+                        f"{run.get('match_result', {}).get('break_count', 0)} breaks.",
+                        "info",
+                    )
+                else:
+                    flash(
+                        "Some lines still unmapped — map them, or tick "
+                        "“Ignore unmapped lines” if they are client's own / out of scope, then confirm again.",
+                        "warning",
+                    )
+                return redirect(
+                    url_for("hub.holdings_reconciliation", run_id=run_id)
+                )
+
+            if action in (
+                "holdings_notes_preview",
+                "holdings_notes_approve",
+            ) and run_id:
+                from services.reconciliation.advisor_holdings_notes_service import (
+                    approve_notes,
+                    build_preview,
+                    compute_sync_through,
+                )
+                from services.forward_holding_calculation_service import (
+                    get_client_portfolio_by_date,
+                )
+                from datetime import date as date_cls
+
+                run = get_run(run_id)
+                if not run:
+                    raise ValueError("Run not found.")
+                cid = int(run["client_id"])
+                paste = request.form.get("holdings_notes_paste") or ""
+                as_of_raw = run.get("as_of") or date_cls.today().isoformat()
+                as_of = date_cls.fromisoformat(str(as_of_raw)[:10])
+                port = get_client_portfolio_by_date(cid, as_of)
+                sys_map = {}
+                for h in port.get("holdings") or []:
+                    sym = (h.get("symbol") or "").upper().strip()
+                    if sym:
+                        sys_map[sym] = float(h.get("quantity") or 0)
+                if action == "holdings_notes_preview":
+                    preview = build_preview(cid, paste, sys_map)
+                    if not preview.get("ok"):
+                        flash(preview.get("error") or "Could not parse paste.", "warning")
+                    else:
+                        flash(
+                            f"Parsed {preview.get('row_count')} holdings rows; "
+                            f"{preview.get('drift_count')} differ from books.",
+                            "info",
+                        )
+                    # Stash preview on run for template
+                    run = dict(run)
+                    run["holdings_notes_preview"] = preview
+                    from services.reconciliation.store import save_run
+
+                    save_run({**get_run(run_id), "holdings_notes_preview": preview})
+                    return redirect(
+                        url_for("hub.holdings_reconciliation", run_id=run_id)
+                    )
+                # approve — sync-through = max(as_of, CF reconciled_through, last trade)
+                paste_hash = (request.form.get("paste_hash") or "").strip() or None
+                cf_through = None
+                last_trade_d = None
+                try:
+                    from services.cashflow_trade_advisor_notes_service import (
+                        get_approved_reconciled_through,
+                    )
+
+                    cf_through = get_approved_reconciled_through(cid)
+                except Exception:
+                    pass
+                try:
+                    from models import Transaction
+
+                    lt = (
+                        Transaction.query.filter_by(client_id=cid)
+                        .order_by(Transaction.transaction_date.desc())
+                        .first()
+                    )
+                    if lt and lt.transaction_date:
+                        last_trade_d = (
+                            lt.transaction_date.date()
+                            if hasattr(lt.transaction_date, "date")
+                            else lt.transaction_date
+                        )
+                except Exception:
+                    pass
+                sync_through = compute_sync_through(
+                    as_of=as_of,
+                    reconciled_through=cf_through,
+                    last_trade_date=last_trade_d,
+                )
+                result = approve_notes(
+                    cid,
+                    paste_text=paste,
+                    approved_by=getattr(current_user, "email", None)
+                    or getattr(current_user, "username", None),
+                    paste_hash=paste_hash,
+                    system_qty_by_symbol=sys_map,
+                    sync_through=sync_through,
+                )
+                if not result.get("ok"):
+                    flash(result.get("error") or "Approve failed.", "warning")
+                else:
+                    flash(
+                        f"Advisor holdings notes approved "
+                        f"({result['artifact'].get('row_count')} rows, "
+                        f"{result['artifact'].get('drift_count')} drifts).",
+                        "success",
+                    )
+                    # clear preview stash
+                    fresh = get_run(run_id)
+                    if fresh and "holdings_notes_preview" in fresh:
+                        fresh = dict(fresh)
+                        fresh.pop("holdings_notes_preview", None)
+                        from services.reconciliation.store import save_run
+
+                        save_run(fresh)
+                return redirect(
+                    url_for("hub.holdings_reconciliation", run_id=run_id)
+                )
+
+            if action in ("match", "refresh_investigation") and run_id:
+                from services.reconciliation.run_service import refresh_investigation
+
+                if action == "refresh_investigation":
+                    run = refresh_investigation(run_id)
+                    es = (run.get("last_email_sync") or {})
+                    if es.get("skipped") and es.get("reason") == "archive_fresh":
+                        flash(
+                            "Investigation rebuilt from uploaded holdings. "
+                            "Emails reused from archive (not re-downloaded).",
+                            "success",
+                        )
+                    elif es.get("imap_error") or es.get("ok") is False:
+                        flash(
+                            "Investigation rebuilt from uploaded holdings, but email sync failed: "
+                            f"{es.get('imap_error') or 'error'}.",
+                            "warning",
+                        )
+                    else:
+                        flash(
+                            "Investigation rebuilt from uploaded holdings "
+                            f"(email archive +{es.get('imap_added', 0)} IMAP / "
+                            f"+{es.get('emaillog_added', 0)} EmailLog).",
+                            "success",
+                        )
+                    mr = run.get("match_result") or {}
+                    flash(
+                        f"Match: {mr.get('matched_count', 0)} matched, "
+                        f"{mr.get('break_count', 0)} breaks.",
+                        "info",
+                    )
+                else:
+                    run = run_match(run_id)
+                    flash("Match complete.", "success")
+                return redirect(
+                    url_for("hub.holdings_reconciliation", run_id=run_id)
+                )
+        except Exception as exc:
+            logger.exception("Holdings reconciliation error")
+            flash(str(exc), "error")
+            if run_id:
+                return redirect(
+                    url_for("hub.holdings_reconciliation", run_id=run_id)
+                )
+
+    if user_can_view_all_clients(current_user):
+        clients = Client.query.order_by(Client.name).all()
+    else:
+        clients = (
+            Client.query.filter_by(advisor_id=current_user.id)
+            .order_by(Client.name)
+            .all()
+        )
+
+    from models import Security
+
+    securities = (
+        Security.query.with_entities(Security.id, Security.symbol, Security.name)
+        .order_by(Security.symbol)
+        .limit(5000)
+        .all()
+    )
+    selected_client_id = request.args.get("client_id", type=int) or (
+        int(run["client_id"]) if run and run.get("client_id") else None
+    )
+    client_runs = []
+    drive_holdings = {"ok": False, "files": [], "needs_drive": False}
+    trade_drive_link = {}
+    if selected_client_id and can_access_client(selected_client_id):
+        from services.reconciliation.store import list_runs_for_client
+        from services.reconciliation.broker_trade_evidence import load_trade_drive_link
+
+        client_runs = list_runs_for_client(selected_client_id, limit=10)
+        trade_drive_link = load_trade_drive_link(selected_client_id)
+        try:
+            from services.reconciliation.holdings_drive_service import (
+                list_client_holdings_files,
+            )
+
+            drive_holdings = list_client_holdings_files(selected_client_id)
+        except Exception as exc:
+            logger.warning("list Drive holdings failed: %s", exc)
+            drive_holdings = {
+                "ok": False,
+                "files": [],
+                "error": str(exc),
+            }
+
+    email_archive_status = {}
+    holdings_notes_approved = None
+    if run and run.get("client_id"):
+        try:
+            from services.client_email_archive_service import archive_status
+
+            email_archive_status = archive_status(int(run["client_id"]))
+        except Exception:
+            email_archive_status = {}
+        try:
+            from services.reconciliation.advisor_holdings_notes_service import (
+                load_approved_notes,
+            )
+
+            holdings_notes_approved = load_approved_notes(int(run["client_id"]))
+        except Exception:
+            holdings_notes_approved = None
+
+    return render_template(
+        "hub/holdings_reconciliation.html",
+        clients=clients,
+        securities=securities,
+        run=run,
+        selected_client_id=selected_client_id,
+        client_runs=client_runs,
+        drive_holdings=drive_holdings,
+        trade_drive_link=trade_drive_link,
+        email_archive_status=email_archive_status,
+        holdings_notes_approved=holdings_notes_approved,
+    )

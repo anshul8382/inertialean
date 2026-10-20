@@ -830,6 +830,9 @@ def build_case(client_id: int) -> Dict[str, Any]:
                 "difference": art.get("difference"),
                 "row_count": art.get("row_count"),
                 "explanation": art.get("explanation"),
+                # Full saved paste rows so UI can show what was uploaded/approved
+                "rows": art.get("rows") or [],
+                "saved": True,
             }
             notes_through_val = art.get("reconciled_through")
             case["advisor_notes_through"] = notes_through_val

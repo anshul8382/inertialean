@@ -79,22 +79,47 @@
 
   {% if case.advisor_notes and case.advisor_notes.reconciled_through %}
   <div class="alert alert-info">
-    <strong>Advisor notes approved</strong> through
+    <strong>Advisor notes saved</strong> (approved) through
     <strong>{{ case.advisor_notes.reconciled_through }}</strong>
     {% if case.advisor_notes.approved_at %}
     <span class="text-muted small">({{ case.advisor_notes.approved_at[:19] }} UTC)</span>
     {% endif %}
     — CF↔trade mismatch ignored through that date; after it, trades vs cashflows apply as usual.
     <div class="small mt-1">
+      {{ case.advisor_notes.row_count or (case.advisor_notes.rows|length if case.advisor_notes.rows else 0) }} row(s) stored ·
       Advisor net ₹{{ "{:,.0f}".format(case.advisor_notes.advisor_net_inr or 0) }}
       · system ₹{{ "{:,.0f}".format(case.advisor_notes.system_net_through_inr or 0) }}
       · gap ₹{{ "{:,.0f}".format(case.advisor_notes.difference or 0) }}
     </div>
+    {% if case.advisor_notes.rows %}
+    <details class="small mt-2">
+      <summary>View saved note rows</summary>
+      <div class="table-responsive mt-1">
+        <table class="table table-sm table-bordered bg-white mb-0">
+          <thead><tr><th>Date</th><th class="text-end">Amount (INR)</th></tr></thead>
+          <tbody>
+            {% for r in case.advisor_notes.rows %}
+            <tr>
+              <td>{{ r.date }}</td>
+              <td class="text-end">{{ "{:,.0f}".format(r.amount_inr or 0) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
     <form method="post" class="mt-2" onsubmit="return confirm('Clear the approved advisor-notes cutoff?');">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="advisor_notes_clear">
       <button type="submit" class="btn btn-sm btn-outline-secondary">Clear cutoff</button>
     </form>
+  </div>
+  {% else %}
+  <div class="alert alert-secondary small mb-3">
+    No approved advisor spreadsheet notes on file for this client yet.
+    Paste below → <strong>Check</strong> → <strong>Approve</strong> to save (JSON under
+    <code>var/cashflow_trade_integrity/advisor_notes/</code>).
   </div>
   {% endif %}
 

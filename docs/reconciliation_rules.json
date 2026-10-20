@@ -1,0 +1,115 @@
+{
+  "version": "1.0.0",
+  "tolerances": {
+    "qty_abs": 0.001,
+    "settle_lag_days": 2,
+    "timing_batch_clear_ratio": 0.6
+  },
+  "allocation": {
+    "clear_min_evidences": 3,
+    "clear_line_ratio": 0.5,
+    "rupee_materiality": 500000,
+    "max_iterations": 5,
+    "trade_window_days": 21
+  },
+  "as_of_guess": {
+    "month_only_use": "month_end",
+    "allow_file_mtime": true
+  },
+  "formats": {
+    "zerodha_kite_csv": {
+      "id": "zerodha_kite_csv",
+      "extensions": [
+        ".csv"
+      ],
+      "fingerprints": [
+        "Instrument",
+        "Qty."
+      ]
+    },
+    "groww_holdings_xlsx": {
+      "id": "groww_holdings_xlsx",
+      "extensions": [
+        ".xlsx",
+        ".xls"
+      ],
+      "fingerprints": [
+        "Equity Holdings Statement as on",
+        "Holdings statement for stocks as on",
+        "Unique Client Code"
+      ]
+    },
+    "cdsl_demat_xlsx": {
+      "id": "cdsl_demat_xlsx",
+      "extensions": [
+        ".xlsx",
+        ".xls"
+      ],
+      "fingerprints": [
+        "Demat Holdings as on",
+        "ISIN Number",
+        "Script Name"
+      ]
+    },
+    "broker_shortcode_xlsx": {
+      "id": "broker_shortcode_xlsx",
+      "extensions": [
+        ".xlsx",
+        ".xls"
+      ],
+      "fingerprints": [
+        "Stock Symbol",
+        "ISIN Code",
+        "Average Cost Price"
+      ]
+    },
+    "angel_dp_pdf": {
+      "id": "angel_dp_pdf",
+      "extensions": [
+        ".pdf"
+      ],
+      "fingerprints": [
+        "Statement of DP Transaction Cum Holding",
+        "CLOSING BALANCE",
+        "angelone"
+      ]
+    }
+  },
+  "diagnosis": {
+    "trade_equals_holding_reco_missing": "not_a_break",
+    "patterns": [
+      {
+        "id": "TIMING_SETTLEMENT_BATCH",
+        "when": "batch_clears_with_lag"
+      },
+      {
+        "id": "BOOKING_ERROR",
+        "when": "reco_matches_holding_not_trade"
+      },
+      {
+        "id": "PHANTOM_OR_MISSED_EXEC",
+        "when": "reco_matches_trade_not_holding"
+      },
+      {
+        "id": "UNEXECUTED_RECO",
+        "when": "only_reco"
+      },
+      {
+        "id": "ONLY_TRADE",
+        "when": "only_trade"
+      },
+      {
+        "id": "ONLY_HOLDING",
+        "when": "only_holding"
+      },
+      {
+        "id": "WRONG_SECURITY_NAME",
+        "when": "similar_security_unmatched_trade"
+      },
+      {
+        "id": "UNKNOWN",
+        "when": "else"
+      }
+    ]
+  }
+}

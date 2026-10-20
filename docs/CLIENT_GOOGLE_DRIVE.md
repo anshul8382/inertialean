@@ -31,6 +31,44 @@ cd /opt/Inertia2026v1   # or local repo
 
 Adds `client.google_drive_folder_id`, `client.google_drive_folder_note`, and `suitability_report`.
 
+## Sent email archive
+
+On **Client detail → Google Drive**, use **Sync client emails** to:
+
+1. Pull Gmail **Sent** via IMAP (`MAIL_USERNAME` / `MAIL_PASSWORD`) for messages To/Cc the client’s primary + secondary emails  
+2. Merge any gaps from MySQL `EmailLog`  
+3. Store under `var/client_email_archive/client_<id>/` (index + HTML/EML)  
+4. Upload new messages into an **`Emails/`** subfolder in the linked Drive (sibling of `Holdings/`, under the client name folder)
+
+Incremental: later syncs only fetch since `last_sent_at` (with 1-day overlap). Dedupes by Message-ID / `emaillog:<id>`.
+
+**Investigation search** walks **all nodes** under the client Drive folder (not only `Emails/`) for `.html` / `.eml` files, and also merges local archive + live EmailLog + DB recommendation sessions so a gap in one source does not hide data.
+
+If the Drive folder is **not linked**, sync still saves locally and shows a **Drive folder missing** warning so you can add the folder ID. Holdings recon investigation surfaces the same flag.
+
+Also available from Hub → Holdings reconciliation when a run is open.
+
+## Trade evidence / contract notes (investigation)
+
+For holdings recon, link a **separate** Drive folder that holds broker contract notes
+(PDF), trade xlsx, and optional order-book screenshots:
+
+1. Hub → Holdings reconciliation → **Upload / prior runs / trade evidence**
+2. Paste folder URL/ID + PDF passwords (comma-separated; often client PAN(s))
+3. **Refresh investigation** — app scans notes, compares to system trades + sent recos
+
+Stored under `var/holdings_reconciliation/trade_drive_links.json` (local/server; not DB).
+
+## Holdings statements (`Holdings/`)
+
+On **Hub → Holdings reconciliation**:
+
+1. Select a client — the app lists files already in Drive **`Holdings/`** (CSV / XLSX / PDF).
+2. Choose one to reconcile, **or** upload one or more new files (multi-select). Each file is its own recon run.
+3. New uploads are copied into **`Holdings/`** when the client Drive folder is linked and the same filename is not already there.
+
+If Drive is not linked, recon still works locally; the UI shows a link warning.
+
 ## Troubleshooting uploads
 
 If generate fails with **storageQuotaExceeded**, the folder is on personal My Drive. Move it into a **Shared drive**, add the service account as Content manager, update the Folder ID, and retry.

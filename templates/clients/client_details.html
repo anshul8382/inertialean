@@ -381,6 +381,42 @@
                             {% endif %}
                         </div>
                     </div>
+                    <hr class="my-3">
+                    <div class="row">
+                        <div class="col-12">
+                            <h6 class="text-primary mb-2">Sent email archive</h6>
+                            <p class="small text-muted mb-2">
+                                Pulls Gmail Sent (IMAP) + app EmailLog for this client’s addresses into a local archive,
+                                then uploads new messages to an <code>Emails/</code> subfolder in the linked Drive.
+                                Later syncs only fetch since the last archived email.
+                            </p>
+                            {% if email_archive_status and email_archive_status.needs_drive_details %}
+                            <div class="alert alert-warning small py-2">
+                                <strong>Drive folder missing.</strong>
+                                {{ email_archive_status.drive_flag or 'Link the client Google Drive folder above so archived emails can be stored in Drive.' }}
+                                <a href="#google_drive_folder_id">Add Drive details</a>
+                            </div>
+                            {% endif %}
+                            <div class="small text-muted mb-2">
+                                Archived: <strong>{{ email_archive_status.total_archived if email_archive_status else 0 }}</strong>
+                                {% if email_archive_status and email_archive_status.last_sent_at %}
+                                · last email {{ email_archive_status.last_sent_at }}
+                                {% endif %}
+                                {% if email_archive_status and email_archive_status.last_synced_at %}
+                                · last sync {{ email_archive_status.last_synced_at[:16]|replace('T', ' ') }}
+                                {% endif %}
+                                {% if email_archive_status and email_archive_status.client_emails %}
+                                · filter {{ email_archive_status.client_emails|join(', ') }}
+                                {% endif %}
+                            </div>
+                            <form method="post" action="{{ url_for('client_google_drive.sync_client_email_archive', client_id=client.id) }}">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-envelope-open-text"></i> Sync client emails
+                                </button>
+                            </form>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

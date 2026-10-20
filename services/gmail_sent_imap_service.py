@@ -144,16 +144,22 @@ def parse_reco_email_body(body: str) -> Dict[str, Any]:
                     continue
                 company, symbol, qty_s, price_s, value_s = cells_txt[:5]
                 symbol = symbol.strip()
+                # Tables often show "NSE:AFFLE" — keep ticker only
+                if ":" in symbol:
+                    symbol = symbol.split(":")[-1].strip()
+                symbol = symbol.upper()
                 if not symbol and not company:
                     continue
+                qty = _parse_money(qty_s)
                 amount = _parse_money(value_s)
                 if amount == 0:
-                    amount = _parse_money(qty_s) * _parse_money(price_s)
+                    amount = qty * _parse_money(price_s)
                 lines_out.append(
                     {
                         "action": action,
                         "symbol": symbol,
                         "name": company,
+                        "quantity": qty if qty else None,
                         "amount": amount,
                         "asset_class": "Equity",  # email tables are equity trades; debt rare in HTML
                     }
@@ -233,6 +239,223 @@ def _select_sent(conn: imaplib.IMAP4_SSL) -> str:
     raise RuntimeError("Could not select Gmail Sent folder — enable IMAP in Gmail settings")
 
 
+def _all_recipient_addresses(msg: email.message.Message) -> List[str]:
+    """Lowercased emails from To / Cc / Bcc headers."""
+    found: List[str] = []
+    seen = set()
+    for hdr in ("To", "Cc", "Bcc"):
+        raw = _decode_header_value(msg.get(hdr))
+        if not raw:
+            continue
+        for m in re.finditer(r"[\w.+-]+@[\w.-]+\.\w+", raw):
+            addr = m.group(0).lower()
+            if addr not in seen:
+                seen.add(addr)
+                found.append(addr)
+    return found
+
+
+def message_matches_addresses(
+    msg: email.message.Message, addresses: List[str]
+) -> bool:
+    """True if any To/Cc/Bcc address is in the target set."""
+    targets = {a.strip().lower() for a in addresses if a and a.strip()}
+    if not targets:
+        return False
+    return bool(targets.intersection(_all_recipient_addresses(msg)))
+
+
+def _parse_msg_date(msg: email.message.Message) -> Optional[date]:
+    date_hdr = msg.get("Date")
+    try:
+        if date_hdr:
+            return parsedate_to_datetime(date_hdr).date()
+    except Exception:
+        return None
+    return None
+
+
+def _imap_recipient_or_clause(addresses: List[str]) -> str:
+    """
+    Build IMAP OR chain for TO/CC matching any address.
+    Example: (OR (OR TO "a@x.com" CC "a@x.com") (OR TO "b@y.com" CC "b@y.com"))
+    """
+    parts: List[str] = []
+    for addr in addresses:
+        a = addr.strip().lower()
+        if not a or "@" not in a:
+            continue
+        # Quote for IMAP string
+        q = a.replace('\\', '\\\\').replace('"', '\\"')
+        parts.append(f'(OR TO "{q}" CC "{q}")')
+    if not parts:
+        return ""
+    clause = parts[0]
+    for p in parts[1:]:
+        clause = f"(OR {clause} {p})"
+    return clause
+
+
+def _fetch_rfc822(conn: imaplib.IMAP4_SSL, num: bytes) -> Optional[bytes]:
+    typ, msg_data = conn.fetch(num, "(RFC822)")
+    if typ != "OK" or not msg_data or not msg_data[0]:
+        return None
+    raw = msg_data[0][1]
+    if not isinstance(raw, (bytes, bytearray)):
+        return None
+    return bytes(raw)
+
+
+def _row_from_raw(
+    raw: bytes,
+    *,
+    num: bytes,
+    since: date,
+    before: date,
+    targets: List[str],
+) -> Optional[Dict[str, Any]]:
+    msg = email.message_from_bytes(raw)
+    if targets and not message_matches_addresses(msg, targets):
+        return None
+    advice_date = _parse_msg_date(msg)
+    if advice_date is None:
+        return None
+    if advice_date < since or advice_date >= before:
+        return None
+    subject = _decode_header_value(msg.get("Subject"))
+    html, text = _message_body(msg)
+    mid = (msg.get("Message-ID") or "").strip() or (
+        f"imap-{num.decode() if isinstance(num, bytes) else num}"
+    )
+    to_raw = _decode_header_value(msg.get("To"))
+    cc_raw = _decode_header_value(msg.get("Cc"))
+    return {
+        "gmail_message_id": mid,
+        "subject": subject,
+        "sent_at": advice_date.isoformat(),
+        "advice_date": advice_date,
+        "to_email": _extract_email_address(to_raw),
+        "to_raw": to_raw,
+        "cc_raw": cc_raw,
+        "recipient_emails": _all_recipient_addresses(msg),
+        "html": html,
+        "text": text,
+        "raw_rfc822": raw,
+        "source": "imap_sent",
+    }
+
+
+def fetch_sent_to_addresses(
+    *,
+    addresses: List[str],
+    since: date,
+    before: date,
+    max_messages: int = 150,
+) -> List[Dict[str, Any]]:
+    """
+    Fetch Sent messages whose To/Cc includes any of ``addresses``
+    between since (inclusive) and before (exclusive).
+
+    Uses IMAP TO/CC search (not full-mailbox download). Caps full-body fetches
+    at ``max_messages`` so the request cannot hang for hours.
+    """
+    targets = sorted({a.strip().lower() for a in addresses if a and "@" in a})
+    if not targets:
+        return []
+
+    conn = _imap_login()
+    # Avoid indefinite hang on a dead IMAP socket
+    try:
+        conn.sock.settimeout(90)
+    except Exception:
+        pass
+    results: List[Dict[str, Any]] = []
+    try:
+        _select_sent(conn)
+        since_s = since.strftime("%d-%b-%Y")
+        before_s = before.strftime("%d-%b-%Y")
+        recip = _imap_recipient_or_clause(targets)
+        ids: List[bytes] = []
+        if recip:
+            criteria = f'(SINCE {since_s} BEFORE {before_s} {recip})'
+            typ, data = conn.search(None, criteria)
+            if typ == "OK" and data and data[0]:
+                ids = data[0].split()
+                logger.info(
+                    "IMAP Sent TO/CC search: %s hit(s) for %s (%s → %s)",
+                    len(ids),
+                    targets,
+                    since_s,
+                    before_s,
+                )
+        if not ids:
+            # Fallback: date window only, but HEADER peek first (never bulk RFC822)
+            typ, data = conn.search(None, f"(SINCE {since_s} BEFORE {before_s})")
+            if typ != "OK" or not data or not data[0]:
+                return []
+            candidate_ids = data[0].split()
+            logger.warning(
+                "IMAP TO/CC search empty; header-scanning %s Sent msg(s) (cap %s)",
+                len(candidate_ids),
+                max_messages * 20,
+            )
+            # Newest first
+            candidate_ids = list(reversed(candidate_ids))
+            matched: List[bytes] = []
+            scan_cap = min(len(candidate_ids), max(max_messages * 20, 400))
+            for i, num in enumerate(candidate_ids[:scan_cap]):
+                try:
+                    typ, msg_data = conn.fetch(
+                        num, "(BODY.PEEK[HEADER.FIELDS (TO CC BCC SUBJECT DATE MESSAGE-ID)])"
+                    )
+                    if typ != "OK" or not msg_data:
+                        continue
+                    # msg_data is list of tuples; header bytes in [0][1]
+                    hdr = b""
+                    for part in msg_data:
+                        if isinstance(part, tuple) and len(part) >= 2 and part[1]:
+                            hdr = part[1]
+                            break
+                    if not hdr:
+                        continue
+                    msg = email.message_from_bytes(hdr)
+                    if message_matches_addresses(msg, targets):
+                        matched.append(num)
+                        if len(matched) >= max_messages:
+                            break
+                except Exception as exc:
+                    logger.warning("Skip IMAP header %s: %s", num, exc)
+                if i and i % 100 == 0:
+                    logger.info("IMAP header scan progress %s/%s", i, scan_cap)
+            ids = matched
+
+        # Prefer newest
+        ids = list(reversed(ids))[: int(max_messages)]
+        for i, num in enumerate(ids):
+            try:
+                raw = _fetch_rfc822(conn, num)
+                if not raw:
+                    continue
+                row = _row_from_raw(
+                    raw, num=num, since=since, before=before, targets=targets
+                )
+                if row:
+                    results.append(row)
+            except Exception as exc:
+                logger.warning("Skip IMAP message %s: %s", num, exc)
+            if i and i % 25 == 0:
+                logger.info("IMAP body fetch progress %s/%s", i, len(ids))
+    finally:
+        try:
+            conn.logout()
+        except Exception:
+            pass
+    logger.info(
+        "IMAP Sent fetch done: %s message(s) for %s", len(results), targets
+    )
+    return results
+
+
 def fetch_portfolio_reco_sent(
     *,
     since: date,
@@ -270,13 +493,7 @@ def fetch_portfolio_reco_sent(
                 subject = _decode_header_value(msg.get("Subject"))
                 if RECO_SUBJECT_MARKER.lower() not in subject.lower():
                     continue
-                date_hdr = msg.get("Date")
-                advice_date: Optional[date] = None
-                try:
-                    if date_hdr:
-                        advice_date = parsedate_to_datetime(date_hdr).date()
-                except Exception:
-                    advice_date = None
+                advice_date = _parse_msg_date(msg)
                 if advice_date is None:
                     continue
                 if advice_date < since or advice_date >= before:

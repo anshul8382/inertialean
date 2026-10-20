@@ -111,6 +111,49 @@ def save_client_google_drive(client_id: int):
 
 
 @client_google_drive_bp.route(
+    "/clients/<int:client_id>/email-archive/sync", methods=["POST"]
+)
+@login_required
+def sync_client_email_archive(client_id: int):
+    """Pull Sent (IMAP) + EmailLog into local archive; upload to Drive Emails/ when linked."""
+    from services.client_email_archive_service import sync_client_emails
+
+    client, redir = _require_client(client_id)
+    if redir:
+        return redir
+
+    try:
+        result = sync_client_emails(client_id)
+    except Exception as exc:
+        logger.exception("Email archive sync failed for client %s", client_id)
+        flash(f"Email archive sync failed: {exc}", "error")
+        return redirect(url_for("clients.client_details", client_id=client_id))
+
+    parts = [
+        f"Archived locally: +{result.get('imap_added', 0)} IMAP, "
+        f"+{result.get('emaillog_added', 0)} EmailLog "
+        f"(total {result.get('total_archived', 0)})."
+    ]
+    if result.get("imap_error"):
+        flash(f"IMAP note: {result['imap_error']}", "warning")
+    if result.get("needs_drive_details"):
+        flash(
+            result.get("drive_flag")
+            or "Client Google Drive folder is not linked — add Drive details so emails can be stored in Drive.",
+            "warning",
+        )
+        parts.append("Drive upload skipped until folder is linked.")
+    elif result.get("stored_on_drive"):
+        parts.append("Uploaded new messages to Drive Emails/.")
+    flash(" ".join(parts), "success")
+
+    next_url = (request.form.get("next") or "").strip()
+    if next_url and next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect(url_for("clients.client_details", client_id=client_id))
+
+
+@client_google_drive_bp.route(
     "/clients/<int:client_id>/suitability-report/generate", methods=["POST"]
 )
 @login_required

@@ -1,0 +1,1176 @@
+{% extends "base.html" %}
+{% block title %}Holdings reconciliation{% endblock %}
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'Holdings recon' %}
+  {% set mobile_back_url = url_for('hub.operational_dashboard') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <p class="text-muted small px-3">Open on desktop for upload and mapping review.</p>
+</div>
+
+<div class="im-desktop-only im-collapsed-on-mobile container-fluid mt-3 mb-5">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+      <a href="{{ url_for('hub.operational_dashboard') }}" class="small text-muted text-decoration-none">← Operational intelligence</a>
+      <h2 class="mt-1 mb-0"><i class="fas fa-balance-scale text-primary"></i> Holdings reconciliation</h2>
+      <p class="text-muted small mb-0">
+        Statement vs trade-built portfolio (as-of). Confirm mappings before match.
+        Rules: <code>docs/RECONCILIATION_RULES.md</code>
+      </p>
+    </div>
+  </div>
+
+  {# Top bar: client + Drive + upload — full-width results below #}
+  <div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+      <div class="d-flex flex-wrap align-items-end gap-3">
+        <form method="get" class="mb-0" id="holdings-client-pick" style="min-width:12rem;flex:0 1 16rem;">
+          <label class="form-label small mb-0" for="client_id_pick">Client</label>
+          <select class="form-select form-select-sm" name="client_id" id="client_id_pick"
+                  onchange="this.form.submit()">
+            <option value="">Select client…</option>
+            {% for c in clients %}
+            <option value="{{ c.id }}" {% if selected_client_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+          </select>
+          {% if run %}<input type="hidden" name="run_id" value="{{ run.id }}">{% endif %}
+        </form>
+
+        {% if selected_client_id %}
+        {% set dh = drive_holdings or {} %}
+        {% if dh.ok and dh.files %}
+        <form method="post" class="mb-0 flex-grow-1" id="holdings-drive-form"
+              action="{{ url_for('hub.holdings_reconciliation') }}" style="min-width:14rem;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="action" value="use_drive_file">
+          <input type="hidden" name="client_id" value="{{ selected_client_id }}">
+          <input type="hidden" name="broker" value="{{ run.broker if run else 'default' }}" id="drive_broker_mirror">
+          <label class="form-label small mb-0">Drive Holdings/</label>
+          <div class="d-flex flex-wrap align-items-center gap-2">
+            <div class="d-flex flex-wrap gap-2 small" style="max-height:4.5rem;overflow:auto;flex:1 1 12rem;">
+              {% for f in dh.files[:12] %}
+              <div class="form-check form-check-inline mb-0 me-0">
+                <input class="form-check-input" type="checkbox" name="drive_file_id" id="drv_{{ f.id }}"
+                       value="{{ f.id }}" form="holdings-drive-form">
+                <label class="form-check-label text-truncate" for="drv_{{ f.id }}" style="max-width:11rem;" title="{{ f.name }}">
+                  {{ f.name }}
+                </label>
+              </div>
+              {% endfor %}
+              {% if dh.files|length > 12 %}
+              <span class="text-muted">+{{ dh.files|length - 12 }} more</span>
+              {% endif %}
+            </div>
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="radio" name="multi_mode" id="drv_mode_combine" value="combine" checked form="holdings-drive-form">
+              <label class="form-check-label small" for="drv_mode_combine">Combine</label>
+            </div>
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="radio" name="multi_mode" id="drv_mode_bracket" value="date_bracket" form="holdings-drive-form">
+              <label class="form-check-label small" for="drv_mode_bracket">Date bracket</label>
+            </div>
+            <button type="submit" class="btn btn-primary btn-sm" form="holdings-drive-form" id="holdings-drive-submit">
+              Start from Drive
+            </button>
+          </div>
+        </form>
+        {% elif dh.needs_drive or (dh.ok == false and dh.needs_drive) %}
+        <div class="small text-muted mb-1">No Drive folder linked — link on client detail.</div>
+        {% elif dh.ok %}
+        <div class="small text-muted mb-1">Holdings/ empty — upload below.</div>
+        {% elif dh.error %}
+        <div class="small text-warning mb-1">{{ dh.error }}</div>
+        {% endif %}
+        {% endif %}
+
+        <div class="ms-lg-auto">
+          <details class="small">
+            <summary class="text-muted" style="cursor:pointer">Upload / prior runs / trade evidence</summary>
+            <div class="border rounded p-2 mt-1 bg-light" style="min-width:16rem;max-width:28rem;">
+              {% if selected_client_id %}
+              {% set tdl = trade_drive_link or {} %}
+              <form method="post" class="mb-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="save_trade_evidence">
+                <input type="hidden" name="client_id" value="{{ selected_client_id }}">
+                {% if run %}<input type="hidden" name="run_id" value="{{ run.id }}">{% endif %}
+                <div class="fw-semibold mb-1">Trade evidence (contract notes)</div>
+                <label class="form-label small mb-0" for="trade_folder_url">Drive folder URL / ID</label>
+                <input class="form-control form-control-sm mb-1" name="trade_folder_url" id="trade_folder_url"
+                       value="{{ tdl.folder_id or '' }}"
+                       placeholder="https://drive.google.com/drive/folders/…">
+                <label class="form-label small mb-0" for="pdf_passwords">PDF passwords (PAN, comma-separated)</label>
+                <input class="form-control form-control-sm mb-1" name="pdf_passwords" id="pdf_passwords"
+                       value="{{ (tdl.pdf_passwords or [])|join(', ') }}"
+                       placeholder="AECPA6630G, AQUPD7523P" autocomplete="off">
+                <button type="submit" class="btn btn-outline-primary btn-sm">Save trade folder</button>
+                <div class="form-text">Used on Refresh to match sent recos vs books vs broker fills.</div>
+              </form>
+              <hr class="my-2">
+              {% endif %}
+              {% if selected_client_id and client_runs %}
+              <form method="post" class="mb-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="combine_runs">
+                <input type="hidden" name="client_id" value="{{ selected_client_id }}">
+                <input type="hidden" name="broker" value="{{ run.broker if run else 'default' }}">
+                <div class="fw-semibold mb-1">Prior runs ({{ client_runs|length }})</div>
+                <ul class="list-unstyled mb-1" style="max-height:6rem;overflow:auto;">
+                  {% for r in client_runs[:10] %}
+                  <li class="mb-1">
+                    {% if r.format_id not in ('combined_statements', 'date_bracket') %}
+                    <input type="checkbox" name="combine_run_id" value="{{ r.id }}" id="cr_{{ r.id }}">
+                    {% else %}
+                    <span class="text-muted">·</span>
+                    {% endif %}
+                    <a href="{{ url_for('hub.holdings_reconciliation', run_id=r.id, client_id=selected_client_id) }}">
+                      {{ r.filename or r.format_id }} · {{ r.as_of or '?' }}
+                    </a>
+                  </li>
+                  {% endfor %}
+                </ul>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="multi_mode" id="cr_mode_combine" value="combine" checked>
+                  <label class="form-check-label" for="cr_mode_combine">Combine</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="multi_mode" id="cr_mode_bracket" value="date_bracket">
+                  <label class="form-check-label" for="cr_mode_bracket">Date bracket</label>
+                </div>
+                <button type="submit" class="btn btn-outline-success btn-sm d-block mt-1">Run on selected</button>
+              </form>
+              <hr class="my-2">
+              {% endif %}
+              <form method="post" enctype="multipart/form-data" id="holdings-upload-form"
+                    action="{{ url_for('hub.holdings_reconciliation') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="upload">
+                <div class="mb-1">
+                  <label class="form-label small mb-0" for="client_id">Client</label>
+                  <select class="form-select form-select-sm" name="client_id" id="client_id" required>
+                    <option value="">Select…</option>
+                    {% for c in clients %}
+                    <option value="{{ c.id }}" {% if selected_client_id == c.id or (run and run.client_id == c.id) %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="mb-1">
+                  <label class="form-label small mb-0" for="broker">Broker</label>
+                  <input class="form-control form-control-sm" name="broker" id="broker"
+                         value="{{ run.broker if run else 'default' }}"
+                         placeholder="zerodha / groww / angel"
+                         oninput="var m=document.getElementById('drive_broker_mirror'); if(m) m.value=this.value;">
+                </div>
+                <div class="mb-1">
+                  <label class="form-label small mb-0" for="statement">File(s)</label>
+                  <input class="form-control form-control-sm" type="file" name="statement" id="statement"
+                         accept=".csv,.xlsx,.xls,.pdf" multiple>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="multi_mode" id="up_mode_combine" value="combine" checked>
+                  <label class="form-check-label" for="up_mode_combine">Combine</label>
+                </div>
+                <div class="form-check form-check-inline">
+                  <input class="form-check-input" type="radio" name="multi_mode" id="up_mode_bracket" value="date_bracket">
+                  <label class="form-check-label" for="up_mode_bracket">Date bracket</label>
+                </div>
+                <button type="submit" class="btn btn-outline-secondary btn-sm d-block mt-1" id="holdings-upload-submit">Upload &amp; parse</button>
+              </form>
+            </div>
+          </details>
+        </div>
+      </div>
+      <script>
+      (function () {
+        var up = document.getElementById('holdings-upload-form');
+        var drive = document.getElementById('holdings-drive-form');
+        if (up) {
+          up.addEventListener('submit', function (e) {
+            var fileInput = document.getElementById('statement');
+            var driveChecked = drive && drive.querySelectorAll('input[name="drive_file_id"]:checked').length;
+            if (driveChecked && (!fileInput || !fileInput.files || !fileInput.files.length)) {
+              e.preventDefault();
+              alert('You already checked Drive file(s). Click “Start from Drive” — no local upload needed.');
+              var btn = document.getElementById('holdings-drive-submit');
+              if (btn) btn.focus();
+              return;
+            }
+            if (!fileInput || !fileInput.files || !fileInput.files.length) {
+              e.preventDefault();
+              alert('Choose a local file to upload, or use Start from Drive.');
+              if (fileInput) fileInput.focus();
+            }
+          });
+        }
+        if (drive) {
+          drive.addEventListener('submit', function (e) {
+            if (!drive.querySelectorAll('input[name="drive_file_id"]:checked').length) {
+              e.preventDefault();
+              alert('Check at least one Drive file, then click Start from Drive.');
+            }
+          });
+        }
+      })();
+      </script>
+    </div>
+  </div>
+
+  <div class="holdings-recon-main">
+      {% if not run %}
+      <div class="alert alert-light border">Select a client and start from Drive Holdings/, or use Upload under the top bar. Supported: Zerodha CSV, Groww/equity XLSX, CDSL demat XLSX, broker short-code XLSX, Angel DP PDF.</div>
+      {% else %}
+      <div class="card shadow-sm mb-3">
+        <div class="card-body py-3">
+          <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+            <strong>{{ run.client_name }}</strong>
+            <span class="badge bg-info text-dark">{{ run.format_id }}</span>
+            <span class="badge bg-secondary">{{ run.status }}</span>
+            <span class="text-muted small">{{ run.filename }}</span>
+          </div>
+          {% if run.format_id == 'date_bracket' and run.date_bracket %}
+          {% set db = run.date_bracket %}
+          <div class="alert alert-warning py-2 small mb-2">
+            <strong>Date bracket</strong> — {{ db.summary }}
+            <div class="text-muted mt-1">As-of chain: {{ db.as_of_dates|join(' → ') }}</div>
+          </div>
+          {% if db.windows %}
+          <div class="border rounded p-2 small mb-2">
+            {% for w in db.windows %}
+            <div class="mb-2 {% if not loop.last %}border-bottom pb-2{% endif %}">
+              <div class="fw-semibold">{{ w.from_as_of }} → {{ w.to_as_of }}</div>
+              <div class="text-muted">Appeared {{ w.appeared_count }} · Resolved {{ w.resolved_count }} · Persistent {{ w.persistent_count }}</div>
+              {% if w.appeared %}
+              <div class="mt-1">New breaks:
+                {% for b in w.appeared[:12] %}
+                <code>{{ b.symbol or b.security_id }}</code>{% if not loop.last %}, {% endif %}
+                {% endfor %}{% if w.appeared|length > 12 %}…{% endif %}
+              </div>
+              {% endif %}
+              {% if w.resolved %}
+              <div>Cleared:
+                {% for b in w.resolved[:8] %}
+                <code>{{ b.symbol or b.security_id }}</code>{% if not loop.last %}, {% endif %}
+                {% endfor %}{% if w.resolved|length > 8 %}…{% endif %}
+              </div>
+              {% endif %}
+            </div>
+            {% endfor %}
+            {% if db.already_at_earliest %}
+            <div class="text-muted">Already broken at earliest as-of:
+              {% for b in db.already_at_earliest[:10] %}
+              <code>{{ b.symbol or b.security_id }}</code>{% if not loop.last %}, {% endif %}
+              {% endfor %}{% if db.already_at_earliest|length > 10 %}…{% endif %}
+            </div>
+            {% endif %}
+          </div>
+          {% endif %}
+          {% elif run.format_id == 'combined_statements' or (run.combined_from and run.format_id != 'date_bracket') %}
+          <div class="alert alert-success py-2 small mb-2">
+            <strong>Combined statements</strong> — quantities for the same security are summed
+            before matching books
+            {% if run.combined_from %}
+            ({{ run.combined_from|length }} files:
+            {% for s in run.combined_from[:6] %}{{ s.filename }}{% if not loop.last %}, {% endif %}{% endfor %}{% if run.combined_from|length > 6 %}…{% endif %}).
+            {% endif %}
+          </div>
+          {% endif %}
+          {% if run.parse_warnings %}
+          <ul class="small text-warning mb-0">
+            {% for w in run.parse_warnings %}<li>{{ w }}</li>{% endfor %}
+          </ul>
+          {% endif %}
+        </div>
+      </div>
+
+      {% if run.status in ('awaiting_confirm', 'confirmed') or (run.review_rows and run.status != 'matched') %}
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2"><strong class="small text-uppercase text-muted">1. Confirm as-of &amp; security maps</strong></div>
+        <div class="card-body">
+          <p class="small text-muted mb-2">
+            Blue <span class="badge bg-info text-dark">suggested</span> rows are pre-selected from a name match.
+            Change the dropdown if wrong, then Confirm (tick Remember to reuse next time).
+            Unmapped lines that are the client's own / outside advisory scope: choose
+            <em>Ignore (out of scope)</em> on the row, or tick <strong>Ignore unmapped lines</strong> below.
+          </p>
+          <form method="post" data-recon-long="1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="confirm">
+            <input type="hidden" name="run_id" value="{{ run.id }}">
+            <div class="row g-2 mb-3">
+              <div class="col-md-4">
+                <label class="form-label small">As-of date</label>
+                <input type="date" class="form-control form-control-sm" name="as_of" required
+                       value="{{ run.as_of or '' }}">
+                <div class="form-text">
+                  Guessed from {{ run.as_of_source or 'none' }}
+                  ({{ run.as_of_confidence or 'none' }}) — please confirm.
+                </div>
+              </div>
+            </div>
+            <div class="table-responsive" style="max-height: 420px; overflow:auto;">
+              <table class="table table-sm table-striped align-middle mb-0">
+                <thead class="table-light sticky-top">
+                  <tr>
+                    <th>Qty</th>
+                    <th>NSE</th>
+                    <th>ISIN</th>
+                    <th>Broker code</th>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Map to security</th>
+                    <th>Remember</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in run.review_rows %}
+                  <tr class="{% if row.status == 'unmapped' %}table-warning{% elif row.status == 'suggested' %}table-info{% elif row.status == 'ignored' %}table-secondary{% endif %}">
+                    <td>
+                      {{ row.qty }}
+                      {% if row.combine_note %}
+                      <div class="form-text text-success" style="font-size:0.65rem;">{{ row.combine_note }}</div>
+                      {% elif row.sources and row.sources|length > 1 %}
+                      <div class="form-text" style="font-size:0.65rem;">
+                        {% for s in row.sources[:4] %}{{ s.filename }}:{{ s.qty }}{% if not loop.last %}+{% endif %}{% endfor %}
+                      </div>
+                      {% endif %}
+                    </td>
+                    <td>{{ row.nse_symbol or '—' }}</td>
+                    <td class="small">{{ row.isin or '—' }}</td>
+                    <td>{{ row.broker_code or '—' }}</td>
+                    <td class="small">{{ row.raw_name or '—' }}</td>
+                    <td>
+                      {% if row.status == 'mapped' %}
+                      <span class="badge bg-success">mapped</span>
+                      {% elif row.status == 'suggested' %}
+                      <span class="badge bg-info text-dark" title="Name match {{ row.match_score or '' }} — change if wrong">suggested</span>
+                      {% elif row.status == 'ignored' %}
+                      <span class="badge bg-secondary" title="Excluded from match">ignored</span>
+                      {% else %}
+                      <span class="badge bg-warning text-dark">unmapped</span>
+                      {% endif %}
+                    </td>
+                    <td style="min-width:12rem;">
+                      <select class="form-select form-select-sm" name="sec_{{ row.line_index }}">
+                        <option value="">—</option>
+                        <option value="__ignore__" {% if row.status == 'ignored' %}selected{% endif %}>
+                          Ignore (out of scope)
+                        </option>
+                        {% for s in securities %}
+                        <option value="{{ s.id }}"
+                          {% if row.security_id == s.id %}selected{% endif %}>
+                          {{ s.symbol }} — {{ s.name[:40] }}
+                        </option>
+                        {% endfor %}
+                      </select>
+                      {% if row.status == 'suggested' and row.match_method %}
+                      <div class="form-text">via {{ row.match_method }}{% if row.match_score %} ({{ row.match_score }}){% endif %}</div>
+                      {% endif %}
+                    </td>
+                    <td class="text-center">
+                      <input type="checkbox" name="remember_{{ row.line_index }}" value="1"
+                             {% if row.status != 'mapped' and row.status != 'ignored' %}checked{% endif %}>
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            <div class="form-check mt-3 mb-2">
+              <input class="form-check-input" type="checkbox" name="ignore_unmapped" value="1" id="ignore_unmapped">
+              <label class="form-check-label small" for="ignore_unmapped">
+                Ignore unmapped lines — client's own holdings / outside advisory scope
+                (excluded from this recon; do not treat as breaks)
+              </label>
+            </div>
+            <div class="mt-2">
+              <button type="submit" class="btn btn-success btn-sm">Confirm &amp; run match</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if run.client_id %}
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2">
+          <strong class="small text-uppercase text-muted">Advisor notes (holdings paste)</strong>
+        </div>
+        <div class="card-body small">
+          <p class="text-muted mb-2">
+            Paste holdings table (Company Name, NSE Symbol, Quantity, …).
+            Cashflow paste stays on
+            <a href="{{ url_for('clients.cashflow_trade_integrity', client_id=run.client_id) }}">cashflow–trade integrity</a>.
+          </p>
+          {% if holdings_notes_approved and holdings_notes_approved.approved %}
+          <div class="alert alert-success py-2 mb-2">
+            Approved {{ holdings_notes_approved.approved_at or '' }} —
+            {{ holdings_notes_approved.row_count or 0 }} rows,
+            {{ holdings_notes_approved.drift_count or 0 }} drift vs books
+            {% if holdings_notes_approved.sync_through %}
+            · sync-through {{ holdings_notes_approved.sync_through }}
+            {% endif %}
+          </div>
+          {% endif %}
+          {% set hprev = run.holdings_notes_preview or {} %}
+          {% if hprev.ok %}
+          <div class="alert alert-info py-2 mb-2">
+            Preview: {{ hprev.row_count }} rows · {{ hprev.drift_count }} drift
+            {% if hprev.drift %}
+            <div class="mt-1">{% for d in hprev.drift[:8] %}<code>{{ d.symbol }}</code> {{ d.detail }}{% if not loop.last %}; {% endif %}{% endfor %}</div>
+            {% endif %}
+          </div>
+          {% endif %}
+          <form method="post" class="mb-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="run_id" value="{{ run.id }}">
+            <textarea name="holdings_notes_paste" class="form-control form-control-sm mb-2" rows="6"
+              placeholder="Company Name	NSE Symbol	Quantity	Purchase Price	…">{{ request.form.holdings_notes_paste if request.form.get('holdings_notes_paste') else '' }}</textarea>
+            <button type="submit" name="action" value="holdings_notes_preview" class="btn btn-outline-secondary btn-sm">Preview</button>
+            {% if hprev.ok %}
+            <input type="hidden" name="paste_hash" value="{{ hprev.paste_hash }}">
+            <button type="submit" name="action" value="holdings_notes_approve" class="btn btn-primary btn-sm">Approve</button>
+            {% endif %}
+          </form>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if run.match_result %}
+      {% set mr = run.match_result %}
+      {% set ov = mr.overall or {} %}
+
+      <div class="card shadow-sm mb-3">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+          <strong class="small text-uppercase text-muted">2. Match results</strong>
+          <form method="post" class="mb-0" data-recon-long="1">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="action" value="refresh_investigation">
+            <input type="hidden" name="run_id" value="{{ run.id }}">
+            <button type="submit" class="btn btn-outline-secondary btn-sm"
+                    title="Re-run match + investigation from this upload. Emails reused if already archived.">
+              Refresh investigation
+            </button>
+          </form>
+        </div>
+        <div class="card-body">
+          <p class="mb-3">
+            As-of <strong>{{ mr.as_of }}</strong> ·
+            matched <strong>{{ mr.matched_count }}</strong> ·
+            mismatches <strong>{{ mr.break_count }}</strong>
+            {% if ov.match_pct is defined %} · {{ ov.match_pct }}% clean{% endif %}
+          </p>
+
+          {% set ad = ov.amount_dispute or mr.amount_dispute or {} %}
+          {% if ad and ad.portfolio_value is defined %}
+          <div class="row g-2 mb-3">
+            <div class="col-md-4">
+              <div class="border rounded p-2 h-100 bg-success bg-opacity-10">
+                <div class="text-uppercase text-muted" style="font-size:0.7rem;">Matched amount</div>
+                <div class="fs-5 fw-semibold">₹{{ "{:,.0f}".format(ad.matched.amount or 0) }}</div>
+                <div class="small">{{ ad.matched.pct_of_portfolio if ad.matched.pct_of_portfolio is not none else '—' }}% of portfolio
+                  <span class="text-muted">· {{ ad.matched.count or 0 }} names</span>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="border rounded p-2 h-100 bg-warning bg-opacity-10">
+                <div class="text-uppercase text-muted" style="font-size:0.7rem;">Found sources</div>
+                <div class="fs-5 fw-semibold">₹{{ "{:,.0f}".format(ad.found_sources.amount or 0) }}</div>
+                <div class="small">{{ ad.found_sources.pct_of_portfolio if ad.found_sources.pct_of_portfolio is not none else '—' }}% of portfolio
+                  <span class="text-muted">· {{ ad.found_sources.count or 0 }} gaps (|Δ|×price)</span>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="border rounded p-2 h-100 bg-danger bg-opacity-10">
+                <div class="text-uppercase text-muted" style="font-size:0.7rem;">Still need to check</div>
+                <div class="fs-5 fw-semibold">₹{{ "{:,.0f}".format(ad.needs_check.amount or 0) }}</div>
+                <div class="small">{{ ad.needs_check.pct_of_portfolio if ad.needs_check.pct_of_portfolio is not none else '—' }}% of portfolio
+                  <span class="text-muted">· {{ ad.needs_check.count or 0 }} gaps</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="small text-muted mb-3">
+            Portfolio ≈ ₹{{ "{:,.0f}".format(ad.portfolio_value or 0) }}
+            (statement qty × price).
+            Dispute total ≈ ₹{{ "{:,.0f}".format(ad.dispute_total or 0) }}
+            {% if ad.missing_price_on_breaks %} · {{ ad.missing_price_on_breaks }} mismatch(es) missing price{% endif %}
+          </p>
+          {% endif %}
+
+          <h6 class="text-uppercase text-muted small mb-2">Holdings matched ({{ mr.matched_count or 0 }})</h6>
+          {% set matched_list = mr.matched_rows or [] %}
+          {% if matched_list %}
+          <div class="table-responsive mb-4" style="max-height:280px; overflow:auto;">
+            <table class="table table-sm table-striped align-middle mb-0">
+              <thead class="table-light sticky-top">
+                <tr>
+                  <th>Symbol</th>
+                  <th>Statement</th>
+                  <th>System</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for m in matched_list|sort(attribute='symbol') %}
+                <tr>
+                  <td><code>{{ m.symbol or m.security_id }}</code></td>
+                  <td>{{ m.statement_qty }}</td>
+                  <td>{{ m.system_qty }}</td>
+                  <td><span class="badge bg-success">matched</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <p class="text-muted small mb-4">No matched holdings.</p>
+          {% endif %}
+
+          {% set story_early = ov.advisor_story or (ov.simple_investigate.advisor_story if ov.simple_investigate else none) or {} %}
+          {% set hi_syms = story_early.high_confidence_symbols or story_early.fixes or [] %}
+          {% set hi_set = hi_syms|map('upper')|list if hi_syms else [] %}
+
+          <h6 class="text-uppercase text-muted small mb-2">Mismatches</h6>
+          {% if story_early.resolved_count is defined or story_early.pending_count is defined %}
+          <p class="small mb-2">
+            <span class="badge text-bg-warning">{{ story_early.resolved_count or 0 }} resolved</span>
+            <span class="text-muted">(high confidence — focus reco, missing in books)</span>
+            ·
+            <span class="badge text-bg-secondary">{{ story_early.pending_count or 0 }} pending</span>
+          </p>
+          {% endif %}
+          {% if mr.breaks %}
+          <div class="table-responsive mb-4">
+            <table class="table table-sm table-hover">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Statement</th>
+                  <th>System</th>
+                  <th>Delta</th>
+                  <th>Tentative ₹</th>
+                  <th>Status</th>
+                  <th>Hypothesis</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for b in mr.breaks %}
+                {% set d = b.diagnosis or {} %}
+                {% set is_hi = b.high_confidence or d.high_confidence or ((b.symbol or '')|upper in hi_set) %}
+                <tr class="{% if is_hi %}table-warning{% endif %}">
+                  <td>
+                    <code>{{ b.symbol or b.security_id }}</code>
+                    {% if is_hi %}<span class="badge text-bg-warning ms-1">high conf</span>{% endif %}
+                  </td>
+                  <td>{{ b.statement_qty }}</td>
+                  <td>{{ b.system_qty }}</td>
+                  <td>{{ b.delta }}</td>
+                  <td class="small">
+                    {% if b.tentative_amount is not none %}
+                    ₹{{ "{:,.0f}".format(b.tentative_amount) }}
+                    {% if b.price %}<span class="text-muted">(|Δ|×{{ b.price }})</span>{% endif %}
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% set st = b.status_display or b.status %}
+                    <span class="badge {% if st == 'FOUND_MISSING_RECOMMENDATION' or st == 'LIQUIDBEES_INTEREST_UNITS' %}bg-warning text-dark{% else %}bg-danger{% endif %}">{{ st }}</span>
+                  </td>
+                  <td>
+                    <span class="badge bg-dark">{{ d.top_hypothesis or '—' }}</span>
+                    {% if d.liquid_bees and d.liquid_bees.matches and d.liquid_bees.recommendation %}
+                    <div class="small text-muted mt-1">{{ d.liquid_bees.recommendation }}</div>
+                    {% elif d.advisor_action %}
+                    <div class="small text-muted mt-1">{{ d.advisor_action }}</div>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="alert alert-success mb-4">No quantity mismatches at this as-of.</div>
+          {% endif %}
+
+          <h6 class="text-uppercase text-muted small mb-2">Investigation details</h6>
+          {% set lb = ov.liquid_bees or {} %}
+          {% if lb.hits %}
+          <div class="border rounded p-2 small mb-3 bg-warning bg-opacity-10">
+            <div class="fw-semibold mb-1">Liquid Bees interest units</div>
+            <div class="text-muted mb-1">{{ lb.summary }}</div>
+            <ul class="mb-0">
+              {% for h in lb.hits %}
+              <li>{{ h.recommendation or (h.symbol ~ ' Δ ' ~ h.gap) }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+          {% set hvr = ov.holdings_vs_reco or {} %}
+          {% if hvr.hits %}
+          <div class="border rounded p-2 small mb-3">
+            <div class="fw-semibold mb-1">Confirm with client</div>
+            <div class="text-muted mb-1">{{ hvr.summary }}</div>
+            <ul class="mb-0">
+              {% for h in hvr.hits[:12] %}
+              <li>
+                <code>{{ h.symbol }}</code>
+                {% if h.hypothesis %}<span class="badge bg-secondary">{{ h.hypothesis }}</span>{% endif %}
+                — {{ h.summary }}
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+          {% set be = ov.broker_evidence or {} %}
+          {% if be and (be.findings or be.summary or be.broker) %}
+          <div class="border rounded p-2 small mb-3">
+            <div class="fw-semibold mb-1">Broker / reco evidence (Drive contract notes)</div>
+            <div class="text-muted mb-1">{{ be.summary }}</div>
+            {% if be.broker and be.broker.reason == 'trade_folder_not_linked' %}
+            <div class="text-warning">Link the trade-details Drive folder under Upload / trade evidence, then refresh.</div>
+            {% endif %}
+            {% if be.broker and be.broker.files_scanned %}
+            <div class="text-muted">Scanned {{ be.broker.files_scanned }} file(s)
+              · decrypted {{ be.broker.decrypt_ok or 0 }}
+              {% if be.broker.decrypt_fail %} · {{ be.broker.decrypt_fail }} failed decrypt{% endif %}
+              {% if be.broker.screenshots %} · {{ be.broker.screenshots|length }} order screenshot(s){% endif %}
+            </div>
+            {% endif %}
+            {% if be.findings %}
+            <ul class="mb-0 mt-1">
+              {% for f in be.findings[:12] %}
+              <li>{{ f }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+          {% endif %}
+          {% set es = ov.email_sync or mr.email_sync or {} %}
+          {% if mr.break_count and es and (es.imap_error or es.ok == false) %}
+          <div class="alert alert-warning small py-2">
+            <strong>Email sync failed:</strong>
+            {{ es.imap_error or 'error' }} — qty gaps shown; sync emails and refresh.
+          </div>
+          {% endif %}
+          {% set conf = ov.investigation_confidence or {} %}
+          {% set trust_pc = conf.trust_primary_cause if conf.trust_primary_cause is defined else (conf.level != 'low') %}
+          {% set alloc = ov.allocation or {} %}
+          {% set story = ov.advisor_story or (ov.simple_investigate.advisor_story if ov.simple_investigate else none) or alloc.advisor_story or conf.advisor_story or {} %}
+          {% set steps = (ov.simple_investigate.steps if ov.simple_investigate else none) or [] %}
+
+          {% if story.headline %}
+          <div class="alert alert-primary small py-3 mb-3">
+            <div class="fw-semibold mb-2">{{ story.headline }}</div>
+            {% if story.subject %}
+            <div class="text-muted mb-2">{{ story.sent_at or '' }} — {{ story.subject }}</div>
+            {% endif %}
+
+            <div class="mb-3 p-2 bg-white border rounded">
+              <div class="fw-semibold mb-1">Gaps resolved vs pending</div>
+              <div>
+                <strong>{{ story.resolved_count or (story.fixes|length if story.fixes else 0) }}</strong> resolved
+                {% if story.gap_total %} of {{ story.gap_total }}{% endif %}
+                — {{ story.resolved_summary or 'Explained by focus recommendation (missing in system).' }}
+              </div>
+              <div class="mt-1">
+                <strong>{{ story.pending_count or (story.remaining|length if story.remaining else 0) }}</strong> pending
+                — {{ story.pending_summary or 'Other mismatches still open.' }}
+              </div>
+            </div>
+
+            {% set ex = story.execution_check or (ov.simple_investigate.execution_check if ov.simple_investigate else none) %}
+            {% if ex and ex.checked %}
+            <div class="mb-3 p-2 bg-white border rounded">
+              <div class="fw-semibold mb-1">Execution check ({{ ex.window or 'reco window' }})</div>
+              <div class="mb-1">{{ ex.message }}</div>
+              <ul class="mb-0 ps-3">
+                <li>Matching trades found: {{ ex.trades_matching_count or 0 }}
+                  {% if ex.trades_matching_symbols %}
+                  ({{ ex.trades_matching_symbols[:8]|join(', ') }}{% if ex.trades_matching_symbols|length > 8 %}…{% endif %})
+                  {% endif %}
+                </li>
+                <li>Reco lines still missing in books: {{ ex.trades_missing_count or 0 }}
+                  {% if ex.trades_missing_symbols %}
+                  ({{ ex.trades_missing_symbols[:8]|join(', ') }}{% if ex.trades_missing_symbols|length > 8 %}…{% endif %})
+                  {% endif %}
+                </li>
+                <li>Recommendation rows still open/sent: {{ ex.open_reco_count or 0 }}
+                  · marked executed: {{ ex.executed_reco_count or 0 }}</li>
+                {% if ex.session_status %}
+                <li>Recommendation session: <code>{{ ex.session_status }}</code></li>
+                {% endif %}
+                {% if ex.workflow_stage %}
+                <li>Investment workflow stage: <code>{{ ex.workflow_stage }}</code>
+                  {% if ex.workflow_stage != 'COMPLETED' %}(still open){% endif %}
+                </li>
+                {% endif %}
+              </ul>
+            </div>
+            {% endif %}
+
+            {% if story.fixes %}
+            <div class="mb-1">Resolved by this reco (missing in system) — high confidence:</div>
+            <ul class="mb-2 ps-3">
+              {% for s in story.fixes[:20] %}
+              <li><code>{{ s }}</code></li>
+              {% endfor %}
+              {% if story.fixes|length > 20 %}
+              <li class="text-muted">+{{ story.fixes|length - 20 }} more</li>
+              {% endif %}
+            </ul>
+            {% endif %}
+            {% set remain_notes = story.remaining_notes or ov.remaining_notes or [] %}
+            {% if story.remaining or remain_notes %}
+            <div class="mb-1">Other mismatches (pending) — expand each holding:</div>
+            <div class="mb-2">
+              {% if remain_notes %}
+                {% for n in remain_notes[:20] %}
+                <details class="border rounded px-2 py-1 mb-1 bg-white">
+                  <summary style="cursor:pointer;">
+                    <code>{{ n.symbol }}</code>
+                    <span class="text-muted">Δ {{ n.delta }} · gap {{ n.gap }}</span>
+                    {% if n.summary %}
+                    <span class="text-muted">— {{ n.summary[:90] }}{% if n.summary|length > 90 %}…{% endif %}</span>
+                    {% endif %}
+                  </summary>
+                  <div class="small mt-2 mb-1">
+                    {% if n.potential_issues %}
+                    <div class="fw-semibold mb-1">Potential issue</div>
+                    <ul class="mb-2 ps-3">
+                      {% for p in n.potential_issues[:4] %}
+                      <li class="mb-1">{{ p }}</li>
+                      {% endfor %}
+                    </ul>
+                    {% endif %}
+                    {% if n.checks %}
+                    <div class="fw-semibold mb-1">Checks</div>
+                    <ul class="mb-2 ps-3">
+                      {% for c in n.checks[:10] %}
+                      <li class="mb-1">{{ c }}</li>
+                      {% endfor %}
+                    </ul>
+                    {% endif %}
+                    {% if n.suspects %}
+                    <div class="fw-semibold mb-1">Suspects (qty ≈ gap)</div>
+                    <ul class="mb-0 ps-3">
+                      {% for s in n.suspects[:6] %}
+                      <li>
+                        <code>{{ s.source }}</code>
+                        {{ (s.action or '')|upper }}
+                        {% if s.quantity is not none %}{{ s.quantity }}{% endif %}
+                        {% if s.sent_at %}<span class="text-muted">({{ s.sent_at }})</span>{% endif %}
+                      </li>
+                      {% endfor %}
+                    </ul>
+                    {% endif %}
+                  </div>
+                </details>
+                {% endfor %}
+                {% if remain_notes|length > 20 %}
+                <div class="text-muted">+{{ remain_notes|length - 20 }} more</div>
+                {% endif %}
+              {% else %}
+                {% for s in story.remaining[:16] %}
+                <code>{{ s }}</code>{% if not loop.last %}, {% endif %}
+                {% endfor %}{% if story.remaining|length > 16 %}…{% endif %}
+              {% endif %}
+            </div>
+            {% endif %}
+            {% if story.next %}
+            <div class="fw-semibold">{{ story.next }}</div>
+            {% endif %}
+            {% if steps|length > 1 %}
+            <details class="mt-2">
+              <summary class="text-muted" style="cursor:pointer;">All steps ({{ steps|length }})</summary>
+              <ol class="mb-0 mt-1 ps-3">
+                {% for st in steps %}
+                <li>
+                  Seed <code>{{ st.seed }}</code>
+                  → fixes {{ st.fixes[:8]|join(', ') }}{% if st.fixes|length > 8 %}…{% endif %}
+                </li>
+                {% endfor %}
+              </ol>
+            </details>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          {% set rte = ov.recent_trade_explain or [] %}
+          {% if rte %}
+          <div class="border rounded p-2 mb-3 small border-success">
+            <div class="text-muted text-uppercase mb-1" style="font-size:0.7rem;">Recent trades explain gap</div>
+            <div class="mb-1">If you remove the last trade(s) on these names, books match holdings:</div>
+            {% if ov.recent_trade_explain_by_month %}
+            <div class="mb-1 text-muted">
+              {% for ym, syms in ov.recent_trade_explain_by_month.items() %}
+              <div>· <strong>{{ ym }}</strong>: {{ syms[:12]|join(', ') }}{% if syms|length > 12 %}…{% endif %}</div>
+              {% endfor %}
+            </div>
+            {% endif %}
+            <ul class="mb-0 ps-3">
+              {% for r in rte[:10] %}
+              <li><code>{{ r.symbol }}</code> Δ {{ r.delta }} — {{ r.summary }}</li>
+              {% endfor %}
+            </ul>
+            {% if rte|length > 10 %}
+            <div class="text-muted mt-1">+{{ rte|length - 10 }} more</div>
+            {% endif %}
+          </div>
+          {% endif %}
+
+          {% set pc = ov.primary_cause or {} %}
+          {% set ranked = ov.ranked_explanations or pc.ranked_explanations or [] %}
+          {% set srt = ov.security_reco_thread or {} %}
+          {% set show_details = ranked or srt.mismatch_count or alloc.focus_recos or alloc.cleared_recos %}
+          {% if show_details %}
+          <details class="mb-3 small">
+            <summary class="text-muted" style="cursor:pointer; font-size:0.75rem;">
+              More detail (optional)
+            </summary>
+            {% if pc.title and trust_pc and not pc.demoted %}
+            <div class="mb-2"><strong>{{ pc.title }}</strong>{% if pc.code %} <code>{{ pc.code }}</code>{% endif %}</div>
+            {% endif %}
+            {% if ranked %}
+            <ol class="mt-2 mb-2">
+              {% for e in ranked[:4] %}
+              <li>{{ e.title }}</li>
+              {% endfor %}
+            </ol>
+            {% endif %}
+            {% if alloc.cleared_recos %}
+            <div class="mb-1 text-muted">Other reco sets look in sync:
+              {% for c in alloc.cleared_recos[:4] %}
+              {{ c.sent_at }} {{ c.subject }}{% if not loop.last %}; {% endif %}
+              {% endfor %}
+            </div>
+            {% endif %}
+          </details>
+          {% endif %}
+          {% set nar = ov.narrative or {} %}
+          {% if conf.level != 'low' and nar.prose %}
+          <div class="border-start border-3 ps-2 mb-3 small">
+            <div class="text-muted text-uppercase mb-1" style="font-size:0.7rem;">
+              Advisor narrative
+            </div>
+            <p class="mb-1">{{ nar.prose }}</p>
+            {% if nar.next_checks %}
+            <ol class="mb-0 ps-3">
+              {% for c in nar.next_checks[:3] %}
+              <li>{{ c }}</li>
+              {% endfor %}
+            </ol>
+            {% endif %}
+          </div>
+          {% endif %}
+          {% if ov.investigation_passes %}
+          <details class="mb-3 small">
+            <summary class="text-muted text-uppercase" style="font-size:0.7rem; cursor:pointer;">
+              Investigation passes
+              {% if ov.stopped_at_pass is not none %}(ranked at pass {{ ov.stopped_at_pass }}){% endif %}
+            </summary>
+            <ol class="mt-2 mb-0">
+              {% for p in ov.investigation_passes %}
+              <li class="mb-2">
+                <strong>Pass {{ p.pass }} · {{ p.name }}</strong>
+                {% if p.stop %}<span class="badge text-bg-warning">rank</span>{% endif %}
+                {% if p.candidate_cause %}<code class="ms-1">{{ p.candidate_cause }}</code>{% endif %}
+                <ul class="mb-0">
+                  {% for f in p.findings or [] %}
+                  <li>{{ f }}</li>
+                  {% endfor %}
+                </ul>
+              </li>
+              {% endfor %}
+            </ol>
+          </details>
+          {% endif %}
+          {% if ov.headlines %}
+          <div class="mb-1 text-muted text-uppercase" style="font-size:0.7rem;">Investigation detail</div>
+          <ul class="mb-3 small">
+            {% for h in ov.headlines %}
+            <li class="mb-1">{{ h }}</li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% set fyi_list = ov.fyi or [] %}
+          {% if fyi_list or (ov.emails and ov.emails.fyi) %}
+          <details class="mb-3 small text-muted">
+            <summary class="text-uppercase" style="font-size:0.7rem; cursor:pointer;">FYI — archive / sync (not investigation)</summary>
+            <ul class="mt-2 mb-0">
+              {% for f in fyi_list %}
+              <li class="mb-1">{{ f }}</li>
+              {% endfor %}
+              {% if ov.emails and ov.emails.fyi and ov.emails.fyi not in fyi_list %}
+              <li class="mb-1">{{ ov.emails.fyi }}</li>
+              {% endif %}
+            </ul>
+          </details>
+          {% endif %}
+          <div class="row g-2 small mb-0">
+            {% if ov.status_counts %}
+            <div class="col-md-4">
+              <div class="text-muted text-uppercase" style="font-size:0.7rem;">Break types</div>
+              <ul class="list-unstyled mb-0">
+                {% for k, v in ov.status_counts.items() %}
+                <li><code>{{ k }}</code> · {{ v }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+            {% if ov.hypothesis_counts %}
+            <div class="col-md-4">
+              <div class="text-muted text-uppercase" style="font-size:0.7rem;">Top hypotheses</div>
+              <ul class="list-unstyled mb-0">
+                {% for row in ov.hypothesis_counts[:6] %}
+                <li><code>{{ row.hypothesis }}</code> · {{ row.count }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+            {% if ov.busy_trade_days %}
+            <div class="col-md-4">
+              <div class="text-muted text-uppercase" style="font-size:0.7rem;">Busy trade days (break names)</div>
+              <ul class="list-unstyled mb-0">
+                {% for d in ov.busy_trade_days[:6] %}
+                <li>{{ d.date }} · {{ d.leg_count }} legs</li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+            {% if ov.emails %}
+            <div class="col-md-6 mt-2">
+              <div class="text-muted text-uppercase" style="font-size:0.7rem;">Emails (batch — before security rows)</div>
+              {% set cluster = ov.emails.email_cluster or {} %}
+              {% if cluster.found and cluster.message %}
+              <div class="alert alert-warning small py-2 mb-2">
+                <strong>Email cluster match:</strong> {{ cluster.message }}
+              </div>
+              {% endif %}
+              {% if ov.emails.batch_hint_lines %}
+              <div class="small mb-2">
+                <strong>Near-as-of reco email — recommended trades (parsed table):</strong>
+                {{ ov.emails.batch_hint_lines[:25]|join('; ') }}{% if ov.emails.batch_hint_lines|length > 25 %}…{% endif %}
+                <div class="text-muted" style="font-size:0.75rem;">
+                  These are BUY/SELL lines from the recommendation email near as-of, not statement holdings.
+                </div>
+              </div>
+              {% endif %}
+              {% if ov.emails.emailed_sell_still_long_detail %}
+              <div class="small mb-2">
+                <strong>SELL recommended vs system still long:</strong>
+                <ul class="mb-0 ps-3">
+                  {% for row in ov.emails.emailed_sell_still_long_detail[:10] %}
+                  <li>
+                    {{ row.symbol }}
+                    {% if row.sell_qty is not none %} — recommended SELL {{ row.sell_qty }}{% endif %}
+                    · Δ {{ row.delta }}
+                    (stmt {{ row.statement_qty }} / sys {{ row.system_qty }})
+                    {% if row.explains_gap %}
+                    <span class="text-success">— explains gap if booked</span>
+                    {% else %}
+                    <span class="text-muted">— does not fully explain gap</span>
+                    {% endif %}
+                  </li>
+                  {% endfor %}
+                </ul>
+              </div>
+              {% endif %}
+              {% if ov.emails.reco_if_executed_match %}
+              <div class="small mb-2">
+                <strong>If reco booked → match:</strong>
+                <ul class="mb-0 ps-3">
+                  {% for row in ov.emails.reco_if_executed_match[:10] %}
+                  <li>{{ row.symbol }}: {{ row.message }}</li>
+                  {% endfor %}
+                </ul>
+              </div>
+              {% endif %}
+              {% if ov.emails.needs_drive_details or (email_archive_status and email_archive_status.needs_drive_details) %}
+              <div class="alert alert-warning small py-2 mb-2">
+                <strong>Drive folder missing.</strong>
+                {{ ov.emails.drive_flag or email_archive_status.drive_flag or 'Link client Google Drive so emails can be stored in Drive.' }}
+                {% if run and run.client_id %}
+                <a href="{{ url_for('clients.client_details', client_id=run.client_id) }}#google_drive_folder_id">Add Drive details</a>
+                {% endif %}
+              </div>
+              {% endif %}
+              {% if ov.emails.client_emails_filter %}
+              <div class="text-muted mb-1">Filter: {{ ov.emails.client_emails_filter|join(', ') }}</div>
+              {% endif %}
+              {% if run and run.client_id %}
+              <form method="post" action="{{ url_for('client_google_drive.sync_client_email_archive', client_id=run.client_id) }}" class="mb-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="next" value="{{ url_for('hub.holdings_reconciliation', run_id=run.id) }}">
+                <button type="submit" class="btn btn-outline-primary btn-sm">Sync client emails</button>
+              </form>
+              {% endif %}
+              <ul class="list-unstyled mb-0">
+                {% for e in (ov.emails.emails or [])[:6] %}
+                <li class="mb-1">
+                  <span class="text-nowrap">{{ e.sent_at }}</span>
+                  · <span class="text-truncate d-inline-block" style="max-width:16rem;" title="{{ e.subject }}">{{ e.subject }}</span>
+                  {% if e.body_reco_hints %}
+                  <div class="text-muted" style="font-size:0.7rem;">
+                    {% for h in e.body_reco_hints[:8] %}{{ h.action }} {{ h.symbol }}{% if not loop.last %}; {% endif %}{% endfor %}
+                  </div>
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+            {% if ov.advisor_notes %}
+            <div class="col-md-4 mt-2">
+              <div class="text-muted text-uppercase" style="font-size:0.7rem;">Advisor / CF notes</div>
+              <div>{{ ov.advisor_notes.summary or '—' }}</div>
+              {% if ov.advisor_notes.ui_url %}
+              <a href="{{ ov.advisor_notes.ui_url }}">open cashflow notes</a>
+              {% endif %}
+            </div>
+            {% endif %}
+            {% if ov.call_notes and ov.call_notes.calls %}
+            <div class="col-md-4 mt-2">
+              <div class="text-muted text-uppercase" style="font-size:0.7rem;">Call notes</div>
+              <div>{{ ov.call_notes.summary }}</div>
+            </div>
+            {% endif %}
+          </div>
+          {% if mr.timing and mr.timing.applied %}
+          <div class="alert alert-info small mt-3 mb-0">{{ mr.timing.message }}</div>
+          {% endif %}
+        </div>
+      </div>
+
+      {% elif run.status == 'confirmed' %}
+      <form method="post" class="mb-3" data-recon-long="1">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="match">
+        <input type="hidden" name="run_id" value="{{ run.id }}">
+        <button type="submit" class="btn btn-primary btn-sm">Run match</button>
+      </form>
+      {% endif %}
+      {% endif %}
+  </div>
+</div>
+
+{# Progress overlay for long confirm / match / refresh #}
+<div id="recon-progress-overlay" class="d-none" role="status" aria-live="polite"
+     style="position:fixed;inset:0;z-index:2000;background:rgba(15,23,42,.55);display:flex;align-items:center;justify-content:center;padding:1rem;">
+  <div class="bg-white rounded shadow p-4" style="width:min(420px,100%);">
+    <div class="d-flex align-items-center gap-2 mb-2">
+      <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+      <strong id="recon-progress-title">Request in progress</strong>
+    </div>
+    <p class="small text-muted mb-2" id="recon-progress-label">Starting… please keep this tab open.</p>
+    <div class="progress mb-1" style="height:10px;">
+      <div id="recon-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+           role="progressbar" style="width:3%;" aria-valuenow="3" aria-valuemin="0" aria-valuemax="100"></div>
+    </div>
+    <div class="d-flex justify-content-between small text-muted">
+      <span id="recon-progress-pct">3%</span>
+      <span id="recon-progress-stage"></span>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+(function () {
+  var overlay = document.getElementById('recon-progress-overlay');
+  if (!overlay) return;
+  var labelEl = document.getElementById('recon-progress-label');
+  var barEl = document.getElementById('recon-progress-bar');
+  var pctEl = document.getElementById('recon-progress-pct');
+  var stageEl = document.getElementById('recon-progress-stage');
+  var titleEl = document.getElementById('recon-progress-title');
+  var pollTimer = null;
+  var fallbackPct = 3;
+
+  function setUi(pct, label, stage) {
+    pct = Math.max(0, Math.min(99, Math.round(pct || 0)));
+    if (barEl) {
+      barEl.style.width = pct + '%';
+      barEl.setAttribute('aria-valuenow', String(pct));
+    }
+    if (pctEl) pctEl.textContent = pct + '%';
+    if (labelEl && label) labelEl.textContent = label;
+    if (stageEl) stageEl.textContent = stage || '';
+  }
+
+  function showOverlay(msg) {
+    overlay.classList.remove('d-none');
+    overlay.style.display = 'flex';
+    if (titleEl) titleEl.textContent = 'Request in progress';
+    setUi(3, msg || 'Working… please keep this tab open.', '');
+    document.body.style.cursor = 'wait';
+  }
+
+  function pollProgress(runId) {
+    if (!runId) return;
+    var url = {{ url_for('hub.holdings_reconciliation_progress', run_id='__RID__')|tojson }}.replace('__RID__', encodeURIComponent(runId));
+    pollTimer = setInterval(function () {
+      fetch(url, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data || !data.ok) return;
+          if (data.in_progress || (data.pct > 0 && data.pct < 100)) {
+            setUi(data.pct || fallbackPct, data.label || 'Working…', data.stage || '');
+            fallbackPct = Math.max(fallbackPct, data.pct || 0);
+          }
+        })
+        .catch(function () { /* keep fallback */ });
+      // Soft fallback so the bar never looks stuck if a stage is long
+      if (fallbackPct < 92) {
+        fallbackPct = Math.min(92, fallbackPct + 1);
+        if (barEl && parseInt(barEl.getAttribute('aria-valuenow') || '0', 10) < fallbackPct) {
+          setUi(fallbackPct, labelEl ? labelEl.textContent : 'Still working…', stageEl ? stageEl.textContent : '');
+        }
+      }
+    }, 900);
+  }
+
+  function armForm(form) {
+    form.addEventListener('submit', function () {
+      var action = (form.querySelector('[name="action"]') || {}).value || '';
+      var runId = (form.querySelector('[name="run_id"]') || {}).value || '';
+      var longActions = { confirm: 1, match: 1, refresh_investigation: 1 };
+      if (!longActions[action] && !form.getAttribute('data-recon-long')) return;
+      var btn = form.querySelector('[type="submit"]');
+      if (btn) btn.disabled = true;
+      var msg = 'Request in progress — matching statement to books and investigating breaks. Please wait.';
+      if (action === 'refresh_investigation') {
+        msg = 'Request in progress — refreshing investigation. Please wait.';
+      } else if (action === 'confirm') {
+        msg = 'Request in progress — confirming maps, then matching. Please wait.';
+      }
+      showOverlay(msg);
+      pollProgress(runId);
+      // Native form submit continues; overlay stays until page navigates
+    });
+  }
+
+  document.querySelectorAll('form').forEach(function (form) {
+    var actionInput = form.querySelector('[name="action"]');
+    if (!actionInput) return;
+    var a = actionInput.value;
+    if (a === 'confirm' || a === 'match' || a === 'refresh_investigation' || form.getAttribute('data-recon-long')) {
+      armForm(form);
+    }
+  });
+  // Refresh investigation uses button name=action value=...
+  document.querySelectorAll('form').forEach(function (form) {
+    var refreshBtn = form.querySelector('[name="action"][value="refresh_investigation"]');
+    if (refreshBtn && !form._reconArmed) {
+      form._reconArmed = true;
+      armForm(form);
+    }
+  });
+})();
+</script>
+{% endblock %}
