@@ -1,4 +1,4 @@
-"""Confirm maps must survive statement reload; bad DBCORP sticky maps must not."""
+"""User-owned holdings maps are overwritten only by a later user confirm."""
 import pytest
 
 from services.reconciliation.run_service import _preserve_confirmations
@@ -6,36 +6,7 @@ from services.reconciliation.run_service import _preserve_confirmations
 pytestmark = pytest.mark.no_app
 
 
-def test_bad_dbcorp_sticky_yields_to_fresh_goldbees():
-    old = [
-        {
-            "raw_name": "NIP IND ETF GOLD BEES",
-            "isin": "INF204KB17I5",
-            "qty": 450,
-            "security_id": 99,
-            "security_symbol": "DBCORP",
-            "status": "mapped",
-            "match_method": "user_confirm",
-        }
-    ]
-    fresh = [
-        {
-            "raw_name": "NIP IND ETF GOLD BEES",
-            "isin": "INF204KB17I5",
-            "qty": 450,
-            "security_id": 42,
-            "security_symbol": "GOLDBEES",
-            "status": "suggested",
-            "match_method": "name_match",
-        }
-    ]
-    out = _preserve_confirmations(old, fresh)
-    assert out[0]["security_symbol"] == "GOLDBEES"
-    assert out[0]["security_id"] == 42
-
-
-def test_user_goldbees_confirm_wins_over_fresh_dbcorp():
-    """Confirm → match reload must not wipe the user's GOLDBEES choice."""
+def test_user_goldbees_confirm_never_overwritten_by_fresh_dbcorp():
     old = [
         {
             "raw_name": "NIP IND ETF GOLD BEES",
@@ -61,13 +32,15 @@ def test_user_goldbees_confirm_wins_over_fresh_dbcorp():
     out = _preserve_confirmations(old, fresh)
     assert out[0]["security_symbol"] == "GOLDBEES"
     assert out[0]["security_id"] == 42
+    assert out[0]["match_method"] == "user_confirm"
 
 
-def test_preserve_drops_name_only_dbcorp_onto_unmapped_bees():
+def test_user_dbcorp_confirm_also_sticky_until_user_changes():
+    """Even a wrong user confirm stays until the user remaps — not auto-fixed."""
     old = [
         {
-            "raw_name": "NIP IND ETF LIQUID BEES",
-            "qty": 0.003,
+            "raw_name": "NIP IND ETF GOLD BEES",
+            "isin": "INF204KB17I5",
             "security_id": 99,
             "security_symbol": "DBCORP",
             "status": "mapped",
@@ -76,34 +49,56 @@ def test_preserve_drops_name_only_dbcorp_onto_unmapped_bees():
     ]
     fresh = [
         {
-            "raw_name": "NIP IND ETF LIQUID BEES",
-            "qty": 0.003,
-            "security_id": None,
-            "security_symbol": None,
-            "status": "unmapped",
+            "raw_name": "NIP IND ETF GOLD BEES",
+            "isin": "INF204KB17I5",
+            "security_id": 42,
+            "security_symbol": "GOLDBEES",
+            "status": "suggested",
+            "match_method": "name_match",
         }
     ]
     out = _preserve_confirmations(old, fresh)
-    assert out[0].get("security_id") is None
-    assert out[0].get("status") == "unmapped"
+    assert out[0]["security_symbol"] == "DBCORP"
 
 
-def test_abbrev_symbol_confirm_kept_when_fresh_also_unrelated():
-    """HNGSNGBEES may not appear literally in 'HANGSENG BEES' — still keep user map."""
+def test_auto_name_match_may_be_replaced_by_fresh():
     old = [
         {
-            "raw_name": "NIP IND ETF HANGSENG BEES",
-            "isin": "INF732E01037",
-            "security_id": 7,
-            "security_symbol": "HNGSNGBEES",
-            "status": "mapped",
-            "match_method": "user_confirm",
+            "raw_name": "NIP IND ETF GOLD BEES",
+            "security_id": 99,
+            "security_symbol": "DBCORP",
+            "status": "suggested",
+            "match_method": "name_match",
         }
     ]
     fresh = [
         {
-            "raw_name": "NIP IND ETF HANGSENG BEES",
-            "isin": "INF732E01037",
+            "raw_name": "NIP IND ETF GOLD BEES",
+            "security_id": 42,
+            "security_symbol": "GOLDBEES",
+            "status": "suggested",
+            "match_method": "name_match",
+        }
+    ]
+    out = _preserve_confirmations(old, fresh)
+    assert out[0]["security_symbol"] == "GOLDBEES"
+
+
+def test_preserved_confirm_stays_user_owned():
+    old = [
+        {
+            "raw_name": "NIP IND ETF LIQUID BEES",
+            "isin": "INF204KB19I1",
+            "security_id": 55,
+            "security_symbol": "LIQUIDBEES",
+            "status": "mapped",
+            "match_method": "preserved_confirm",
+        }
+    ]
+    fresh = [
+        {
+            "raw_name": "NIP IND ETF LIQUID BEES",
+            "isin": "INF204KB19I1",
             "security_id": 99,
             "security_symbol": "DBCORP",
             "status": "suggested",
@@ -111,4 +106,5 @@ def test_abbrev_symbol_confirm_kept_when_fresh_also_unrelated():
         }
     ]
     out = _preserve_confirmations(old, fresh)
-    assert out[0]["security_symbol"] == "HNGSNGBEES"
+    assert out[0]["security_symbol"] == "LIQUIDBEES"
+    assert out[0]["match_method"] == "user_confirm"

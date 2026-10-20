@@ -633,12 +633,35 @@ def _row_identity_key(row: Dict[str, Any]) -> Tuple[str, str, str]:
     )
 
 
-def _symbol_in_statement_text(symbol: str, row: Dict[str, Any]) -> bool:
-    sym = str(symbol or "").strip().upper()
-    if not sym:
+# Maps the user set (confirm form / Remember). Never overwritten by auto-resolve.
+_USER_OWNED_MAP_METHODS = frozenset(
+    {
+        "user_confirm",
+        "preserved_user_confirm",
+        "preserved_confirm",  # set on reload after a user confirm
+        "map_isin",
+        "map_nse",
+        "map_broker",
+        "map_name",
+    }
+)
+
+
+def _is_user_owned_map(row: Dict[str, Any]) -> bool:
+    method = str(row.get("match_method") or "").strip()
+    if method in _USER_OWNED_MAP_METHODS:
         return True
-    blob = f"{row.get('raw_name') or ''} {row.get('nse_symbol') or ''}".upper()
-    return sym in blob.replace(" ", "")
+    if row.get("status") == "ignored":
+        return True
+    # Legacy confirmed rows often lack match_method — treat mapped+id as user-owned
+    # unless the method is clearly an auto-resolve.
+    if (
+        row.get("status") == "mapped"
+        and row.get("security_id")
+        and method not in ("name_match", "mprofit_name", "db_nse", "db_isin")
+    ):
+        return True
+    return False
 
 
 def _preserve_confirmations(
@@ -648,10 +671,8 @@ def _preserve_confirmations(
     """
     Re-apply prior maps/ignores onto freshly parsed review rows.
 
-    Confirm → match reloads the statement and re-resolves names. A fresh auto-resolve
-    must not overwrite the user's confirmed map (that was wiping GOLDBEES back to
-    DBCORP). Only drop a prior map when it is a name-only sticky match whose symbol
-    does not appear in the statement text (the Gold Bees → DBCORP bug).
+    Rule: user-owned maps (confirm form / Remember) are overwritten only by the user
+    on a later confirm — never by name-match or other auto-resolve on reload/match.
     """
     by_isin: Dict[str, Dict[str, Any]] = {}
     by_sym: Dict[str, Dict[str, Any]] = {}
@@ -668,14 +689,13 @@ def _preserve_confirmations(
     for row in new_review or []:
         nr = dict(row)
         isin, sym, name = _row_identity_key(nr)
-        matched_by = None
         prev = None
         if isin and isin in by_isin:
-            prev, matched_by = by_isin[isin], "isin"
+            prev = by_isin[isin]
         elif sym and sym in by_sym:
-            prev, matched_by = by_sym[sym], "nse"
+            prev = by_sym[sym]
         elif name and name in by_name:
-            prev, matched_by = by_name[name], "name"
+            prev = by_name[name]
         if not prev:
             out.append(nr)
             continue
@@ -687,23 +707,17 @@ def _preserve_confirmations(
         if not prev.get("security_id"):
             out.append(nr)
             continue
-        prev_sym = str(prev.get("security_symbol") or "")
-        prev_ok = _symbol_in_statement_text(prev_sym, nr)
-        fresh_sym = str(nr.get("security_symbol") or "")
-        fresh_ok = bool(nr.get("security_id")) and _symbol_in_statement_text(
-            fresh_sym, nr
-        )
-        # Bad sticky map (DBCORP on "…GOLD BEES"): take a better fresh map, or unmapped
-        if not prev_ok and (fresh_ok or not nr.get("security_id")):
+        if _is_user_owned_map(prev):
+            # User data — keep exactly; auto-resolve must not replace
+            nr["security_id"] = prev.get("security_id")
+            nr["security_symbol"] = prev.get("security_symbol") or nr.get(
+                "security_symbol"
+            )
+            nr["status"] = "mapped"
+            nr["match_method"] = "user_confirm"
             out.append(nr)
             continue
-        # User/prior confirm wins over a conflicting fresh auto-resolve (DBCORP)
-        nr["security_id"] = prev.get("security_id")
-        nr["security_symbol"] = prev.get("security_symbol") or nr.get(
-            "security_symbol"
-        )
-        nr["status"] = "mapped"
-        nr["match_method"] = prev.get("match_method") or "preserved_confirm"
+        # Prior was auto-only (name_match / db_*) — allow fresh resolve to win
         out.append(nr)
     return out
 
