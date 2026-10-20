@@ -59,13 +59,13 @@ For holdings recon, link a **separate** Drive folder that holds broker contract 
 
 Stored under `var/holdings_reconciliation/trade_drive_links.json` (local/server; not DB).
 
-## Holdings statements (`Holdings/`)
+## Holdings statements (`Holdings/` / `Holding Statement/`)
 
 On **Hub → Holdings reconciliation**:
 
-1. Select a client — the app lists files already in Drive **`Holdings/`** (CSV / XLSX / PDF).
-2. Choose one to reconcile, **or** upload one or more new files (multi-select). Each file is its own recon run.
-3. New uploads are copied into **`Holdings/`** when the client Drive folder is linked and the same filename is not already there.
+1. Select a client — the app lists CSV / XLSX / PDF under **`Holdings/`**, **`Holding Statement/`**, and one nested `…/Holdings/` (skips Emails / Trade details).
+2. Choose one or more to reconcile, **or** upload new files (multi-select). Each file is its own recon run.
+3. New uploads go into the non-empty holdings-like folder when present; otherwise **`Holdings/`** is created.
 
 If Drive is not linked, recon still works locally; the UI shows a link warning.
 
