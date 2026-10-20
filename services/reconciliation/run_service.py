@@ -633,6 +633,14 @@ def _row_identity_key(row: Dict[str, Any]) -> Tuple[str, str, str]:
     )
 
 
+def _symbol_in_statement_text(symbol: str, row: Dict[str, Any]) -> bool:
+    sym = str(symbol or "").strip().upper()
+    if not sym:
+        return True
+    blob = f"{row.get('raw_name') or ''} {row.get('nse_symbol') or ''}".upper()
+    return sym in blob.replace(" ", "")
+
+
 def _preserve_confirmations(
     old_rows: List[Dict[str, Any]],
     new_review: List[Dict[str, Any]],
@@ -640,10 +648,10 @@ def _preserve_confirmations(
     """
     Re-apply prior maps/ignores onto freshly parsed review rows.
 
-    Prefer ISIN / NSE identity. Name-only sticky maps are unsafe after a name-match
-    bug (e.g. Gold Bees wrongly confirmed as DBCORP) — do not overwrite a fresh
-    resolve, and do not re-apply a prior security_id onto an unmapped fresh row
-    when the prior symbol does not appear in the statement name/NSE.
+    Confirm → match reloads the statement and re-resolves names. A fresh auto-resolve
+    must not overwrite the user's confirmed map (that was wiping GOLDBEES back to
+    DBCORP). Only drop a prior map when it is a name-only sticky match whose symbol
+    does not appear in the statement text (the Gold Bees → DBCORP bug).
     """
     by_isin: Dict[str, Dict[str, Any]] = {}
     by_sym: Dict[str, Dict[str, Any]] = {}
@@ -676,21 +684,20 @@ def _preserve_confirmations(
 
             out.append(mark_ignored(nr))
             continue
-        # Fresh resolve already chose a security — keep it (fixes bad sticky confirms).
-        if nr.get("security_id"):
-            out.append(nr)
-            continue
         if not prev.get("security_id"):
             out.append(nr)
             continue
-        if matched_by == "name":
-            prev_sym = str(prev.get("security_symbol") or "").strip().upper()
-            blob = f"{nr.get('raw_name') or ''} {nr.get('nse_symbol') or ''}".upper()
-            blob_compact = blob.replace(" ", "")
-            if prev_sym and prev_sym not in blob_compact:
-                # e.g. prior DBCORP on "NIP IND ETF GOLD BEES" — drop sticky map
-                out.append(nr)
-                continue
+        prev_sym = str(prev.get("security_symbol") or "")
+        prev_ok = _symbol_in_statement_text(prev_sym, nr)
+        fresh_sym = str(nr.get("security_symbol") or "")
+        fresh_ok = bool(nr.get("security_id")) and _symbol_in_statement_text(
+            fresh_sym, nr
+        )
+        # Bad sticky map (DBCORP on "…GOLD BEES"): take a better fresh map, or unmapped
+        if not prev_ok and (fresh_ok or not nr.get("security_id")):
+            out.append(nr)
+            continue
+        # User/prior confirm wins over a conflicting fresh auto-resolve (DBCORP)
         nr["security_id"] = prev.get("security_id")
         nr["security_symbol"] = prev.get("security_symbol") or nr.get(
             "security_symbol"
