@@ -14,7 +14,9 @@ from services.reconciliation.rules_loader import (
 def _portfolio_qty_map(client_id: int, as_of: date) -> Dict[int, Dict[str, Any]]:
     from services.forward_holding_calculation_service import get_client_portfolio_by_date
 
-    port = get_client_portfolio_by_date(client_id, as_of)
+    # Holdings recon must not reuse a per-request portfolio cache — books can
+    # change mid-session and other hub screens may have primed g._portfolio_cache.
+    port = get_client_portfolio_by_date(client_id, as_of, use_cache=False)
     out: Dict[int, Dict[str, Any]] = {}
     for h in port.get("holdings") or []:
         sid = int(h["security_id"])
@@ -121,10 +123,12 @@ def run_position_match(
     )
 
     sources_by_sid: Dict[int, List[Dict[str, Any]]] = {}
+    lines_by_sid: Dict[int, List[Dict[str, Any]]] = {}
     for ln in confirmed_lines:
         if not ln.get("security_id"):
             continue
         sid = int(ln["security_id"])
+        lines_by_sid.setdefault(sid, []).append(ln)
         srcs = ln.get("sources") or []
         if srcs:
             sources_by_sid[sid] = list(srcs)
@@ -133,10 +137,22 @@ def run_position_match(
     remaining_breaks: List[Dict[str, Any]] = []
     for br in breaks:
         sid = int(br["security_id"])
+        # Prefer explicit combine sources; else synthesise from all lines
+        # mapped to this security (catches double-map of two names → one sid).
+        srcs = sources_by_sid.get(sid)
+        if not srcs and len(lines_by_sid.get(sid) or []) > 1:
+            srcs = [
+                {
+                    "filename": (ln.get("raw_name") or ln.get("nse_symbol") or f"line {ln.get('line_index')}"),
+                    "qty": float(ln.get("qty") or 0),
+                    "isin": ln.get("isin"),
+                }
+                for ln in lines_by_sid[sid]
+            ]
         expl = explain_books_match_one_demat(
             statement_qty=float(br.get("statement_qty") or 0),
             system_qty=float(br.get("system_qty") or 0),
-            sources=sources_by_sid.get(sid),
+            sources=srcs,
             tol=tol,
         )
         if expl and expl.get("ok"):
@@ -155,6 +171,14 @@ def run_position_match(
             )
             demat_explained.append(br.get("security_id"))
         else:
+            if srcs and len(srcs) > 1:
+                br = {
+                    **br,
+                    "statement_sources": srcs,
+                    "statement_breakdown": " + ".join(
+                        f"{s.get('filename')}:{float(s.get('qty') or 0):g}" for s in srcs[:6]
+                    ),
+                }
             remaining_breaks.append(br)
     breaks = remaining_breaks
     matched = len(matched_rows)

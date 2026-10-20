@@ -1468,7 +1468,13 @@ def audit_holdings_accuracy(client_id: int, as_of_date: date) -> List[Dict[str, 
         return []
 
 
-def get_client_portfolio_by_date(client_id: int, as_of_date: date, db_session=None) -> Dict[str, Any]:
+def get_client_portfolio_by_date(
+    client_id: int,
+    as_of_date: date,
+    db_session=None,
+    *,
+    use_cache: bool = True,
+) -> Dict[str, Any]:
     """
     Calculate entire client portfolio using forward calculation
     
@@ -1476,6 +1482,8 @@ def get_client_portfolio_by_date(client_id: int, as_of_date: date, db_session=No
         client_id: Client ID
         as_of_date: Date to calculate portfolio for
         db_session: Optional database session to use for queries (for uncommitted transactions)
+        use_cache: When False, skip the per-request portfolio cache (holdings recon
+            match/refresh must see live books, not a stale g cache).
         
     Returns:
         Portfolio summary with all holdings. Pricing uses ``HistoricalPrice.close`` on
@@ -1489,7 +1497,7 @@ def get_client_portfolio_by_date(client_id: int, as_of_date: date, db_session=No
     # Only cache when db_session is None (standard path); custom sessions may
     # include uncommitted data that must not be shared.
     _cache_key = None
-    if db_session is None:
+    if use_cache and db_session is None:
         try:
             from flask import g
             _cache_key = f'_pcache_{client_id}_{as_of_date}'

@@ -589,6 +589,13 @@ def confirm_run(
     run["confirmed_by"] = user_id
     run["confirmed_at"] = datetime.utcnow().isoformat() + "Z"
     run["status"] = "confirmed" if not still_open else "awaiting_confirm"
+    # Maps/as-of changed — drop prior analysis so Statement/System cannot
+    # disagree with the confirm table (e.g. LT mapped 37 while stale match
+    # still showed statement 80).
+    if run.get("match_result") or run.get("breaks"):
+        run["match_result"] = None
+        run["breaks"] = []
+        run["match_stale_cleared_at"] = datetime.utcnow().isoformat() + "Z"
     warnings = list(run.get("parse_warnings") or [])
     if still_open:
         warnings.append(
@@ -617,6 +624,222 @@ def _mapped_rows_from_run(run: Dict[str, Any]) -> List[Dict[str, Any]]:
     ]
 
 
+def _row_identity_key(row: Dict[str, Any]) -> Tuple[str, str, str]:
+    return (
+        str(row.get("isin") or "").strip().upper(),
+        str(row.get("nse_symbol") or row.get("security_symbol") or "").strip().upper(),
+        str(row.get("raw_name") or "").strip().upper()[:80],
+    )
+
+
+def _preserve_confirmations(
+    old_rows: List[Dict[str, Any]],
+    new_review: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Re-apply prior maps/ignores onto freshly parsed review rows (by ISIN/symbol/name)."""
+    by_isin: Dict[str, Dict[str, Any]] = {}
+    by_sym: Dict[str, Dict[str, Any]] = {}
+    by_name: Dict[str, Dict[str, Any]] = {}
+    for r in old_rows or []:
+        isin, sym, name = _row_identity_key(r)
+        if isin:
+            by_isin[isin] = r
+        if sym:
+            by_sym[sym] = r
+        if name:
+            by_name[name] = r
+    out: List[Dict[str, Any]] = []
+    for row in new_review or []:
+        nr = dict(row)
+        isin, sym, name = _row_identity_key(nr)
+        prev = (by_isin.get(isin) if isin else None) or (
+            by_sym.get(sym) if sym else None
+        ) or (by_name.get(name) if name else None)
+        if not prev:
+            out.append(nr)
+            continue
+        if prev.get("status") == "ignored":
+            from services.reconciliation.security_resolve import mark_ignored
+
+            out.append(mark_ignored(nr))
+            continue
+        if prev.get("security_id"):
+            nr["security_id"] = prev.get("security_id")
+            nr["security_symbol"] = prev.get("security_symbol") or nr.get(
+                "security_symbol"
+            )
+            nr["status"] = "mapped"
+            nr["match_method"] = prev.get("match_method") or "preserved_confirm"
+        out.append(nr)
+    return out
+
+
+def _download_statement_bytes(run: Dict[str, Any]) -> Tuple[bytes, str, Optional[str]]:
+    """
+    Prefer live Drive download (no local/Drive-name cache). Fall back to upload_path.
+    Returns (data, filename, drive_file_id_or_none).
+    """
+    dh = run.get("drive_holdings") or {}
+    file_id = (dh.get("file_id") or "").strip() or None
+    fname = (run.get("filename") or "holdings.bin").strip() or "holdings.bin"
+    if file_id:
+        from services.client_google_drive_service import download_file_bytes
+
+        dl = download_file_bytes(file_id)
+        if not dl.get("ok"):
+            raise ValueError(
+                dl.get("error")
+                or f"Could not re-download Drive statement {file_id}"
+            )
+        return (
+            dl.get("content") or b"",
+            (dl.get("name") or fname),
+            file_id,
+        )
+    rel = run.get("upload_path")
+    if rel:
+        path = upload_abs(str(rel))
+        if path.is_file():
+            return path.read_bytes(), fname, None
+    raise ValueError(
+        "No Drive file_id or local upload to reload statement — re-upload / Start from Drive."
+    )
+
+
+def reload_statement_fresh(
+    run: Dict[str, Any],
+    *,
+    progress_cb=None,
+) -> Dict[str, Any]:
+    """
+    Re-load statement bytes (Drive first), re-parse, keep maps, clear analysis.
+
+    Single-file runs stay isolated (no other client runs mixed in). Combined runs
+    re-pull each source from Drive / child upload and re-merge.
+    """
+    def _prog(pct: int, label: str, stage: str = "") -> None:
+        if progress_cb:
+            try:
+                progress_cb(pct, label, stage)
+            except Exception:
+                pass
+
+    broker = run.get("broker")
+    old_confirmed = list(run.get("confirmed_rows") or run.get("review_rows") or [])
+    is_combined = (
+        run.get("format_id") == "combined_statements"
+        or bool(run.get("combined_from"))
+    )
+
+    if is_combined and (run.get("combined_from") or []):
+        _prog(6, "Re-loading each statement from Drive…", "reload_statement")
+        sources = []
+        for src in run.get("combined_from") or []:
+            child = load_run(str(src.get("run_id") or ""))
+            if not child:
+                raise ValueError(
+                    f"Combined source run missing: {src.get('run_id')} — "
+                    "re-load files from Drive."
+                )
+            data, fname, _fid = _download_statement_bytes(child)
+            if not data:
+                raise ValueError(f"Empty statement reload for {fname}")
+            # Refresh child upload + parse so source runs stay current too
+            rel = save_upload(child["id"], fname, data)
+            path = upload_abs(rel)
+            parsed = detect_and_parse(path, filename=fname)
+            review = resolve_lines(parsed.to_dict()["lines"], broker=broker)
+            review = _preserve_confirmations(
+                child.get("confirmed_rows") or child.get("review_rows") or [],
+                review,
+            )
+            child["upload_path"] = rel
+            child["filename"] = fname
+            child["staging_lines"] = parsed.to_dict()["lines"]
+            child["review_rows"] = review
+            child["confirmed_rows"] = [
+                r for r in review if r.get("security_id") or r.get("status") == "ignored"
+            ] or None
+            child["match_result"] = None
+            child["breaks"] = []
+            child["format_id"] = parsed.format_id
+            if child.get("drive_holdings") is None:
+                child["drive_holdings"] = {}
+            child["drive_holdings"]["reloaded_at"] = (
+                datetime.utcnow().isoformat() + "Z"
+            )
+            save_run(child)
+            sources.append(
+                {
+                    "filename": fname,
+                    "run_id": child["id"],
+                    "rows": child.get("confirmed_rows") or child.get("review_rows") or [],
+                }
+            )
+        # One file after filter → treat as single (combine irrelevant)
+        if len(sources) == 1:
+            only = sources[0]["rows"]
+            run["staging_lines"] = []
+            run["review_rows"] = sort_review_rows_for_confirm(list(only))
+            run["confirmed_rows"] = _preserve_confirmations(
+                old_confirmed, run["review_rows"]
+            )
+            run["combined_from"] = None
+            run["format_id"] = "single_from_combined"
+            run.pop("parse_meta", None)
+        else:
+            merged = sort_review_rows_for_confirm(merge_statement_rows(sources))
+            run["review_rows"] = merged
+            run["confirmed_rows"] = _preserve_confirmations(old_confirmed, merged)
+            run["staging_lines"] = []
+            run["format_id"] = "combined_statements"
+            run["parse_meta"] = {
+                **(run.get("parse_meta") or {}),
+                "combined": True,
+                "reloaded_at": datetime.utcnow().isoformat() + "Z",
+            }
+    else:
+        _prog(6, "Re-loading statement from Drive…", "reload_statement")
+        data, fname, file_id = _download_statement_bytes(run)
+        if not data:
+            raise ValueError("Empty statement on reload")
+        rel = save_upload(run["id"], fname, data)
+        path = upload_abs(rel)
+        parsed = detect_and_parse(path, filename=fname)
+        review = resolve_lines(parsed.to_dict()["lines"], broker=broker)
+        review = _preserve_confirmations(old_confirmed, review)
+        run["upload_path"] = rel
+        run["filename"] = fname
+        run["format_id"] = parsed.format_id
+        run["staging_lines"] = parsed.to_dict()["lines"]
+        run["review_rows"] = review
+        run["confirmed_rows"] = [
+            r for r in review if r.get("security_id") or r.get("status") == "ignored"
+        ]
+        # Single-file: drop any leftover multi-statement markers
+        run["combined_from"] = None
+        for r in run["confirmed_rows"] or []:
+            r.pop("sources", None)
+            r.pop("combine_note", None)
+        dh = dict(run.get("drive_holdings") or {})
+        if file_id:
+            dh["file_id"] = file_id
+            dh["from_drive"] = True
+        dh["reloaded_at"] = datetime.utcnow().isoformat() + "Z"
+        run["drive_holdings"] = dh
+        if not run.get("as_of") and parsed.as_of:
+            run["as_of"] = parsed.as_of.isoformat()
+            run["as_of_source"] = parsed.as_of_source
+            run["as_of_confidence"] = parsed.as_of_confidence
+
+    # Always drop prior analysis — statement bytes may have changed
+    run["match_result"] = None
+    run["breaks"] = []
+    run["statement_reloaded_at"] = datetime.utcnow().isoformat() + "Z"
+    save_run(run)
+    return run
+
+
 def run_match(run_id: str) -> Dict[str, Any]:
     run = load_run(run_id)
     if not run:
@@ -625,16 +848,17 @@ def run_match(run_id: str) -> Dict[str, Any]:
         raise ValueError("Confirm all mappings and as-of before matching")
     if not run.get("as_of"):
         raise ValueError("As-of date is required")
-    as_of = date.fromisoformat(str(run["as_of"])[:10])
-    rows = _mapped_rows_from_run(run)
-    if not rows:
-        raise ValueError("No mapped lines to match — confirm security maps first")
-    if not run.get("confirmed_rows"):
-        run["confirmed_rows"] = rows
     set_run_progress(
-        run_id, pct=3, label="Request in progress — starting match…", stage="start"
+        run_id, pct=3, label="Request in progress — reloading statement…", stage="start"
     )
     try:
+        run = reload_statement_fresh(run, progress_cb=_progress_cb_for(run_id))
+        as_of = date.fromisoformat(str(run["as_of"])[:10])
+        rows = _mapped_rows_from_run(run)
+        if not rows:
+            raise ValueError("No mapped lines to match — confirm security maps first")
+        run["confirmed_rows"] = rows
+        save_run(run)
         result = run_position_match(
             int(run["client_id"]),
             as_of,
@@ -674,10 +898,9 @@ def run_match(run_id: str) -> Dict[str, Any]:
 
 def refresh_investigation(run_id: str) -> Dict[str, Any]:
     """
-    Re-run the full match + investigation from the already-uploaded holdings.
+    Re-load statement from Drive (or local upload), re-parse, re-match vs live books.
 
-    Does not re-parse the statement. Emails: reuse local archive if fresh
-    (no re-download); investigation always rebuilds from scratch (email-first).
+    System portfolio bypasses request cache. Prior analysis is cleared first.
     """
     run = load_run(run_id)
     if not run:
@@ -686,11 +909,7 @@ def refresh_investigation(run_id: str) -> Dict[str, Any]:
         raise ValueError("Confirm mappings and as-of before refreshing investigation")
     if not run.get("as_of"):
         raise ValueError("As-of date is required")
-    rows = _mapped_rows_from_run(run)
-    if not rows:
-        raise ValueError("No mapped uploaded holdings on this run")
 
-    # Clear prior investigation so UI cannot show a half-old result
     run["match_result"] = None
     run["breaks"] = []
     run["investigation_refresh_started_at"] = datetime.utcnow().isoformat() + "Z"
@@ -698,14 +917,18 @@ def refresh_investigation(run_id: str) -> Dict[str, Any]:
     set_run_progress(
         run_id,
         pct=3,
-        label="Request in progress — refreshing investigation…",
+        label="Request in progress — reloading statement from Drive…",
         stage="start",
     )
 
-    as_of = date.fromisoformat(str(run["as_of"])[:10])
-    if not run.get("confirmed_rows"):
-        run["confirmed_rows"] = rows
     try:
+        run = reload_statement_fresh(run, progress_cb=_progress_cb_for(run_id))
+        as_of = date.fromisoformat(str(run["as_of"])[:10])
+        rows = _mapped_rows_from_run(run)
+        if not rows:
+            raise ValueError("No mapped uploaded holdings on this run")
+        run["confirmed_rows"] = rows
+        save_run(run)
         result = run_position_match(
             int(run["client_id"]),
             as_of,

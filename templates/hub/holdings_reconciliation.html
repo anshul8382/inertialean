@@ -447,8 +447,9 @@
         <div class="card-body">
           <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 p-2 border rounded bg-light">
             <div class="small text-muted mb-0">
-              Re-run match + diagnosis after new emails, Trade details, or map fixes.
-              Emails are reused if already archived.
+              Reloads this statement from Drive (or local upload), rebuilds maps, and
+              compares to live books — no statement/portfolio cache. One file = one run
+              (combine only applies when you pick 2+ files).
             </div>
             <form method="post" class="mb-0 flex-shrink-0" data-recon-long="1">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -572,7 +573,12 @@
                     <code>{{ b.symbol or b.security_id }}</code>
                     {% if is_hi %}<span class="badge text-bg-warning ms-1">high conf</span>{% endif %}
                   </td>
-                  <td>{{ b.statement_qty }}</td>
+                  <td>
+                    {{ b.statement_qty }}
+                    {% if b.statement_breakdown %}
+                    <div class="form-text text-muted" style="font-size:0.65rem;">{{ b.statement_breakdown }}</div>
+                    {% endif %}
+                  </td>
                   <td>{{ b.system_qty }}</td>
                   <td>{{ b.delta }}</td>
                   <td class="small">
