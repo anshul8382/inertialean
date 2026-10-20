@@ -625,9 +625,10 @@ def _mapped_rows_from_run(run: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def _row_identity_key(row: Dict[str, Any]) -> Tuple[str, str, str]:
+    """Statement identity only — never use mapped security_symbol (avoids DBCORP sticky keys)."""
     return (
         str(row.get("isin") or "").strip().upper(),
-        str(row.get("nse_symbol") or row.get("security_symbol") or "").strip().upper(),
+        str(row.get("nse_symbol") or "").strip().upper(),
         str(row.get("raw_name") or "").strip().upper()[:80],
     )
 
@@ -636,7 +637,14 @@ def _preserve_confirmations(
     old_rows: List[Dict[str, Any]],
     new_review: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """Re-apply prior maps/ignores onto freshly parsed review rows (by ISIN/symbol/name)."""
+    """
+    Re-apply prior maps/ignores onto freshly parsed review rows.
+
+    Prefer ISIN / NSE identity. Name-only sticky maps are unsafe after a name-match
+    bug (e.g. Gold Bees wrongly confirmed as DBCORP) — do not overwrite a fresh
+    resolve, and do not re-apply a prior security_id onto an unmapped fresh row
+    when the prior symbol does not appear in the statement name/NSE.
+    """
     by_isin: Dict[str, Dict[str, Any]] = {}
     by_sym: Dict[str, Dict[str, Any]] = {}
     by_name: Dict[str, Dict[str, Any]] = {}
@@ -652,9 +660,14 @@ def _preserve_confirmations(
     for row in new_review or []:
         nr = dict(row)
         isin, sym, name = _row_identity_key(nr)
-        prev = (by_isin.get(isin) if isin else None) or (
-            by_sym.get(sym) if sym else None
-        ) or (by_name.get(name) if name else None)
+        matched_by = None
+        prev = None
+        if isin and isin in by_isin:
+            prev, matched_by = by_isin[isin], "isin"
+        elif sym and sym in by_sym:
+            prev, matched_by = by_sym[sym], "nse"
+        elif name and name in by_name:
+            prev, matched_by = by_name[name], "name"
         if not prev:
             out.append(nr)
             continue
@@ -663,13 +676,27 @@ def _preserve_confirmations(
 
             out.append(mark_ignored(nr))
             continue
-        if prev.get("security_id"):
-            nr["security_id"] = prev.get("security_id")
-            nr["security_symbol"] = prev.get("security_symbol") or nr.get(
-                "security_symbol"
-            )
-            nr["status"] = "mapped"
-            nr["match_method"] = prev.get("match_method") or "preserved_confirm"
+        # Fresh resolve already chose a security — keep it (fixes bad sticky confirms).
+        if nr.get("security_id"):
+            out.append(nr)
+            continue
+        if not prev.get("security_id"):
+            out.append(nr)
+            continue
+        if matched_by == "name":
+            prev_sym = str(prev.get("security_symbol") or "").strip().upper()
+            blob = f"{nr.get('raw_name') or ''} {nr.get('nse_symbol') or ''}".upper()
+            blob_compact = blob.replace(" ", "")
+            if prev_sym and prev_sym not in blob_compact:
+                # e.g. prior DBCORP on "NIP IND ETF GOLD BEES" — drop sticky map
+                out.append(nr)
+                continue
+        nr["security_id"] = prev.get("security_id")
+        nr["security_symbol"] = prev.get("security_symbol") or nr.get(
+            "security_symbol"
+        )
+        nr["status"] = "mapped"
+        nr["match_method"] = prev.get("match_method") or "preserved_confirm"
         out.append(nr)
     return out
 
