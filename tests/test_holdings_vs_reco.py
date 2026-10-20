@@ -1,4 +1,4 @@
-"""Holdings exceed reco / possible duplicate client order cues."""
+"""Holdings exceed reco / duplicate vs executed-not-recorded cues."""
 import pytest
 
 from services.reconciliation.holdings_vs_reco import assess_holdings_vs_reco
@@ -18,12 +18,10 @@ def test_holdings_exceed_only_when_fallback_enabled():
         ],
         trades=[],
     )
-    # Default: do not surface exceed (other investigations not confirmed failed)
     quiet = assess_holdings_vs_reco(**args)
     assert "HOLDINGS_EXCEED_RECO" not in quiet["hypotheses"]
     assert quiet["findings"] == []
 
-    # Last resort only
     out = assess_holdings_vs_reco(**args, include_holdings_exceed=True)
     assert out["advisor_confirm"] is True
     assert "HOLDINGS_EXCEED_RECO" in out["hypotheses"]
@@ -51,7 +49,8 @@ def test_other_investigations_failed_helper():
     )
 
 
-def test_delta_matches_reco_possible_duplicate_when_already_booked():
+def test_delta_matches_reco_duplicate_only_when_books_already_have_trade():
+    """Duplicate = gap replicates an existing booked trade."""
     out = assess_holdings_vs_reco(
         symbol="MARICO",
         statement_qty=105,
@@ -69,21 +68,56 @@ def test_delta_matches_reco_possible_duplicate_when_already_booked():
         trades=[{"type": "BUY", "quantity": 35, "date": "2026-05-10"}],
     )
     assert "POSSIBLE_DUPLICATE_CLIENT_ORDER" in out["hypotheses"]
+    assert "EXECUTED_NOT_RECORDED" not in out["hypotheses"]
     assert "duplicate" in (out["summary"] or "").lower()
     assert out["advisor_confirm"] is True
 
 
-def test_delta_matches_reco_mentions_duplicate_as_alternate():
+def test_ather_gap_matches_reco_no_trade_is_executed_not_recorded():
+    """ATHERENERG-style: holdings ahead by reco qty, zero books trades → not duplicate."""
+    out = assess_holdings_vs_reco(
+        symbol="ATHERENERG",
+        statement_qty=30,
+        system_qty=0,
+        delta=30,
+        recos=[
+            {
+                "action": "buy",
+                "quantity": 30,
+                "sent_at": "2026-06-16",
+                "status": "sent",
+            }
+        ],
+        trades=[],
+    )
+    assert out["top_hypothesis"] == "EXECUTED_NOT_RECORDED"
+    assert "POSSIBLE_DUPLICATE_CLIENT_ORDER" not in out["hypotheses"]
+    assert "duplicate" not in (out["summary"] or "").lower()
+    assert "not recorded" in (out["summary"] or "").lower()
+    assert "trade statement" in (out["summary"] or "").lower()
+    assert out["suspects"][0].get("next_check") == "trade_statements"
+
+
+def test_reco_marked_executed_but_no_book_trade_is_not_duplicate():
+    """Reco status alone is not enough for duplicate — need a books fill."""
     out = assess_holdings_vs_reco(
         symbol="HDFCBANK",
         statement_qty=50,
         system_qty=0,
         delta=50,
-        recos=[{"action": "buy", "quantity": 50, "sent_at": "2026-06-01", "status": "sent"}],
+        recos=[
+            {
+                "action": "buy",
+                "quantity": 50,
+                "sent_at": "2026-06-01",
+                "status": "executed",
+                "executed_at": "2026-06-02",
+            }
+        ],
         trades=[],
     )
-    assert any("duplicate" in f.lower() for f in out["findings"])
-    assert out["advisor_confirm"] is True
+    assert out["top_hypothesis"] == "EXECUTED_NOT_RECORDED"
+    assert "POSSIBLE_DUPLICATE_CLIENT_ORDER" not in out["hypotheses"]
 
 
 def test_no_cue_when_holdings_within_reco():

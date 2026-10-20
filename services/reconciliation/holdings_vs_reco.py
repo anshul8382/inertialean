@@ -1,8 +1,11 @@
 """
 Holdings vs recommendation cues for advisor confirmation.
 
-1. Gap |Δ| matches a specific reco qty → possible duplicate client order.
-2. Holdings exceed recommended BUY qty → previously held / bought more than
+1. Gap |Δ| matches a reco qty **and books already have that trade** → possible
+   duplicate client order (gap is a replica of an existing booked fill).
+2. Gap |Δ| matches a reco qty **but no matching book trade** → executed but
+   not recorded — check linked trade statements / contract notes next.
+3. Holdings exceed recommended BUY qty → previously held / bought more than
    recommended — **only as a last resort** when other investigations did not
    explain the gap (`include_holdings_exceed=True`).
 """
@@ -187,24 +190,23 @@ def assess_holdings_vs_reco(
     suspects: List[Dict[str, Any]] = []
     hypotheses: List[str] = []
 
-    # --- 1) Δ matches a specific reco → possible duplicate client order (check first) ---
-    if gap > 0.001 and buys:
+    # --- 1) Δ matches a specific reco BUY ---
+    # Duplicate ONLY when books already contain that fill (gap = replica).
+    # No matching book trade → executed-not-recorded; check trade statements next.
+    if gap > 0.001 and buys and dlt > 0.001:
         for b in buys:
             q = b["quantity"]
             if not qty_close(gap, q):
                 continue
-            executed = bool(b.get("executed_at")) or (b.get("status") or "") in (
-                "executed",
-                "closed",
-            )
             book_has = _trade_covers_qty(trades, q, side="buy")
             when = b.get("sent_at") or ""
-            if dlt > 0.001 and (executed or book_has):
+            when_bit = f" ({when})" if when else ""
+            if book_has:
                 msg = (
-                    f"{sym}: gap {gap:g} matches reco BUY {q:g}"
-                    f"{f' ({when})' if when else ''}, and books already show that "
-                    f"qty / reco is marked executed — possible duplicate order by "
-                    f"the client. Ask the advisor to confirm with the client."
+                    f"{sym}: gap {gap:g} matches reco BUY {q:g}{when_bit}, and books "
+                    f"already show a BUY of that qty — possible duplicate order by "
+                    f"the client (extra fill beyond the booked trade). Ask the "
+                    f"advisor to confirm with the client."
                 )
                 findings.append(msg)
                 hypotheses.append("POSSIBLE_DUPLICATE_CLIENT_ORDER")
@@ -218,31 +220,33 @@ def assess_holdings_vs_reco(
                         "detail": msg,
                         "advisor_action": (
                             "Confirm with client whether they placed a duplicate buy "
-                            f"of ~{q:g} in addition to the recommended order."
+                            f"of ~{q:g} in addition to the trade already in books."
                         ),
                     }
                 )
-            elif dlt > 0.001:
+            else:
                 msg = (
-                    f"{sym}: gap {gap:g} matches reco BUY {q:g}"
-                    f"{f' ({when})' if when else ''}. Besides a missing books entry, "
-                    f"this can also be a duplicate order by the client — ask the "
-                    f"advisor to confirm with the client."
+                    f"{sym}: gap {gap:g} matches reco BUY {q:g}{when_bit}, but books "
+                    f"have no matching BUY — likely executed and not recorded. "
+                    f"Check linked trade statements / contract notes for a fill of "
+                    f"~{q:g}, then add the trade to books."
                 )
                 findings.append(msg)
-                hypotheses.append("POSSIBLE_DUPLICATE_CLIENT_ORDER")
+                hypotheses.append("EXECUTED_NOT_RECORDED")
                 suspects.append(
                     {
-                        "kind": "gap_matches_reco_possible_duplicate",
-                        "priority": 2,
+                        "kind": "executed_not_recorded_vs_reco",
+                        "priority": 0,
                         "action": "buy",
                         "quantity": q,
                         "sent_at": when,
                         "detail": msg,
                         "advisor_action": (
-                            "Confirm with client: missing booking vs duplicate buy of "
-                            f"~{q:g}."
+                            "Search trade statements / contract notes for "
+                            f"{sym} BUY ~{q:g}{when_bit}; if found, book the trade "
+                            "(not a duplicate — nothing is in books yet)."
                         ),
+                        "next_check": "trade_statements",
                     }
                 )
             break
@@ -357,15 +361,23 @@ def apply_holdings_vs_reco_to_breaks(
         d["investigation_notes"] = notes
         hyp = str(d.get("top_hypothesis") or "")
         primary = pack.get("top_hypothesis")
-        # Duplicate may upgrade weak hyps; exceed only when still weak / last resort
-        if primary == "POSSIBLE_DUPLICATE_CLIENT_ORDER" and (
+        # Executed-not-recorded / true duplicate may upgrade weak hyps;
+        # exceed only when still weak / last resort.
+        if primary in (
+            "POSSIBLE_DUPLICATE_CLIENT_ORDER",
+            "EXECUTED_NOT_RECORDED",
+        ) and (
             not hyp
             or hyp in _WEAK_HYPS
             or hyp.startswith("TIMING")
+            or hyp.startswith("RECO_NOT_EXECUTED")
+            or "not executed" in hyp.lower()
         ):
             if not d.get("prior_hypothesis"):
                 d["prior_hypothesis"] = hyp or None
             d["top_hypothesis"] = primary
+            if primary == "EXECUTED_NOT_RECORDED":
+                d["check_trade_statements"] = True
         elif (
             primary == "HOLDINGS_EXCEED_RECO"
             and allow_exceed

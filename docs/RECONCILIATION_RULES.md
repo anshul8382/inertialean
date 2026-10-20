@@ -58,8 +58,12 @@ Drive / upload / prior-runs UI: pick mode before multi-select submit. Date-brack
    recommend booking **BUY Δ @ ~₹0** (dividend/interest units). Module:
    [`liquid_bees_interest.py`](../services/reconciliation/liquid_bees_interest.py).
 
-   **Holdings vs reco / duplicate order:** If |Δ| **matches a specific reco qty**,
-   flag possible **duplicate client order** (`POSSIBLE_DUPLICATE_CLIENT_ORDER`).
+   **Holdings vs reco / duplicate vs missed booking:** If |Δ| **matches a specific
+   reco qty**:
+   - Books **already have** that BUY → `POSSIBLE_DUPLICATE_CLIENT_ORDER` (gap is a
+     replica of an existing trade).
+   - Books have **no** matching BUY → `EXECUTED_NOT_RECORDED` — check linked
+     **trade statements / contract notes**, then book the fill (not a duplicate).
    **`HOLDINGS_EXCEED_RECO`** (previously held / bought more than recommended —
    confirm with client) is a **last resort only** when other investigations did
    not explain the gap. Module:
