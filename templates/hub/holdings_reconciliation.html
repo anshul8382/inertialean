@@ -85,7 +85,7 @@
 
         <div class="ms-lg-auto">
           <details class="small">
-            <summary class="text-muted" style="cursor:pointer">Upload / prior runs / trade evidence</summary>
+            <summary class="text-muted" style="cursor:pointer">Upload / trade evidence</summary>
             <div class="border rounded p-2 mt-1 bg-light" style="min-width:16rem;max-width:28rem;">
               {% if selected_client_id %}
               {% set tdl = trade_drive_link or {} %}
@@ -105,39 +105,6 @@
                        placeholder="AECPA6630G, AQUPD7523P" autocomplete="off">
                 <button type="submit" class="btn btn-outline-primary btn-sm">Save trade folder</button>
                 <div class="form-text">Used on Refresh to match sent recos vs books vs broker fills.</div>
-              </form>
-              <hr class="my-2">
-              {% endif %}
-              {% if selected_client_id and client_runs %}
-              <form method="post" class="mb-2">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="action" value="combine_runs">
-                <input type="hidden" name="client_id" value="{{ selected_client_id }}">
-                <input type="hidden" name="broker" value="{{ run.broker if run else 'default' }}">
-                <div class="fw-semibold mb-1">Prior runs ({{ client_runs|length }})</div>
-                <ul class="list-unstyled mb-1" style="max-height:6rem;overflow:auto;">
-                  {% for r in client_runs[:10] %}
-                  <li class="mb-1">
-                    {% if r.format_id not in ('combined_statements', 'date_bracket') %}
-                    <input type="checkbox" name="combine_run_id" value="{{ r.id }}" id="cr_{{ r.id }}">
-                    {% else %}
-                    <span class="text-muted">·</span>
-                    {% endif %}
-                    <a href="{{ url_for('hub.holdings_reconciliation', run_id=r.id, client_id=selected_client_id) }}">
-                      {{ r.filename or r.format_id }} · {{ r.as_of or '?' }}
-                    </a>
-                  </li>
-                  {% endfor %}
-                </ul>
-                <div class="form-check form-check-inline">
-                  <input class="form-check-input" type="radio" name="multi_mode" id="cr_mode_combine" value="combine" checked>
-                  <label class="form-check-label" for="cr_mode_combine">Combine</label>
-                </div>
-                <div class="form-check form-check-inline">
-                  <input class="form-check-input" type="radio" name="multi_mode" id="cr_mode_bracket" value="date_bracket">
-                  <label class="form-check-label" for="cr_mode_bracket">Date bracket</label>
-                </div>
-                <button type="submit" class="btn btn-outline-success btn-sm d-block mt-1">Run on selected</button>
               </form>
               <hr class="my-2">
               {% endif %}

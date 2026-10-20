@@ -58,7 +58,17 @@ def test_refresh_investigation_rebuilds(monkeypatch):
             },
         }
 
+    def fake_reload(run, progress_cb=None):
+        # Unit test: skip Drive/local re-parse; keep confirmed holdings.
+        if progress_cb:
+            progress_cb(6, "reload_skip", "reload_statement")
+        run = dict(run)
+        run["match_result"] = None
+        run["breaks"] = []
+        return run
+
     monkeypatch.setattr(rs, "run_position_match", fake_match)
+    monkeypatch.setattr(rs, "reload_statement_fresh", fake_reload)
     monkeypatch.setattr(rs, "set_run_progress", lambda *a, **k: None)
     out = rs.refresh_investigation("r1")
     assert out["status"] == "matched"

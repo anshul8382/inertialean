@@ -30,10 +30,20 @@ def _name_score(a: str, b: str) -> float:
         return 0.0
     if na == nb:
         return 1.0
-    if na in nb or nb in na:
+    # Substring containment is unsafe for short norms after noise stripping
+    # (e.g. "D.B.Corp Limited" → "d b", which sits inside "gol**d b**ees").
+    # Require whole-token containment and a meaningful shorter side.
+    ta, tb = set(na.split()), set(nb.split())
+    shorter_toks, longer_toks = (ta, tb) if len(ta) <= len(tb) else (tb, ta)
+    shorter_s, longer_s = (na, nb) if len(na) <= len(nb) else (nb, na)
+    meaningful = sum(1 for t in shorter_toks if len(t) >= 3)
+    if (
+        shorter_toks
+        and shorter_toks <= longer_toks
+        and (meaningful >= 2 or len(shorter_s) >= 8)
+    ):
         return 0.92
     # token Jaccard + sequence
-    ta, tb = set(na.split()), set(nb.split())
     jacc = len(ta & tb) / len(ta | tb) if ta and tb else 0.0
     seq = SequenceMatcher(None, na, nb).ratio()
     return max(seq, 0.55 * seq + 0.45 * jacc)
