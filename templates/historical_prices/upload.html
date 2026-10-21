@@ -6,6 +6,7 @@
 {% block content %}
 {{ maint_hub_open('Price upload', 'CSV upload, benchmarks, AMFI NAV sync.', url_for('main.maintenance_reference_data')) }}
   {{ maint_link('fa-eye', 'View historical prices', url_for('historical_prices.view_historical_prices')) }}
+  {{ maint_link('fa-chart-line', 'Nifty 50 index upload', url_for('historical_prices.upload_page') ~ '#benchmark-index-upload', 'Year-wise benchmark CSV') }}
   {{ maint_link('fa-sync', 'AMFI India MF NAV', url_for('historical_prices.upload_page') ~ '#amfi-india-mf-nav', 'Sync NAV and search schemes') }}
 {{ maint_hub_close('Upload sections below — scroll for CSV, benchmarks, and fund tools.') }}
 <div class="container-fluid">
@@ -61,16 +62,8 @@
 2023-01-02,EQ,1010.00,1030.00,1005.00,1010.00,1025.00,1025.00,1017.50,1200.00,900.00,1200000,1220000000,6000</code></pre>
                     </div>
 
-                    <!-- Benchmark Data Upload Section - Only show if data is missing -->
-                    {% set nifty_has_missing_data = false %}
-                    {% for year in range(2014, 2026) %}
-                        {% if not nifty_status.get(year, {}).has_data %}
-                            {% set nifty_has_missing_data = true %}
-                        {% endif %}
-                    {% endfor %}
-                    
-                    {% if nifty_has_missing_data %}
-                    <div class="card mb-4 border-primary">
+                    {# Always show index upload — stock upload does NOT write benchmark_data #}
+                    <div class="card mb-4 border-primary" id="benchmark-index-upload">
                         <div class="card-header bg-primary text-white">
                             <h5 class="mb-0">
                                 <i class="fas fa-chart-line"></i> Benchmark Index Upload (Nifty 50)
@@ -79,7 +72,8 @@
                         <div class="card-body">
                             <div class="alert alert-info">
                                 <h6><i class="fas fa-info-circle"></i> Nifty 50 Data Upload</h6>
-                                <p>Upload year-wise Nifty 50 historical data. Each file should contain one year of data.</p>
+                                <p>Use this section for <strong>index / Nifty 50</strong> files. Stock upload below writes equity prices only — it will not update the Nifty benchmark series used for XIRR comparison.</p>
+                                <p>Upload year-wise historical data (CSV/Excel). Re-upload replaces that year’s rows.</p>
                                 <p><strong>File Format:</strong></p>
                                 <ul>
                                     <li>CSV or Excel file</li>
@@ -89,50 +83,34 @@
                                 <p class="mb-0"><strong>Example:</strong> <code>NIFTY50_2024.csv</code> or <code>Nifty_2023.xlsx</code></p>
                             </div>
 
-                <div class="row">
-                    {% set years = range(2014, 2026) %}
-                    {% for year in years %}
+                            <div class="row">
+                                {% for year in nifty_years|default(range(2014, current_year + 1)) %}
                                 <div class="col-md-3 col-sm-6 mb-3">
                                     <div class="card">
                                         <div class="card-body text-center">
                                             <h6>Year {{ year }}</h6>
-                                            
-                                            {% if nifty_status[year] %}
-                                                {% if nifty_status[year].has_data %}
-                                                    <span class="badge badge-success mb-2">
-                                                        <i class="fas fa-check"></i> Uploaded
-                                                    </span>
-                                                    <p class="small text-muted mb-2">{{ nifty_status[year].record_count }} records</p>
-                                                {% else %}
-                                                    <span class="badge badge-warning mb-2">
-                                                        <i class="fas fa-clock"></i> Pending
-                                                    </span>
-                                                {% endif %}
+                                            {% set yr = nifty_status.get(year) if nifty_status else none %}
+                                            {% if yr and yr.has_data %}
+                                                <span class="badge badge-success mb-2 nifty-year-badge">
+                                                    <i class="fas fa-check"></i> Uploaded
+                                                </span>
+                                                <p class="small text-muted mb-2 nifty-year-count">{{ yr.record_count }} records</p>
                                             {% else %}
-                                                <span class="badge badge-warning mb-2">
+                                                <span class="badge badge-warning mb-2 nifty-year-badge">
                                                     <i class="fas fa-clock"></i> Pending
                                                 </span>
+                                                <p class="small text-muted mb-2 nifty-year-count d-none"></p>
                                             {% endif %}
-                                            
                                             <div class="upload-section mt-2">
-                                                {% if not nifty_status.get(year, {}).has_data %}
-                                                <input type="file" 
-                                                       id="nifty_file_{{ year }}" 
-                                                       class="form-control-file d-none" 
+                                                <input type="file"
+                                                       id="nifty_file_{{ year }}"
+                                                       class="form-control-file d-none"
                                                        accept=".csv,.xlsx,.xls">
-                                                <button class="btn btn-sm btn-primary" 
+                                                <button type="button" class="btn btn-sm btn-primary nifty-upload-btn"
                                                         onclick="document.getElementById('nifty_file_{{ year }}').click()">
-                                                    <i class="fas fa-upload"></i> Upload
+                                                    <i class="fas fa-upload"></i>
+                                                    {% if yr and yr.has_data %}Replace{% else %}Upload{% endif %}
                                                 </button>
-                                                {% else %}
-                                                <div class="text-center">
-                                                    <span class="badge badge-success">
-                                                        <i class="fas fa-check"></i> Data Available
-                                                    </span>
-                                                    <br>
-                                                    <small class="text-muted">Historical data already uploaded</small>
-                                                </div>
-                                                {% endif %}
                                                 <div id="nifty_upload_status_{{ year }}" class="mt-2"></div>
                                             </div>
                                         </div>
@@ -142,7 +120,6 @@
                             </div>
                         </div>
                     </div>
-                    {% endif %}
 
                     <!-- Separator -->
                     <hr class="my-4">
@@ -150,7 +127,7 @@
                     <h4 class="mb-3"><i class="fas fa-chart-line"></i> All Securities Historical Prices</h4>
                     <div class="alert alert-info">
                         <h6><i class="fas fa-info-circle"></i> Securities Upload</h6>
-                        <p class="mb-0">Upload historical price data for all securities including stocks, debt instruments, ETFs, REITs, and other asset classes. Listed when <strong>yearly coverage</strong> fails, or there is <strong>a block of 7 or more consecutive calendar dates</strong> with no saved close between existing prices (holes yearly % often hides). Use <strong>Request company for upload</strong> below to re-upload when coverage looks fine but prices are wrong.</p>
+                        <p class="mb-0">For <strong>stocks / ETFs / funds</strong> only — not Nifty index (use <a href="#benchmark-index-upload">Benchmark Index Upload</a> above). Listed when <strong>yearly coverage</strong> fails, or there is <strong>a block of 7 or more consecutive calendar dates</strong> with no saved close between existing prices. Use <strong>Request company for upload</strong> below to re-upload when coverage looks fine but prices are wrong.</p>
                     </div>
 
                     <!-- Manual force-upload request (Option A: query + session) -->
@@ -611,26 +588,23 @@ document.querySelectorAll('[id^="nifty_file_"]').forEach(input => {
                     <i class="fas fa-check"></i> ${message}
                 </div>`;
                 
-                // Hide the upload button and show success state
                 const uploadButton = document.querySelector(`button[onclick*="nifty_file_${year}"]`);
+                const cardBody = uploadButton ? uploadButton.closest('.card-body') : null;
                 if (uploadButton) {
-                    uploadButton.style.display = 'none';
+                    uploadButton.innerHTML = '<i class="fas fa-upload"></i> Replace';
                 }
-                
-                // Update the status badge to show uploaded
-                const cardBody = uploadButton.closest('.card-body');
-                const badge = cardBody.querySelector('.badge');
-                if (badge) {
-                    badge.className = 'badge badge-success mb-2';
-                    badge.innerHTML = '<i class="fas fa-check"></i> Uploaded';
+                if (cardBody) {
+                    const badge = cardBody.querySelector('.nifty-year-badge') || cardBody.querySelector('.badge');
+                    if (badge) {
+                        badge.className = 'badge badge-success mb-2 nifty-year-badge';
+                        badge.innerHTML = '<i class="fas fa-check"></i> Uploaded';
+                    }
+                    const countEl = cardBody.querySelector('.nifty-year-count');
+                    if (countEl && data.uploaded != null) {
+                        countEl.classList.remove('d-none');
+                        countEl.textContent = data.uploaded + ' records';
+                    }
                 }
-                
-                // Update record count
-                const recordCount = cardBody.querySelector('.small.text-muted');
-                if (recordCount) {
-                    recordCount.textContent = `${data.uploaded} records`;
-                }
-                
                 setTimeout(() => location.reload(), 2000);
             } else {
                 statusDiv.innerHTML = `<div class="alert alert-danger p-2 mb-0">

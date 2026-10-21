@@ -612,10 +612,12 @@ def upload_page():
         # Merge manually requested companies (session / prior force_security_id)
         stocks_data = _apply_force_uploads_to_stocks_data(stocks_data)
         
-        # Get Nifty data status
+        # Get Nifty data status (always shown on page — upload/replace per year)
         try:
             from services.benchmark_service import BenchmarkService
-            nifty_status = BenchmarkService.get_all_years_status(benchmark_id=1, start_year=2014)
+            nifty_status = BenchmarkService.get_all_years_status(
+                benchmark_id=1, start_year=2014, end_year=current_year
+            )
         except Exception as e:
             logger.warning(f"Could not load Nifty status: {e}")
             nifty_status = {}
@@ -627,15 +629,18 @@ def upload_page():
                              securities_data=stocks_data,  # Alias for template
                              current_year=current_year,
                              nifty_status=nifty_status,
+                             nifty_years=list(range(2014, current_year + 1)),
                              force_upload_queue=force_queue)
         
     except Exception as e:
         logger.error(f"Error loading historical prices upload page: {str(e)}")
         flash(f"Error loading page: {str(e)}", 'error')
+        _cy = datetime.now().year
         return render_template('historical_prices/upload.html', 
                              stocks_data=[], 
-                             current_year=datetime.now().year,
+                             current_year=_cy,
                              nifty_status={},
+                             nifty_years=list(range(2014, _cy + 1)),
                              force_upload_queue=[])
 
 @historical_prices_bp.route('/view')
