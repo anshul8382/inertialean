@@ -26,6 +26,9 @@ def test_guess_filename_day_and_month():
     d2, src2 = guess_from_filename("Devyani August 2026 holding statement .xlsx")
     assert d2 and d2.month == 8 and d2.year == 2026
     assert src2 == "filename_month"
+    d3, src3 = guess_from_filename("VS HS sep 21 2026.xlsx")
+    assert d3 and d3.isoformat() == "2026-09-21"
+    assert src3 == "filename_day"
 
 
 def test_zerodha_csv():
@@ -98,6 +101,39 @@ def test_angel_dp_pdf():
     assert all(ln.isin and ln.qty > 0 for ln in r.lines)
     # period end preferred
     assert r.as_of is not None
+
+
+def test_client_portfolio_details_xlsx():
+    r = detect_and_parse(
+        FIXTURES / "client_portfolio_vs_sep21.xlsx",
+        filename="VS HS sep 21 2026.xlsx",
+    )
+    assert r.format_id == "client_portfolio_details_xlsx"
+    assert len(r.lines) >= 20
+    assert any(ln.nse_symbol == "HDFCBANK" for ln in r.lines)
+    assert any(ln.isin == "INE040A01034" for ln in r.lines)
+    # filename day when sheet has no as-of
+    assert r.as_of and r.as_of.isoformat() == "2026-09-21"
+
+
+def test_portfolio_holding_statement_xlsx():
+    r = detect_and_parse(
+        FIXTURES / "portfolio_holding_statement_oct.xlsx",
+        filename="Oct 2026 holding .xlsx",
+    )
+    assert r.format_id == "portfolio_holding_statement_xlsx"
+    assert len(r.lines) >= 20
+    assert all(ln.isin and ln.qty > 0 for ln in r.lines)
+    # Date of Download 11/10/2026 (DMY)
+    assert r.as_of and r.as_of.isoformat() == "2026-10-11"
+
+
+def test_demat_allocated_tsv_xls():
+    r = detect_and_parse(FIXTURES / "demat_allocated_7500013278.xls")
+    assert r.format_id == "demat_allocated_tsv"
+    assert len(r.lines) >= 20
+    assert any(ln.isin == "INE00WC01027" for ln in r.lines)
+    assert any(ln.broker_code == "AFFIND" for ln in r.lines)
 
 
 def test_merge_prefers_header():

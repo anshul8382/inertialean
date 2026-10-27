@@ -120,10 +120,34 @@ def txn_date_ranges_by_security() -> List[Tuple[int, date, date]]:
     return out
 
 
+def _attach_prices_sheet_portfolio_audit(summary: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extension of this scan: held portfolio ↔ Prices sheet (email-only).
+    Must not fail the historical SPIKE/MISSING/ZERO snapshot.
+    """
+    try:
+        from services.price_accuracy_prices_sheet_audit_service import (
+            run_prices_sheet_portfolio_audit,
+        )
+
+        # One audit run per Price Accuracy scan (weekly DAG or Hub manual).
+        summary["prices_sheet_audit"] = run_prices_sheet_portfolio_audit(
+            send_email=True,
+            force_email=True,
+        )
+    except Exception as exc:
+        logger.warning("prices sheet portfolio audit failed: %s", exc)
+        summary["prices_sheet_audit"] = {"ok": False, "error": str(exc)}
+    return summary
+
+
 def run_price_accuracy_scan(threshold_pct: float = 10.0) -> Dict[str, Any]:
     """
     Replace previous run/results with a fresh snapshot.
     Threshold applies to consecutive historical rows (pct change vs prior row close).
+
+    After the DB snapshot, also runs the Prices-sheet portfolio audit (email-only
+    extension — SHEET_MISSING / SHEET_TICKER_MISMATCH / gated SHEET_PRICE_BAD).
     """
     threshold_pct = float(threshold_pct)
     if threshold_pct <= 0:
@@ -151,7 +175,16 @@ def run_price_accuracy_scan(threshold_pct: float = 10.0) -> Dict[str, Any]:
             )
             db.session.add(run)
             db.session.commit()
-            return {"run_id": run.id, "securities_scanned": 0, "spikes": 0, "missing": 0, "zeros": 0, "skipped_closed": 0}
+            return _attach_prices_sheet_portfolio_audit(
+                {
+                    "run_id": run.id,
+                    "securities_scanned": 0,
+                    "spikes": 0,
+                    "missing": 0,
+                    "zeros": 0,
+                    "skipped_closed": 0,
+                }
+            )
 
         tx_dates_by_sid: Dict[int, Set[date]] = {}
         date_rows = (
@@ -356,14 +389,16 @@ def run_price_accuracy_scan(threshold_pct: float = 10.0) -> Dict[str, Any]:
             )
 
         db.session.commit()
-        return {
-            "run_id": run.id,
-            "securities_scanned": len(tx_ranges),
-            "spikes": len(spikes),
-            "missing": len(missing),
-            "zeros": len(zeros),
-            "skipped_closed": len(sparse_rows),
-        }
+        return _attach_prices_sheet_portfolio_audit(
+            {
+                "run_id": run.id,
+                "securities_scanned": len(tx_ranges),
+                "spikes": len(spikes),
+                "missing": len(missing),
+                "zeros": len(zeros),
+                "skipped_closed": len(sparse_rows),
+            }
+        )
     except Exception as exc:
         logger.exception("price accuracy scan failed: %s", exc)
         db.session.rollback()

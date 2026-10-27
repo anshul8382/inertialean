@@ -137,8 +137,13 @@ echo '==> .env keys (values not printed):'
 grep -E '^(EMAIL_SOURCE_TAG|DI_CREATE_OPS_TASKS|DB_NAME|DB_USER|CODEBASE_BACKUP_DRIVE_ENABLED)=' .env | sed 's/=.*/=***/' || true
 
 if [[ '$SKIP_PIP' -eq 0 ]] && [[ -x ./venv/bin/pip ]]; then
-  echo '==> pip install -r requirements.txt'
-  ./venv/bin/pip install -r requirements.txt -q
+  # Explicit per-package notices for anything newly installed (see prod_install_notices.txt)
+  if [[ -x ./scripts/deployment/announce_and_install_prod_deps.sh ]]; then
+    bash ./scripts/deployment/announce_and_install_prod_deps.sh
+  else
+    echo '==> pip install -r requirements.txt (no announce script)'
+    ./venv/bin/pip install -r requirements.txt -q
+  fi
 fi
 
 if [[ -x ./venv/bin/python3 ]] && [[ -f wsgi.py || -f main.py ]]; then

@@ -117,7 +117,39 @@ _PLAYBOOKS: Dict[str, Dict[str, Any]] = {
         ],
         "url_key": "firm_data_integrity",
     },
+    "portfolio_vs_benchmark": {
+        "why": (
+            "Portfolio XIRR vs Nifty is a performance FYI for client conversations — "
+            "not a book/data mismatch. Shown yellow on Data Integrity; act via Client Health / review."
+        ),
+        "steps": [
+            "Read the drivers in the section detail (top negative contributors).",
+            "Use Client Health / review prep — do not invent trades or alter books to clear this.",
+            "Re-run portfolio performance monitor after the period improves, or resolve when no longer underperforming.",
+        ],
+        "url_key": "firm_data_integrity",
+    },
+    "investment_workflow": {
+        "why": (
+            "Monthly investment workflow is past its stage SLA — ops follow-up, "
+            "not a cashflow/trade integrity error. Yellow on Data Integrity; prefer Client Health FUNDS/RECOS nudges."
+        ),
+        "steps": [
+            "Open the monthly investment / workflow and move the stuck stage (FUNDS → … → COMPLETED).",
+            "Keep funds/notes current; Client Health shows the same A* process signal.",
+            "Re-check after the workflow advances — the stalled issue should clear on the next agent run.",
+        ],
+        "url_key": "firm_data_integrity",
+    },
 }
+
+# Attention header: short titles only; full issue text lives in section cards.
+_SOFT_ATTENTION_SECTIONS = frozenset(
+    {
+        "portfolio_vs_benchmark",
+        "investment_workflow",
+    }
+)
 
 
 def _load_guidelines(max_chars: int = 3500) -> str:
@@ -141,6 +173,7 @@ def _compact_context(case: Dict[str, Any]) -> Dict[str, Any]:
                 {
                     "fact_id": it.get("fact_id"),
                     "title": (it.get("title") or "")[:160],
+                    "short_title": (it.get("short_title") or "")[:80] or None,
                     "kind": it.get("kind"),
                     "url": it.get("url"),
                 }
@@ -203,6 +236,21 @@ def _deterministic_attention(case: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[
                     syms.append(t.split("·", 1)[1].split("—")[0].strip())
             if syms:
                 title = f"{title}: {', '.join(syms)}"
+        # Soft FYI sections: short attention title; no full-message bullet dump (detail in section card)
+        if sid in _SOFT_ATTENTION_SECTIONS:
+            shorts = [f.get("short_title") for f in findings if f.get("short_title")]
+            if len(shorts) == 1:
+                title = shorts[0]
+            elif len(shorts) > 1:
+                title = f"{sec.get('title') or sid}: {', '.join(shorts[:3])}"
+            else:
+                title = {
+                    "portfolio_vs_benchmark": "Underperformance vs Nifty",
+                    "investment_workflow": "Workflow stuck",
+                }.get(sid, title)
+            finding_summaries: List[str] = []
+        else:
+            finding_summaries = [f.get("title") for f in findings[:5] if f.get("title")]
         cited = [f.get("fact_id") for f in findings if f.get("fact_id")][:8]
         items.append(
             {
@@ -215,7 +263,7 @@ def _deterministic_attention(case: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[
                 "how_to_resolve": list(play["steps"]),
                 "open_url": _url_for_section(sid, case, sec_by_id.get(sid)),
                 "cited_fact_ids": cited,
-                "finding_summaries": [f.get("title") for f in findings[:5] if f.get("title")],
+                "finding_summaries": finding_summaries,
             }
         )
         priority += 1

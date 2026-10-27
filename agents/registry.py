@@ -141,7 +141,11 @@ SCHEDULED_AGENT_LIKE_JOBS: List[Dict[str, Any]] = [
     {
         "name": "price_accuracy_scan",
         "display_name": "Price Accuracy Scan",
-        "description": "Detects suspicious price jumps (Hub → System → Price data accuracy)",
+        "description": (
+            "Historical SPIKE/MISSING/ZERO snapshot, then email digest for held stocks "
+            "(open PA findings + SHEET_MISSING / SHEET_TICKER_MISMATCH / SHEET_PRICE_BAD "
+            "after 5 consecutive scans). Email-only; no Hub UI change."
+        ),
         "service": "services.price_accuracy_service.run_price_accuracy_scan",
         "group": "scheduled_jobs",
         "airflow_dags": ["price_accuracy_weekly"],

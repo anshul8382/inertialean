@@ -131,8 +131,12 @@ echo '==> .env keys (values not printed):'
 grep -E '^(EMAIL_SOURCE_TAG|DI_CREATE_OPS_TASKS|DB_NAME|DB_USER)=' .env | sed 's/=.*/=***/' || true
 
 if [[ '$SKIP_PIP' -eq 0 ]] && [[ -x ./venv/bin/pip ]]; then
-  echo '==> pip install -r requirements.txt'
-  ./venv/bin/pip install -r requirements.txt -q
+  if [[ -x ./scripts/deployment/announce_and_install_prod_deps.sh ]]; then
+    bash ./scripts/deployment/announce_and_install_prod_deps.sh
+  else
+    echo '==> pip install -r requirements.txt (no announce script)'
+    ./venv/bin/pip install -r requirements.txt -q
+  fi
 fi
 
 # Quick import smoke (optional if wsgi missing)

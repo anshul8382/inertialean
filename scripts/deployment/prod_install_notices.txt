@@ -1,0 +1,8 @@
+# Prod install notices — shown explicitly whenever deploy installs a package that is
+# missing from the server venv. Keep one line per distribution name:
+#   <pip-name><TAB or spaces><what it is / what it does>
+#
+# Update this file in the SAME commit that adds the dependency to requirements.txt.
+# Deploy (deploy_kvm_vps.sh / announce_and_install_prod_deps.sh) prints these before pip.
+
+pycryptodome	AES crypto library for PyPDF2 — unlocks password-protected broker PDFs (e.g. Zerodha contract notes). Without it, encrypted PDFs fail as “password required” even with the correct password.

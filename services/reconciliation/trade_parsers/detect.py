@@ -55,6 +55,7 @@ def _extract_pdf_text(
     encrypted = bool(getattr(reader, "is_encrypted", False))
     if encrypted:
         unlocked = False
+        crypto_missing = False
         # Try empty password first (some brokers use blank user-pwd), then supplied
         candidates = [""] + [str(p) for p in (passwords or []) if str(p)]
         seen_pw = set()
@@ -70,9 +71,14 @@ def _extract_pdf_text(
                 used = str(pw) if pw else ""
                 unlocked = True
                 break
-            except Exception:
+            except Exception as exc:
+                msg = str(exc).lower()
+                if "pycryptodome" in msg or "aes algorithm" in msg:
+                    crypto_missing = True
                 continue
         if not unlocked:
+            if crypto_missing:
+                return "", None, "pdf_crypto_missing"
             return "", None, "password_required"
     try:
         text = "\n".join((page.extract_text() or "") for page in reader.pages)
@@ -129,6 +135,14 @@ def detect_and_parse_trade(
     is_pdf = data[:5] == b"%PDF-" or low.endswith(".pdf")
     if is_pdf or data[:5] == b"%PDF-":
         text, used_pw, fail = _extract_pdf_text(data, passwords)
+        if fail == "pdf_crypto_missing":
+            return TradeParseResult(
+                format_id="pdf_crypto_missing",
+                warnings=[
+                    "Encrypted PDF needs PyCryptodome (pip install pycryptodome) to decrypt AES."
+                ],
+                meta={"pdf_crypto_missing": True},
+            )
         if fail == "password_required":
             return TradeParseResult(
                 format_id="pdf_password_required",

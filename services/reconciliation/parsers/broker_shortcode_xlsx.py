@@ -18,13 +18,15 @@ from services.reconciliation.parsers.base import (
 
 def can_parse_rows(rows) -> bool:
     blob = " ".join(" ".join(str(c) for c in r[:8]) for r in rows[:5]).lower()
-    return "stock symbol" in blob and "isin code" in blob
+    # Require explicit "Stock Symbol" — do not steal PORTFOLIO HOLDING STATEMENT
+    # rows that only have Name + ISIN + Qty.
+    return "stock symbol" in blob and ("isin code" in blob or "isin" in blob)
 
 
 def parse(path: Union[str, Path]) -> ParseResult:
     path = Path(path)
     rows = iter_xlsx_rows(path)
-    hdr_i, mapping = find_header_row(rows, ["stock symbol", "isin code", "qty"])
+    hdr_i, mapping = find_header_row(rows, ["stock symbol"])
 
     def col(*names):
         for n in names:
@@ -36,8 +38,8 @@ def parse(path: Union[str, Path]) -> ParseResult:
     c_isin = col("isin code", "isin")
     c_name = col("company name")
     c_qty = col("qty", "quantity")
-    if c_qty is None:
-        raise ValueError("Qty column not found")
+    if c_code is None or c_qty is None:
+        raise ValueError("Broker short-code table needs Stock Symbol and Qty")
 
     lines = []
     for row in rows[hdr_i + 1 :]:

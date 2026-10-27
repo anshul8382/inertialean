@@ -51,6 +51,8 @@ Runs `run_price_accuracy_scan()` inside Flask app context — identical to the H
 - **Threshold**: `PRICE_ACCURACY_SCAN_THRESHOLD_PCT` env (default `10`).
 - **Schedule**: Every **Monday 09:30 IST** (`0 4 * * 1` UTC); change in Airflow UI if your scheduler timezone differs.
 - **Results**: Latest snapshot in DB; review at `/hub/system/price-accuracy`.
+- **Extension**: same run also audits held stocks vs Prices sheet and emails
+  Anshul/ops (SHEET_MISSING / mismatch / SHEET_PRICE_BAD after 5 consecutive scans).
 """,
 ) as dag:
     PythonOperator(

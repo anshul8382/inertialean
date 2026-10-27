@@ -56,6 +56,62 @@ def test_deterministic_prices_playbook():
     assert "RELIANCE" in (row.get("finding_summaries") or [""])[0]
 
 
+def test_soft_fyi_attention_uses_short_titles_without_duplicating_detail():
+    case = {
+        "client_id": 5,
+        "client_name": "Abhinav",
+        "overall_status": "needs_review",
+        "overall_label": "Needs review",
+        "deep_links": {"firm_data_integrity": "/data-integrity/client/5"},
+        "sections": [
+            {
+                "id": "cashflow_trade",
+                "title": "Cashflow ↔ trades",
+                "status": "matched",
+                "items": [],
+            },
+            {
+                "id": "portfolio_vs_benchmark",
+                "title": "Portfolio vs benchmark",
+                "status": "needs_review",
+                "signal_ids": ["I1"],
+                "items": [
+                    {
+                        "fact_id": "issue:10",
+                        "title": (
+                            "Portfolio XIRR (-8.37%) is below benchmark Nifty XIRR (-7.34%). "
+                            "Underperformance: 1.04%. Top active negative contributors: HDFCBANK"
+                        ),
+                        "short_title": "Underperformance vs Nifty",
+                    }
+                ],
+            },
+            {
+                "id": "investment_workflow",
+                "title": "Investment workflow",
+                "status": "needs_review",
+                "signal_ids": ["H1"],
+                "items": [
+                    {
+                        "fact_id": "issue:11",
+                        "title": "Workflow stuck in FUNDS stage for 61 days. Related SLA alerts: workflow_stalled.",
+                        "short_title": "Workflow stuck in FUNDS",
+                    }
+                ],
+            },
+        ],
+    }
+    ctx = mod._compact_context(case)
+    out = mod._deterministic_attention(case, ctx)
+    by_sid = {a["section_id"]: a for a in out["attention"]}
+    assert by_sid["portfolio_vs_benchmark"]["title"] == "Underperformance vs Nifty"
+    assert by_sid["investment_workflow"]["title"] == "Workflow stuck in FUNDS"
+    # Full messages stay off the attention block (shown in section cards only)
+    assert by_sid["portfolio_vs_benchmark"]["finding_summaries"] == []
+    assert by_sid["investment_workflow"]["finding_summaries"] == []
+    assert by_sid["portfolio_vs_benchmark"]["status"] == "needs_review"
+
+
 def test_llm_validation_allowlists_sections():
     case = {
         "client_id": 1,

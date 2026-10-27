@@ -10,7 +10,10 @@ from services.reconciliation.parsers import (
     axis_direct_xlsx,
     broker_shortcode_xlsx,
     cdsl_demat_xlsx,
+    client_portfolio_details_xlsx,
+    demat_allocated_tsv,
     groww_xlsx,
+    portfolio_holding_statement_xlsx,
     zerodha_csv,
     zerodha_kite_xlsx,
 )
@@ -24,39 +27,51 @@ def detect_and_parse(path: Union[str, Path], filename: str = "") -> ParseResult:
 
     if ext == ".csv":
         head = path.read_text(encoding="utf-8-sig", errors="replace")[:2000]
-        if zerodha_csv.can_parse(head):
+        if demat_allocated_tsv.looks_like_demat_allocated_text(head):
+            result = demat_allocated_tsv.parse(path)
+        elif zerodha_csv.can_parse(head):
             result = zerodha_csv.parse(path)
         else:
-            raise ValueError("Unrecognized CSV holdings format (expected Zerodha Kite)")
+            raise ValueError("Unrecognized CSV holdings format")
     elif ext in (".xlsx", ".xls"):
-        rows = iter_xlsx_rows(path, max_rows=25)
-        if zerodha_kite_xlsx.can_parse_rows(rows):
-            result = zerodha_kite_xlsx.parse(path)
-        elif axis_direct_xlsx.can_parse_rows(rows):
-            result = axis_direct_xlsx.parse(path)
-        elif cdsl_demat_xlsx.can_parse_rows(rows):
-            result = cdsl_demat_xlsx.parse(path)
-        elif broker_shortcode_xlsx.can_parse_rows(rows):
-            result = broker_shortcode_xlsx.parse(path)
-        elif groww_xlsx.can_parse_rows(rows):
-            result = groww_xlsx.parse(path)
+        # Misnamed TSV demat exports (``.xls`` that starts with ``Stock Name``)
+        if demat_allocated_tsv.can_parse_path(path):
+            result = demat_allocated_tsv.parse(path)
         else:
-            # try full parse in priority order
-            last_exc: Optional[Exception] = None
-            for parser in (
-                zerodha_kite_xlsx,
-                axis_direct_xlsx,
-                groww_xlsx,
-                broker_shortcode_xlsx,
-                cdsl_demat_xlsx,
-            ):
-                try:
-                    result = parser.parse(path)
-                    break
-                except Exception as exc:  # noqa: BLE001 — try next format
-                    last_exc = exc
+            rows = iter_xlsx_rows(path, max_rows=25)
+            if client_portfolio_details_xlsx.can_parse_rows(rows):
+                result = client_portfolio_details_xlsx.parse(path)
+            elif portfolio_holding_statement_xlsx.can_parse_rows(rows):
+                result = portfolio_holding_statement_xlsx.parse(path)
+            elif zerodha_kite_xlsx.can_parse_rows(rows):
+                result = zerodha_kite_xlsx.parse(path)
+            elif axis_direct_xlsx.can_parse_rows(rows):
+                result = axis_direct_xlsx.parse(path)
+            elif cdsl_demat_xlsx.can_parse_rows(rows):
+                result = cdsl_demat_xlsx.parse(path)
+            elif broker_shortcode_xlsx.can_parse_rows(rows):
+                result = broker_shortcode_xlsx.parse(path)
+            elif groww_xlsx.can_parse_rows(rows):
+                result = groww_xlsx.parse(path)
             else:
-                raise ValueError("Unrecognized Excel holdings format") from last_exc
+                # try full parse in priority order
+                last_exc: Optional[Exception] = None
+                for parser in (
+                    client_portfolio_details_xlsx,
+                    portfolio_holding_statement_xlsx,
+                    zerodha_kite_xlsx,
+                    axis_direct_xlsx,
+                    groww_xlsx,
+                    broker_shortcode_xlsx,
+                    cdsl_demat_xlsx,
+                ):
+                    try:
+                        result = parser.parse(path)
+                        break
+                    except Exception as exc:  # noqa: BLE001 — try next format
+                        last_exc = exc
+                else:
+                    raise ValueError("Unrecognized Excel holdings format") from last_exc
     elif ext == ".pdf":
         # peek text
         from PyPDF2 import PdfReader

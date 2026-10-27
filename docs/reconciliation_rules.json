@@ -88,6 +88,49 @@
         "Average Cost Price"
       ]
     },
+    "client_portfolio_details_xlsx": {
+      "id": "client_portfolio_details_xlsx",
+      "extensions": [
+        ".xlsx",
+        ".xls"
+      ],
+      "fingerprints": [
+        "Client Portfolio Details",
+        "Client Code",
+        "Comp. Name",
+        "DPAccount Holdings",
+        "Holdings"
+      ]
+    },
+    "portfolio_holding_statement_xlsx": {
+      "id": "portfolio_holding_statement_xlsx",
+      "extensions": [
+        ".xlsx",
+        ".xls"
+      ],
+      "fingerprints": [
+        "PORTFOLIO HOLDING STATEMENT",
+        "Date of Download",
+        "Customer Name",
+        "ISIN",
+        "Qty"
+      ]
+    },
+    "demat_allocated_tsv": {
+      "id": "demat_allocated_tsv",
+      "extensions": [
+        ".xls",
+        ".csv",
+        ".tsv",
+        ".txt"
+      ],
+      "fingerprints": [
+        "Stock Name",
+        "Allocated Quantity",
+        "Blocked for Trade",
+        "ISIN"
+      ]
+    },
     "angel_dp_pdf": {
       "id": "angel_dp_pdf",
       "extensions": [

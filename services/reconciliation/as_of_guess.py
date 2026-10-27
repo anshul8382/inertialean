@@ -59,6 +59,22 @@ def guess_from_filename(filename: str) -> Tuple[Optional[date], str]:
             return date(y, mo, d), "filename_day"
         except ValueError:
             pass
+    # Month DD YYYY  (e.g. "VS HS sep 21 2026.xlsx")
+    m = re.search(
+        r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+        r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|"
+        r"dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?[,]?\s+(\d{4})\b",
+        name,
+        re.I,
+    )
+    if m:
+        mo = _MONTHS[m.group(1).lower()]
+        d = int(m.group(2))
+        y = int(m.group(3))
+        try:
+            return date(y, mo, d), "filename_day"
+        except ValueError:
+            pass
     # Month YYYY
     m = re.search(
         r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"

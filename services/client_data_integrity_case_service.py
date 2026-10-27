@@ -281,6 +281,8 @@ CHECK_TO_SIGNAL = {
     "orphan_cashflow": "G7",
     "quantity_mismatch": "HOLD",
     "unapplied_action": "CA",
+    "underperformance_vs_benchmark": "I1",
+    "workflow_stalled": "H1",
 }
 
 # check_name → section_id
@@ -295,6 +297,36 @@ CHECK_TO_SECTION = {
     "orphan_cashflow": "orphan_cashflow",
     "quantity_mismatch": "holdings",
     "unapplied_action": "corporate_actions",
+    # FYI / ops — own sections (not catch-all other_issues); soft yellow on DI
+    "underperformance_vs_benchmark": "portfolio_vs_benchmark",
+    "workflow_stalled": "investment_workflow",
+}
+
+# These stay on the DI page but never drive red overall (Option B).
+FYI_SOFT_REVIEW_CHECKS = frozenset(
+    {
+        "underperformance_vs_benchmark",
+        "workflow_stalled",
+    }
+)
+FYI_SOFT_SECTION_IDS = frozenset(
+    {
+        "portfolio_vs_benchmark",
+        "investment_workflow",
+    }
+)
+
+SECTION_TITLES = {
+    "duplicates": "Duplicate trades",
+    "dates": "Date integrity",
+    "negatives": "Negative values",
+    "reco_match": "Recommendation vs execution",
+    "orphan_cashflow": "Orphan cashflows (agent)",
+    "holdings": "Holdings vs trades",
+    "corporate_actions": "Corporate actions",
+    "portfolio_vs_benchmark": "Portfolio vs benchmark",
+    "investment_workflow": "Investment workflow",
+    "other_issues": "Other data issues",
 }
 
 # Open issue severity → section status
@@ -304,6 +336,27 @@ def _issue_status(severity: Optional[str]) -> str:
         return "not_matched"
     return "needs_review"
 
+
+def _short_title_for_issue(
+    check_name: str, message: Optional[str], details: Optional[Dict[str, Any]] = None
+) -> str:
+    """Compact label for attention headers (full message stays on section items)."""
+    import re
+
+    name = check_name or ""
+    msg = message or ""
+    details = details or {}
+    if name == "underperformance_vs_benchmark":
+        return "Underperformance vs Nifty"
+    if name == "workflow_stalled":
+        stage = details.get("current_stage")
+        if stage:
+            return f"Workflow stuck in {stage}"
+        m = re.search(r"Workflow stuck in\s+(\w+)", msg, re.I)
+        if m:
+            return f"Workflow stuck in {m.group(1)}"
+        return "Workflow stuck"
+    return (msg or name)[:80]
 
 def _worse(a: str, b: str) -> str:
     return a if _STATUS_RANK.get(a, -1) >= _STATUS_RANK.get(b, -1) else b
@@ -509,20 +562,10 @@ def _sections_from_open_issues(client_id: int) -> List[Dict[str, Any]]:
         if name in ("cashflow_trade_totals_mismatch",):
             continue
         sec_id = CHECK_TO_SECTION.get(name, "other_issues")
-        titles = {
-            "duplicates": "Duplicate trades",
-            "dates": "Date integrity",
-            "negatives": "Negative values",
-            "reco_match": "Recommendation vs execution",
-            "orphan_cashflow": "Orphan cashflows (agent)",
-            "holdings": "Holdings vs trades",
-            "corporate_actions": "Corporate actions",
-            "other_issues": "Other data issues",
-        }
         if sec_id not in buckets:
             buckets[sec_id] = {
                 "id": sec_id,
-                "title": titles.get(sec_id, sec_id),
+                "title": SECTION_TITLES.get(sec_id, sec_id),
                 "status": "matched",
                 "signal_ids": [],
                 "open_count": 0,
@@ -531,11 +574,16 @@ def _sections_from_open_issues(client_id: int) -> List[Dict[str, Any]]:
             }
         b = buckets[sec_id]
         st = _issue_status(issue.severity)
+        # Option B: performance / workflow SLA stay yellow on DI even if critical
+        if name in FYI_SOFT_REVIEW_CHECKS:
+            st = "needs_review"
         b["status"] = _worse(b["status"], st)
         b["open_count"] += 1
         sig = CHECK_TO_SIGNAL.get(name)
         if sig and sig not in b["signal_ids"]:
             b["signal_ids"].append(sig)
+        details = issue.details if isinstance(getattr(issue, "details", None), dict) else {}
+        full_title = (issue.message or name)[:240]
         b["items"].append(
             {
                 "id": issue.id,
@@ -543,7 +591,8 @@ def _sections_from_open_issues(client_id: int) -> List[Dict[str, Any]]:
                 "check_name": name,
                 "check_category": issue.check_category,
                 "severity": issue.severity,
-                "title": (issue.message or name)[:160],
+                "title": full_title,
+                "short_title": _short_title_for_issue(name, issue.message, details),
                 "detected_at": issue.detected_at.isoformat() + "Z" if issue.detected_at else None,
                 "url": f"/data-integrity/client/{int(client_id)}",
             }
@@ -551,6 +600,8 @@ def _sections_from_open_issues(client_id: int) -> List[Dict[str, Any]]:
 
     out = []
     for b in buckets.values():
+        if b["id"] in FYI_SOFT_SECTION_IDS and b["status"] == "not_matched":
+            b["status"] = "needs_review"
         b["summary"] = f"{b['open_count']} open issue(s)"
         b["items"] = b["items"][:15]
         out.append(b)
@@ -563,6 +614,8 @@ def _sections_from_open_issues(client_id: int) -> List[Dict[str, Any]]:
         "orphan_cashflow",
         "holdings",
         "corporate_actions",
+        "portfolio_vs_benchmark",
+        "investment_workflow",
         "other_issues",
     ]
     out.sort(key=lambda s: order.index(s["id"]) if s["id"] in order else 99)

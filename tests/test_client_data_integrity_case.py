@@ -21,6 +21,107 @@ def test_worse_wins():
     assert mod._worse("matched", "matched") == "matched"
 
 
+def test_fyi_checks_map_to_soft_sections():
+    assert mod.CHECK_TO_SECTION["underperformance_vs_benchmark"] == "portfolio_vs_benchmark"
+    assert mod.CHECK_TO_SECTION["workflow_stalled"] == "investment_workflow"
+    assert "underperformance_vs_benchmark" in mod.FYI_SOFT_REVIEW_CHECKS
+    assert "investment_workflow" in mod.FYI_SOFT_SECTION_IDS
+
+
+def test_short_title_for_issue():
+    assert (
+        mod._short_title_for_issue(
+            "underperformance_vs_benchmark",
+            "Portfolio XIRR (-8%) is below benchmark Nifty XIRR (-7%). Underperformance: 1%.",
+        )
+        == "Underperformance vs Nifty"
+    )
+    assert (
+        mod._short_title_for_issue(
+            "workflow_stalled",
+            "Workflow stuck in FUNDS stage for 61 days.",
+            {"current_stage": "FUNDS"},
+        )
+        == "Workflow stuck in FUNDS"
+    )
+
+
+def test_soft_fyi_sections_do_not_paint_overall_red(monkeypatch):
+    """Option B: critical workflow/underperformance → needs_review, not not_matched overall."""
+
+    class FakeClient:
+        name = "FYI Client"
+
+    class FakeClientModel:
+        class query:
+            @staticmethod
+            def get(_id):
+                return FakeClient()
+
+    monkeypatch.setattr(
+        mod,
+        "_section_cashflow_trade",
+        lambda client_id, live, detail: (
+            {
+                "id": "cashflow_trade",
+                "title": "Cashflow ↔ trades",
+                "status": "matched",
+                "signal_ids": ["G8"],
+                "open_count": 0,
+                "summary": "ok",
+                "items": [],
+            },
+            {"status": "matched", "difference": 0},
+        ),
+    )
+    monkeypatch.setattr(
+        mod,
+        "_sections_from_open_issues",
+        lambda client_id: [
+            {
+                "id": "portfolio_vs_benchmark",
+                "title": "Portfolio vs benchmark",
+                "status": "needs_review",
+                "signal_ids": ["I1"],
+                "open_count": 1,
+                "summary": "1 open",
+                "items": [
+                    {
+                        "fact_id": "issue:1",
+                        "title": "Portfolio XIRR below Nifty… long text",
+                        "short_title": "Underperformance vs Nifty",
+                    }
+                ],
+            },
+            {
+                "id": "investment_workflow",
+                "title": "Investment workflow",
+                "status": "needs_review",
+                "signal_ids": ["H1"],
+                "open_count": 1,
+                "summary": "1 open",
+                "items": [
+                    {
+                        "fact_id": "issue:2",
+                        "title": "Workflow stuck in FUNDS stage for 61 days…",
+                        "short_title": "Workflow stuck in FUNDS",
+                    }
+                ],
+            },
+        ],
+    )
+    monkeypatch.setattr(mod, "_section_prices", lambda client_id: None)
+
+    import models
+
+    monkeypatch.setattr(models, "Client", FakeClientModel)
+
+    case = mod.build_case(99, include_g8_detail=False, live_g8=False)
+    assert case["overall_status"] == "needs_review"
+    assert case["overall_label"] == "Needs review"
+    assert case["badge_class"] == "bg-warning text-dark"
+
+
 def test_build_case_overall_from_sections(monkeypatch):
     class FakeClient:
         name = "Test Client"
