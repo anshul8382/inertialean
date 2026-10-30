@@ -186,6 +186,50 @@ def fetch_zoho_invoice(zoho_invoice_id: str) -> Tuple[Optional[dict], Optional[s
     return inv, None
 
 
+def list_zoho_invoices(
+    *,
+    date_start: Optional[date] = None,
+    date_end: Optional[date] = None,
+    per_page: int = 200,
+    max_pages: int = 50,
+) -> Tuple[list, Optional[str]]:
+    """
+    List Zoho Books invoices (paginated). Returns (invoices, error).
+    date_start / date_end filter on Zoho invoice date (inclusive).
+    """
+    if not zoho_configured():
+        return [], (
+            "Zoho is not configured (set ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, "
+            "ZOHO_REFRESH_TOKEN, ZOHO_ORGANIZATION_ID)."
+        )
+    page_size = max(1, min(int(per_page or 200), 200))
+    page_cap = max(1, min(int(max_pages or 50), 100))
+    out: list = []
+    page = 1
+    while page <= page_cap:
+        params: Dict[str, Any] = {
+            "page": page,
+            "per_page": page_size,
+            "sort_column": "date",
+            "sort_order": "A",
+        }
+        if date_start:
+            params["date_start"] = date_start.isoformat()
+        if date_end:
+            params["date_end"] = date_end.isoformat()
+        data, err = _request("GET", "/invoices", params=params)
+        if err:
+            return out, err
+        batch = list((data or {}).get("invoices") or [])
+        out.extend(batch)
+        page_ctx = (data or {}).get("page_context") or {}
+        has_more = bool(page_ctx.get("has_more_page"))
+        if not has_more or not batch:
+            break
+        page += 1
+    return out, None
+
+
 def push_invoice_to_zoho(invoice, *, send_email: bool = True) -> Dict[str, Any]:
     """
     Create a Zoho Books invoice from an Inertia Invoice (idempotent if already linked).

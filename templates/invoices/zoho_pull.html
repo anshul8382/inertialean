@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Pull invoices from Zoho{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <h1 class="mb-0"><i class="fas fa-cloud-download-alt"></i> Pull from Zoho Books</h1>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{{ url_for('invoices.upload_invoices') }}" class="btn btn-outline-primary">CSV import</a>
+            <a href="{{ url_for('invoices.list_invoices') }}" class="btn btn-outline-secondary">Back to invoices</a>
+        </div>
+    </div>
+
+    {% if not zoho_ok or (zoho_diag and zoho_diag.error) %}
+    <div class="alert alert-warning" role="alert">
+        <strong>Zoho connection:</strong>
+        {% if zoho_diag and zoho_diag.error %}{{ zoho_diag.error }}{% else %}Not configured.{% endif %}
+        {% if current_user.is_admin %}
+        Fix under <a href="{{ url_for('settings.index') }}">Settings → Zoho Books</a> (Connect Zoho).
+        {% else %}
+        Ask an admin to Connect Zoho under Settings.
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="alert alert-success py-2 small" role="status">
+        Zoho configured{% if zoho_diag.organization_id %} · org <code>{{ zoho_diag.organization_id }}</code>{% endif %}.
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <div class="col-lg-7">
+            <div class="card shadow-sm mb-4">
+                <div class="card-body">
+                    <p class="text-muted">
+                        Fetches invoices from Zoho Books for the date range, matches customers to clients
+                        (email / name), creates missing rows, and refreshes status on existing invoice numbers.
+                        Draft and void Zoho invoices are skipped.
+                    </p>
+                    <form method="post" action="{{ url_for('invoices.zoho_pull_invoices') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="row g-3 mb-3">
+                            <div class="col-sm-6">
+                                <label for="date_start" class="form-label">From (invoice date)</label>
+                                <input type="date" class="form-control" id="date_start" name="date_start"
+                                       value="{{ date_start }}" required>
+                            </div>
+                            <div class="col-sm-6">
+                                <label for="date_end" class="form-label">To</label>
+                                <input type="date" class="form-control" id="date_end" name="date_end"
+                                       value="{{ date_end }}" required>
+                            </div>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" value="1" id="update_existing"
+                                   name="update_existing" checked>
+                            <label class="form-check-label" for="update_existing">
+                                Update status / amounts on invoices already in Inertia
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary" {% if not zoho_ok %}disabled{% endif %}>
+                            <i class="fas fa-sync"></i> Pull from Zoho
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card border-secondary mb-4">
+                <div class="card-header py-2">Notes</div>
+                <div class="card-body small">
+                    <ul class="mb-0 ps-3">
+                        <li>Requires live Zoho OAuth (same credentials as push/sync).</li>
+                        <li>Unmatched customers are listed — add the client or import via CSV with manual mapping.</li>
+                        <li>New rows store <code>[zoho_invoice_id=…]</code> in notes for later sync.</li>
+                        <li>IA regulatory fees use local invoices with status paid / sent / overdue.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if result and result.ok %}
+    <div class="card shadow-sm mb-4">
+        <div class="card-header py-2">Last pull summary</div>
+        <div class="card-body">
+            <ul class="mb-3">
+                <li>Fetched: {{ result.fetched }}</li>
+                <li>Created: {{ result.created }}</li>
+                <li>Updated: {{ result.updated }}</li>
+                <li>Skipped void/draft: {{ result.skipped_void_or_draft }}</li>
+                <li>Unmatched: {{ (result.unmatched or [])|length }}</li>
+                <li>Errors: {{ (result.errors or [])|length }}</li>
+            </ul>
+
+            {% if result.unmatched %}
+            <h2 class="h6">Unmatched customers</h2>
+            <div class="table-responsive mb-3">
+                <table class="table table-sm table-striped">
+                    <thead>
+                        <tr>
+                            <th>Invoice</th>
+                            <th>Customer</th>
+                            <th>Email</th>
+                            <th>Date</th>
+                            <th class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in result.unmatched %}
+                        <tr>
+                            <td>{{ u.invoice_number }}</td>
+                            <td>{{ u.customer_name }}</td>
+                            <td>{{ u.email }}</td>
+                            <td>{{ u.date }}</td>
+                            <td class="text-end">{{ u.total }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            {% if result.errors %}
+            <h2 class="h6">Errors</h2>
+            <ul class="small mb-0">
+                {% for e in result.errors %}
+                <li>{{ e.invoice_number or e.zoho_invoice_id }}: {{ e.message }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

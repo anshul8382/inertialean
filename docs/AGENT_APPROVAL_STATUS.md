@@ -1,12 +1,12 @@
 # Agent approval status
 
-Generated: 2026-10-27T08:24:12.303959+00:00
+Generated: 2026-10-30T18:26:14.608926+00:00
 
 | Agent | Status | Detail |
 |-------|--------|--------|
 | Engineering | PASS | create_app + agents/registry.py |
 | Guideline Manager | PASS | Audit status: pass (1 findings) |
-| DB cutover | PASS | registry: 4 feature(s); DEFER_DB_FEATURES=audit_log |
+| DB cutover | PASS | registry: 5 feature(s); DEFER_DB_FEATURES=audit_log |
 | SEBI regulatory | PASS | see audit_sebi_compliance.py output |
 | Security (VAPT) | PARTIAL | VAPT (total    54) → docs/SECURITY_VAPT_REPORT.md |
 | Security (deps) | PASS | deps: 0 Python, 0 Node → docs/DEPENDENCY_AUDIT.md |

@@ -107,8 +107,8 @@
                     </h6>
                 </div>
                 <div class="card-body">
-                    <p class="text-muted mb-2">Push/send invoices from onboarding. Use a <strong>Server-based</strong> Zoho API client (not Self Client) with redirect URI matching <code>ZOHO_REDIRECT_URI</code>.</p>
-                    <p class="small text-muted mb-2"><strong>Prod checklist:</strong> HTTPS redirect URI in Zoho console + <code>.env</code>, org ID matching the Books org, refresh token from Connect Zoho, then restart.</p>
+                    <p class="text-muted mb-2">Push/send invoices from onboarding, and <strong>pull billing</strong> from Zoho into Invoices. Use a <strong>Server-based</strong> Zoho API client (not Self Client) with redirect URI matching <code>ZOHO_REDIRECT_URI</code>.</p>
+                    <p class="small text-muted mb-2"><strong>Prod checklist:</strong> HTTPS redirect URI in Zoho console + <code>.env</code>, org ID matching the Books org, refresh token from Connect Zoho, then restart. After Connect works, use <a href="{{ url_for('invoices.zoho_pull_invoices') }}">Invoices → Pull from Zoho</a>.</p>
                     {% if zoho_status %}
                     <ul class="small text-muted mb-3">
                         <li>API: <code>{{ zoho_status.api_base }}</code></li>

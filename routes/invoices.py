@@ -48,6 +48,75 @@ def require_manager_or_admin(f):
     return decorated
 
 
+@invoices.route("/zoho-pull", methods=["GET", "POST"])
+@login_required
+@require_manager_or_admin
+@handle_errors
+def zoho_pull_invoices():
+    """Pull Zoho Books invoices into Inertia by date range (create + refresh)."""
+    from access_control import get_accessible_clients
+    from services.zoho_books_service import diagnose_connection, zoho_configured
+    from services.zoho_invoice_pull_service import pull_zoho_invoices
+
+    today = date.today()
+    default_start = date(today.year if today.month >= 4 else today.year - 1, 4, 1)
+    default_end = today
+    zoho_ok = zoho_configured()
+    zoho_diag = diagnose_connection() if zoho_ok else {"configured": False, "error": "Not configured"}
+    result = None
+
+    if request.method == "POST":
+        if not zoho_ok:
+            flash("Zoho is not configured. Connect under Settings first.", "warning")
+            return redirect(url_for("invoices.zoho_pull_invoices"))
+        try:
+            start = datetime.strptime(
+                (request.form.get("date_start") or "").strip(), "%Y-%m-%d"
+            ).date()
+            end = datetime.strptime(
+                (request.form.get("date_end") or "").strip(), "%Y-%m-%d"
+            ).date()
+        except ValueError:
+            flash("Invalid date range. Use YYYY-MM-DD.", "error")
+            return redirect(url_for("invoices.zoho_pull_invoices"))
+        update_existing = request.form.get("update_existing") == "1"
+        accessible = get_accessible_clients()
+        allowed_ids = {c.id for c in accessible}
+        result = pull_zoho_invoices(
+            date_start=start,
+            date_end=end,
+            user_id=current_user.id,
+            accessible_client_ids=allowed_ids,
+            update_existing=update_existing,
+        )
+        if not result.get("ok"):
+            flash(result.get("error") or "Zoho pull failed.", "error")
+        else:
+            flash(
+                f"Zoho pull: fetched {result.get('fetched', 0)}, "
+                f"created {result.get('created', 0)}, "
+                f"updated {result.get('updated', 0)}, "
+                f"unmatched {len(result.get('unmatched') or [])}, "
+                f"skipped void/draft {result.get('skipped_void_or_draft', 0)}.",
+                "success" if not (result.get("errors") or result.get("unmatched")) else "warning",
+            )
+            if result.get("errors"):
+                flash(
+                    f"{len(result['errors'])} row error(s) — see details below.",
+                    "warning",
+                )
+        default_start, default_end = start, end
+
+    return render_template(
+        "invoices/zoho_pull.html",
+        zoho_ok=zoho_ok,
+        zoho_diag=zoho_diag,
+        date_start=default_start.isoformat(),
+        date_end=default_end.isoformat(),
+        result=result,
+    )
+
+
 @invoices.route("/upload", methods=["GET", "POST"])
 @login_required
 @require_manager_or_admin
