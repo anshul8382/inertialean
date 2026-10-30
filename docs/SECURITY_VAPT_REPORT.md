@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-10-20T13:09:28.367298+00:00
+Generated: 2026-10-30T18:33:19.039438+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -8,16 +8,16 @@ Agent: `security_audit_agent` v1.0.0
 | Severity | Count |
 |----------|-------|
 | critical | 0 |
-| high | 22 |
-| medium | 25 |
+| high | 24 |
+| medium | 30 |
 | low | 0 |
 | info | 0 |
-| **Total** | **47** |
+| **Total** | **54** |
 
 ## Threat themes
 
-- **EXTERNAL** — External attackers / public internet exposure (26 findings)
-- **INTERNAL** — Insider misuse / employee data theft (21 findings)
+- **EXTERNAL** — External attackers / public internet exposure (28 findings)
+- **INTERNAL** — Insider misuse / employee data theft (26 findings)
 - **COMPLIANCE** — SEBI / financial-data regulatory standards (0 findings)
 - **CONFIG** — Misconfiguration & operational hardening (0 findings)
 
@@ -287,6 +287,30 @@ files = [f for f in request.files.getlist('document') if f and f.filename]
 
 **Fix:** Always wrap with `werkzeug.utils.secure_filename(name)`, validate the extension against an allowlist (e.g. `{'.pdf', '.png', '.jpg', '.csv'}`), and store under a UUID-based path inside a dedicated `instance/uploads/` directory that is **not** served as static content.
 
+### `SEC-EXT-009` — File upload without `secure_filename` / path normalization
+
+**Severity:** high • **Theme:** EXTERNAL • **Category:** path_traversal • **CWE:** CWE-22 • **Location:** `routes/recommended_trades.py:373`
+
+Saving an uploaded file using its original filename (`document.filename`) allows path traversal (`../../etc/passwd`) and overwrite of arbitrary files the process can write.
+
+```
+f = request.files.get("file") or request.files.get("upload")
+```
+
+**Fix:** Always wrap with `werkzeug.utils.secure_filename(name)`, validate the extension against an allowlist (e.g. `{'.pdf', '.png', '.jpg', '.csv'}`), and store under a UUID-based path inside a dedicated `instance/uploads/` directory that is **not** served as static content.
+
+### `SEC-EXT-009` — File upload without `secure_filename` / path normalization
+
+**Severity:** high • **Theme:** EXTERNAL • **Category:** path_traversal • **CWE:** CWE-22 • **Location:** `routes/trade_parser_lab.py:97`
+
+Saving an uploaded file using its original filename (`document.filename`) allows path traversal (`../../etc/passwd`) and overwrite of arbitrary files the process can write.
+
+```
+f = request.files.get("trade_file")
+```
+
+**Fix:** Always wrap with `werkzeug.utils.secure_filename(name)`, validate the extension against an allowlist (e.g. `{'.pdf', '.png', '.jpg', '.csv'}`), and store under a UUID-based path inside a dedicated `instance/uploads/` directory that is **not** served as static content.
+
 ### `SEC-EXT-004` — Jinja `|safe` used in `airflow/email_templates/failure_content.html` (1 occurrence)
 
 **Severity:** medium • **Theme:** EXTERNAL • **Category:** xss • **CWE:** CWE-79 • **Location:** `airflow/email_templates/failure_content.html:13`
@@ -375,6 +399,14 @@ SQL dumps inside the repo or working tree get copied to laptops, containers, and
 
 **Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
 
+### `SEC-CMP-004` — Database backup file in working tree: `backups/kvm_inertia_app2025_20261030_212204.sql.gz`
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/kvm_inertia_app2025_20261030_212204.sql.gz`
+
+SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
+
+**Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
+
 ### `SEC-CMP-004` — Database backup file in working tree: `backups/lean_inertia_app2025_20261005_215752.sql.gz`
 
 **Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/lean_inertia_app2025_20261005_215752.sql.gz`
@@ -399,14 +431,6 @@ SQL dumps inside the repo or working tree get copied to laptops, containers, and
 
 **Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
 
-### `SEC-CMP-004` — Database backup file in working tree: `backups/lean_inertia_app2025_20261005_220418.sql.gz`
-
-**Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/lean_inertia_app2025_20261005_220418.sql.gz`
-
-SQL dumps inside the repo or working tree get copied to laptops, containers, and CI artifacts — multiplying the blast radius of a breach.
-
-**Fix:** Move backups to an off-host bucket (S3 / GCS) with object-lock + server-side encryption. Keep `backups/` in `.gitignore`. Enforce 30-day rotation via `scripts/cleanup_local_disk.sh` (already provided) or scheduled job.
-
 ### `SEC-CMP-004` — Database backup file in working tree: `backups/lean_inertia_app2025_20261005_220551.sql.gz`
 
 **Severity:** medium • **Theme:** INTERNAL • **Category:** backup_in_tree • **Location:** `backups/lean_inertia_app2025_20261005_220551.sql.gz`
@@ -417,7 +441,7 @@ SQL dumps inside the repo or working tree get copied to laptops, containers, and
 
 ### `SEC-INT-002` — Export/download endpoint `download_invoice_pdf` is not audit-logged
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/invoices.py:615`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/invoices.py:702`
 
 Functions named export/download/csv/excel/backup typically return client data in bulk. Without an audit log entry, an internal user downloading the entire client base is invisible.
 
@@ -429,7 +453,7 @@ def download_invoice_pdf(
 
 ### `SEC-INT-002` — Export/download endpoint `download_invoice_portfolio_excel` is not audit-logged
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/invoices.py:822`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/invoices.py:909`
 
 Functions named export/download/csv/excel/backup typically return client data in bulk. Without an audit log entry, an internal user downloading the entire client base is invisible.
 
@@ -453,7 +477,7 @@ def download_lead_proposal(
 
 ### `SEC-INT-002` — Export/download endpoint `download_regulatory_client_master_archive` is not audit-logged
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/main.py:1733`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/main.py:1734`
 
 Functions named export/download/csv/excel/backup typically return client data in bulk. Without an audit log entry, an internal user downloading the entire client base is invisible.
 
@@ -462,6 +486,42 @@ def download_regulatory_client_master_archive(
 ```
 
 **Fix:** Call `services.audit_service.log_audit_event('bulk_export', resource_type='<entity>', details={'rows': n, 'filters': ...})` before returning the response. Include `client_id` when scope is single-client.
+
+### `SEC-INT-004` — Potential sensitive value in a log statement
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** log_pii_leak • **CWE:** CWE-532 • **Location:** `routes/recommended_trades.py:400`
+
+Log files can be read by internal users with shell access, shared with third parties for debugging, or ingested by SaaS log services. Secrets and PII inside logs are then effectively leaked.
+
+```
+logger.debug("saved pdf password lookup skipped", exc_info=True)
+```
+
+**Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
+
+### `SEC-INT-004` — Potential sensitive value in a log statement
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** log_pii_leak • **CWE:** CWE-532 • **Location:** `routes/recommended_trades.py:413`
+
+Log files can be read by internal users with shell access, shared with third parties for debugging, or ingested by SaaS log services. Secrets and PII inside logs are then effectively leaked.
+
+```
+logger.debug("client document password lookup skipped", exc_info=True)
+```
+
+**Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
+
+### `SEC-INT-004` — Potential sensitive value in a log statement
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** log_pii_leak • **CWE:** CWE-532 • **Location:** `routes/recommended_trades.py:487`
+
+Log files can be read by internal users with shell access, shared with third parties for debugging, or ingested by SaaS log services. Secrets and PII inside logs are then effectively leaked.
+
+```
+logger.debug("remember pdf password skipped", exc_info=True)
+```
+
+**Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
 
 ### `SEC-INT-004` — Potential sensitive value in a log statement
 
@@ -519,6 +579,30 @@ Log files can be read by internal users with shell access, shared with third par
 
 ```
 logger.debug("KYC PAN backfill skipped lead=%s", lead_id, exc_info=True)
+```
+
+**Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
+
+### `SEC-INT-004` — Potential sensitive value in a log statement
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** log_pii_leak • **CWE:** CWE-532 • **Location:** `services/regulatory_identity_capture_service.py:221`
+
+Log files can be read by internal users with shell access, shared with third parties for debugging, or ingested by SaaS log services. Secrets and PII inside logs are then effectively leaked.
+
+```
+logger.debug("client agreement PAN lookup skipped", exc_info=True)
+```
+
+**Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.
+
+### `SEC-INT-004` — Potential sensitive value in a log statement
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** log_pii_leak • **CWE:** CWE-532 • **Location:** `services/regulatory_identity_capture_service.py:237`
+
+Log files can be read by internal users with shell access, shared with third parties for debugging, or ingested by SaaS log services. Secrets and PII inside logs are then effectively leaked.
+
+```
+logger.debug("lead KYC/agreement PAN lookup skipped", exc_info=True)
 ```
 
 **Fix:** Never log password / token / api_key / PAN values. Log a constant marker (e.g. `password=***`) and at most the first/last 2 characters of identifiers. Add a redaction filter to `logging.Logger`.

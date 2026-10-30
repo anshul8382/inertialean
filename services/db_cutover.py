@@ -13,6 +13,7 @@ FEATURE_AUDIT_LOG = "audit_log"
 FEATURE_FINDING_NOTIFICATION = "finding_notification"
 FEATURE_PEER_MESSAGE = "peer_message"
 FEATURE_ADVISORY_REGISTER = "advisory_register"
+FEATURE_IA_REGULATORY = "ia_regulatory_statement"
 
 _REGISTRY = {
     FEATURE_AUDIT_LOG: {
@@ -46,6 +47,14 @@ _REGISTRY = {
         "restricted": (
             "SEBI advisory register (view/Excel/import + auto-append on recommendation send). "
             "UI shows empty / import disabled until advisory_register_entry exists."
+        ),
+    },
+    FEATURE_IA_REGULATORY: {
+        "migration_script": "migrations/add_ia_regulatory_snapshot.py",
+        "code_gate": "services/ia_regulatory_statement_service.py",
+        "restricted": (
+            "SEBI IA clients/fees/AUA statement (live + quarterly/half-yearly freeze). "
+            "Also run migrations/add_client_regulatory_flags.py for NRI/FPI/entity columns."
         ),
     },
 }
@@ -96,6 +105,7 @@ def audit_log_table_exists() -> bool:
 _finding_notif_table_checked: Optional[bool] = None
 _peer_message_table_checked: Optional[bool] = None
 _advisory_register_table_checked: Optional[bool] = None
+_ia_regulatory_table_checked: Optional[bool] = None
 
 
 def advisory_register_enabled() -> bool:
@@ -103,6 +113,13 @@ def advisory_register_enabled() -> bool:
     if is_feature_deferred(FEATURE_ADVISORY_REGISTER):
         return False
     return _advisory_register_table_exists()
+
+
+def ia_regulatory_statement_enabled() -> bool:
+    """True when ia_regulatory_snapshot exists and feature is not deferred."""
+    if is_feature_deferred(FEATURE_IA_REGULATORY):
+        return False
+    return _ia_regulatory_table_exists()
 
 
 def finding_notification_enabled() -> bool:
@@ -141,6 +158,30 @@ def _advisory_register_table_exists() -> bool:
     except Exception:
         _advisory_register_table_checked = False
     return _advisory_register_table_checked
+
+
+def _ia_regulatory_table_exists() -> bool:
+    global _ia_regulatory_table_checked
+    if _ia_regulatory_table_checked is not None:
+        return _ia_regulatory_table_checked
+    try:
+        from flask import has_request_context, current_app
+        from sqlalchemy import inspect
+
+        from extensions import db
+
+        if has_request_context():
+            _ia_regulatory_table_checked = inspect(db.engine).has_table(
+                "ia_regulatory_snapshot"
+            )
+        else:
+            with current_app.app_context():
+                _ia_regulatory_table_checked = inspect(db.engine).has_table(
+                    "ia_regulatory_snapshot"
+                )
+    except Exception:
+        _ia_regulatory_table_checked = False
+    return _ia_regulatory_table_checked
 
 
 def _finding_notification_table_exists() -> bool:

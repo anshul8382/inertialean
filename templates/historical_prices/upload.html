@@ -73,7 +73,7 @@
                             <div class="alert alert-info">
                                 <h6><i class="fas fa-info-circle"></i> Nifty 50 Data Upload</h6>
                                 <p>Use this section for <strong>index / Nifty 50</strong> files. Stock upload below writes equity prices only — it will not update the Nifty benchmark series used for XIRR comparison.</p>
-                                <p>Upload year-wise historical data (CSV/Excel). Re-upload replaces that year’s rows.</p>
+                                <p>Upload year-wise historical data (CSV/Excel). Re-upload <strong>replaces only the dates in the file</strong>; other days in that year stay as-is.</p>
                                 <p><strong>File Format:</strong></p>
                                 <ul>
                                     <li>CSV or Excel file</li>
@@ -580,9 +580,9 @@ document.querySelectorAll('[id^="nifty_file_"]').forEach(input => {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                let message = `${data.uploaded} records uploaded`;
-                if (data.cleared > 0) {
-                    message = `Cleared ${data.cleared} old records, uploaded ${data.uploaded} new records`;
+                let message = data.message || `${data.uploaded} records upserted`;
+                if (data.created != null || data.updated != null) {
+                    message = `Added ${data.created || 0}, updated ${data.updated || 0} (other dates unchanged)`;
                 }
                 statusDiv.innerHTML = `<div class="alert alert-success p-2 mb-0">
                     <i class="fas fa-check"></i> ${message}

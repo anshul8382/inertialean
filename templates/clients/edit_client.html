@@ -88,6 +88,25 @@
                     </div>
                     <small class="form-text text-muted">Uncheck to mark this client as inactive (hidden from default lists).</small>
                 </div>
+                <div class="mb-3 border rounded p-3 bg-light">
+                    <h6 class="text-primary">Regulatory classification</h6>
+                    <div class="mb-2">
+                        {{ form.client_entity_type.label(class="form-label") }}
+                        {{ form.client_entity_type(class="form-select") }}
+                    </div>
+                    <div class="form-check">
+                        {{ form.is_nri(class="form-check-input") }}
+                        {{ form.is_nri.label(class="form-check-label") }}
+                    </div>
+                    <div class="form-check">
+                        {{ form.is_fpi(class="form-check-input") }}
+                        {{ form.is_fpi.label(class="form-check-label") }}
+                    </div>
+                    <div class="form-check">
+                        {{ form.is_accredited_investor(class="form-check-input") }}
+                        {{ form.is_accredited_investor.label(class="form-check-label") }}
+                    </div>
+                </div>
                 <div class="mb-3">
                     {{ form.date_of_birth.label(class="form-label") }}
                     {{ form.date_of_birth(class="form-control") }}

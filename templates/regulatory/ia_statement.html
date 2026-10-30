@@ -1,0 +1,300 @@
+{% extends "base.html" %}
+
+{% block title %}IA Statement{% endblock %}
+
+{% macro count_row(label, row) %}
+<tr>
+  <td>{{ label }}</td>
+  {% for k in column_keys %}
+  <td class="text-end">{{ row.get(k, 0) }}</td>
+  {% endfor %}
+  <td class="text-end fw-bold">{{ row.get('Total', 0) }}</td>
+</tr>
+{% endmacro %}
+
+{% macro amount_row(label, row) %}
+<tr>
+  <td>{{ label }}</td>
+  {% for k in column_keys %}
+  <td class="text-end">{{ '{:,.0f}'.format(row.get(k, 0) or 0) }}</td>
+  {% endfor %}
+  <td class="text-end fw-bold">{{ '{:,.0f}'.format(row.get('Total', 0) or 0) }}</td>
+</tr>
+{% endmacro %}
+
+{% block content %}
+<div class="im-mobile-only im-mobile-page">
+  {% set mobile_page_title = 'IA statement' %}
+  {% set mobile_back_url = url_for('main.dashboard') %}
+  {% include 'partials/mobile/app_header.html' %}
+  <div class="im-metric-grid mb-3">
+    <div class="im-metric-tile"><span class="im-metric-tile__label">Period</span><span class="im-metric-tile__value">{{ payload.period_key or period_key }}</span></div>
+    <div class="im-metric-tile"><span class="im-metric-tile__label">Mode</span><span class="im-metric-tile__value">{{ payload.mode or view_mode }}</span></div>
+  </div>
+  <a class="im-settings-link" href="{{ url_for('regulatory_ia_statement.download_ia_statement', period_type=period_type, period_key=period_key, view=view_mode) }}">
+    <i class="fas fa-download"></i><span>Download Excel</span><i class="fas fa-chevron-right text-muted"></i>
+  </a>
+  <p class="text-muted small mt-2">Full SEBI grid and review tables on desktop.</p>
+</div>
+
+<div class="im-desktop-only container-fluid">
+  <div class="d-sm-flex align-items-center justify-content-between mb-3">
+    <div>
+      <h1 class="h3 mb-1 text-gray-800"><i class="fas fa-balance-scale"></i> IA Statement</h1>
+      <p class="text-muted small mb-0">
+        Clients · fees · AUA by residency / investor type
+        · <strong>{{ payload.period_key or period_key }}</strong>
+        · {{ payload.period_start }} → {{ payload.period_end }}
+        · mode <strong>{{ payload.mode or 'live' }}</strong>
+      </p>
+    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <form method="get" class="d-flex flex-wrap align-items-center gap-2 mb-0" id="ia-period-form">
+        <select name="period_type" class="form-control form-control-sm"
+                onchange="var k=this.form.elements['period_key']; if(k){k.disabled=true;} this.form.submit();">
+          <option value="quarter" {% if period_type == 'quarter' %}selected{% endif %}>Quarterly</option>
+          <option value="half" {% if period_type == 'half' %}selected{% endif %}>Half-yearly</option>
+          <option value="year" {% if period_type == 'year' %}selected{% endif %}>Yearly (FY)</option>
+        </select>
+        <select name="period_key" class="form-control form-control-sm" onchange="this.form.submit()">
+          {% for opt in period_options.get(period_type, []) %}
+          <option value="{{ opt.value }}" {% if opt.value == period_key %}selected{% endif %}>{{ opt.label }}</option>
+          {% endfor %}
+        </select>
+        {% set view_param = request.args.get('view', 'auto') %}
+        <select name="view" class="form-control form-control-sm" onchange="this.form.submit()">
+          <option value="auto" {% if view_param not in ('live', 'frozen') %}selected{% endif %}>Auto (frozen if available)</option>
+          <option value="frozen" {% if view_param == 'frozen' %}selected{% endif %}>Frozen only</option>
+          <option value="live" {% if view_param == 'live' %}selected{% endif %}>Live (slow)</option>
+        </select>
+      </form>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('regulatory_ia_statement.download_ia_statement', period_type=period_type, period_key=period_key, view=view_mode) }}">
+        <i class="fas fa-download"></i> Excel
+      </a>
+      {% if current_user.is_manager or current_user.is_admin %}
+      <form method="post" action="{{ url_for('regulatory_ia_statement.freeze_ia_statement') }}" class="mb-0"
+            onsubmit="return confirm('Freeze snapshot for {{ period_key }}?');">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="period_type" value="{{ period_type }}">
+        <input type="hidden" name="period_key" value="{{ period_key }}">
+        <button type="submit" class="btn btn-outline-secondary btn-sm">
+          <i class="fas fa-snowflake"></i> Freeze
+        </button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if payload.mode == 'frozen' %}
+  <div class="alert alert-success py-2">
+    Showing <strong>frozen</strong> snapshot
+    {% if payload.frozen_at %}(frozen at {{ payload.frozen_at }}){% endif %}.
+    Choose <em>Live (slow)</em> only if you need a fresh recompute.
+  </div>
+  {% elif payload.mode == 'live' %}
+  <div class="alert alert-info py-2">
+    Live compute (includes AUA holdings scan — can take a minute).
+    {% if has_frozen %}A frozen snapshot exists for this period — switch view to Auto/Frozen for a fast load.{% endif %}
+  </div>
+  {% endif %}
+  {% if payload.warning %}
+  <div class="alert alert-warning">{{ payload.warning }}</div>
+  {% endif %}
+  {% if payload.error %}
+  <div class="alert alert-danger">{{ payload.error }}</div>
+  {% endif %}
+
+  {% set rows = payload.rows or {} %}
+  {% set labels = payload.column_labels or {} %}
+
+  <div class="card shadow mb-4">
+    <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">SEBI IA grid</h6></div>
+    <div class="card-body table-responsive">
+      <table class="table table-sm table-bordered mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Particulars</th>
+            {% for k in column_keys %}
+            <th class="text-end">{{ labels.get(k, k) }} ({{ k }})</th>
+            {% endfor %}
+            <th class="text-end">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ count_row('Number of clients at end of previous period (i)', rows.get('clients_prev_end') or {}) }}
+          {{ count_row('Client agreements entered during period (ii)', rows.get('agreements_entered') or {}) }}
+          {{ count_row('Agreements expired/terminated during period (iii)', rows.get('agreements_expired') or {}) }}
+          {{ count_row('Clients at end of period (iv = i + ii − iii)', rows.get('clients_period_end') or {}) }}
+          {{ count_row('Active with signed agreement (CRM)', rows.get('clients_signed_active') or {}) }}
+          {{ count_row('Active without signed agreement', rows.get('clients_missing_agreement') or {}) }}
+          {{ count_row('Active clients total (signed + missing)', rows.get('clients_active_total') or {}) }}
+          {{ count_row('Max agreements in force on a single day (current FY)', rows.get('max_agreements_fy') or {}) }}
+          {{ amount_row('Fees — fixed fee mode (a)', rows.get('fees_fixed') or {}) }}
+          {{ amount_row('Fees — AUA based fee mode (b)', rows.get('fees_aua') or {}) }}
+          {{ amount_row('Fees — Accredited Investors (c)', rows.get('fees_accredited') or {}) }}
+          {{ amount_row('Total fees (d = a + b + c)', rows.get('fees_total') or {}) }}
+          {{ count_row('Clients on AUA fee mode at period end', rows.get('aua_mode_clients') or {}) }}
+          {{ count_row('Accredited investors at period end', rows.get('accredited_clients') or {}) }}
+          {% set aua = rows.get('aua_by_bucket') or {} %}
+          {{ amount_row('Net AUA — Equity', aua.get('equity') or {}) }}
+          {{ amount_row('Net AUA — Debt', aua.get('debt') or {}) }}
+          {{ amount_row('Net AUA — Equity Derivatives', aua.get('equity_derivatives') or {}) }}
+          {{ amount_row('Net AUA — Mutual Funds', aua.get('mutual_funds') or {}) }}
+          {{ amount_row('Net AUA — Other SEBI regulated', aua.get('other_sebi') or {}) }}
+          {{ amount_row('Net AUA — Other regulators', aua.get('other_regulators') or {}) }}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% set review = payload.review or {} %}
+
+  <div class="row">
+    <div class="col-lg-4 mb-4">
+      <div class="card shadow h-100">
+        <div class="card-header py-2"><strong>Entered in period</strong> ({{ (review.entered or [])|length }})</div>
+        <div class="card-body p-0 table-responsive" style="max-height: 320px; overflow:auto;">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>ID</th><th>Name</th><th>Signed</th></tr></thead>
+            <tbody>
+            {% for r in review.entered or [] %}
+              <tr>
+                <td><a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_id }}</a></td>
+                <td>{{ r.client_name }}</td>
+                <td>{{ r.event_date }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3" class="text-muted">None</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4 mb-4">
+      <div class="card shadow h-100">
+        <div class="card-header py-2"><strong>Expired / inactive in period</strong> ({{ (review.expired or [])|length }})</div>
+        <div class="card-body p-0 table-responsive" style="max-height: 320px; overflow:auto;">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>ID</th><th>Name</th><th>Inactive since</th></tr></thead>
+            <tbody>
+            {% for r in review.expired or [] %}
+              <tr>
+                <td><a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_id }}</a></td>
+                <td>{{ r.client_name }}</td>
+                <td>{{ r.event_date }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3" class="text-muted">None</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-4 mb-4">
+      <div class="card shadow h-100">
+        <div class="card-header py-2"><strong>Not billed ≥18 months</strong> ({{ (review.unbilled_18m or [])|length }})</div>
+        <div class="card-body p-0 table-responsive" style="max-height: 320px; overflow:auto;">
+          <table class="table table-sm mb-0">
+            <thead><tr><th>ID</th><th>Name</th><th>Confirm</th></tr></thead>
+            <tbody>
+            {% for r in review.unbilled_18m or [] %}
+              <tr>
+                <td><a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_id }}</a></td>
+                <td>{{ r.client_name }}<div class="small text-muted">{{ r.notes }}</div></td>
+                <td class="text-nowrap">
+                  <form method="post" action="{{ url_for('regulatory_ia_statement.confirm_client_active') }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="client_id" value="{{ r.client_id }}">
+                    <input type="hidden" name="period_type" value="{{ period_type }}">
+                    <input type="hidden" name="period_key" value="{{ period_key }}">
+                    <input type="hidden" name="action" value="keep_active">
+                    <button class="btn btn-outline-success btn-sm" type="submit" title="Keep active">OK</button>
+                  </form>
+                  <form method="post" action="{{ url_for('regulatory_ia_statement.confirm_client_active') }}" class="d-inline"
+                        onsubmit="return confirm('Mark {{ r.client_name }} inactive?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="client_id" value="{{ r.client_id }}">
+                    <input type="hidden" name="period_type" value="{{ period_type }}">
+                    <input type="hidden" name="period_key" value="{{ period_key }}">
+                    <input type="hidden" name="action" value="mark_inactive">
+                    <button class="btn btn-outline-danger btn-sm" type="submit">Off</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3" class="text-muted">None</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12 mb-4">
+      <div class="card shadow">
+        <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <strong>Active without signed agreement</strong>
+          <span class="badge bg-secondary">{{ (review.missing_agreement or [])|length }}</span>
+        </div>
+        <div class="card-body py-2">
+          <p class="small text-muted mb-2">
+            Active clients in Practice Analytics who are not in the statement grid because they have no
+            signed agreement as of the valuation date. Explains active count (e.g. 120) vs clients at period end.
+            This list is always live (even when the grid above is frozen).
+          </p>
+        </div>
+        <div class="card-body p-0 table-responsive" style="max-height: 420px; overflow:auto;">
+          <table class="table table-sm table-striped mb-0">
+            <thead>
+              <tr>
+                <th scope="col">ID</th>
+                <th scope="col">Name</th>
+                <th scope="col">Bucket</th>
+                <th scope="col">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for r in review.missing_agreement or [] %}
+              <tr>
+                <td><a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_id }}</a></td>
+                <td>{{ r.client_name }}</td>
+                <td>{{ r.bucket }}</td>
+                <td class="small text-muted">{{ r.notes }}</td>
+              </tr>
+            {% else %}
+              <tr><td colspan="4" class="text-muted">None — every active client has a signed agreement.</td></tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if frozen_list %}
+  <div class="card shadow mb-4">
+    <div class="card-header py-2"><strong>Frozen snapshots</strong></div>
+    <div class="card-body p-0 table-responsive">
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Key</th><th>Type</th><th>End</th><th>Frozen at</th><th></th></tr></thead>
+        <tbody>
+        {% for s in frozen_list %}
+          <tr>
+            <td>{{ s.period_key }}</td>
+            <td>{{ s.period_type }}</td>
+            <td>{{ s.period_end }}</td>
+            <td>{{ s.frozen_at }}</td>
+            <td><a href="{{ url_for('regulatory_ia_statement.ia_statement', period_type=s.period_type, period_key=s.period_key, view='frozen') }}">Open</a></td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

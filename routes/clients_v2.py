@@ -273,6 +273,8 @@ def add_client():
                 flash(f"Invalid secondary email(s): {', '.join(secondary_invalid)}", "error")
                 return render_template("clients/add_client.html", form=form)
 
+            from services.client_regulatory_flags_service import normalize_entity_type
+
             client_data = {
                 'name': form.name.data,
                 'email': form.email.data,
@@ -280,7 +282,18 @@ def add_client():
                 'phone': form.phone.data,
                 'address': form.address.data,
                 'risk_profile': form.risk_profile.data,
-                'user_id': current_user.id
+                'user_id': current_user.id,
+                'is_active': form.is_active.data if hasattr(form, 'is_active') else True,
+                'is_nri': bool(form.is_nri.data) if hasattr(form, 'is_nri') else False,
+                'is_fpi': bool(form.is_fpi.data) if hasattr(form, 'is_fpi') else False,
+                'is_accredited_investor': bool(form.is_accredited_investor.data)
+                if hasattr(form, 'is_accredited_investor')
+                else False,
+                'client_entity_type': normalize_entity_type(
+                    form.client_entity_type.data
+                    if hasattr(form, 'client_entity_type')
+                    else 'individual'
+                ),
             }
             
             client = ClientService.create_client(client_data)

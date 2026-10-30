@@ -139,6 +139,17 @@ RUNTIME_AGENTS: List[Dict[str, Any]] = [
 # Scheduled jobs that are not BaseAgent modules but appear in Intelligence Hub / ops
 SCHEDULED_AGENT_LIKE_JOBS: List[Dict[str, Any]] = [
     {
+        "name": "ia_regulatory_freeze",
+        "display_name": "IA Regulatory Statement Freeze",
+        "description": (
+            "On/after month-start, freeze completed prior quarter, half-year, and "
+            "Indian FY year SEBI IA clients/fees/AUA snapshots if not already frozen."
+        ),
+        "service": "services.ia_regulatory_statement_service.auto_freeze_due_periods",
+        "group": "scheduled_jobs",
+        "airflow_dags": ["ia_regulatory_freeze"],
+    },
+    {
         "name": "price_accuracy_scan",
         "display_name": "Price Accuracy Scan",
         "description": (
@@ -221,6 +232,17 @@ SCHEDULED_AGENT_LIKE_JOBS: List[Dict[str, Any]] = [
         "service": "services.review_billing_projection_service.send_review_billing_projection_weekly",
         "group": "scheduled_jobs",
         "airflow_dags": ["review_billing_projection_weekly"],
+    },
+    {
+        "name": "daily_client_returns",
+        "display_name": "Daily Client Returns Digest",
+        "description": (
+            "07:00 IST email: lifetime XIRR + absolute and trailing 1M–5Y absolute "
+            "vs Nifty cashflow-sim (anshul@equities4wealth.com only; HTML+Excel)"
+        ),
+        "service": "services.daily_client_returns_digest_service.send_daily_client_returns_digest",
+        "group": "scheduled_jobs",
+        "airflow_dags": ["daily_client_returns"],
     },
 ]
 

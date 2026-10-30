@@ -73,6 +73,12 @@ NAV_GROUPS: Tuple[NavGroup, ...] = (
                 active_match=("regulatory_advisory_register.",),
             ),
             NavItem(
+                "regulatory_ia_statement.ia_statement",
+                "IA Statement",
+                "fas fa-balance-scale",
+                active_match=("regulatory_ia_statement.",),
+            ),
+            NavItem(
                 "client_google_drive.list_client_drive_folders",
                 "Client Drive folders",
                 "fab fa-google-drive",

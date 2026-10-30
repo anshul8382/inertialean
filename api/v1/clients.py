@@ -392,7 +392,16 @@ def update_client(client_id):
         if 'advisor_id' in data:
             client.advisor_id = data['advisor_id']
         if 'is_active' in data:
-            client.is_active = bool(data['is_active'])
+            from services.client_regulatory_flags_service import apply_active_change
+
+            apply_active_change(client, bool(data['is_active']))
+        for flag in ('is_nri', 'is_fpi', 'is_accredited_investor'):
+            if flag in data:
+                setattr(client, flag, bool(data[flag]))
+        if 'client_entity_type' in data:
+            from services.client_regulatory_flags_service import normalize_entity_type
+
+            client.client_entity_type = normalize_entity_type(data['client_entity_type'])
         
         db.session.commit()
         
@@ -408,6 +417,10 @@ def update_client(client_id):
                 'date_of_birth': client.date_of_birth.isoformat() if client.date_of_birth else None,
                 'advisor_id': client.advisor_id,
                 'is_active': bool(client.is_active),
+                'is_nri': bool(getattr(client, 'is_nri', False)),
+                'is_fpi': bool(getattr(client, 'is_fpi', False)),
+                'client_entity_type': getattr(client, 'client_entity_type', 'individual'),
+                'is_accredited_investor': bool(getattr(client, 'is_accredited_investor', False)),
             },
             message="Client updated successfully"
         )
@@ -434,7 +447,9 @@ def delete_client(client_id):
         if client.holdings:
             raise ConflictError("Cannot delete client with holdings")
         
-        client.is_active = False
+        from services.client_regulatory_flags_service import apply_active_change
+
+        apply_active_change(client, False)
         db.session.commit()
         
         return APIResponse.success(

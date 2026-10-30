@@ -243,6 +243,20 @@ try:
 except Exception:
     pass
 try:
+    from models.ia_regulatory_snapshot import (
+        IaRegulatorySnapshot,
+        IaRegulatorySnapshotClientEvent,
+    )
+
+    setattr(sys.modules[__name__], "IaRegulatorySnapshot", IaRegulatorySnapshot)
+    setattr(
+        sys.modules[__name__],
+        "IaRegulatorySnapshotClientEvent",
+        IaRegulatorySnapshotClientEvent,
+    )
+except Exception:
+    pass
+try:
     from models.suitability_report import SuitabilityReport
 
     setattr(sys.modules[__name__], "SuitabilityReport", SuitabilityReport)

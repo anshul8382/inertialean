@@ -181,6 +181,17 @@ class ClientForm(FlaskForm):
         render_kw={'rows': 4, 'placeholder': 'Add a new planning note (saved with date and author)...'},
     )
     is_active = BooleanField('Active Client', default=True)
+    client_entity_type = SelectField(
+        'Client type',
+        choices=[
+            ('individual', 'Individual'),
+            ('non_individual', 'Non-individual (corporate / trust / HUF / etc.)'),
+        ],
+        default='individual',
+    )
+    is_nri = BooleanField('NRI / Non-resident', default=False)
+    is_fpi = BooleanField('FPI', default=False)
+    is_accredited_investor = BooleanField('Accredited investor', default=False)
     submit = SubmitField('Save Client')
 
 class PortfolioForm(FlaskForm):

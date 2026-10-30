@@ -221,6 +221,26 @@
             </div>
             <small class="form-text text-muted">Uncheck only if adding a client who should start as inactive.</small>
         </div>
+        <hr>
+        <h5 class="mb-3">Regulatory classification</h5>
+        <div class="mb-3">
+            {{ form.client_entity_type.label(class="form-label") }}
+            {{ form.client_entity_type(class="form-select") }}
+        </div>
+        <div class="mb-3">
+            <div class="form-check">
+                {{ form.is_nri(class="form-check-input") }}
+                {{ form.is_nri.label(class="form-check-label") }}
+            </div>
+            <div class="form-check">
+                {{ form.is_fpi(class="form-check-input") }}
+                {{ form.is_fpi.label(class="form-check-label") }}
+            </div>
+            <div class="form-check">
+                {{ form.is_accredited_investor(class="form-check-input") }}
+                {{ form.is_accredited_investor.label(class="form-check-label") }}
+            </div>
+        </div>
         {{ form.submit(class="btn btn-primary") }}
     </form>
 </div>

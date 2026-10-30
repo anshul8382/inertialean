@@ -80,6 +80,23 @@ Logic: `services/db_cutover.py` → `audit_log_writes_enabled()`
 2. Restart app  
 3. Manager: Import FY from UI or `python3 scripts/import_advisory_register_fy.py` (needs Gmail IMAP)
 
+### 2b. `ia_regulatory_statement` — SEBI IA clients/fees/AUA statement
+
+| Item | Detail |
+|------|--------|
+| **Status** | Table-gated + client flag columns (not in default `DEFER_DB_FEATURES`) |
+| **User impact** | `/regulatory/ia-statement` live view works if client columns exist; freeze disabled until snapshot table exists |
+| **Code gate** | `services/db_cutover.py` → `ia_regulatory_statement_enabled()`; `services/ia_regulatory_statement_service.py` |
+| **Migrations** | `migrations/add_client_regulatory_flags.py`, `migrations/add_ia_regulatory_snapshot.py` |
+| **Model** | Client flags on `models.py`; `models/ia_regulatory_snapshot.py` |
+| **Optional defer** | Add `ia_regulatory_statement` to `DEFER_DB_FEATURES` |
+
+**After cutover:**
+
+1. `python3 migrations/add_client_regulatory_flags.py` then `python3 migrations/add_ia_regulatory_snapshot.py` on `_dev` / `_test` / prod  
+2. Seed NRI: edit `data/regulatory/nri_clients.json` → `python3 scripts/import_nri_clients.py`  
+3. Airflow DAG `ia_regulatory_freeze` auto-freezes prior quarter/half/FY-year on the 1st of each month
+
 ### 3. Client Google Drive + Suitability report
 
 | Item | Detail |

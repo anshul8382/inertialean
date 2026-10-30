@@ -1328,12 +1328,9 @@ def upload_nifty_data():
                 'error': f'No data found for year {year} in the uploaded file'
             }), 400
         
-        # Clear existing data for this year first (overwrite mode)
-        clear_result = BenchmarkService.clear_year_data(benchmark_id=1, year=year)
-        cleared_count = clear_result.get('deleted_count', 0)
-        
-        # Upload using BenchmarkService with overwrite=True
-        uploaded_count = 0
+        # Upsert only dates present in the file — do not wipe the rest of the year
+        created_count = 0
+        updated_count = 0
         skipped_count = 0
         
         for _, row in df_year.iterrows():
@@ -1344,28 +1341,42 @@ def upload_nifty_data():
                 benchmark_id=1,  # Nifty 50
                 price_date=price_date,
                 price=price,
-                overwrite=True  # Always overwrite in upload mode
+                overwrite=True,  # replace that date only
             )
             
             if result['success']:
                 if result['action'] == 'created':
-                    uploaded_count += 1
+                    created_count += 1
                 elif result['action'] == 'updated':
-                    uploaded_count += 1
+                    updated_count += 1
                 else:
                     skipped_count += 1
+            else:
+                skipped_count += 1
         
         db.session.commit()
         
-        logger.info(f"Cleared {cleared_count} old records and uploaded {uploaded_count} Nifty records for year {year}")
+        uploaded_count = created_count + updated_count
+        logger.info(
+            "Nifty upsert year=%s created=%s updated=%s skipped=%s (no year wipe)",
+            year,
+            created_count,
+            updated_count,
+            skipped_count,
+        )
         
         return jsonify({
             'success': True,
             'uploaded': uploaded_count,
-            'cleared': cleared_count,
+            'created': created_count,
+            'updated': updated_count,
+            'cleared': 0,
             'skipped': skipped_count,
             'year': year,
-            'message': f'Cleared {cleared_count} old records, uploaded {uploaded_count} new records for year {year}'
+            'message': (
+                f'Updated {updated_count} and added {created_count} date(s) for {year} '
+                f'(other dates in that year left unchanged)'
+            ),
         })
     
     except Exception as e:

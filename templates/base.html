@@ -319,6 +319,11 @@
                                 <i class="fas fa-book"></i> Advisory Register
                             </a></li>
                             {% endif %}
+                            {% if (current_user.is_manager or has_route_access('regulatory_ia_statement.ia_statement') or has_route_access('regulatory_advisory_register.advisory_register') or has_route_access('main.practice_analytics')) and nav_can('regulatory_ia_statement.ia_statement') %}
+                            <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('regulatory_ia_statement.') %}active{% endif %}" href="{{ url_for('regulatory_ia_statement.ia_statement') }}">
+                                <i class="fas fa-balance-scale"></i> IA Statement
+                            </a></li>
+                            {% endif %}
                             {% if nav_can('client_google_drive.list_client_drive_folders') %}
                             <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('client_google_drive.') %}active{% endif %}" href="{{ url_for('client_google_drive.list_client_drive_folders') }}">
                                 <i class="fab fa-google-drive"></i> Client Drive folders

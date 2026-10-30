@@ -267,6 +267,32 @@ def task_review_billing_projection_weekly():
             )
 
 
+def task_daily_client_returns():
+    from services.daily_client_returns_digest_service import (
+        send_daily_client_returns_digest,
+    )
+
+    app = _app()
+    with app.app_context():
+        result = send_daily_client_returns_digest(dry_run=False)
+        print(f"daily_client_returns {result}")
+        if not result.get("sent"):
+            raise RuntimeError(
+                f"Daily client returns digest failed to send: {result}"
+            )
+
+
+def task_ia_regulatory_freeze():
+    from services.ia_regulatory_statement_service import auto_freeze_due_periods
+
+    app = _app()
+    with app.app_context():
+        result = auto_freeze_due_periods()
+        print(f"ia_regulatory_freeze {result}")
+        if not result.get("ok"):
+            raise RuntimeError(f"IA regulatory freeze failed: {result}")
+
+
 TASKS = {
     "data_integrity_daily": task_data_integrity_daily,
     "data_integrity_weekly": task_data_integrity_weekly,
@@ -291,6 +317,8 @@ TASKS = {
     "client_data_integrity_nightly": task_client_data_integrity_nightly,
     "bni_ty_notes_weekly": task_bni_ty_notes_weekly,
     "review_billing_projection_weekly": task_review_billing_projection_weekly,
+    "daily_client_returns": task_daily_client_returns,
+    "ia_regulatory_freeze": task_ia_regulatory_freeze,
 }
 
 

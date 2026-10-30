@@ -1,0 +1,32 @@
+---
+description: Two-step gate for git commit and KVM/prod ship — never ship without explicit go-ahead
+alwaysApply: true
+---
+
+# Commit and prod ship (mandatory gate)
+
+This workspace ships to **KVM** (`ship_kvm.sh` → `187.127.188.97`). Never BigRock.
+
+## Hard rules
+
+1. **Do not** `git commit`, `git push`, or run `ship_kvm.sh` / `deploy_kvm_vps.sh` / `ship_lean.sh` unless the user **explicitly** asked to commit and/or move to prod (e.g. “commit and move to KVM”, “ship to prod”).
+2. Fixing a bug, finishing a feature, or “make it work on KVM” is **not** permission to commit or ship.
+3. **Never** use `SKIP_AGENT_APPROVAL=1` / `--skip-approval` unless the user explicitly allows a bypass in that message.
+
+## Required sequence (when user asks to commit + move to prod)
+
+1. **Stage only** relevant files (no secrets). Do **not** commit yet.
+2. Run the agent approval loop:
+   ```bash
+   python3 scripts/run_agent_approval_loop.py --write-status
+   ```
+3. **Report results to the user** (PASS / FAIL / PARTIAL per agent; blockers if any). Propose the commit message. Stop.
+4. **Wait** for an explicit final go-ahead (e.g. “go ahead”, “ship it”, “commit and deploy”).
+5. Only then: commit → push → `./scripts/deployment/ship_kvm.sh` (or the ship command they named) → confirm remote HEAD / health. HUP gunicorn on `:5004` if restart needs sudo.
+
+If approval **FAIL**s: do not commit/ship; fix or ask. Do not silently bypass.
+
+## Allowed without ship ask
+
+- Local edits, tests, read-only SSH checks, explaining URLs/APIs.
+- Do **not** reload/restart prod gunicorn “to pick up changes” as a substitute for ship unless they asked to deploy.

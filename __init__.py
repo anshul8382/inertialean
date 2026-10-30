@@ -442,6 +442,13 @@ def create_app(config_class=ProductionConfig):
         app.logger.warning("Advisory register blueprint not registered: %s", _ar_e)
 
     try:
+        from routes.regulatory_ia_statement import regulatory_ia_statement_bp
+
+        app.register_blueprint(regulatory_ia_statement_bp)
+    except Exception as _ia_e:
+        app.logger.warning("IA statement blueprint not registered: %s", _ia_e)
+
+    try:
         from routes.client_google_drive import client_google_drive_bp
 
         app.register_blueprint(client_google_drive_bp)
