@@ -663,7 +663,7 @@
 
                     {% if current_user.is_admin or current_user.is_manager %}
                     <hr>
-                    <div class="row">
+                    <div class="row" id="zoho-books">
                         <div class="col-12">
                             <h6 class="text-dark mb-2">
                                 <i class="fas fa-cloud"></i> Zoho Books
@@ -673,10 +673,10 @@
                                 {% if client.zoho_contact_id %}
                                 <code>{{ client.zoho_contact_id }}</code>
                                 {% else %}
-                                <span class="text-warning">not linked</span> (matched by email/name on pull)
+                                <span class="text-warning">not linked</span> — find by Zoho name and confirm, or enter ID
                                 {% endif %}
                             </p>
-                            <div class="d-flex flex-wrap gap-2 mb-2">
+                            <div class="d-flex flex-wrap gap-2 mb-3">
                                 <form method="post" action="{{ url_for('clients.client_zoho_pull_invoices', client_id=client.id) }}" class="d-inline">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="update_existing" value="1">
@@ -686,12 +686,59 @@
                                 </form>
                                 <form method="post" action="{{ url_for('clients.client_zoho_link_contact', client_id=client.id) }}" class="d-inline">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="action" value="suggest">
+                                    <button type="submit" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-search"></i> Find Zoho name matches
+                                    </button>
+                                </form>
+                                <form method="post" action="{{ url_for('clients.client_zoho_link_contact', client_id=client.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <input type="hidden" name="action" value="auto">
-                                    <button type="submit" class="btn btn-outline-secondary btn-sm">
-                                        Auto-link Zoho contact
+                                    <button type="submit" class="btn btn-outline-secondary btn-sm"
+                                            title="Links immediately via email, then name — no confirmation">
+                                        Auto-link (no confirm)
                                     </button>
                                 </form>
                             </div>
+
+                            {% if zoho_contact_match_error %}
+                            <div class="alert alert-warning py-2 small">{{ zoho_contact_match_error }}</div>
+                            {% endif %}
+
+                            {% if zoho_contact_matches %}
+                            <form method="post" action="{{ url_for('clients.client_zoho_link_contact', client_id=client.id) }}" class="mb-3">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="action" value="confirm">
+                                <label class="form-label small mb-1" for="zoho_match_select_{{ client.id }}">
+                                    Closest Zoho contact is pre-selected — confirm or pick another
+                                </label>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-8">
+                                        <select class="form-select form-select-sm" id="zoho_match_select_{{ client.id }}"
+                                                name="zoho_contact_id" required
+                                                onchange="var o=this.options[this.selectedIndex]; document.getElementById('zoho_match_name_{{ client.id }}').value=o.getAttribute('data-name')||'';">
+                                            {% for m in zoho_contact_matches %}
+                                            <option value="{{ m.contact_id }}"
+                                                    data-name="{{ m.name|e }}"
+                                                    {% if loop.first %}selected{% endif %}>
+                                                {{ m.name }} — {{ m.email }}
+                                                ({{ (m.score * 100)|round|int }}% · {{ m.reason }})
+                                                · ID {{ m.contact_id }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                        <input type="hidden" id="zoho_match_name_{{ client.id }}" name="zoho_contact_name"
+                                               value="{{ zoho_contact_matches[0].name if zoho_contact_matches else '' }}">
+                                    </div>
+                                    <div class="col-auto">
+                                        <button type="submit" class="btn btn-success btn-sm">
+                                            <i class="fas fa-check"></i> Confirm link
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                            {% endif %}
+
                             <form method="post" action="{{ url_for('clients.client_zoho_link_contact', client_id=client.id) }}" class="row g-2 align-items-end">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <input type="hidden" name="action" value="save">

@@ -270,6 +270,37 @@ def find_zoho_contact_by_name(name: str) -> Tuple[Optional[str], Optional[str]]:
     return str(contacts[0].get("contact_id") or "").strip() or None, None
 
 
+def list_zoho_contacts(
+    *,
+    contact_name_contains: Optional[str] = None,
+    per_page: int = 200,
+    max_pages: int = 10,
+) -> Tuple[list, Optional[str]]:
+    """Paginated Zoho Books contacts. Returns (contacts, error)."""
+    if not zoho_configured():
+        return [], "Zoho is not configured."
+    page_size = max(1, min(int(per_page or 200), 200))
+    page_cap = max(1, min(int(max_pages or 10), 25))
+    out: list = []
+    page = 1
+    needle = (contact_name_contains or "").strip() or None
+    while page <= page_cap:
+        params: Dict[str, Any] = {"page": page, "per_page": page_size}
+        if needle:
+            params["contact_name_contains"] = needle
+        data, err = _request("GET", "/contacts", params=params)
+        if err:
+            return out, err
+        batch = list((data or {}).get("contacts") or [])
+        out.extend(batch)
+        page_ctx = (data or {}).get("page_context") or {}
+        has_more = bool(page_ctx.get("has_more_page"))
+        if not has_more or not batch:
+            break
+        page += 1
+    return out, None
+
+
 def push_invoice_to_zoho(invoice, *, send_email: bool = True) -> Dict[str, Any]:
     """
     Create a Zoho Books invoice from an Inertia Invoice (idempotent if already linked).

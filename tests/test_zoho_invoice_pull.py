@@ -51,6 +51,36 @@ def test_sync_missing_uses_create_only():
         assert kwargs["update_existing"] is False
 
 
+def test_score_zoho_contact_name_prefers_close_match():
+    from services.zoho_invoice_pull_service import _score_zoho_contact_name
+
+    assert _score_zoho_contact_name("Rahul Sharma", "Rahul Sharma") == 1.0
+    assert _score_zoho_contact_name("Rahul Sharma", "Mr. Rahul Sharma") >= 0.92
+    assert _score_zoho_contact_name("Rahul Sharma", "Completely Different") < 0.5
+
+
+@patch("services.zoho_invoice_pull_service.zoho_configured", return_value=True)
+@patch("services.zoho_invoice_pull_service.find_zoho_contact_by_email", return_value=(None, None))
+@patch("services.zoho_invoice_pull_service.list_zoho_contacts")
+def test_suggest_zoho_contacts_ranks_closest(mock_list, _email, _cfg):
+    from services.zoho_invoice_pull_service import suggest_zoho_contacts_for_client
+
+    mock_list.return_value = (
+        [
+            {"contact_id": "1", "contact_name": "Ramesh Kumar", "email": "a@x.com"},
+            {"contact_id": "2", "contact_name": "Rahul Sharma", "email": "r@x.com"},
+            {"contact_id": "3", "contact_name": "Other Person", "email": "o@x.com"},
+        ],
+        None,
+    )
+    client = SimpleNamespace(id=1, name="Rahul Sharma", email="no-match@example.com")
+    out = suggest_zoho_contacts_for_client(client, limit=5)
+    assert out["ok"] is True
+    assert out["best"]["contact_id"] == "2"
+    assert out["best"]["score"] >= 0.9
+
+
+
 @patch("services.zoho_books_service.zoho_configured", return_value=True)
 @patch("services.zoho_books_service._request")
 def test_list_zoho_invoices_paginates(mock_req, _cfg):

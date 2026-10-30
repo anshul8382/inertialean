@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
+from difflib import SequenceMatcher
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from sqlalchemy import func, inspect
@@ -12,6 +13,7 @@ from extensions import db
 from models import Client, Invoice
 from services.invoice_import_service import (
     _map_zoho_status,
+    _normalize_person_name,
     normalize_invoice_number,
     resolve_agreement_id_for_client,
     suggest_client_match,
@@ -20,6 +22,7 @@ from services.zoho_books_service import (
     _set_note_marker,
     find_zoho_contact_by_email,
     find_zoho_contact_by_name,
+    list_zoho_contacts,
     list_zoho_invoices,
     zoho_configured,
 )
@@ -115,6 +118,129 @@ def resolve_zoho_contact_for_client(client: Client) -> Dict[str, Any]:
             f"(email {client.email or '—'}). Set zoho_contact_id manually or fix email in Zoho."
         ),
         "contact_id": None,
+    }
+
+
+def _score_zoho_contact_name(client_name: str, zoho_name: str) -> float:
+    a = _normalize_person_name(client_name or "")
+    b = _normalize_person_name(zoho_name or "")
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+    if a in b or b in a:
+        return max(0.92, SequenceMatcher(None, a, b).ratio())
+    return SequenceMatcher(None, a, b).ratio()
+
+
+def suggest_zoho_contacts_for_client(
+    client: Client, *, limit: int = 12
+) -> Dict[str, Any]:
+    """
+    Rank Zoho Books contacts for this client (email hit first, then name similarity).
+
+    Returns {ok, error?, matches:[{contact_id, name, email, score, reason}], best?}
+    Does not persist a mapping — caller asks the user to confirm.
+    """
+    if not zoho_configured():
+        return {"ok": False, "error": "Zoho is not configured.", "matches": []}
+
+    matches: List[Dict[str, Any]] = []
+    seen: Set[str] = set()
+    client_email = (client.email or "").strip().lower()
+    client_name = (client.name or "").strip()
+
+    def _add(contact: dict, score: float, reason: str) -> None:
+        cid = str(contact.get("contact_id") or "").strip()
+        if not cid or cid in seen:
+            return
+        seen.add(cid)
+        email = (
+            contact.get("email")
+            or contact.get("email_id")
+            or ((contact.get("contact_persons") or [{}])[0] or {}).get("email")
+            or ""
+        )
+        matches.append(
+            {
+                "contact_id": cid,
+                "name": (contact.get("contact_name") or "").strip() or "—",
+                "email": (email or "").strip() or "—",
+                "score": round(float(score), 3),
+                "reason": reason,
+            }
+        )
+
+    # 1) Exact email
+    if client_email:
+        data_cid, err = find_zoho_contact_by_email(client.email or "")
+        if err:
+            return {"ok": False, "error": err, "matches": []}
+        if data_cid:
+            # Re-fetch name via name search / list filter is heavy; stub from email hit
+            _add(
+                {
+                    "contact_id": data_cid,
+                    "contact_name": client_name or data_cid,
+                    "email": client.email,
+                },
+                1.0,
+                "email",
+            )
+
+    # 2) Name contains searches (full name + first token) + broader list for scoring
+    tokens = [t for t in _normalize_person_name(client_name).split() if len(t) > 1]
+    search_needles: List[Optional[str]] = []
+    if client_name:
+        search_needles.append(client_name)
+    if tokens:
+        search_needles.append(tokens[0].title())
+    search_needles.append(None)  # unfiltered pages as fallback pool
+
+    pool: List[dict] = []
+    pool_ids: Set[str] = set()
+    for needle in search_needles:
+        max_pages = 3 if needle else 5
+        batch, err = list_zoho_contacts(
+            contact_name_contains=needle, per_page=200, max_pages=max_pages
+        )
+        if err and not pool:
+            return {"ok": False, "error": err, "matches": []}
+        if err:
+            break
+        for c in batch:
+            cid = str(c.get("contact_id") or "").strip()
+            if cid and cid not in pool_ids:
+                pool_ids.add(cid)
+                pool.append(c)
+        if len(pool) >= 400:
+            break
+
+    for c in pool:
+        zname = (c.get("contact_name") or "").strip()
+        zemail = (
+            (c.get("email") or c.get("email_id") or "")
+            or ((c.get("contact_persons") or [{}])[0] or {}).get("email")
+            or ""
+        )
+        zemail_l = str(zemail).strip().lower()
+        if client_email and zemail_l == client_email:
+            _add(c, 1.0, "email")
+            continue
+        score = _score_zoho_contact_name(client_name, zname)
+        if score >= 0.45:
+            reason = "exact_name" if score >= 0.999 else "name"
+            _add(c, score, reason)
+
+    matches.sort(key=lambda m: (-m["score"], m["name"].lower()))
+    matches = matches[: max(1, min(int(limit or 12), 25))]
+    best = matches[0] if matches else None
+    return {
+        "ok": True,
+        "matches": matches,
+        "best": best,
+        "client_name": client_name,
+        "client_email": client.email or "",
     }
 
 

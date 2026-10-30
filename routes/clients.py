@@ -1293,9 +1293,16 @@ def client_details(client_id):
     except Exception:
         distributors_for_assign = []
 
+    from flask import session as flask_session
+
+    zoho_contact_matches = flask_session.pop(f"zoho_contact_matches_{client_id}", None)
+    zoho_contact_match_error = flask_session.pop(f"zoho_contact_match_error_{client_id}", None)
+
     return render_template('clients/client_details.html',
                          client=client,
                          distributors_for_assign=distributors_for_assign,
+                         zoho_contact_matches=zoho_contact_matches,
+                         zoho_contact_match_error=zoho_contact_match_error,
                          google_drive_folder_url=google_drive_folder_url,
                          google_drive_sa_email=google_drive_sa_email,
                          suitability_reports=suitability_reports,
@@ -1540,7 +1547,52 @@ def client_zoho_link_contact(client_id):
         )
         return redirect(url_for("clients.client_details", client_id=client_id))
 
+    from flask import session as flask_session
+    from services.zoho_invoice_pull_service import suggest_zoho_contacts_for_client
+    from services.zoho_books_service import zoho_configured
+
     action = (request.form.get("action") or "save").strip()
+    if action == "suggest":
+        if not zoho_configured():
+            flash("Zoho is not configured. Connect under Settings first.", "warning")
+            return redirect(url_for("clients.client_details", client_id=client_id))
+        suggested = suggest_zoho_contacts_for_client(client, limit=12)
+        if not suggested.get("ok"):
+            flask_session[f"zoho_contact_match_error_{client_id}"] = (
+                suggested.get("error") or "Could not load Zoho contacts."
+            )
+            flask_session.pop(f"zoho_contact_matches_{client_id}", None)
+            flash(suggested.get("error") or "Could not load Zoho contacts.", "error")
+        else:
+            flask_session[f"zoho_contact_matches_{client_id}"] = suggested.get("matches") or []
+            flask_session.pop(f"zoho_contact_match_error_{client_id}", None)
+            n = len(suggested.get("matches") or [])
+            best = suggested.get("best") or {}
+            if n:
+                flash(
+                    f"Found {n} Zoho name match(es). Closest: "
+                    f"{best.get('name')} ({int(round((best.get('score') or 0) * 100))}%). "
+                    f"Confirm below.",
+                    "info",
+                )
+            else:
+                flash("No similar Zoho contact names found. Try manual ID or fix the name in Zoho.", "warning")
+        return redirect(url_for("clients.client_details", client_id=client_id) + "#zoho-books")
+
+    if action == "confirm":
+        zid = (request.form.get("zoho_contact_id") or "").strip()
+        zname = (request.form.get("zoho_contact_name") or "").strip()
+        if not zid:
+            flash("Select a Zoho contact to confirm.", "error")
+            return redirect(url_for("clients.client_details", client_id=client_id) + "#zoho-books")
+        persist_zoho_contact_id(client, zid)
+        flask_session.pop(f"zoho_contact_matches_{client_id}", None)
+        flash(
+            f"Linked Zoho contact {zname or zid} ({zid}).",
+            "success",
+        )
+        return redirect(url_for("clients.client_details", client_id=client_id) + "#zoho-books")
+
     if action == "auto":
         resolved = resolve_zoho_contact_for_client(client)
         if resolved.get("ok"):
@@ -1551,21 +1603,23 @@ def client_zoho_link_contact(client_id):
             )
         else:
             flash(resolved.get("error") or "Could not resolve Zoho contact.", "error")
-        return redirect(url_for("clients.client_details", client_id=client_id))
+        return redirect(url_for("clients.client_details", client_id=client_id) + "#zoho-books")
 
     if action == "clear":
         client.zoho_contact_id = None
         db.session.commit()
+        flask_session.pop(f"zoho_contact_matches_{client_id}", None)
         flash("Cleared Zoho contact mapping.", "success")
-        return redirect(url_for("clients.client_details", client_id=client_id))
+        return redirect(url_for("clients.client_details", client_id=client_id) + "#zoho-books")
 
     zid = (request.form.get("zoho_contact_id") or "").strip()
     if not zid:
         flash("Enter a Zoho contact / customer ID.", "error")
-        return redirect(url_for("clients.client_details", client_id=client_id))
+        return redirect(url_for("clients.client_details", client_id=client_id) + "#zoho-books")
     persist_zoho_contact_id(client, zid)
+    flask_session.pop(f"zoho_contact_matches_{client_id}", None)
     flash(f"Saved Zoho contact ID {zid}.", "success")
-    return redirect(url_for("clients.client_details", client_id=client_id))
+    return redirect(url_for("clients.client_details", client_id=client_id) + "#zoho-books")
 
 
 @clients_bp.route('/<int:client_id>/edit', methods=['GET', 'POST'])
