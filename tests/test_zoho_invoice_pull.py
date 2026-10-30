@@ -40,6 +40,17 @@ def test_status_overdue():
     assert _local_status_from_zoho_row({"status": "overdue", "balance": "100"}) == "overdue"
 
 
+def test_sync_missing_uses_create_only():
+    from services import zoho_invoice_pull_service as mod
+
+    with patch.object(mod, "pull_zoho_invoices", return_value={"ok": True, "created": 3}) as mocked:
+        out = mod.sync_missing_zoho_invoices(user_id=1, date_start=date(2026, 4, 1), date_end=date(2026, 9, 30))
+        assert out["ok"] is True
+        kwargs = mocked.call_args.kwargs
+        assert kwargs["create_only"] is True
+        assert kwargs["update_existing"] is False
+
+
 @patch("services.zoho_books_service.zoho_configured", return_value=True)
 @patch("services.zoho_books_service._request")
 def test_list_zoho_invoices_paginates(mock_req, _cfg):

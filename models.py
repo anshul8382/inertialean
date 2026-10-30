@@ -33,8 +33,18 @@ class Client(db.Model):
     advisor_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     distributor_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True, index=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)  # Active vs inactive client engagement
+    # Regulatory / SEBI IA statement classification
+    is_nri = db.Column(db.Boolean, default=False, nullable=False)
+    is_fpi = db.Column(db.Boolean, default=False, nullable=False)
+    client_entity_type = db.Column(
+        db.String(32), default="individual", nullable=False
+    )  # individual | non_individual
+    is_accredited_investor = db.Column(db.Boolean, default=False, nullable=False)
+    inactive_since = db.Column(db.Date, nullable=True)  # set when is_active flips to False
     google_drive_folder_id = db.Column(db.String(128), nullable=True)
     google_drive_folder_note = db.Column(db.String(255), nullable=True)
+    # Zoho Books customer/contact id — durable map for invoice pull/push
+    zoho_contact_id = db.Column(db.String(64), nullable=True, index=True)
     
     # Relationships
     portfolios = db.relationship('Portfolio', back_populates='client')

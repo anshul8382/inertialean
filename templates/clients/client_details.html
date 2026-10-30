@@ -660,6 +660,59 @@
                         </div>
                     </div>
                     {% endif %}
+
+                    {% if current_user.is_admin or current_user.is_manager %}
+                    <hr>
+                    <div class="row">
+                        <div class="col-12">
+                            <h6 class="text-dark mb-2">
+                                <i class="fas fa-cloud"></i> Zoho Books
+                            </h6>
+                            <p class="small text-muted mb-2">
+                                Mapped Zoho contact ID:
+                                {% if client.zoho_contact_id %}
+                                <code>{{ client.zoho_contact_id }}</code>
+                                {% else %}
+                                <span class="text-warning">not linked</span> (matched by email/name on pull)
+                                {% endif %}
+                            </p>
+                            <div class="d-flex flex-wrap gap-2 mb-2">
+                                <form method="post" action="{{ url_for('clients.client_zoho_pull_invoices', client_id=client.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="update_existing" value="1">
+                                    <button type="submit" class="btn btn-info btn-sm">
+                                        <i class="fas fa-cloud-download-alt"></i> Pull all Zoho invoices
+                                    </button>
+                                </form>
+                                <form method="post" action="{{ url_for('clients.client_zoho_link_contact', client_id=client.id) }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="action" value="auto">
+                                    <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                        Auto-link Zoho contact
+                                    </button>
+                                </form>
+                            </div>
+                            <form method="post" action="{{ url_for('clients.client_zoho_link_contact', client_id=client.id) }}" class="row g-2 align-items-end">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input type="hidden" name="action" value="save">
+                                <div class="col-sm-8 col-md-6">
+                                    <label class="form-label small mb-0" for="zoho_contact_id_{{ client.id }}">Manual Zoho contact ID</label>
+                                    <input type="text" class="form-control form-control-sm" id="zoho_contact_id_{{ client.id }}"
+                                           name="zoho_contact_id" value="{{ client.zoho_contact_id or '' }}"
+                                           placeholder="e.g. 560405000000774039">
+                                </div>
+                                <div class="col-auto">
+                                    <button type="submit" class="btn btn-outline-primary btn-sm">Save map</button>
+                                </div>
+                                {% if client.zoho_contact_id %}
+                                <div class="col-auto">
+                                    <button type="submit" name="action" value="clear" class="btn btn-outline-danger btn-sm">Clear</button>
+                                </div>
+                                {% endif %}
+                            </form>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>

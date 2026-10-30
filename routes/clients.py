@@ -112,6 +112,9 @@ def add_client():
                 other_notes=other_notes,
                 is_active=form.is_active.data if hasattr(form, 'is_active') else True,
             )
+            from services.client_regulatory_flags_service import apply_regulatory_form_fields
+
+            apply_regulatory_form_fields(client, form)
             
             # Set risk_profile_updated_at if risk profile is provided
             if form.risk_profile.data:
@@ -1447,6 +1450,124 @@ def client_detail_section_calendar_year_xirr(client_id):
     )
 
 
+@clients_bp.route('/<int:client_id>/zoho-pull-invoices', methods=['POST'])
+@login_required
+@handle_errors
+def client_zoho_pull_invoices(client_id):
+    """Pull all Zoho Books invoices for this client into Inertia."""
+    from flask_wtf.csrf import validate_csrf
+    from access_control import get_accessible_clients
+    from services.zoho_books_service import zoho_configured
+    from services.zoho_invoice_pull_service import pull_zoho_invoices_for_client
+
+    client = Client.query.get_or_404(client_id)
+    accessible_ids = {c.id for c in get_accessible_clients()}
+    if client.id not in accessible_ids and not (
+        getattr(current_user, "is_admin", False) or getattr(current_user, "is_manager", False)
+    ):
+        flash("You do not have access to this client.", "error")
+        return redirect(url_for("clients.client_details", client_id=client_id))
+    if not (
+        getattr(current_user, "is_admin", False) or getattr(current_user, "is_manager", False)
+    ):
+        flash("Manager or Admin required to pull Zoho invoices.", "error")
+        return redirect(url_for("clients.client_details", client_id=client_id))
+
+    try:
+        validate_csrf(request.form.get("csrf_token"))
+    except Exception:
+        flash("Invalid CSRF token. Try again.", "error")
+        return redirect(url_for("clients.client_details", client_id=client_id))
+
+    if not zoho_configured():
+        flash("Zoho is not configured. Connect under Settings first.", "warning")
+        return redirect(url_for("clients.client_details", client_id=client_id))
+
+    update_existing = request.form.get("update_existing") == "1"
+    result = pull_zoho_invoices_for_client(
+        client,
+        user_id=current_user.id,
+        update_existing=update_existing,
+    )
+    if not result.get("ok"):
+        flash(result.get("error") or "Zoho pull failed.", "error")
+    else:
+        resolve = result.get("resolve") or {}
+        flash(
+            f"Zoho pull for {client.name}: fetched {result.get('fetched', 0)}, "
+            f"created {result.get('created', 0)}, updated {result.get('updated', 0)}, "
+            f"already present {result.get('skipped_existing', 0)} "
+            f"(Zoho contact via {resolve.get('match_reason', '—')}).",
+            "success",
+        )
+    return redirect(url_for("clients.client_details", client_id=client_id))
+
+
+@clients_bp.route('/<int:client_id>/zoho-link-contact', methods=['POST'])
+@login_required
+@handle_errors
+def client_zoho_link_contact(client_id):
+    """Manually set or clear client.zoho_contact_id (durable Zoho map)."""
+    from flask_wtf.csrf import validate_csrf
+    from access_control import get_accessible_clients
+    from services.zoho_invoice_pull_service import (
+        client_zoho_contact_column_exists,
+        persist_zoho_contact_id,
+        resolve_zoho_contact_for_client,
+    )
+
+    client = Client.query.get_or_404(client_id)
+    if not (
+        getattr(current_user, "is_admin", False) or getattr(current_user, "is_manager", False)
+    ):
+        flash("Manager or Admin required.", "error")
+        return redirect(url_for("clients.client_details", client_id=client_id))
+    accessible_ids = {c.id for c in get_accessible_clients()}
+    if client.id not in accessible_ids and not getattr(current_user, "is_admin", False):
+        flash("You do not have access to this client.", "error")
+        return redirect(url_for("clients.client_details", client_id=client_id))
+
+    try:
+        validate_csrf(request.form.get("csrf_token"))
+    except Exception:
+        flash("Invalid CSRF token. Try again.", "error")
+        return redirect(url_for("clients.client_details", client_id=client_id))
+
+    if not client_zoho_contact_column_exists():
+        flash(
+            "Run migrations/add_client_zoho_contact_id.py before linking Zoho contacts.",
+            "warning",
+        )
+        return redirect(url_for("clients.client_details", client_id=client_id))
+
+    action = (request.form.get("action") or "save").strip()
+    if action == "auto":
+        resolved = resolve_zoho_contact_for_client(client)
+        if resolved.get("ok"):
+            flash(
+                f"Linked Zoho contact {resolved.get('contact_id')} "
+                f"(via {resolved.get('match_reason')}).",
+                "success",
+            )
+        else:
+            flash(resolved.get("error") or "Could not resolve Zoho contact.", "error")
+        return redirect(url_for("clients.client_details", client_id=client_id))
+
+    if action == "clear":
+        client.zoho_contact_id = None
+        db.session.commit()
+        flash("Cleared Zoho contact mapping.", "success")
+        return redirect(url_for("clients.client_details", client_id=client_id))
+
+    zid = (request.form.get("zoho_contact_id") or "").strip()
+    if not zid:
+        flash("Enter a Zoho contact / customer ID.", "error")
+        return redirect(url_for("clients.client_details", client_id=client_id))
+    persist_zoho_contact_id(client, zid)
+    flash(f"Saved Zoho contact ID {zid}.", "success")
+    return redirect(url_for("clients.client_details", client_id=client_id))
+
+
 @clients_bp.route('/<int:client_id>/edit', methods=['GET', 'POST'])
 @login_required
 @handle_errors
@@ -1536,8 +1657,9 @@ def edit_client(client_id):
                     form.other_notes.data,
                     note_author_name(current_user),
                 )
-            if hasattr(form, 'is_active'):
-                client.is_active = form.is_active.data
+            from services.client_regulatory_flags_service import apply_regulatory_form_fields
+
+            apply_regulatory_form_fields(client, form)
             
             # Update risk_profile_updated_at if risk profile changed
             if risk_profile_changed:
@@ -1561,8 +1683,10 @@ def edit_client(client_id):
 @handle_errors
 def toggle_client_active(client_id):
     """Toggle whether the client is active or inactive."""
+    from services.client_regulatory_flags_service import apply_active_change
+
     client = Client.query.get_or_404(client_id)
-    client.is_active = not client.is_active
+    apply_active_change(client, not bool(client.is_active))
     db.session.commit()
     status_text = 'activated' if client.is_active else 'deactivated'
     flash(f'Client "{client.name}" has been {status_text}.', 'success')

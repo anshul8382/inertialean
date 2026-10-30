@@ -190,12 +190,14 @@ def list_zoho_invoices(
     *,
     date_start: Optional[date] = None,
     date_end: Optional[date] = None,
+    customer_id: Optional[str] = None,
     per_page: int = 200,
     max_pages: int = 50,
 ) -> Tuple[list, Optional[str]]:
     """
     List Zoho Books invoices (paginated). Returns (invoices, error).
     date_start / date_end filter on Zoho invoice date (inclusive).
+    customer_id filters to one Zoho Books contact/customer.
     """
     if not zoho_configured():
         return [], (
@@ -206,6 +208,7 @@ def list_zoho_invoices(
     page_cap = max(1, min(int(max_pages or 50), 100))
     out: list = []
     page = 1
+    cust = (customer_id or "").strip() or None
     while page <= page_cap:
         params: Dict[str, Any] = {
             "page": page,
@@ -217,6 +220,8 @@ def list_zoho_invoices(
             params["date_start"] = date_start.isoformat()
         if date_end:
             params["date_end"] = date_end.isoformat()
+        if cust:
+            params["customer_id"] = cust
         data, err = _request("GET", "/invoices", params=params)
         if err:
             return out, err
@@ -228,6 +233,41 @@ def list_zoho_invoices(
             break
         page += 1
     return out, None
+
+
+def find_zoho_contact_by_email(email: str) -> Tuple[Optional[str], Optional[str]]:
+    """Return (contact_id, error) for an exact Zoho contact email match."""
+    em = (email or "").strip()
+    if not em:
+        return None, "Email is empty."
+    data, err = _request("GET", "/contacts", params={"email": em})
+    if err:
+        return None, err
+    contacts = (data or {}).get("contacts") or []
+    if not contacts:
+        return None, None
+    return str(contacts[0].get("contact_id") or "").strip() or None, None
+
+
+def find_zoho_contact_by_name(name: str) -> Tuple[Optional[str], Optional[str]]:
+    """Best-effort name search; returns first contact_id or (None, None)."""
+    nm = (name or "").strip()
+    if not nm:
+        return None, "Name is empty."
+    data, err = _request(
+        "GET", "/contacts", params={"contact_name_contains": nm, "per_page": 10}
+    )
+    if err:
+        return None, err
+    contacts = (data or {}).get("contacts") or []
+    if not contacts:
+        return None, None
+    # Prefer exact (case-insensitive) contact_name match
+    low = nm.lower()
+    for c in contacts:
+        if (c.get("contact_name") or "").strip().lower() == low:
+            return str(c.get("contact_id") or "").strip() or None, None
+    return str(contacts[0].get("contact_id") or "").strip() or None, None
 
 
 def push_invoice_to_zoho(invoice, *, send_email: bool = True) -> Dict[str, Any]:
