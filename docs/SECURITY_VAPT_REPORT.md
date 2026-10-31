@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-10-31T09:07:09.372030+00:00
+Generated: 2026-10-31T11:03:01.256715+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -441,7 +441,7 @@ SQL dumps inside the repo or working tree get copied to laptops, containers, and
 
 ### `SEC-INT-002` — Export/download endpoint `download_invoice_pdf` is not audit-logged
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/invoices.py:828`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/invoices.py:920`
 
 Functions named export/download/csv/excel/backup typically return client data in bulk. Without an audit log entry, an internal user downloading the entire client base is invisible.
 
@@ -453,7 +453,7 @@ def download_invoice_pdf(
 
 ### `SEC-INT-002` — Export/download endpoint `download_invoice_portfolio_excel` is not audit-logged
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/invoices.py:1035`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/invoices.py:1127`
 
 Functions named export/download/csv/excel/backup typically return client data in bulk. Without an audit log entry, an internal user downloading the entire client base is invisible.
 
