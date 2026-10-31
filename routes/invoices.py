@@ -99,6 +99,76 @@ def zoho_pull_invoices():
                     f"{c.get('unmapped_zoho', 0)} Zoho without Inertia.",
                     "info",
                 )
+        elif action == "bulk_link_mapping":
+            if not mapping_ready:
+                flash("Zoho contact map column is not available.", "warning")
+                return redirect(url_for("invoices.zoho_pull_invoices") + "#mapping-report")
+
+            linked = 0
+            skipped = 0
+            used_clients: set = set()
+            used_zoho: set = set()
+
+            def _link_one(client_id: int, zid: str) -> bool:
+                nonlocal linked, skipped
+                zid = (zid or "").strip()
+                if not client_id or client_id not in allowed_ids or not zid:
+                    skipped += 1
+                    return False
+                if client_id in used_clients or zid in used_zoho:
+                    skipped += 1
+                    return False
+                client = Client.query.get(client_id)
+                if not client:
+                    skipped += 1
+                    return False
+                # Avoid assigning same Zoho id to two clients
+                other = Client.query.filter(
+                    Client.zoho_contact_id == zid,
+                    Client.id != client_id,
+                ).first()
+                if other:
+                    skipped += 1
+                    return False
+                persist_zoho_contact_id(client, zid)
+                used_clients.add(client_id)
+                used_zoho.add(zid)
+                linked += 1
+                return True
+
+            for cid_s in request.form.getlist("bulk_inertia_client_id"):
+                try:
+                    cid = int(cid_s)
+                except ValueError:
+                    skipped += 1
+                    continue
+                zid = (request.form.get(f"bulk_zoho_for_{cid}") or "").strip()
+                _link_one(cid, zid)
+
+            for zid in request.form.getlist("bulk_zoho_contact_id"):
+                zid = (zid or "").strip()
+                if not zid:
+                    continue
+                try:
+                    cid = int(request.form.get(f"bulk_client_for_{zid}") or "0")
+                except ValueError:
+                    skipped += 1
+                    continue
+                _link_one(cid, zid)
+
+            if linked:
+                flash(
+                    f"Linked {linked} client↔Zoho pair(s)"
+                    + (f"; skipped {skipped}." if skipped else "."),
+                    "success",
+                )
+            else:
+                flash(
+                    "No links applied. Select one or more rows with a Zoho/Inertia choice.",
+                    "warning",
+                )
+            mapping_report = _refresh_mapping_report(allowed_ids)
+
         elif action in ("link_mapping", "unlink_mapping"):
             if not mapping_ready:
                 flash("Zoho contact map column is not available.", "warning")

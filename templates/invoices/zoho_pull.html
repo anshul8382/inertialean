@@ -206,32 +206,51 @@
             <p class="small text-muted mb-4">No clients have <code>zoho_contact_id</code> yet.</p>
             {% endif %}
 
-            <h2 class="h6">Inertia clients without Zoho map ({{ mapping_report.counts.unmapped_clients }})</h2>
-            {% if mapping_report.unmapped_clients %}
-            <div class="table-responsive mb-4">
-                <table class="table table-sm table-striped align-middle">
-                    <thead>
-                        <tr>
-                            <th>Inertia client</th>
-                            <th>Email</th>
-                            <th>Zoho contact</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for u in mapping_report.unmapped_clients %}
-                        <tr>
-                            <td>{{ u.client_name }} <span class="text-muted">#{{ u.client_id }}</span></td>
-                            <td>{{ u.email }}</td>
-                            <td colspan="2">
-                                <form method="post" action="{{ url_for('invoices.zoho_pull_invoices') }}#mapping-report" class="d-flex flex-wrap gap-1 align-items-center">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="client_id" value="{{ u.client_id }}">
-                                    <select name="zoho_contact_id" class="form-select form-select-sm" style="min-width: 16rem;" required
-                                            onchange="var o=this.options[this.selectedIndex]; this.form.zoho_contact_name.value=o.getAttribute('data-name')||'';">
+            {% if mapping_report.unmapped_clients or mapping_report.unmapped_zoho %}
+            <form method="post" action="{{ url_for('invoices.zoho_pull_invoices') }}#mapping-report" id="bulk-link-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3 sticky-top bg-white py-2 border-bottom">
+                    <div class="small text-muted">
+                        Tick rows to approve, adjust dropdowns if needed, then confirm all at once.
+                        Suggested matches are pre-selected.
+                    </div>
+                    <button type="submit" name="action" value="bulk_link_mapping" class="btn btn-success"
+                            onclick="return confirm('Link all selected client↔Zoho pairs?');">
+                        <i class="fas fa-check-double"></i> Confirm selected links
+                    </button>
+                </div>
+
+                <h2 class="h6">Inertia clients without Zoho map ({{ mapping_report.counts.unmapped_clients }})</h2>
+                {% if mapping_report.unmapped_clients %}
+                <div class="table-responsive mb-4">
+                    <table class="table table-sm table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width:2.5rem">
+                                    <input type="checkbox" class="form-check-input" id="bulk-select-inertia"
+                                           title="Select all with a Zoho choice"
+                                           onclick="document.querySelectorAll('.bulk-inertia-check').forEach(function(cb){cb.checked=this.checked;}.bind(this))">
+                                </th>
+                                <th>Inertia client</th>
+                                <th>Email</th>
+                                <th>Zoho contact</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for u in mapping_report.unmapped_clients %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" class="form-check-input bulk-inertia-check"
+                                           name="bulk_inertia_client_id" value="{{ u.client_id }}"
+                                           {% if u.suggested_zoho_id %}checked{% endif %}>
+                                </td>
+                                <td>{{ u.client_name }} <span class="text-muted">#{{ u.client_id }}</span></td>
+                                <td>{{ u.email }}</td>
+                                <td>
+                                    <select name="bulk_zoho_for_{{ u.client_id }}" class="form-select form-select-sm" style="min-width: 16rem;">
                                         <option value="">Pick Zoho contact…</option>
                                         {% for c in mapping_report.contact_choices %}
-                                        <option value="{{ c.zoho_contact_id }}" data-name="{{ c.zoho_name|e }}"
+                                        <option value="{{ c.zoho_contact_id }}"
                                                 {% if u.suggested_zoho_id and c.zoho_contact_id == u.suggested_zoho_id %}selected{% endif %}>
                                             {{ c.zoho_name }} — {{ c.zoho_email }}
                                             {% if u.suggested_zoho_id and c.zoho_contact_id == u.suggested_zoho_id %}
@@ -240,45 +259,46 @@
                                         </option>
                                         {% endfor %}
                                     </select>
-                                    <input type="hidden" name="zoho_contact_name" value="{{ u.suggested_zoho_name or '' }}">
-                                    <button type="submit" name="action" value="link_mapping" class="btn btn-sm btn-success">
-                                        Confirm link
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <p class="small text-muted mb-4">All accessible clients are linked.</p>
-            {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="small text-muted mb-4">All accessible clients are linked.</p>
+                {% endif %}
 
-            <h2 class="h6">Zoho contacts without Inertia map ({{ mapping_report.counts.unmapped_zoho }})</h2>
-            {% if mapping_report.unmapped_zoho %}
-            <div class="table-responsive mb-0">
-                <table class="table table-sm table-striped align-middle">
-                    <thead>
-                        <tr>
-                            <th>Zoho contact</th>
-                            <th>Email</th>
-                            <th>Zoho ID</th>
-                            <th>Link to Inertia client</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for z in mapping_report.unmapped_zoho %}
-                        <tr>
-                            <td>{{ z.zoho_name }}</td>
-                            <td>{{ z.zoho_email }}</td>
-                            <td><code>{{ z.zoho_contact_id }}</code></td>
-                            <td>
-                                <form method="post" action="{{ url_for('invoices.zoho_pull_invoices') }}#mapping-report" class="d-flex flex-wrap gap-1 align-items-center">
-                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                    <input type="hidden" name="zoho_contact_id" value="{{ z.zoho_contact_id }}">
-                                    <input type="hidden" name="zoho_contact_name" value="{{ z.zoho_name }}">
-                                    <select name="client_id" class="form-select form-select-sm" style="min-width: 14rem;" required>
+                <h2 class="h6">Zoho contacts without Inertia map ({{ mapping_report.counts.unmapped_zoho }})</h2>
+                {% if mapping_report.unmapped_zoho %}
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th style="width:2.5rem">
+                                    <input type="checkbox" class="form-check-input" id="bulk-select-zoho"
+                                           title="Select all with an Inertia choice"
+                                           onclick="document.querySelectorAll('.bulk-zoho-check').forEach(function(cb){cb.checked=this.checked;}.bind(this))">
+                                </th>
+                                <th>Zoho contact</th>
+                                <th>Email</th>
+                                <th>Zoho ID</th>
+                                <th>Link to Inertia client</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for z in mapping_report.unmapped_zoho %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" class="form-check-input bulk-zoho-check"
+                                           name="bulk_zoho_contact_id" value="{{ z.zoho_contact_id }}"
+                                           {% if z.suggested_client_id %}checked{% endif %}>
+                                </td>
+                                <td>{{ z.zoho_name }}</td>
+                                <td>{{ z.zoho_email }}</td>
+                                <td><code>{{ z.zoho_contact_id }}</code></td>
+                                <td>
+                                    <select name="bulk_client_for_{{ z.zoho_contact_id }}" class="form-select form-select-sm" style="min-width: 14rem;">
                                         <option value="">Pick Inertia client…</option>
                                         {% for c in mapping_report.inertia_choices %}
                                         <option value="{{ c.client_id }}"
@@ -290,18 +310,25 @@
                                         </option>
                                         {% endfor %}
                                     </select>
-                                    <button type="submit" name="action" value="link_mapping" class="btn btn-sm btn-success">
-                                        Confirm link
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="small text-muted mb-3">Every fetched Zoho contact is linked to an Inertia client.</p>
+                {% endif %}
+
+                <div class="d-flex justify-content-end">
+                    <button type="submit" name="action" value="bulk_link_mapping" class="btn btn-success"
+                            onclick="return confirm('Link all selected client↔Zoho pairs?');">
+                        <i class="fas fa-check-double"></i> Confirm selected links
+                    </button>
+                </div>
+            </form>
             {% else %}
-            <p class="small text-muted mb-0">Every fetched Zoho contact is linked to an Inertia client.</p>
+            <p class="small text-muted mb-0">Nothing left to link — all clients and Zoho contacts are mapped.</p>
             {% endif %}
         </div>
     </div>
