@@ -72,7 +72,8 @@ def _defer_raw() -> str:
                 return str(val)
     except Exception:
         pass
-    return os.environ.get("DEFER_DB_FEATURES", FEATURE_AUDIT_LOG)
+    # Default empty after audit_log cutover (table-existence gate still applies).
+    return os.environ.get("DEFER_DB_FEATURES", "")
 
 
 def deferred_features() -> FrozenSet[str]:

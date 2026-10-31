@@ -104,8 +104,9 @@ def login():
                 else:
                     login_user(user, remember=form.remember.data)
                     try:
-                        from services.audit_service import log_audit_event
-                        log_audit_event("login_success", user_id=user.id, details={"channel": "web_session"})
+                        from services.user_audit_service import record_login_success
+
+                        record_login_success(user, channel="web_session")
                     except Exception:
                         pass
                     next_page = normalize_internal_next(
@@ -115,6 +116,17 @@ def login():
                         next_page = url_for('main.dashboard')
                     return redirect(next_page)
             logger.info("Failed login attempt for email=%s", form.email.data)
+            try:
+                from services.user_audit_service import record_login_failure
+
+                record_login_failure(
+                    email=form.email.data,
+                    user_id=user.id if user else None,
+                    channel="web_session",
+                    reason="invalid_credentials",
+                )
+            except Exception:
+                pass
             flash('Invalid email or password.', 'error')
         else:
             for field, errors in form.errors.items():
@@ -126,15 +138,23 @@ def login():
 @auth.route('/logout')
 @login_required
 def logout():
+    uid = current_user.id if current_user.is_authenticated else None
+    try:
+        from services.user_audit_service import record_logout
+
+        record_logout(uid, channel="web_session")
+    except Exception:
+        pass
+
     # Clear all session data
     session.clear()
-    
+
     # Logout the user
     logout_user()
-    
+
     # Clear any remaining session cookies
     session.permanent = False
-    
+
     flash('You have been logged out.', 'success')
     return redirect(url_for('auth.login'))
 

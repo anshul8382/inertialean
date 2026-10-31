@@ -53,9 +53,9 @@ class Config:
     FORCE_2FA_FOR_ALL_USERS = os.environ.get('FORCE_2FA_FOR_ALL_USERS', 'true').lower() == 'true'
 
     # DB cutover: comma-separated feature keys to skip until additive migrations run on prod.
-    # Default "audit_log" avoids failed commits when audit_log table is missing. See docs/DB_CUTOVER_REGISTRY.md
-    # At cutover: set DEFER_DB_FEATURES= (empty) after running migrations/add_audit_log_table.py
-    DEFER_DB_FEATURES = os.environ.get('DEFER_DB_FEATURES', 'audit_log')
+    # Empty = all table-gated features enabled when tables exist.
+    # Set DEFER_DB_FEATURES=audit_log only if you must skip audit writes. See docs/DB_CUTOVER_REGISTRY.md
+    DEFER_DB_FEATURES = os.environ.get('DEFER_DB_FEATURES', '')
     
     # File upload settings
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')

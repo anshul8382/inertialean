@@ -133,10 +133,30 @@ def view_user(user_id):
     if not user:
         flash('User not found.', 'error')
         return redirect(url_for('users.list_users'))
-    
+
     now = datetime.utcnow()
-    
-    return render_template('users/view.html', user=user, now=now)
+    year = request.args.get("year", type=int) or now.year
+    month = request.args.get("month", type=int) or now.month
+    if month < 1 or month > 12:
+        month = now.month
+
+    from services.db_cutover import audit_log_table_exists
+    from services.user_audit_service import list_user_audit_events, month_activity_summary
+
+    audit_ready = audit_log_table_exists()
+    activity = month_activity_summary(user_id, year, month) if audit_ready else None
+    audit_events = list_user_audit_events(user_id, limit=80) if audit_ready else []
+
+    return render_template(
+        "users/view.html",
+        user=user,
+        now=now,
+        audit_ready=audit_ready,
+        activity=activity,
+        audit_events=audit_events,
+        audit_year=year,
+        audit_month=month,
+    )
 
 @users.route('/<int:user_id>/edit', methods=['GET', 'POST'])
 @login_required

@@ -15,18 +15,18 @@ At cutover: `db-cutover-prod` (see `.local/deployment-agent/CURSOR_AGENT.md`).
 
 ## Environment switch
 
-| Variable | Default (local / prod until cutover) | After cutover |
-|----------|--------------------------------------|---------------|
-| `DEFER_DB_FEATURES` | `audit_log` | *(empty)* |
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `DEFER_DB_FEATURES` | *(empty)* | Set `audit_log` only to force-skip audit writes |
 
 **Content intelligence (`ic_*` tables):** Not required for Campaign Studio tag/match flows. Tags and send log live in existing `campaign_studio_campaign.payload` JSON (`contentIntelligence` key). Person matching reads `client` / `lead`. Optional dedicated tables (`ic_persons`, `ic_content`, `ic_send_log`) are deferred — do **not** run `inertia_content.storage.Database.create_tables()` on shared prod until a cutover window.
 
 ```bash
-# .env — current (defer DB audit writes; no commit errors)
-DEFER_DB_FEATURES=audit_log
-
-# .env — after audit_log table exists on prod
+# .env — normal (audit writes on when audit_log table exists)
 DEFER_DB_FEATURES=
+
+# Optional emergency defer
+# DEFER_DB_FEATURES=audit_log
 ```
 
 Config: `config.Config.DEFER_DB_FEATURES`  
@@ -36,34 +36,7 @@ Logic: `services/db_cutover.py` → `audit_log_writes_enabled()`
 
 ## Active deferrals (code patched)
 
-### 1. `audit_log` — DB-backed audit trail
-
-| Item | Detail |
-|------|--------|
-| **Status** | Deferred (default) |
-| **User impact** | None for normal UI. Exports and logins work; **audit rows are not stored** in MySQL. |
-| **Compliance impact** | SEBI-style **DB audit trail** incomplete until cutover. File logs (`utils/audit_logger.py`, `audit_trail_service`) may still apply elsewhere. |
-| **Code gate** | `services/audit_service.py` — `log_audit_event()` / `log_data_export()` return early when deferred |
-| **Call sites** | No per-file comments needed; all routes use `audit_service` (e.g. `routes/auth.py`, `routes/main.py`, `routes/agreements.py`, `routes/invoices.py`, `routes/account_management.py`, `routes/main_sections/uploads.py`, `api/v1/auth.py`, …) |
-| **Migration** | `migrations/add_audit_log_table.py` |
-| **Model** | `models/audit_log.py` |
-
-**Restricted actions (not persisted to `audit_log` while deferred):**
-
-- Login success / failure (`routes/auth.py`)
-- Bulk exports: practice analytics Excel, client CSV, agreements PDF/DOCX, account CSV, corporate-actions sample, document download, invoice import CSVs, 2FA backup code views
-- Client list/view audit hooks that call `log_audit_event`
-- API auth events via `api/v1/auth.py`
-
-**After cutover:**
-
-1. Backup prod DB  
-2. `python migrations/add_audit_log_table.py` on prod  
-3. Set `DEFER_DB_FEATURES=` in prod `.env`  
-4. Restart app  
-5. Remove or shorten `DB CUTOVER` blocks in `audit_service.py` if desired (optional; gate is harmless if left)
-
-### 2. `advisory_register` — SEBI advisory register
+### 1. `advisory_register` — SEBI advisory register
 
 | Item | Detail |
 |------|--------|
@@ -214,7 +187,7 @@ Run **only** after backup. Prefer scripts that use `create(..., checkfirst=True)
 
 | Feature | Completed date | Notes |
 |---------|----------------|-------|
-| — | — | — |
+| `audit_log` | 2026-10-31 | Table on KVM; `DEFER_DB_FEATURES=` empty. Login/logout via `user_audit_service`; per-user history on Users → view. Past logins before this date were not stored. |
 
 ---
 

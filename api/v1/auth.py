@@ -73,9 +73,9 @@ def api_login():
         return APIResponse.error("JWT support not available (install PyJWT)", status_code=503)
 
     try:
-        from services.audit_service import log_audit_event
+        from services.user_audit_service import record_login_success
 
-        log_audit_event("login_success", user_id=user.id, details={"channel": "api_jwt"})
+        record_login_success(user, channel="api_jwt")
     except Exception:
         pass
 
@@ -120,9 +120,9 @@ def api_verify_2fa():
         return APIResponse.error("JWT support not available", status_code=503)
 
     try:
-        from services.audit_service import log_audit_event
+        from services.user_audit_service import record_login_success
 
-        log_audit_event("login_success", user_id=user.id, details={"channel": "api_jwt_2fa"})
+        record_login_success(user, channel="api_jwt_2fa")
     except Exception:
         pass
 

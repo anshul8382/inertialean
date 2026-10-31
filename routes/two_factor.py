@@ -107,6 +107,12 @@ def setup_2fa():
                     session.pop('2fa_user_id', None)
                     session.pop('2fa_setup_required', None)
                     session['2fa_verified'] = True  # Mark 2FA as verified for this session
+                    try:
+                        from services.user_audit_service import record_login_success
+
+                        record_login_success(user, channel="web_session_2fa_setup")
+                    except Exception:
+                        pass
                     flash('2FA setup completed! You are now logged in.', 'success')
                     return redirect(url_for('two_factor.backup_codes'))
                 else:
@@ -199,18 +205,34 @@ def verify_2fa():
                 # Make session durable across the redirect after 2FA.
                 session.permanent = True
                 login_user(user, remember=remember_user)
-                
-                # Update last login
-                from datetime import datetime
-                user.last_login = datetime.utcnow()
-                db.session.commit()
-                
+
+                try:
+                    from services.user_audit_service import record_login_success
+
+                    record_login_success(user, channel="web_session_2fa")
+                except Exception:
+                    try:
+                        db.session.commit()
+                    except Exception:
+                        pass
+
                 flash('Login successful!', 'success')
                 next_page = normalize_internal_next(next_page)
                 if not next_page:
                     next_page = url_for('main.dashboard')
                 return redirect(next_page)
             else:
+                try:
+                    from services.user_audit_service import record_login_failure
+
+                    record_login_failure(
+                        email=getattr(user, "email", None),
+                        user_id=user.id,
+                        channel="web_session_2fa",
+                        reason="invalid_2fa_code",
+                    )
+                except Exception:
+                    pass
                 flash(f'Invalid 2FA code: {result["error"]}', 'error')
                 return render_template('two_factor/verify.html')
                 
