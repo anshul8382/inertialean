@@ -586,3 +586,163 @@ def sync_missing_zoho_invoices(
         create_only=True,
         update_existing=False,
     )
+
+
+def _zoho_contact_email(contact: dict) -> str:
+    email = (
+        contact.get("email")
+        or contact.get("email_id")
+        or ((contact.get("contact_persons") or [{}])[0] or {}).get("email")
+        or ""
+    )
+    return str(email).strip()
+
+
+def build_zoho_client_mapping_report(
+    *,
+    accessible_client_ids: Optional[Set[int]] = None,
+) -> Dict[str, Any]:
+    """
+    Compare Inertia clients ↔ Zoho contacts.
+
+    Returns mapped links, Inertia clients with no Zoho map, Zoho contacts with no
+    Inertia client, and name mismatches on stored links.
+    """
+    if not zoho_configured():
+        return {"ok": False, "error": "Zoho is not configured."}
+    if not client_zoho_contact_column_exists():
+        return {
+            "ok": False,
+            "error": "Run migrations/add_client_zoho_contact_id.py first.",
+        }
+
+    q = Client.query.order_by(Client.name)
+    if accessible_client_ids is not None:
+        q = q.filter(Client.id.in_(accessible_client_ids))
+    clients = q.all()
+
+    contacts, err = list_zoho_contacts(per_page=200, max_pages=15)
+    if err:
+        return {"ok": False, "error": err}
+
+    by_zoho_id: Dict[str, dict] = {}
+    for c in contacts:
+        cid = str(c.get("contact_id") or "").strip()
+        if cid:
+            by_zoho_id[cid] = c
+
+    mapped: List[Dict[str, Any]] = []
+    mismatched: List[Dict[str, Any]] = []
+    unmapped_clients: List[Dict[str, Any]] = []
+    used_zoho_ids: Set[str] = set()
+
+    for cl in clients:
+        zid = get_stored_zoho_contact_id(cl)
+        if not zid:
+            sug_id = None
+            sug_name = None
+            sug_score = 0.0
+            sug_reason = "none"
+            cl_email = (cl.email or "").strip().lower()
+            for zc in contacts:
+                zemail = _zoho_contact_email(zc).lower()
+                zname = (zc.get("contact_name") or "").strip()
+                if cl_email and zemail and cl_email == zemail:
+                    sug_id = str(zc.get("contact_id") or "")
+                    sug_name = zname
+                    sug_score = 1.0
+                    sug_reason = "email"
+                    break
+                score = _score_zoho_contact_name(cl.name or "", zname)
+                if score > sug_score:
+                    sug_score = score
+                    sug_id = str(zc.get("contact_id") or "")
+                    sug_name = zname
+                    sug_reason = "name"
+            if sug_score < 0.72:
+                sug_id = None
+                sug_name = None
+                sug_reason = "none"
+                sug_score = 0.0
+            unmapped_clients.append(
+                {
+                    "client_id": cl.id,
+                    "client_name": cl.name,
+                    "email": cl.email or "—",
+                    "suggested_zoho_id": sug_id,
+                    "suggested_zoho_name": sug_name,
+                    "suggested_score": round(sug_score, 3) if sug_id else None,
+                    "suggested_reason": sug_reason,
+                }
+            )
+            continue
+
+        used_zoho_ids.add(zid)
+        zc = by_zoho_id.get(zid)
+        zname = (zc.get("contact_name") if zc else None) or "—"
+        zemail = _zoho_contact_email(zc) if zc else "—"
+        score = _score_zoho_contact_name(cl.name or "", zname if zname != "—" else "")
+        row = {
+            "client_id": cl.id,
+            "client_name": cl.name,
+            "email": cl.email or "—",
+            "zoho_contact_id": zid,
+            "zoho_name": zname,
+            "zoho_email": zemail or "—",
+            "name_score": round(score, 3) if zc else None,
+            "zoho_found": bool(zc),
+        }
+        mapped.append(row)
+        # Mismatch: linked id not in Zoho, or names diverge badly
+        if not zc or (zc and score < 0.72):
+            mismatched.append(
+                {
+                    **row,
+                    "issue": (
+                        "Zoho contact ID not found in org"
+                        if not zc
+                        else f"Name mismatch ({int(score * 100)}% similar)"
+                    ),
+                }
+            )
+
+    unmapped_zoho: List[Dict[str, Any]] = []
+    for zid, zc in by_zoho_id.items():
+        if zid in used_zoho_ids:
+            continue
+        zname = (zc.get("contact_name") or "").strip() or "—"
+        zemail = _zoho_contact_email(zc)
+        sid, sname, reason, cands = suggest_client_match(
+            zname, zemail or None, accessible_client_ids
+        )
+        unmapped_zoho.append(
+            {
+                "zoho_contact_id": zid,
+                "zoho_name": zname,
+                "zoho_email": zemail or "—",
+                "suggested_client_id": sid,
+                "suggested_client_name": sname,
+                "match_reason": reason,
+                "top_score": (cands[0]["score"] if cands else None),
+            }
+        )
+
+    unmapped_zoho.sort(key=lambda r: (r["zoho_name"] or "").lower())
+    mapped.sort(key=lambda r: (r["client_name"] or "").lower())
+    unmapped_clients.sort(key=lambda r: (r["client_name"] or "").lower())
+    mismatched.sort(key=lambda r: (r["client_name"] or "").lower())
+
+    return {
+        "ok": True,
+        "zoho_contacts_fetched": len(contacts),
+        "mapped": mapped,
+        "mismatched": mismatched,
+        "unmapped_clients": unmapped_clients,
+        "unmapped_zoho": unmapped_zoho,
+        "counts": {
+            "mapped": len(mapped),
+            "mismatched": len(mismatched),
+            "unmapped_clients": len(unmapped_clients),
+            "unmapped_zoho": len(unmapped_zoho),
+        },
+    }

@@ -80,16 +80,172 @@
             <div class="card border-secondary mb-4">
                 <div class="card-header py-2">Mapping</div>
                 <div class="card-body small">
-                    <ul class="mb-0 ps-3">
-                        <li><strong>Durable:</strong> <code>client.zoho_contact_id</code> = Zoho Books contact/customer ID.</li>
-                        <li><strong>Auto:</strong> set on successful match (email → name) or via client page Auto-link / manual save.</li>
-                        <li><strong>Fallback:</strong> email exact, then fuzzy name (≥ 0.72) when no map stored.</li>
-                        <li><strong>Per client:</strong> Client → Billing → Pull all Zoho invoices.</li>
+                    <ul class="mb-3 ps-3">
+                        <li><strong>Durable:</strong> <code>client.zoho_contact_id</code> = Zoho contact/customer ID.</li>
+                        <li><strong>Auto:</strong> set on successful match or via client Billing card.</li>
+                        <li><strong>Fallback:</strong> email exact, then fuzzy name (≥ 0.72).</li>
                     </ul>
+                    <form method="post" action="{{ url_for('invoices.zoho_pull_invoices') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <input type="hidden" name="date_start" value="{{ date_start }}">
+                        <input type="hidden" name="date_end" value="{{ date_end }}">
+                        <button type="submit" name="action" value="mapping_report" class="btn btn-outline-primary btn-sm" {% if not zoho_ok or not mapping_ready %}disabled{% endif %}>
+                            <i class="fas fa-project-diagram"></i> Review client mapping
+                        </button>
+                    </form>
+                    <p class="text-muted mb-0 mt-2">Shows linked maps, name mismatches, Inertia clients without Zoho, and Zoho contacts without Inertia.</p>
                 </div>
             </div>
         </div>
     </div>
+
+    {% if mapping_report and mapping_report.ok %}
+    <div class="card shadow-sm mb-4" id="mapping-report">
+        <div class="card-header py-2 d-flex justify-content-between flex-wrap gap-2">
+            <span>Client ↔ Zoho mapping</span>
+            <span class="small text-muted">Zoho contacts fetched: {{ mapping_report.zoho_contacts_fetched }}</span>
+        </div>
+        <div class="card-body">
+            <div class="row g-2 mb-3 small">
+                <div class="col-auto"><span class="badge bg-success">Linked {{ mapping_report.counts.mapped }}</span></div>
+                <div class="col-auto"><span class="badge bg-warning text-dark">Mismatched {{ mapping_report.counts.mismatched }}</span></div>
+                <div class="col-auto"><span class="badge bg-secondary">Inertia unmapped {{ mapping_report.counts.unmapped_clients }}</span></div>
+                <div class="col-auto"><span class="badge bg-info text-dark">Zoho unmapped {{ mapping_report.counts.unmapped_zoho }}</span></div>
+            </div>
+
+            {% if mapping_report.mismatched %}
+            <h2 class="h6 text-warning">Mismatched / broken links</h2>
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Inertia client</th>
+                            <th>Zoho ID</th>
+                            <th>Zoho name</th>
+                            <th>Issue</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in mapping_report.mismatched %}
+                        <tr>
+                            <td>{{ m.client_name }} <span class="text-muted">#{{ m.client_id }}</span></td>
+                            <td><code>{{ m.zoho_contact_id }}</code></td>
+                            <td>{{ m.zoho_name }}</td>
+                            <td>{{ m.issue }}</td>
+                            <td><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.client_details', client_id=m.client_id) }}#zoho-books">Fix</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            <h2 class="h6">Linked ({{ mapping_report.counts.mapped }})</h2>
+            {% if mapping_report.mapped %}
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Inertia client</th>
+                            <th>Email</th>
+                            <th>Zoho ID</th>
+                            <th>Zoho name</th>
+                            <th>Name match</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in mapping_report.mapped %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('clients.client_details', client_id=m.client_id) }}#zoho-books">{{ m.client_name }}</a>
+                            </td>
+                            <td>{{ m.email }}</td>
+                            <td><code>{{ m.zoho_contact_id }}</code></td>
+                            <td>{{ m.zoho_name }}</td>
+                            <td>{% if m.name_score is not none %}{{ (m.name_score * 100)|round|int }}%{% else %}—{% endif %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="small text-muted mb-4">No clients have <code>zoho_contact_id</code> yet.</p>
+            {% endif %}
+
+            <h2 class="h6">Inertia clients without Zoho map ({{ mapping_report.counts.unmapped_clients }})</h2>
+            {% if mapping_report.unmapped_clients %}
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Inertia client</th>
+                            <th>Email</th>
+                            <th>Suggested Zoho</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in mapping_report.unmapped_clients %}
+                        <tr>
+                            <td>{{ u.client_name }} <span class="text-muted">#{{ u.client_id }}</span></td>
+                            <td>{{ u.email }}</td>
+                            <td>
+                                {% if u.suggested_zoho_id %}
+                                {{ u.suggested_zoho_name }}
+                                <span class="text-muted">({{ (u.suggested_score * 100)|round|int }}% · {{ u.suggested_reason }})</span>
+                                <br><code class="small">{{ u.suggested_zoho_id }}</code>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('clients.client_details', client_id=u.client_id) }}#zoho-books">Link</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="small text-muted mb-4">All accessible clients are linked.</p>
+            {% endif %}
+
+            <h2 class="h6">Zoho contacts without Inertia map ({{ mapping_report.counts.unmapped_zoho }})</h2>
+            {% if mapping_report.unmapped_zoho %}
+            <div class="table-responsive mb-0">
+                <table class="table table-sm table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Zoho contact</th>
+                            <th>Email</th>
+                            <th>Zoho ID</th>
+                            <th>Suggested Inertia client</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for z in mapping_report.unmapped_zoho %}
+                        <tr>
+                            <td>{{ z.zoho_name }}</td>
+                            <td>{{ z.zoho_email }}</td>
+                            <td><code>{{ z.zoho_contact_id }}</code></td>
+                            <td>
+                                {% if z.suggested_client_id %}
+                                <a href="{{ url_for('clients.client_details', client_id=z.suggested_client_id) }}#zoho-books">{{ z.suggested_client_name }}</a>
+                                <span class="text-muted">({{ z.match_reason }}{% if z.top_score %} · {{ (z.top_score * 100)|round|int }}%{% endif %})</span>
+                                {% else %}
+                                <span class="text-muted">No close match</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="small text-muted mb-0">Every fetched Zoho contact is linked to an Inertia client.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 
     {% if result and result.ok %}
     <div class="card shadow-sm mb-4">
@@ -107,7 +263,7 @@
             </ul>
 
             {% if result.unmatched %}
-            <h2 class="h6">Unmatched customers</h2>
+            <h2 class="h6">Unmatched customers (this pull)</h2>
             <div class="table-responsive mb-3">
                 <table class="table table-sm table-striped">
                     <thead>

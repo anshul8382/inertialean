@@ -35,7 +35,48 @@ _STATUS_MAP = {
 }
 
 
+def reload_zoho_config_from_dotenv() -> None:
+    """
+    Re-read ZOHO_* from project .env into Flask config.
+
+    Needed after Connect writes ZOHO_REFRESH_TOKEN: systemd may have started
+    workers with an empty token, and load_dotenv(override=False) will not replace it.
+    """
+    import os
+    from pathlib import Path
+
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    env_path = Path(current_app.root_path) / ".env"
+    if not env_path.is_file():
+        return
+    load_dotenv(env_path, override=True)
+    for key in (
+        "ZOHO_CLIENT_ID",
+        "ZOHO_CLIENT_SECRET",
+        "ZOHO_REFRESH_TOKEN",
+        "ZOHO_ORGANIZATION_ID",
+        "ZOHO_ACCOUNTS_URL",
+        "ZOHO_BOOKS_API_BASE",
+        "ZOHO_API_BASE",
+        "ZOHO_REDIRECT_URI",
+        "ZOHO_OAUTH_SCOPE",
+    ):
+        if key in os.environ:
+            current_app.config[key] = os.environ.get(key) or ""
+    # Prefer ZOHO_API_BASE when set (same as Config)
+    api = (os.environ.get("ZOHO_API_BASE") or os.environ.get("ZOHO_BOOKS_API_BASE") or "").strip()
+    if api:
+        current_app.config["ZOHO_BOOKS_API_BASE"] = api
+    # Clear cached access token so new refresh is used
+    _token_cache["access_token"] = None
+    _token_cache["expires_at"] = 0.0
+
+
 def zoho_configured() -> bool:
+    reload_zoho_config_from_dotenv()
     cfg = current_app.config
     return bool(
         cfg.get("ZOHO_CLIENT_ID")
