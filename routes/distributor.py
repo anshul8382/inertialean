@@ -237,6 +237,8 @@ def payouts():
     from services.distributor_service import (
         distributor_schema_ready,
         effective_distributor_user,
+        fy_payouts_for_distributor,
+        indian_fy_start_year,
         month_payouts_for_distributor,
         set_preview_distributor,
     )
@@ -250,6 +252,10 @@ def payouts():
         return redirect(url_for("distributor.dashboard"))
 
     today = date.today()
+    view = (request.args.get("view") or "fy").strip().lower()
+    if view not in ("fy", "month"):
+        view = "fy"
+    fy_start_year = request.args.get("fy", type=int) or indian_fy_start_year(today)
     year = request.args.get("year", type=int) or today.year
     month = request.args.get("month", type=int) or today.month
 
@@ -260,11 +266,16 @@ def payouts():
             return redirect(url_for("distributor.preview"))
         abort(403)
 
-    data = month_payouts_for_distributor(subject.id, year, month)
+    if view == "month":
+        data = month_payouts_for_distributor(subject.id, year, month)
+    else:
+        data = fy_payouts_for_distributor(subject.id, fy_start_year)
     is_admin_view = bool(current_user.is_admin or current_user.is_manager)
     return render_template(
         "distributor/payouts.html",
         data=data,
+        view=view,
+        fy_start_year=fy_start_year,
         year=year,
         month=month,
         is_admin_view=is_admin_view,
@@ -276,11 +287,15 @@ def payouts():
 @login_required
 @require_manager
 def admin_payouts():
-    """Admin/manager: month batch release of pending distributor payouts."""
+    """Admin/manager: release pending distributor payouts (FY default, or by month)."""
     from services.distributor_service import (
+        admin_fy_payout_overview,
         admin_month_payout_overview,
+        backfill_missing_attributions,
         distributor_schema_ready,
+        indian_fy_start_year,
         payout_release_schema_ready,
+        release_attribution_ids,
         release_month_payouts,
     )
 
@@ -289,6 +304,18 @@ def admin_payouts():
         return redirect(url_for("distributor.preview"))
 
     today = date.today()
+    view = (
+        request.args.get("view")
+        or request.form.get("view")
+        or "fy"
+    ).strip().lower()
+    if view not in ("fy", "month"):
+        view = "fy"
+    fy_start_year = (
+        request.args.get("fy", type=int)
+        or request.form.get("fy", type=int)
+        or indian_fy_start_year(today)
+    )
     year = request.args.get("year", type=int) or request.form.get("year", type=int) or today.year
     month = (
         request.args.get("month", type=int)
@@ -296,34 +323,79 @@ def admin_payouts():
         or today.month
     )
 
+    def _redirect_admin():
+        if view == "month":
+            return redirect(url_for("distributor.admin_payouts", view="month", year=year, month=month))
+        return redirect(url_for("distributor.admin_payouts", view="fy", fy=fy_start_year))
+
     if request.method == "POST":
+        action = (request.form.get("action") or "release_month").strip()
+        if action == "backfill":
+            result = backfill_missing_attributions(commit=True)
+            flash(
+                f"Backfill: created {result.get('created', 0)}, skipped {result.get('skipped', 0)}.",
+                "success" if result.get("ok") else "error",
+            )
+            return _redirect_admin()
+
         if not payout_release_schema_ready():
             flash(
                 "Payout release schema not ready. Run migrations/add_distributor_payout_release.py.",
                 "error",
             )
-            return redirect(url_for("distributor.admin_payouts", year=year, month=month))
+            return _redirect_admin()
+
+        notes = (request.form.get("notes") or "").strip() or None
+        if action == "release_selected":
+            raw_ids = request.form.getlist("attribution_id")
+            ids = []
+            for x in raw_ids:
+                try:
+                    ids.append(int(x))
+                except (TypeError, ValueError):
+                    pass
+            ok, msg, _n = release_attribution_ids(
+                ids, actor_id=current_user.id, notes=notes
+            )
+            flash(msg, "success" if ok else "error")
+            return _redirect_admin()
 
         dist_id = request.form.get("distributor_id", type=int)
-        notes = (request.form.get("notes") or "").strip() or None
         if not dist_id:
             flash("Select a distributor.", "error")
-            return redirect(url_for("distributor.admin_payouts", year=year, month=month))
+            return _redirect_admin()
 
-        ok, msg, _batch = release_month_payouts(
-            dist_id,
-            year,
-            month,
-            actor_id=current_user.id,
-            notes=notes,
-        )
+        # Release all pending for distributor in FY, or one calendar month.
+        if view == "fy":
+            overview = admin_fy_payout_overview(fy_start_year)
+            item = next(
+                (r for r in overview["rows"] if r["distributor"].id == dist_id),
+                None,
+            )
+            ids = (item or {}).get("pending_ids") or []
+            ok, msg, _n = release_attribution_ids(
+                ids, actor_id=current_user.id, notes=notes
+            )
+        else:
+            ok, msg, _batch = release_month_payouts(
+                dist_id,
+                year,
+                month,
+                actor_id=current_user.id,
+                notes=notes,
+            )
         flash(msg, "success" if ok else "error")
-        return redirect(url_for("distributor.admin_payouts", year=year, month=month))
+        return _redirect_admin()
 
-    overview = admin_month_payout_overview(year, month)
+    if view == "month":
+        overview = admin_month_payout_overview(year, month)
+    else:
+        overview = admin_fy_payout_overview(fy_start_year)
     return render_template(
         "distributor/admin_payouts.html",
         overview=overview,
+        view=view,
+        fy_start_year=fy_start_year,
         year=year,
         month=month,
         **_preview_context(),

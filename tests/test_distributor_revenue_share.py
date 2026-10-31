@@ -1,7 +1,19 @@
 """Pure math / semantics for distributor revenue share (no DB)."""
 from decimal import Decimal
 from types import SimpleNamespace
-from datetime import datetime
+from datetime import date, datetime
+
+def test_indian_fy_helpers():
+    from services.distributor_service import (
+        indian_fy_bounds,
+        indian_fy_label,
+        indian_fy_start_year,
+    )
+
+    assert indian_fy_start_year(date(2026, 7, 15)) == 2026
+    assert indian_fy_start_year(date(2026, 3, 31)) == 2025
+    assert indian_fy_bounds(2026) == (date(2026, 4, 1), date(2027, 3, 31))
+    assert indian_fy_label(2026) == "FY 2026-27"
 
 
 def _payout(amount_paid, percent) -> Decimal:

@@ -589,6 +589,16 @@ def pull_zoho_invoices(
                     existing.paid_date = None
                 if zoho_id:
                     _set_note_marker(existing, "zoho_invoice_id", zoho_id)
+                try:
+                    from services.distributor_service import sync_attribution_for_invoice
+
+                    sync_attribution_for_invoice(existing)
+                except Exception as attr_err:
+                    logger.warning(
+                        "Distributor attribution sync failed (Zoho update %s): %s",
+                        inv_no,
+                        attr_err,
+                    )
                 db.session.commit()
                 updated += 1
             except Exception as exc:
@@ -650,6 +660,17 @@ def pull_zoho_invoices(
             _set_note_marker(invoice, "zoho_invoice_id", zoho_id)
         try:
             db.session.add(invoice)
+            db.session.flush()
+            try:
+                from services.distributor_service import sync_attribution_for_invoice
+
+                sync_attribution_for_invoice(invoice)
+            except Exception as attr_err:
+                logger.warning(
+                    "Distributor attribution sync failed (Zoho create %s): %s",
+                    inv_no,
+                    attr_err,
+                )
             db.session.commit()
             created += 1
         except Exception as exc:

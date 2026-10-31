@@ -403,6 +403,115 @@ def sync_attribution_for_invoice(invoice) -> Optional[Any]:
     return row
 
 
+def backfill_missing_attributions(*, commit: bool = True) -> Dict[str, Any]:
+    """
+    Create distributor attributions for paid invoices that have a client distributor
+    but no attribution row yet (e.g. Zoho pull before sync hook existed).
+    """
+    from models import Client, Invoice, DistributorInvoiceAttribution
+
+    if not distributor_schema_ready():
+        return {"ok": False, "created": 0, "skipped": 0, "errors": ["schema not ready"]}
+
+    paid = (
+        Invoice.query.filter(Invoice.status == "paid")
+        .order_by(Invoice.id.asc())
+        .all()
+    )
+    created = 0
+    skipped = 0
+    errors: List[str] = []
+    for inv in paid:
+        try:
+            if DistributorInvoiceAttribution.query.filter_by(invoice_id=inv.id).first():
+                skipped += 1
+                continue
+            client = Client.query.get(inv.client_id)
+            if not client or not getattr(client, "distributor_id", None):
+                skipped += 1
+                continue
+            row = sync_attribution_for_invoice(inv)
+            if row is not None and getattr(row, "status", None) == "active":
+                created += 1
+            else:
+                skipped += 1
+        except Exception as e:
+            errors.append(f"invoice {getattr(inv, 'id', '?')}: {e}")
+            logger.warning("backfill attribution failed invoice=%s: %s", inv.id, e)
+
+    if commit:
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            return {
+                "ok": False,
+                "created": 0,
+                "skipped": skipped,
+                "errors": errors + [str(e)],
+            }
+
+    return {"ok": True, "created": created, "skipped": skipped, "errors": errors}
+
+
+def indian_fy_start_year(as_of: Optional[date] = None) -> int:
+    """Indian FY starts 1 Apr. Returns the calendar year of that April."""
+    d = as_of or date.today()
+    return d.year if d.month >= 4 else d.year - 1
+
+
+def indian_fy_bounds(fy_start_year: int) -> Tuple[date, date]:
+    """Inclusive start/end dates for FY starting April fy_start_year."""
+    y = int(fy_start_year)
+    return date(y, 4, 1), date(y + 1, 3, 31)
+
+
+def indian_fy_label(fy_start_year: int) -> str:
+    y = int(fy_start_year)
+    return f"FY {y}-{str(y + 1)[-2:]}"
+
+
+def _split_payout_rows(rows: List[Any], release_ready: bool) -> Dict[str, List[Any]]:
+    pending_rows: List[Any] = []
+    released_rows: List[Any] = []
+    reversed_rows: List[Any] = []
+    for r in rows:
+        if getattr(r, "status", None) == "reversed":
+            reversed_rows.append(r)
+            continue
+        if release_ready and (getattr(r, "payout_status", None) or "pending") == "released":
+            released_rows.append(r)
+        else:
+            pending_rows.append(r)
+    return {
+        "pending_rows": pending_rows,
+        "released_rows": released_rows,
+        "reversed_rows": reversed_rows,
+    }
+
+
+def _payout_totals(rows: List[Any], pending_rows: List[Any], released_rows: List[Any]) -> Dict[str, Decimal]:
+    active = pending_rows + released_rows
+    return {
+        "total_invoice_amount": sum(
+            (_money(r.invoice_amount_paid) for r in active), Decimal("0.00")
+        ).quantize(Decimal("0.01")),
+        "total_payout": sum(
+            (_money(r.payout_amount) for r in active), Decimal("0.00")
+        ).quantize(Decimal("0.01")),
+        "total_pending": sum(
+            (_money(r.payout_amount) for r in pending_rows), Decimal("0.00")
+        ).quantize(Decimal("0.01")),
+        "total_released": sum(
+            (_money(r.payout_amount) for r in released_rows), Decimal("0.00")
+        ).quantize(Decimal("0.01")),
+        "total_clawback": sum(
+            (_money(getattr(r, "clawback_amount", 0) or 0) for r in rows),
+            Decimal("0.00"),
+        ).quantize(Decimal("0.01")),
+    }
+
+
 def month_payouts_for_distributor(
     distributor_id: int, year: int, month: int
 ) -> Dict[str, Any]:
@@ -410,6 +519,7 @@ def month_payouts_for_distributor(
     from models import DistributorInvoiceAttribution, DistributorPayoutRelease
     from sqlalchemy import extract
 
+    release_ready = payout_release_schema_ready()
     empty = {
         "rows": [],
         "pending_rows": [],
@@ -422,9 +532,11 @@ def month_payouts_for_distributor(
         "total_clawback": Decimal("0.00"),
         "release_batch": None,
         "can_release": False,
-        "release_schema": payout_release_schema_ready(),
+        "release_schema": release_ready,
         "year": year,
         "month": month,
+        "view": "month",
+        "months": [],
     }
     if not distributor_schema_ready():
         return empty
@@ -438,28 +550,8 @@ def month_payouts_for_distributor(
         .order_by(DistributorInvoiceAttribution.paid_date.asc())
         .all()
     )
-    release_ready = payout_release_schema_ready()
-    pending_rows = []
-    released_rows = []
-    reversed_rows = []
-    for r in rows:
-        if r.status == "reversed":
-            reversed_rows.append(r)
-            continue
-        if release_ready and (getattr(r, "payout_status", None) or "pending") == "released":
-            released_rows.append(r)
-        else:
-            pending_rows.append(r)
-
-    active = pending_rows + released_rows
-    total_inv = sum((_money(r.invoice_amount_paid) for r in active), Decimal("0.00"))
-    total_pay = sum((_money(r.payout_amount) for r in active), Decimal("0.00"))
-    total_pending = sum((_money(r.payout_amount) for r in pending_rows), Decimal("0.00"))
-    total_released = sum((_money(r.payout_amount) for r in released_rows), Decimal("0.00"))
-    total_clawback = sum(
-        (_money(getattr(r, "clawback_amount", 0) or 0) for r in rows),
-        Decimal("0.00"),
-    )
+    split = _split_payout_rows(rows, release_ready)
+    totals = _payout_totals(rows, split["pending_rows"], split["released_rows"])
 
     release_batch = None
     if release_ready:
@@ -469,19 +561,105 @@ def month_payouts_for_distributor(
 
     return {
         "rows": rows,
-        "pending_rows": pending_rows,
-        "released_rows": released_rows,
-        "reversed_rows": reversed_rows,
-        "total_invoice_amount": total_inv.quantize(Decimal("0.01")),
-        "total_payout": total_pay.quantize(Decimal("0.01")),
-        "total_pending": total_pending.quantize(Decimal("0.01")),
-        "total_released": total_released.quantize(Decimal("0.01")),
-        "total_clawback": total_clawback.quantize(Decimal("0.01")),
+        **split,
+        **totals,
         "release_batch": release_batch,
-        "can_release": bool(pending_rows) and release_ready,
+        "can_release": bool(split["pending_rows"]) and release_ready,
         "release_schema": release_ready,
         "year": year,
         "month": month,
+        "view": "month",
+        "months": [],
+    }
+
+
+def fy_payouts_for_distributor(
+    distributor_id: int, fy_start_year: Optional[int] = None
+) -> Dict[str, Any]:
+    """All attributions with paid_date in the Indian financial year (Apr–Mar)."""
+    from models import DistributorInvoiceAttribution
+
+    fy_start_year = int(fy_start_year or indian_fy_start_year())
+    start, end = indian_fy_bounds(fy_start_year)
+    release_ready = payout_release_schema_ready()
+    empty = {
+        "rows": [],
+        "pending_rows": [],
+        "released_rows": [],
+        "reversed_rows": [],
+        "total_invoice_amount": Decimal("0.00"),
+        "total_payout": Decimal("0.00"),
+        "total_pending": Decimal("0.00"),
+        "total_released": Decimal("0.00"),
+        "total_clawback": Decimal("0.00"),
+        "release_batch": None,
+        "can_release": False,
+        "release_schema": release_ready,
+        "year": fy_start_year,
+        "month": None,
+        "view": "fy",
+        "fy_start_year": fy_start_year,
+        "fy_label": indian_fy_label(fy_start_year),
+        "fy_start": start,
+        "fy_end": end,
+        "months": [],
+    }
+    if not distributor_schema_ready():
+        return empty
+
+    rows = (
+        DistributorInvoiceAttribution.query.filter(
+            DistributorInvoiceAttribution.distributor_id == distributor_id,
+            DistributorInvoiceAttribution.paid_date.isnot(None),
+            DistributorInvoiceAttribution.paid_date >= start,
+            DistributorInvoiceAttribution.paid_date <= end,
+        )
+        .order_by(DistributorInvoiceAttribution.paid_date.asc())
+        .all()
+    )
+    split = _split_payout_rows(rows, release_ready)
+    totals = _payout_totals(rows, split["pending_rows"], split["released_rows"])
+
+    by_month: Dict[Tuple[int, int], List[Any]] = {}
+    for r in rows:
+        pd = r.paid_date
+        if not pd:
+            continue
+        key = (pd.year, pd.month)
+        by_month.setdefault(key, []).append(r)
+
+    months: List[Dict[str, Any]] = []
+    for (y, m) in sorted(by_month.keys()):
+        mrows = by_month[(y, m)]
+        msplit = _split_payout_rows(mrows, release_ready)
+        mtotals = _payout_totals(mrows, msplit["pending_rows"], msplit["released_rows"])
+        months.append(
+            {
+                "year": y,
+                "month": m,
+                "label": f"{y}-{m:02d}",
+                "rows": mrows,
+                **msplit,
+                **mtotals,
+                "can_release": bool(msplit["pending_rows"]) and release_ready,
+            }
+        )
+
+    return {
+        "rows": rows,
+        **split,
+        **totals,
+        "release_batch": None,
+        "can_release": bool(split["pending_rows"]) and release_ready,
+        "release_schema": release_ready,
+        "year": fy_start_year,
+        "month": None,
+        "view": "fy",
+        "fy_start_year": fy_start_year,
+        "fy_label": indian_fy_label(fy_start_year),
+        "fy_start": start,
+        "fy_end": end,
+        "months": months,
     }
 
 
@@ -572,6 +750,99 @@ def release_month_payouts(
     )
 
 
+def release_attribution_ids(
+    attribution_ids: List[int],
+    *,
+    actor_id: Optional[int] = None,
+    notes: Optional[str] = None,
+) -> Tuple[bool, str, int]:
+    """
+    Mark selected pending attributions as payment released (paid to distributor).
+    Groups into month release batches. Commits.
+    """
+    from models import DistributorInvoiceAttribution, DistributorPayoutRelease
+
+    if not payout_release_schema_ready():
+        return False, "Payout release schema not ready. Run migration.", 0
+
+    ids = sorted({int(x) for x in (attribution_ids or []) if x})
+    if not ids:
+        return False, "No payout lines selected.", 0
+
+    pending = (
+        DistributorInvoiceAttribution.query.filter(
+            DistributorInvoiceAttribution.id.in_(ids),
+            DistributorInvoiceAttribution.status == "active",
+            DistributorInvoiceAttribution.payout_status == "pending",
+        )
+        .order_by(DistributorInvoiceAttribution.paid_date.asc())
+        .all()
+    )
+    if not pending:
+        return False, "No pending payout lines matched the selection.", 0
+
+    now = datetime.utcnow()
+    # Group by distributor + calendar month of paid_date for batch audit rows.
+    groups: Dict[Tuple[int, int, int], List[Any]] = {}
+    for row in pending:
+        pd = row.paid_date or now.date()
+        key = (int(row.distributor_id), int(pd.year), int(pd.month))
+        groups.setdefault(key, []).append(row)
+
+    released_n = 0
+    total_all = Decimal("0.00")
+    note_suffix = (notes or "").strip()
+    for (dist_id, year, month), group in groups.items():
+        total = sum((_money(r.payout_amount) for r in group), Decimal("0.00"))
+        total_all += total
+        for row in group:
+            row.payout_status = "released"
+            row.released_at = now
+            row.released_by_id = actor_id
+            extra = f"\nReleased {year}-{month:02d}"
+            if note_suffix:
+                extra += f" ({note_suffix})"
+            row.notes = (row.notes or "") + extra
+            released_n += 1
+
+        batch = DistributorPayoutRelease.query.filter_by(
+            distributor_id=dist_id, year=year, month=month
+        ).first()
+        if batch:
+            batch.row_count = int(batch.row_count or 0) + len(group)
+            batch.total_payout = _money(batch.total_payout) + total
+            batch.released_at = now
+            batch.released_by_id = actor_id
+            if note_suffix:
+                batch.notes = ((batch.notes or "") + "\n" + note_suffix).strip()
+        else:
+            batch = DistributorPayoutRelease(
+                distributor_id=dist_id,
+                year=year,
+                month=month,
+                row_count=len(group),
+                total_payout=total,
+                released_at=now,
+                released_by_id=actor_id,
+                notes=note_suffix or None,
+                created_at=now,
+            )
+            db.session.add(batch)
+
+    db.session.commit()
+    logger.info(
+        "Released %s selected distributor payouts total=%s by=%s",
+        released_n,
+        total_all,
+        actor_id,
+    )
+    return (
+        True,
+        f"Marked {released_n} payout(s) as paid totaling ₹{total_all:,.2f}.",
+        released_n,
+    )
+
+
 def admin_month_payout_overview(year: int, month: int) -> Dict[str, Any]:
     """All distributors with pending/released totals for a calendar month (admin UI)."""
     release_ready = payout_release_schema_ready()
@@ -581,6 +852,7 @@ def admin_month_payout_overview(year: int, month: int) -> Dict[str, Any]:
         return {
             "year": year,
             "month": month,
+            "view": "month",
             "rows": rows,
             "release_schema": release_ready,
             "grand_pending": Decimal("0.00"),
@@ -612,6 +884,62 @@ def admin_month_payout_overview(year: int, month: int) -> Dict[str, Any]:
     return {
         "year": year,
         "month": month,
+        "view": "month",
+        "rows": rows,
+        "release_schema": release_ready,
+        "grand_pending": grand_pending.quantize(Decimal("0.01")),
+        "grand_released": grand_released.quantize(Decimal("0.01")),
+    }
+
+
+def admin_fy_payout_overview(fy_start_year: Optional[int] = None) -> Dict[str, Any]:
+    """All distributors with pending/released totals for an Indian financial year."""
+    fy_start_year = int(fy_start_year or indian_fy_start_year())
+    start, end = indian_fy_bounds(fy_start_year)
+    release_ready = payout_release_schema_ready()
+    rows: List[Dict[str, Any]] = []
+    if not distributor_schema_ready():
+        return {
+            "fy_start_year": fy_start_year,
+            "fy_label": indian_fy_label(fy_start_year),
+            "fy_start": start,
+            "fy_end": end,
+            "view": "fy",
+            "rows": rows,
+            "release_schema": release_ready,
+            "grand_pending": Decimal("0.00"),
+            "grand_released": Decimal("0.00"),
+        }
+
+    grand_pending = Decimal("0.00")
+    grand_released = Decimal("0.00")
+    for dist in list_distributors():
+        data = fy_payouts_for_distributor(dist.id, fy_start_year)
+        if not data["rows"]:
+            continue
+        grand_pending += _money(data["total_pending"])
+        grand_released += _money(data["total_released"])
+        rows.append(
+            {
+                "distributor": dist,
+                "pending_rows": data["pending_rows"],
+                "released_rows": data["released_rows"],
+                "reversed_rows": data["reversed_rows"],
+                "total_pending": data["total_pending"],
+                "total_released": data["total_released"],
+                "total_clawback": data["total_clawback"],
+                "months": data["months"],
+                "can_release": data["can_release"],
+                "pending_ids": [r.id for r in data["pending_rows"]],
+            }
+        )
+
+    return {
+        "fy_start_year": fy_start_year,
+        "fy_label": indian_fy_label(fy_start_year),
+        "fy_start": start,
+        "fy_end": end,
+        "view": "fy",
         "rows": rows,
         "release_schema": release_ready,
         "grand_pending": grand_pending.quantize(Decimal("0.01")),

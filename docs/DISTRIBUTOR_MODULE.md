@@ -15,7 +15,8 @@ View-only distributor portal, client assignment (max one per client), and revenu
 | Pitch deck | File at `static/distributor/Inertia_Distributor_Pitch_Deck.pptx` (or `DISTRIBUTOR_PITCH_DECK_PATH`); link `/distributor/pitch-deck` — friendly message until file is uploaded |
 | Revenue % | Fixed on the **user** (`distributor_revenue_share_percent`) |
 | Attribution | On invoice **paid**: payout = `% × invoice.total_amount`; `payout_status=pending` until month batch release |
-| Payout release | Admin/manager: **Clients → Release distributor payouts** — batch Pending→Released by distributor + calendar month (paid_date). Distributor notified (`DIST_PAYOUT`) |
+| Payout release | Admin/manager: **Clients → Release distributor payouts** — default **financial year (Apr–Mar)**; mark pending as paid (batch or selected lines). Calendar-month view still available. Distributor notified (`DIST_PAYOUT`) |
+| Attribution sync | On invoice paid (UI / Zoho Books sync / Zoho pull). Historical gaps: **Backfill missing** on release page or `python3 scripts/backfill_distributor_attributions.py` |
 | Refund / clawback | Status leaves paid / cancelled / amount drop: **proportional clawback** of remaining payout (works after release too); full reverse when remaining payout hits 0 |
 | Salary | Distributor payout sheet + included in attendance salary breakdown as “Distributor revenue share” (active pending + released for the month) |
 
