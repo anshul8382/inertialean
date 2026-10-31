@@ -732,6 +732,24 @@ def build_zoho_client_mapping_report(
     unmapped_clients.sort(key=lambda r: (r["client_name"] or "").lower())
     mismatched.sort(key=lambda r: (r["client_name"] or "").lower())
 
+    contact_choices = []
+    for zid, zc in sorted(
+        by_zoho_id.items(),
+        key=lambda kv: ((kv[1].get("contact_name") or "").strip().lower(), kv[0]),
+    ):
+        contact_choices.append(
+            {
+                "zoho_contact_id": zid,
+                "zoho_name": (zc.get("contact_name") or "").strip() or "—",
+                "zoho_email": _zoho_contact_email(zc) or "—",
+            }
+        )
+
+    inertia_choices = [
+        {"client_id": cl.id, "client_name": cl.name or f"#{cl.id}"}
+        for cl in clients
+    ]
+
     return {
         "ok": True,
         "zoho_contacts_fetched": len(contacts),
@@ -739,6 +757,8 @@ def build_zoho_client_mapping_report(
         "mismatched": mismatched,
         "unmapped_clients": unmapped_clients,
         "unmapped_zoho": unmapped_zoho,
+        "contact_choices": contact_choices,
+        "inertia_choices": inertia_choices,
         "counts": {
             "mapped": len(mapped),
             "mismatched": len(mismatched),

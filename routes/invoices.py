@@ -59,6 +59,7 @@ def zoho_pull_invoices():
     from services.zoho_invoice_pull_service import (
         build_zoho_client_mapping_report,
         client_zoho_contact_column_exists,
+        persist_zoho_contact_id,
         pull_zoho_invoices,
         sync_missing_zoho_invoices,
     )
@@ -72,6 +73,13 @@ def zoho_pull_invoices():
     mapping_report = None
     mapping_ready = client_zoho_contact_column_exists()
 
+    def _refresh_mapping_report(allowed_ids):
+        report = build_zoho_client_mapping_report(accessible_client_ids=allowed_ids)
+        if not report.get("ok"):
+            flash(report.get("error") or "Could not build mapping report.", "error")
+            return None
+        return report
+
     if request.method == "POST":
         if not zoho_ok:
             flash("Zoho is not configured. Connect under Settings first.", "warning")
@@ -81,12 +89,8 @@ def zoho_pull_invoices():
         allowed_ids = {c.id for c in accessible}
 
         if action == "mapping_report":
-            mapping_report = build_zoho_client_mapping_report(
-                accessible_client_ids=allowed_ids
-            )
-            if not mapping_report.get("ok"):
-                flash(mapping_report.get("error") or "Could not build mapping report.", "error")
-            else:
+            mapping_report = _refresh_mapping_report(allowed_ids)
+            if mapping_report:
                 c = mapping_report.get("counts") or {}
                 flash(
                     f"Mapping report: {c.get('mapped', 0)} linked, "
@@ -95,6 +99,38 @@ def zoho_pull_invoices():
                     f"{c.get('unmapped_zoho', 0)} Zoho without Inertia.",
                     "info",
                 )
+        elif action in ("link_mapping", "unlink_mapping"):
+            if not mapping_ready:
+                flash("Zoho contact map column is not available.", "warning")
+                return redirect(url_for("invoices.zoho_pull_invoices") + "#mapping-report")
+            try:
+                client_id = int(request.form.get("client_id") or "0")
+            except ValueError:
+                client_id = 0
+            if not client_id or client_id not in allowed_ids:
+                flash("Invalid or inaccessible client.", "error")
+                return redirect(url_for("invoices.zoho_pull_invoices") + "#mapping-report")
+            client = Client.query.get(client_id)
+            if not client:
+                flash("Client not found.", "error")
+                return redirect(url_for("invoices.zoho_pull_invoices") + "#mapping-report")
+
+            if action == "unlink_mapping":
+                client.zoho_contact_id = None
+                db.session.commit()
+                flash(f"Cleared Zoho link for {client.name}.", "success")
+            else:
+                zid = (request.form.get("zoho_contact_id") or "").strip()
+                zname = (request.form.get("zoho_contact_name") or "").strip()
+                if not zid:
+                    flash("Select a Zoho contact to link.", "error")
+                else:
+                    persist_zoho_contact_id(client, zid)
+                    flash(
+                        f"Linked {client.name} → {zname or zid}.",
+                        "success",
+                    )
+            mapping_report = _refresh_mapping_report(allowed_ids)
         else:
             try:
                 start = datetime.strptime(

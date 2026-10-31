@@ -120,20 +120,46 @@
                     <thead>
                         <tr>
                             <th>Inertia client</th>
-                            <th>Zoho ID</th>
-                            <th>Zoho name</th>
+                            <th>Current Zoho</th>
                             <th>Issue</th>
-                            <th></th>
+                            <th>Relink / clear</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for m in mapping_report.mismatched %}
                         <tr>
                             <td>{{ m.client_name }} <span class="text-muted">#{{ m.client_id }}</span></td>
-                            <td><code>{{ m.zoho_contact_id }}</code></td>
-                            <td>{{ m.zoho_name }}</td>
+                            <td>
+                                {{ m.zoho_name }}<br>
+                                <code class="small">{{ m.zoho_contact_id }}</code>
+                            </td>
                             <td>{{ m.issue }}</td>
-                            <td><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('clients.client_details', client_id=m.client_id) }}#zoho-books">Fix</a></td>
+                            <td>
+                                <div class="d-flex flex-wrap gap-1 align-items-center">
+                                    <form method="post" action="{{ url_for('invoices.zoho_pull_invoices') }}#mapping-report" class="d-flex flex-wrap gap-1 align-items-center">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="client_id" value="{{ m.client_id }}">
+                                        <select name="zoho_contact_id" class="form-select form-select-sm" style="min-width: 14rem;" required
+                                                onchange="var o=this.options[this.selectedIndex]; this.form.zoho_contact_name.value=o.getAttribute('data-name')||'';">
+                                            <option value="">Pick Zoho contact…</option>
+                                            {% for c in mapping_report.contact_choices %}
+                                            <option value="{{ c.zoho_contact_id }}" data-name="{{ c.zoho_name|e }}"
+                                                    {% if c.zoho_contact_id == m.zoho_contact_id %}selected{% endif %}>
+                                                {{ c.zoho_name }} — {{ c.zoho_email }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                        <input type="hidden" name="zoho_contact_name" value="{{ m.zoho_name }}">
+                                        <button type="submit" name="action" value="link_mapping" class="btn btn-sm btn-success">Save link</button>
+                                    </form>
+                                    <form method="post" action="{{ url_for('invoices.zoho_pull_invoices') }}#mapping-report" class="d-inline">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <input type="hidden" name="client_id" value="{{ m.client_id }}">
+                                        <button type="submit" name="action" value="unlink_mapping" class="btn btn-sm btn-outline-danger"
+                                                onclick="return confirm('Clear Zoho link for {{ m.client_name|e }}?');">Clear</button>
+                                    </form>
+                                </div>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -152,18 +178,25 @@
                             <th>Zoho ID</th>
                             <th>Zoho name</th>
                             <th>Name match</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for m in mapping_report.mapped %}
                         <tr>
-                            <td>
-                                <a href="{{ url_for('clients.client_details', client_id=m.client_id) }}#zoho-books">{{ m.client_name }}</a>
-                            </td>
+                            <td>{{ m.client_name }}</td>
                             <td>{{ m.email }}</td>
                             <td><code>{{ m.zoho_contact_id }}</code></td>
                             <td>{{ m.zoho_name }}</td>
                             <td>{% if m.name_score is not none %}{{ (m.name_score * 100)|round|int }}%{% else %}—{% endif %}</td>
+                            <td>
+                                <form method="post" action="{{ url_for('invoices.zoho_pull_invoices') }}#mapping-report" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="client_id" value="{{ m.client_id }}">
+                                    <button type="submit" name="action" value="unlink_mapping" class="btn btn-sm btn-outline-danger"
+                                            onclick="return confirm('Clear Zoho link for {{ m.client_name|e }}?');">Unlink</button>
+                                </form>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -181,7 +214,7 @@
                         <tr>
                             <th>Inertia client</th>
                             <th>Email</th>
-                            <th>Suggested Zoho</th>
+                            <th>Zoho contact</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -190,16 +223,29 @@
                         <tr>
                             <td>{{ u.client_name }} <span class="text-muted">#{{ u.client_id }}</span></td>
                             <td>{{ u.email }}</td>
-                            <td>
-                                {% if u.suggested_zoho_id %}
-                                {{ u.suggested_zoho_name }}
-                                <span class="text-muted">({{ (u.suggested_score * 100)|round|int }}% · {{ u.suggested_reason }})</span>
-                                <br><code class="small">{{ u.suggested_zoho_id }}</code>
-                                {% else %}
-                                <span class="text-muted">—</span>
-                                {% endif %}
+                            <td colspan="2">
+                                <form method="post" action="{{ url_for('invoices.zoho_pull_invoices') }}#mapping-report" class="d-flex flex-wrap gap-1 align-items-center">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="client_id" value="{{ u.client_id }}">
+                                    <select name="zoho_contact_id" class="form-select form-select-sm" style="min-width: 16rem;" required
+                                            onchange="var o=this.options[this.selectedIndex]; this.form.zoho_contact_name.value=o.getAttribute('data-name')||'';">
+                                        <option value="">Pick Zoho contact…</option>
+                                        {% for c in mapping_report.contact_choices %}
+                                        <option value="{{ c.zoho_contact_id }}" data-name="{{ c.zoho_name|e }}"
+                                                {% if u.suggested_zoho_id and c.zoho_contact_id == u.suggested_zoho_id %}selected{% endif %}>
+                                            {{ c.zoho_name }} — {{ c.zoho_email }}
+                                            {% if u.suggested_zoho_id and c.zoho_contact_id == u.suggested_zoho_id %}
+                                            (suggested {{ (u.suggested_score * 100)|round|int }}%)
+                                            {% endif %}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <input type="hidden" name="zoho_contact_name" value="{{ u.suggested_zoho_name or '' }}">
+                                    <button type="submit" name="action" value="link_mapping" class="btn btn-sm btn-success">
+                                        Confirm link
+                                    </button>
+                                </form>
                             </td>
-                            <td><a class="btn btn-sm btn-outline-primary" href="{{ url_for('clients.client_details', client_id=u.client_id) }}#zoho-books">Link</a></td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -218,7 +264,7 @@
                             <th>Zoho contact</th>
                             <th>Email</th>
                             <th>Zoho ID</th>
-                            <th>Suggested Inertia client</th>
+                            <th>Link to Inertia client</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -228,12 +274,26 @@
                             <td>{{ z.zoho_email }}</td>
                             <td><code>{{ z.zoho_contact_id }}</code></td>
                             <td>
-                                {% if z.suggested_client_id %}
-                                <a href="{{ url_for('clients.client_details', client_id=z.suggested_client_id) }}#zoho-books">{{ z.suggested_client_name }}</a>
-                                <span class="text-muted">({{ z.match_reason }}{% if z.top_score %} · {{ (z.top_score * 100)|round|int }}%{% endif %})</span>
-                                {% else %}
-                                <span class="text-muted">No close match</span>
-                                {% endif %}
+                                <form method="post" action="{{ url_for('invoices.zoho_pull_invoices') }}#mapping-report" class="d-flex flex-wrap gap-1 align-items-center">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <input type="hidden" name="zoho_contact_id" value="{{ z.zoho_contact_id }}">
+                                    <input type="hidden" name="zoho_contact_name" value="{{ z.zoho_name }}">
+                                    <select name="client_id" class="form-select form-select-sm" style="min-width: 14rem;" required>
+                                        <option value="">Pick Inertia client…</option>
+                                        {% for c in mapping_report.inertia_choices %}
+                                        <option value="{{ c.client_id }}"
+                                                {% if z.suggested_client_id and c.client_id == z.suggested_client_id %}selected{% endif %}>
+                                            {{ c.client_name }}
+                                            {% if z.suggested_client_id and c.client_id == z.suggested_client_id %}
+                                            (suggested)
+                                            {% endif %}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" name="action" value="link_mapping" class="btn btn-sm btn-success">
+                                        Confirm link
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                         {% endfor %}
