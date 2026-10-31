@@ -49,7 +49,9 @@ def _assignees():
     return User.query.filter_by(is_active=True).order_by(User.username).all()
 
 
-@portfolio_discussion_bp.route("/")
+# Use "" (no trailing slash) as canonical — a "/" rule causes Werkzeug 308
+# redirects that clear the session cookie and loop behind Tailscale HTTPS.
+@portfolio_discussion_bp.route("", strict_slashes=False)
 @login_required
 @handle_errors
 def queue():
