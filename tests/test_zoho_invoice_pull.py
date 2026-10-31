@@ -60,6 +60,52 @@ def test_score_zoho_contact_name_prefers_close_match():
 
 
 @patch("services.zoho_invoice_pull_service.zoho_configured", return_value=True)
+@patch("services.zoho_invoice_pull_service.get_household_zoho_mapping")
+@patch("services.zoho_invoice_pull_service.get_stored_zoho_contact_id", return_value=None)
+def test_resolve_uses_household_peer_zoho_contact(mock_stored, mock_hh, _cfg):
+    from services.zoho_invoice_pull_service import resolve_zoho_contact_for_client
+
+    peer = SimpleNamespace(id=20, name="Ajith Menon", email="ajith@x.com", zoho_contact_id="Z-99")
+    mock_hh.return_value = {
+        "contact_id": "Z-99",
+        "owner": peer,
+        "owner_client_id": 20,
+        "owner_name": "Ajith Menon",
+        "reason": "household_peer",
+        "household_name": "Menon Family",
+    }
+    anjali = SimpleNamespace(id=21, name="Anjali Menon", email="anjali@x.com", zoho_contact_id=None)
+    out = resolve_zoho_contact_for_client(anjali)
+    assert out["ok"] is True
+    assert out["contact_id"] == "Z-99"
+    assert out["match_reason"] == "household_peer"
+    assert out["mapped_client_id"] == 20
+
+
+@patch("services.zoho_invoice_pull_service.list_household_peer_clients", return_value=[])
+@patch("services.zoho_invoice_pull_service.pull_zoho_invoices", return_value={"ok": True, "created": 1})
+@patch("services.zoho_invoice_pull_service.resolve_zoho_contact_for_client")
+def test_pull_for_client_forces_mapped_household_owner(mock_resolve, mock_pull, _peers):
+    from services.zoho_invoice_pull_service import pull_zoho_invoices_for_client
+
+    mock_resolve.return_value = {
+        "ok": True,
+        "contact_id": "Z-99",
+        "match_reason": "household_peer",
+        "mapped_client_id": 20,
+        "mapped_client_name": "Ajith Menon",
+    }
+    anjali = SimpleNamespace(id=21, name="Anjali Menon")
+    out = pull_zoho_invoices_for_client(anjali, user_id=1)
+    assert out["ok"] is True
+    kwargs = mock_pull.call_args.kwargs
+    assert kwargs["force_client_id"] == 20
+    assert kwargs["zoho_customer_id"] == "Z-99"
+    assert 21 in kwargs["accessible_client_ids"]
+    assert 20 in kwargs["accessible_client_ids"]
+
+
+@patch("services.zoho_invoice_pull_service.zoho_configured", return_value=True)
 @patch("services.zoho_invoice_pull_service.find_zoho_contact_by_email", return_value=(None, None))
 @patch("services.zoho_invoice_pull_service.list_zoho_contacts")
 def test_suggest_zoho_contacts_ranks_closest(mock_list, _email, _cfg):

@@ -108,6 +108,7 @@
         <div class="card-body">
             <div class="row g-2 mb-3 small">
                 <div class="col-auto"><span class="badge bg-success">Linked {{ mapping_report.counts.mapped }}</span></div>
+                <div class="col-auto"><span class="badge bg-primary">Via household {{ mapping_report.counts.household_linked or 0 }}</span></div>
                 <div class="col-auto"><span class="badge bg-warning text-dark">Mismatched {{ mapping_report.counts.mismatched }}</span></div>
                 <div class="col-auto"><span class="badge bg-secondary">Inertia unmapped {{ mapping_report.counts.unmapped_clients }}</span></div>
                 <div class="col-auto"><span class="badge bg-info text-dark">Zoho unmapped {{ mapping_report.counts.unmapped_zoho }}</span></div>
@@ -160,6 +161,33 @@
                                     </form>
                                 </div>
                             </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+
+            {% if mapping_report.household_linked %}
+            <h2 class="h6">Linked via household ({{ mapping_report.counts.household_linked }})</h2>
+            <p class="small text-muted">Same Zoho billing contact as another family member — no separate map needed.</p>
+            <div class="table-responsive mb-4">
+                <table class="table table-sm table-striped align-middle">
+                    <thead>
+                        <tr>
+                            <th>Inertia client</th>
+                            <th>Household</th>
+                            <th>Via member</th>
+                            <th>Zoho contact</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for m in mapping_report.household_linked %}
+                        <tr>
+                            <td>{{ m.client_name }}</td>
+                            <td>{{ m.household_name }}</td>
+                            <td>{{ m.via_client_name }}</td>
+                            <td>{{ m.zoho_name }} <code class="small">{{ m.zoho_contact_id }}</code></td>
                         </tr>
                         {% endfor %}
                     </tbody>

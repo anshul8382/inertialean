@@ -2,11 +2,43 @@
 
 {% block title %}Billing Manager Plan{% endblock %}
 
+{% macro client_cell(r) -%}
+  {% if r.client_id %}
+  <a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_name }}</a>
+  {% else %}
+  {{ r.client_name }}
+  {% endif %}
+  {% if r.household_name %}
+  <span class="badge bg-light text-dark border ms-1" title="Household">{{ r.household_name }}</span>
+  {% endif %}
+  {% if r.household_covered_by_name %}
+  <div class="small text-muted">via {{ r.household_covered_by_name }}</div>
+  {% endif %}
+{%- endmacro %}
+
+{% macro invoice_links(r) -%}
+  {% if r.client_id %}
+  <div class="d-flex flex-wrap gap-1">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('invoices.list_invoices', client_id=r.client_id) }}">Invoices</a>
+    <a class="btn btn-sm btn-outline-primary" href="{{ url_for('invoices.zoho_pull_invoices') }}">Zoho pull</a>
+  </div>
+  {% endif %}
+{%- endmacro %}
+
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <h1 class="h3 mb-0"><i class="fas fa-chess-king"></i> Billing Manager Plan</h1>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 flex-wrap mobile-action-stack">
+            {% if plan and plan.summary.missing_details_count %}
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#missingBillingModal">
+                <i class="fas fa-exclamation-triangle"></i>
+                Missing details ({{ plan.summary.missing_details_count }})
+            </button>
+            {% endif %}
+            <a href="{{ url_for('invoices.zoho_pull_invoices') }}" class="btn btn-outline-primary">
+                <i class="fas fa-cloud-download-alt"></i> Zoho pull
+            </a>
             <a href="{{ url_for('invoices.list_invoices') }}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left"></i> Invoices
             </a>
@@ -25,8 +57,8 @@
                     <input type="date" class="form-control" id="as_of_date" name="as_of_date" value="{{ params.as_of_date }}">
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label" for="weekly_capacity">Weekly capacity (1-5)</label>
-                    <input type="number" min="1" max="5" class="form-control" id="weekly_capacity" name="weekly_capacity" value="{{ params.weekly_capacity }}">
+                    <label class="form-label" for="weekly_capacity">Weekly capacity (1-50)</label>
+                    <input type="number" min="1" max="50" class="form-control" id="weekly_capacity" name="weekly_capacity" value="{{ params.weekly_capacity }}">
                 </div>
                 <div class="col-md-3">
                     <label class="form-label" for="value_weight">Value weight</label>
@@ -37,45 +69,417 @@
                     <input type="number" min="0" step="0.05" class="form-control" id="overdue_weight" name="overdue_weight" value="{{ params.overdue_weight }}">
                 </div>
                 <div class="col-12">
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-play"></i> Build Plan
-                    </button>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" value="1" id="refresh_zoho" name="refresh_zoho"
+                               {% if params.refresh_zoho %}checked{% endif %}>
+                        <label class="form-check-label" for="refresh_zoho">
+                            Refresh Zoho invoices first (sync missing for last 24 months, then build)
+                        </label>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mobile-action-stack">
+                        <button type="submit" name="action" value="build" class="btn btn-primary">
+                            <i class="fas fa-play"></i> Build Plan
+                        </button>
+                        <button type="submit" name="action" value="refresh_and_build" class="btn btn-success">
+                            <i class="fas fa-sync-alt"></i> Refresh Zoho &amp; Build
+                        </button>
+                    </div>
                 </div>
             </form>
+            {% if zoho_refresh and zoho_refresh.get('ok') %}
+            <div class="alert alert-info mt-3 mb-0 small">
+                Zoho sync: fetched {{ zoho_refresh.get('fetched', 0) }},
+                created {{ zoho_refresh.get('created', 0) }},
+                unmatched {{ (zoho_refresh.get('unmatched') or [])|length }}.
+                {% if zoho_refresh.get('unmatched') %}
+                <a href="{{ url_for('invoices.zoho_pull_invoices') }}">Review unmatched on Zoho pull</a>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
     </div>
 
+    {% set ops = plan.ops_reports if plan and plan.ops_reports else ops_reports %}
+    {% if ops %}
+    <div class="card shadow mb-4" id="ops-reports">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <strong>Ops reports</strong>
+            <span class="small text-muted">Reviews · billing slip · missing agreements</span>
+        </div>
+        <div class="card-body">
+            <div class="row g-2 mb-3 small">
+                <div class="col-auto"><span class="badge bg-success">Reviews on track {{ ops.summary.reviews_on_track }}</span></div>
+                <div class="col-auto"><span class="badge bg-warning text-dark">Billing slipping {{ ops.summary.billing_slipping }}</span></div>
+                <div class="col-auto"><span class="badge bg-danger">No agreement {{ ops.summary.missing_agreements }}</span></div>
+            </div>
+            <ul class="nav nav-tabs flex-nowrap overflow-auto" id="opsReportTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#ops-reviews" type="button" role="tab">
+                        Reviews on track (&lt; {{ ops.reviews_on_track.max_months }} mo)
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ops-slipping" type="button" role="tab">
+                        Billing slipping
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ops-no-ag" type="button" role="tab">
+                        No agreement
+                    </button>
+                </li>
+            </ul>
+            <div class="tab-content border border-top-0 p-3">
+                <div class="tab-pane fade show active" id="ops-reviews" role="tabpanel">
+                    <p class="small text-muted">{{ ops.reviews_on_track.source_note }}</p>
+                    {% if ops.reviews_on_track.rows %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Last review</th>
+                                    <th>Months since</th>
+                                    <th>Days since</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in ops.reviews_on_track.rows %}
+                                <tr>
+                                    <td>
+                                        {% if r.client_id %}
+                                        <a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_name }}</a>
+                                        {% else %}{{ r.client_name }}{% endif %}
+                                    </td>
+                                    <td>{{ r.last_review_date }}</td>
+                                    <td>{{ r.months_since_review }}</td>
+                                    <td>{{ r.days_since_review }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted">No clients with a closed review in the last {{ ops.reviews_on_track.max_months }} months.</div>
+                    {% endif %}
+                </div>
+                <div class="tab-pane fade" id="ops-slipping" role="tabpanel">
+                    <p class="small text-muted">
+                        {{ ops.billing_slipping.source_note }}
+                        {% if not plan %}<strong>Build Plan</strong> to populate this list from live billing schedules.{% endif %}
+                    </p>
+                    {% if ops.billing_slipping.rows %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Last billed</th>
+                                    <th>Days since last billing</th>
+                                    <th>Days overdue</th>
+                                    <th>Due since</th>
+                                    <th>Est.</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in ops.billing_slipping.rows %}
+                                <tr>
+                                    <td>
+                                        {% if r.client_id %}
+                                        <a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_name }}</a>
+                                        {% else %}{{ r.client_name }}{% endif %}
+                                        {% if r.household_name %}<span class="badge bg-light text-dark border ms-1">{{ r.household_name }}</span>{% endif %}
+                                    </td>
+                                    <td>{{ r.last_billed_date or "—" }}</td>
+                                    <td>{{ r.days_since_last_billing if r.days_since_last_billing is not none else "—" }}</td>
+                                    <td>{{ r.days_overdue }}</td>
+                                    <td>{{ r.next_billing_date }}</td>
+                                    <td>₹{{ "{:,.0f}".format((r.estimated_invoice_value or 0)|float) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted">{% if plan %}No lagging billable clients.{% else %}Build Plan to see billing slippage.{% endif %}</div>
+                    {% endif %}
+                </div>
+                <div class="tab-pane fade" id="ops-no-ag" role="tabpanel">
+                    <p class="small text-muted">{{ ops.missing_agreements.source_note }}</p>
+                    {% if ops.missing_agreements.rows %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in ops.missing_agreements.rows %}
+                                <tr>
+                                    <td>
+                                        {% if r.client_id %}
+                                        <a href="{{ url_for('clients.client_details', client_id=r.client_id) }}">{{ r.client_name }}</a>
+                                        {% else %}{{ r.client_name }}{% endif %}
+                                    </td>
+                                    <td>{{ r.notes }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted">No accessible clients missing a signed agreement.</div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {% if plan %}
     <div class="row g-3 mb-4">
-        <div class="col-lg-3 col-md-6">
+        <div class="col-lg-2 col-md-4 col-6">
             <div class="card border-left-primary shadow h-100 py-2">
                 <div class="card-body">
-                    <div class="text-xs text-uppercase text-primary fw-bold">Due billings</div>
+                    <div class="text-xs text-uppercase text-primary fw-bold">Due (plan queue)</div>
                     <div class="h5 mb-0">{{ plan.summary.due_billings }}</div>
                 </div>
             </div>
         </div>
-        <div class="col-lg-3 col-md-6">
+        <div class="col-lg-2 col-md-4 col-6">
             <div class="card border-left-success shadow h-100 py-2">
                 <div class="card-body">
-                    <div class="text-xs text-uppercase text-success fw-bold">Total due value</div>
-                    <div class="h5 mb-0">₹{{ "{:,.0f}".format(plan.summary.total_due_estimated_value|float) }}</div>
+                    <div class="text-xs text-uppercase text-success fw-bold">Caught up</div>
+                    <div class="h5 mb-0">{{ plan.summary.caught_up_count }}</div>
                 </div>
             </div>
         </div>
-        <div class="col-lg-3 col-md-6">
+        <div class="col-lg-2 col-md-4 col-6">
             <div class="card border-left-warning shadow h-100 py-2">
                 <div class="card-body">
-                    <div class="text-xs text-uppercase text-warning fw-bold">Weeks to catch up</div>
-                    <div class="h5 mb-0">{{ plan.summary.weeks_to_catch_up }}</div>
+                    <div class="text-xs text-uppercase text-warning fw-bold">Lagging</div>
+                    <div class="h5 mb-0">{{ plan.summary.lagging_count }}</div>
                 </div>
             </div>
         </div>
-        <div class="col-lg-3 col-md-6">
+        <div class="col-lg-2 col-md-4 col-6">
+            <div class="card shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs text-uppercase text-muted fw-bold">Already covered</div>
+                    <div class="h5 mb-0">{{ plan.summary.already_covered_count }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-6">
             <div class="card border-left-danger shadow h-100 py-2">
                 <div class="card-body">
-                    <div class="text-xs text-uppercase text-danger fw-bold">Catch-up by week ending</div>
-                    <div class="h6 mb-0">{{ plan.summary.catch_up_by_week_end or "N/A" }}</div>
+                    <div class="text-xs text-uppercase text-danger fw-bold">Missing details</div>
+                    <div class="h5 mb-0">
+                        {% if plan.summary.missing_details_count %}
+                        <button type="button" class="btn btn-link text-danger p-0 text-decoration-none h5 mb-0"
+                                data-bs-toggle="modal" data-bs-target="#missingBillingModal"
+                                aria-label="Open missing billing details">
+                            {{ plan.summary.missing_details_count }}
+                        </button>
+                        {% else %}
+                        0
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-2 col-md-4 col-6">
+            <div class="card shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="text-xs text-uppercase text-muted fw-bold">Outstanding (queue)</div>
+                    <div class="h5 mb-0">₹{{ "{:,.0f}".format((plan.summary.total_outstanding_unpaid or 0)|float) }}</div>
+                    <div class="small text-muted">Weeks {{ plan.summary.weeks_to_catch_up }} · by {{ plan.summary.catch_up_by_week_end or "N/A" }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <strong>Billing status report</strong>
+            <span class="small text-muted">Caught up · lagging · already invoiced · missing setup</span>
+        </div>
+        <div class="card-body">
+            <ul class="nav nav-tabs flex-nowrap overflow-auto" id="billingStatusTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="tab-lagging" data-bs-toggle="tab" data-bs-target="#pane-lagging" type="button" role="tab">
+                        Lagging ({{ plan.summary.lagging_count }})
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-caught-up" data-bs-toggle="tab" data-bs-target="#pane-caught-up" type="button" role="tab">
+                        Caught up ({{ plan.summary.caught_up_count }})
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-covered" data-bs-toggle="tab" data-bs-target="#pane-covered" type="button" role="tab">
+                        Already covered ({{ plan.summary.already_covered_count }})
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="tab-missing" data-bs-toggle="tab" data-bs-target="#pane-missing" type="button" role="tab">
+                        Missing details ({{ plan.summary.missing_details_count }})
+                    </button>
+                </li>
+            </ul>
+            <div class="tab-content border border-top-0 p-3">
+                <div class="tab-pane fade show active" id="pane-lagging" role="tabpanel">
+                    {% set rows = plan.status_report.lagging %}
+                    {% if rows %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Last billed</th>
+                                    <th>Last Zoho</th>
+                                    <th>Due since</th>
+                                    <th>Days</th>
+                                    <th>Est.</th>
+                                    <th>Outstanding</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in rows %}
+                                <tr>
+                                    <td>
+                                        {{ client_cell(r) }}
+                                        {% if r.zoho_mapped %}<span class="badge bg-info text-dark ms-1">Zoho map</span>{% endif %}
+                                    </td>
+                                    <td>{{ r.last_billed_date or "—" }}</td>
+                                    <td>{{ r.last_zoho_invoice_date or "—" }}</td>
+                                    <td>{{ r.next_billing_date }}</td>
+                                    <td>{{ r.days_overdue }}</td>
+                                    <td>₹{{ "{:,.0f}".format(r.estimated_invoice_value|float) }}</td>
+                                    <td>₹{{ "{:,.0f}".format((r.outstanding_unpaid or 0)|float) }}</td>
+                                    <td>{{ invoice_links(r) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted">No lagging clients — all scanned billable agreements are current or already covered.</div>
+                    {% endif %}
+                </div>
+                <div class="tab-pane fade" id="pane-caught-up" role="tabpanel">
+                    {% set rows = plan.status_report.caught_up %}
+                    {% if rows %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Last billed</th>
+                                    <th>Last Zoho</th>
+                                    <th>Next billing</th>
+                                    <th>Frequency</th>
+                                    <th>Est.</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in rows %}
+                                <tr>
+                                    <td>{{ client_cell(r) }}</td>
+                                    <td>{{ r.last_billed_date or "—" }}</td>
+                                    <td>{{ r.last_zoho_invoice_date or "—" }}</td>
+                                    <td>{{ r.next_billing_date }}</td>
+                                    <td>{{ r.billing_frequency }}</td>
+                                    <td>₹{{ "{:,.0f}".format(r.estimated_invoice_value|float) }}</td>
+                                    <td>{{ invoice_links(r) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted">No caught-up clients in this scan.</div>
+                    {% endif %}
+                </div>
+                <div class="tab-pane fade" id="pane-covered" role="tabpanel">
+                    {% set rows = plan.status_report.already_covered %}
+                    {% if rows %}
+                    <p class="small text-muted">Due by schedule but already have a Zoho/Inertia invoice (or open draft/sent) for this cycle — excluded from the generate queue.</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Last billed</th>
+                                    <th>Last Zoho</th>
+                                    <th>Due since</th>
+                                    <th>Why skipped</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in rows %}
+                                <tr>
+                                    <td>{{ client_cell(r) }}</td>
+                                    <td>{{ r.last_billed_date or "—" }}</td>
+                                    <td>{{ r.last_zoho_invoice_date or "—" }}</td>
+                                    <td>{{ r.next_billing_date }}</td>
+                                    <td>
+                                        {% if r.period_covered %}<span class="badge bg-success">period invoiced</span>{% endif %}
+                                        {% if r.has_open_cycle_invoice %}<span class="badge bg-warning text-dark">open invoice</span>{% endif %}
+                                    </td>
+                                    <td>{{ invoice_links(r) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted">No already-covered clients.</div>
+                    {% endif %}
+                </div>
+                <div class="tab-pane fade" id="pane-missing" role="tabpanel">
+                    {% set rows = plan.status_report.missing_details %}
+                    {% if rows %}
+                    <p class="small text-muted mb-2">
+                        These clients cannot be planned until billing setup is fixed.
+                        <button type="button" class="btn btn-sm btn-outline-danger ms-1" data-bs-toggle="modal" data-bs-target="#missingBillingModal">
+                            Open popup
+                        </button>
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Agreement</th>
+                                    <th>Issues</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in rows %}
+                                <tr>
+                                    <td>{{ client_cell(r) }}</td>
+                                    <td>{{ r.agreement_id }}</td>
+                                    <td>
+                                        {% for msg in r.hard_flag_messages %}
+                                        <div class="small">{{ msg }}</div>
+                                        {% endfor %}
+                                    </td>
+                                    <td>{{ invoice_links(r) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted">No clients missing hard billing details.</div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -90,33 +494,40 @@
                     <thead class="table-light">
                         <tr>
                             <th>Client</th>
-                            <th>Agreement</th>
                             <th>Last billed</th>
+                            <th>Last Zoho</th>
                             <th>Due since</th>
-                            <th>Days overdue</th>
-                            <th>Estimated value</th>
+                            <th>Days</th>
+                            <th>Est.</th>
+                            <th>Outstanding</th>
                             <th>Reason</th>
                             <th>Score</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for r in plan.weekly_plan %}
                         <tr>
-                            <td>{{ r.client_name }}</td>
-                            <td>{{ r.agreement_id }}</td>
+                            <td>
+                                {{ client_cell(r) }}
+                                {% if r.zoho_mapped %}<span class="badge bg-info text-dark ms-1">Zoho</span>{% endif %}
+                            </td>
                             <td>{{ r.last_billed_date or "—" }}</td>
+                            <td>{{ r.last_zoho_invoice_date or "—" }}</td>
                             <td>{{ r.next_billing_date }}</td>
                             <td>{{ r.days_overdue }}</td>
                             <td>₹{{ "{:,.0f}".format(r.estimated_invoice_value|float) }}</td>
+                            <td>₹{{ "{:,.0f}".format((r.outstanding_unpaid or 0)|float) }}</td>
                             <td><span class="badge bg-light text-dark border">{{ r.selection_reason }}</span></td>
                             <td>{{ "{:.3f}".format(r.priority_score|float) }}</td>
+                            <td>{{ invoice_links(r) }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
             {% else %}
-            <div class="text-muted">No due opportunities found.</div>
+            <div class="text-muted">No due opportunities found (or all due clients are already covered / blocked).</div>
             {% endif %}
         </div>
     </div>
@@ -145,7 +556,13 @@
                             <td>₹{{ "{:,.0f}".format(wk.planned_estimated_value|float) }}</td>
                             <td>
                                 {% for item in wk.planned_clients %}
+                                    {% if item.client_id %}
+                                    <a class="badge bg-light text-dark border mb-1 text-decoration-none" href="{{ url_for('clients.client_details', client_id=item.client_id) }}">
+                                        {{ item.client_name }} (₹{{ "{:,.0f}".format(item.estimated_invoice_value|float) }})
+                                    </a>
+                                    {% else %}
                                     <span class="badge bg-light text-dark border mb-1">{{ item.client_name }} (₹{{ "{:,.0f}".format(item.estimated_invoice_value|float) }})</span>
+                                    {% endif %}
                                 {% endfor %}
                             </td>
                         </tr>
@@ -159,10 +576,10 @@
         </div>
     </div>
 
+    {% if plan.missing_inputs %}
     <div class="card shadow mb-4">
-        <div class="card-header py-2"><strong>Missing Inputs / Flags</strong></div>
+        <div class="card-header py-2"><strong>All flags (soft + hard)</strong></div>
         <div class="card-body">
-            {% if plan.missing_inputs %}
             <div class="table-responsive">
                 <table class="table table-sm table-bordered align-middle mb-0">
                     <thead class="table-light">
@@ -175,7 +592,7 @@
                     <tbody>
                         {% for rec in plan.missing_inputs %}
                         <tr>
-                            <td>{{ rec.client_name }}</td>
+                            <td>{{ client_cell(rec) }}</td>
                             <td>{{ rec.agreement_id }}</td>
                             <td>
                                 {% for f in rec.flags %}
@@ -192,11 +609,85 @@
                     </tbody>
                 </table>
             </div>
-            {% else %}
-            <div class="text-muted">No flagged gaps.</div>
-            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="modal fade" id="missingBillingModal" tabindex="-1" aria-labelledby="missingBillingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="missingBillingModalLabel">
+                        Clients missing billing details
+                        <span class="badge bg-danger ms-1">{{ plan.summary.missing_details_count }}</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    {% if plan.missing_details %}
+                    <p class="small text-muted">
+                        These agreements are excluded from the weekly plan until the hard issues below are fixed
+                        (schedule, rates, client link, or billable portfolio).
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Client</th>
+                                    <th>Agreement</th>
+                                    <th>Last billed</th>
+                                    <th>Last Zoho</th>
+                                    <th>Blocking issues</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in plan.missing_details %}
+                                <tr>
+                                    <td>{{ client_cell(r) }}</td>
+                                    <td>{{ r.agreement_id }}</td>
+                                    <td>{{ r.last_billed_date or "—" }}</td>
+                                    <td>{{ r.last_zoho_invoice_date or "—" }}</td>
+                                    <td>
+                                        {% for code in r.hard_flag_codes %}
+                                        <span class="badge bg-danger mb-1">{{ code }}</span>
+                                        {% endfor %}
+                                        {% for msg in r.hard_flag_messages %}
+                                        <div class="small">{{ msg }}</div>
+                                        {% endfor %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-muted">No clients are missing hard billing details.</div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
         </div>
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if plan and plan.summary.missing_details_count %}
+<script>
+(function () {
+  var el = document.getElementById('missingBillingModal');
+  if (!el || typeof bootstrap === 'undefined') return;
+  var key = 'billingPlanMissingShown:{{ plan.as_of_date }}:{{ plan.summary.missing_details_count }}';
+  try {
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+  } catch (e) { /* ignore */ }
+  var modal = bootstrap.Modal.getOrCreateInstance(el);
+  modal.show();
+})();
+</script>
+{% endif %}
 {% endblock %}

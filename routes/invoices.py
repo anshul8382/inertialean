@@ -59,6 +59,7 @@ def zoho_pull_invoices():
     from services.zoho_invoice_pull_service import (
         build_zoho_client_mapping_report,
         client_zoho_contact_column_exists,
+        clients_share_household,
         persist_zoho_contact_id,
         pull_zoho_invoices,
         sync_missing_zoho_invoices,
@@ -94,6 +95,7 @@ def zoho_pull_invoices():
                 c = mapping_report.get("counts") or {}
                 flash(
                     f"Mapping report: {c.get('mapped', 0)} linked, "
+                    f"{c.get('household_linked', 0)} via household, "
                     f"{c.get('mismatched', 0)} mismatched, "
                     f"{c.get('unmapped_clients', 0)} Inertia without Zoho, "
                     f"{c.get('unmapped_zoho', 0)} Zoho without Inertia.",
@@ -105,29 +107,38 @@ def zoho_pull_invoices():
                 return redirect(url_for("invoices.zoho_pull_invoices") + "#mapping-report")
 
             linked = 0
+            household_ok = 0
             skipped = 0
             used_clients: set = set()
             used_zoho: set = set()
 
             def _link_one(client_id: int, zid: str) -> bool:
-                nonlocal linked, skipped
+                nonlocal linked, skipped, household_ok
                 zid = (zid or "").strip()
                 if not client_id or client_id not in allowed_ids or not zid:
                     skipped += 1
                     return False
-                if client_id in used_clients or zid in used_zoho:
+                if client_id in used_clients:
                     skipped += 1
                     return False
                 client = Client.query.get(client_id)
                 if not client:
                     skipped += 1
                     return False
-                # Avoid assigning same Zoho id to two clients
+                # Same Zoho id on another client: OK only if household peer
+                # (family shares one Zoho billing contact — keep single stored owner).
                 other = Client.query.filter(
                     Client.zoho_contact_id == zid,
                     Client.id != client_id,
                 ).first()
                 if other:
+                    if clients_share_household(client_id, other.id):
+                        used_clients.add(client_id)
+                        household_ok += 1
+                        return True
+                    skipped += 1
+                    return False
+                if zid in used_zoho:
                     skipped += 1
                     return False
                 persist_zoho_contact_id(client, zid)
@@ -156,9 +167,15 @@ def zoho_pull_invoices():
                     continue
                 _link_one(cid, zid)
 
-            if linked:
+            if linked or household_ok:
+                parts = []
+                if linked:
+                    parts.append(f"linked {linked}")
+                if household_ok:
+                    parts.append(f"{household_ok} already covered via household")
                 flash(
-                    f"Linked {linked} client↔Zoho pair(s)"
+                    "Mapping: "
+                    + ", ".join(parts)
                     + (f"; skipped {skipped}." if skipped else "."),
                     "success",
                 )
@@ -195,11 +212,28 @@ def zoho_pull_invoices():
                 if not zid:
                     flash("Select a Zoho contact to link.", "error")
                 else:
-                    persist_zoho_contact_id(client, zid)
-                    flash(
-                        f"Linked {client.name} → {zname or zid}.",
-                        "success",
-                    )
+                    other = Client.query.filter(
+                        Client.zoho_contact_id == zid,
+                        Client.id != client_id,
+                    ).first()
+                    if other and clients_share_household(client_id, other.id):
+                        flash(
+                            f"{client.name} is covered via household Zoho link on "
+                            f"{other.name} ({zname or zid}).",
+                            "success",
+                        )
+                    elif other:
+                        flash(
+                            f"Zoho contact already linked to {other.name}. "
+                            f"Unlink them first, or add both to one household.",
+                            "warning",
+                        )
+                    else:
+                        persist_zoho_contact_id(client, zid)
+                        flash(
+                            f"Linked {client.name} → {zname or zid}.",
+                            "success",
+                        )
             mapping_report = _refresh_mapping_report(allowed_ids)
         else:
             try:
@@ -710,19 +744,31 @@ def manager_plan():
     accessible_clients = get_accessible_clients()
     allowed_ids = [c.id for c in accessible_clients]
     plan = None
+    zoho_refresh = None
+    ops_reports = None
 
     params = {
         "as_of_date": date.today().isoformat(),
         "weekly_capacity": 5,
         "value_weight": 0.7,
         "overdue_weight": 0.3,
+        "refresh_zoho": False,
     }
 
+    as_of_obj = date.today()
     if request.method == 'POST':
         as_of_raw = (request.form.get('as_of_date') or '').strip()
         weekly_raw = (request.form.get('weekly_capacity') or '5').strip()
         value_raw = (request.form.get('value_weight') or '0.7').strip()
         overdue_raw = (request.form.get('overdue_weight') or '0.3').strip()
+        action = (request.form.get('action') or 'build').strip()
+        refresh_zoho = action == 'refresh_and_build' or request.form.get('refresh_zoho') in (
+            '1',
+            'on',
+            'true',
+            'yes',
+        )
+        params['refresh_zoho'] = refresh_zoho
 
         if as_of_raw:
             try:
@@ -737,7 +783,7 @@ def manager_plan():
             params["as_of_date"] = as_of_obj.isoformat()
 
         try:
-            params["weekly_capacity"] = max(1, min(int(weekly_raw), 5))
+            params["weekly_capacity"] = max(1, min(int(weekly_raw), 50))
         except ValueError:
             params["weekly_capacity"] = 5
             flash("Invalid weekly capacity; defaulting to 5.", "warning")
@@ -753,6 +799,40 @@ def manager_plan():
             params["overdue_weight"] = 0.3
             flash("Invalid overdue weight; defaulting to 0.3.", "warning")
 
+        if refresh_zoho:
+            from services.zoho_books_service import zoho_configured
+            from services.zoho_invoice_pull_service import sync_missing_zoho_invoices
+
+            if not zoho_configured():
+                flash(
+                    "Zoho is not configured — plan built from local invoices only.",
+                    "warning",
+                )
+            else:
+                date_start = as_of_obj - timedelta(days=730)
+                zoho_refresh = sync_missing_zoho_invoices(
+                    user_id=current_user.id,
+                    accessible_client_ids=set(allowed_ids),
+                    date_start=date_start,
+                    date_end=as_of_obj,
+                )
+                if zoho_refresh.get("ok"):
+                    flash(
+                        "Zoho refresh: fetched {fetched}, created {created}, "
+                        "updated {updated}, unmatched {unmatched}.".format(
+                            fetched=zoho_refresh.get("fetched", 0),
+                            created=zoho_refresh.get("created", 0),
+                            updated=zoho_refresh.get("updated", 0),
+                            unmatched=len(zoho_refresh.get("unmatched") or []),
+                        ),
+                        "success",
+                    )
+                else:
+                    flash(
+                        f"Zoho refresh failed: {zoho_refresh.get('error') or 'unknown error'}",
+                        "error",
+                    )
+
         plan = BillingManagerService.run_plan(
             as_of_date=as_of_obj,
             weekly_capacity=params["weekly_capacity"],
@@ -760,11 +840,23 @@ def manager_plan():
             overdue_weight=params["overdue_weight"],
             accessible_client_ids=allowed_ids,
         )
+        ops_reports = (plan or {}).get("ops_reports")
+    else:
+        # Light companion reports on GET (reviews + missing agreements; slipping after Build).
+        from services.billing_ops_reports_service import build_billing_ops_reports
+
+        ops_reports = build_billing_ops_reports(
+            accessible_client_ids=allowed_ids,
+            as_of=as_of_obj,
+            status_report=None,
+        )
 
     return render_template(
         'invoices/manager_plan.html',
         params=params,
         plan=plan,
+        zoho_refresh=zoho_refresh,
+        ops_reports=ops_reports,
     )
 
 

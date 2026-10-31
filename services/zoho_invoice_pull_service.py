@@ -69,22 +69,115 @@ def persist_zoho_contact_id(client: Client, zoho_contact_id: str) -> bool:
         return False
 
 
+def list_household_peer_clients(client: Client) -> List[Client]:
+    """Other clients in the same household (ClientGroup), excluding self."""
+    if not client or not getattr(client, "id", None):
+        return []
+    try:
+        if not inspect(db.engine).has_table("client_group_member"):
+            return []
+        from models import ClientGroupMember
+
+        membership = ClientGroupMember.query.filter_by(client_id=client.id).first()
+        if not membership:
+            return []
+        peer_ids = [
+            m.client_id
+            for m in ClientGroupMember.query.filter_by(group_id=membership.group_id).all()
+            if m.client_id != client.id
+        ]
+        if not peer_ids:
+            return []
+        return Client.query.filter(Client.id.in_(peer_ids)).all()
+    except Exception:
+        logger.warning("list_household_peer_clients failed for client %s", client.id, exc_info=True)
+        return []
+
+
+def clients_share_household(client_a_id: int, client_b_id: int) -> bool:
+    if not client_a_id or not client_b_id or client_a_id == client_b_id:
+        return False
+    try:
+        if not inspect(db.engine).has_table("client_group_member"):
+            return False
+        from models import ClientGroupMember
+
+        a = ClientGroupMember.query.filter_by(client_id=client_a_id).first()
+        b = ClientGroupMember.query.filter_by(client_id=client_b_id).first()
+        return bool(a and b and a.group_id == b.group_id)
+    except Exception:
+        return False
+
+
+def get_household_zoho_mapping(client: Client) -> Optional[Dict[str, Any]]:
+    """
+    Resolve Zoho contact via self or household peer.
+
+    Returns dict with contact_id, owner (Client who stores the id), reason, household_name?
+    Does not invent a mapping — only reads stored zoho_contact_id.
+    """
+    if not client:
+        return None
+    stored = get_stored_zoho_contact_id(client)
+    if stored:
+        return {
+            "contact_id": stored,
+            "owner": client,
+            "owner_client_id": client.id,
+            "owner_name": client.name,
+            "reason": "stored",
+            "household_name": None,
+        }
+
+    peers = list_household_peer_clients(client)
+    if not peers:
+        return None
+
+    household_name = None
+    try:
+        from models import ClientGroupMember
+
+        m = ClientGroupMember.query.filter_by(client_id=client.id).first()
+        if m and m.group:
+            household_name = m.group.name
+    except Exception:
+        pass
+
+    for peer in peers:
+        zid = get_stored_zoho_contact_id(peer)
+        if zid:
+            return {
+                "contact_id": zid,
+                "owner": peer,
+                "owner_client_id": peer.id,
+                "owner_name": peer.name,
+                "reason": "household_peer",
+                "household_name": household_name,
+            }
+    return None
+
+
 def resolve_zoho_contact_for_client(client: Client) -> Dict[str, Any]:
     """
     Resolve Zoho Books contact_id for an Inertia client.
 
-    Order: stored zoho_contact_id → email lookup → name lookup.
+    Order: stored zoho_contact_id → household peer's stored id → email → name
+    → peer email/name. Household peer maps are not copied onto this client
+    (invoice matching stays on the owner); pull uses mapped_client_id.
     """
     if not zoho_configured():
         return {"ok": False, "error": "Zoho is not configured.", "contact_id": None}
 
-    stored = get_stored_zoho_contact_id(client)
-    if stored:
+    hh = get_household_zoho_mapping(client)
+    if hh:
         return {
             "ok": True,
-            "contact_id": stored,
-            "match_reason": "stored",
-            "mapping_column": True,
+            "contact_id": hh["contact_id"],
+            "match_reason": hh["reason"],
+            "mapped_client_id": hh["owner_client_id"],
+            "mapped_client_name": hh["owner_name"],
+            "household_name": hh.get("household_name"),
+            "mapping_column": client_zoho_contact_column_exists(),
         }
 
     cid, err = find_zoho_contact_by_email(client.email or "")
@@ -96,6 +189,8 @@ def resolve_zoho_contact_for_client(client: Client) -> Dict[str, Any]:
             "ok": True,
             "contact_id": cid,
             "match_reason": "email",
+            "mapped_client_id": client.id,
+            "mapped_client_name": client.name,
             "mapping_column": client_zoho_contact_column_exists(),
         }
 
@@ -108,14 +203,48 @@ def resolve_zoho_contact_for_client(client: Client) -> Dict[str, Any]:
             "ok": True,
             "contact_id": cid,
             "match_reason": "name",
+            "mapped_client_id": client.id,
+            "mapped_client_name": client.name,
             "mapping_column": client_zoho_contact_column_exists(),
         }
+
+    # Try household peers' email/name against Zoho (still persist on the peer who matched).
+    for peer in list_household_peer_clients(client):
+        if peer.email:
+            cid, err = find_zoho_contact_by_email(peer.email)
+            if err:
+                return {"ok": False, "error": err, "contact_id": None}
+            if cid:
+                persist_zoho_contact_id(peer, cid)
+                return {
+                    "ok": True,
+                    "contact_id": cid,
+                    "match_reason": "household_peer_email",
+                    "mapped_client_id": peer.id,
+                    "mapped_client_name": peer.name,
+                    "mapping_column": client_zoho_contact_column_exists(),
+                }
+        if peer.name:
+            cid, err = find_zoho_contact_by_name(peer.name)
+            if err:
+                return {"ok": False, "error": err, "contact_id": None}
+            if cid:
+                persist_zoho_contact_id(peer, cid)
+                return {
+                    "ok": True,
+                    "contact_id": cid,
+                    "match_reason": "household_peer_name",
+                    "mapped_client_id": peer.id,
+                    "mapped_client_name": peer.name,
+                    "mapping_column": client_zoho_contact_column_exists(),
+                }
 
     return {
         "ok": False,
         "error": (
             f"No Zoho contact matched for {client.name!r} "
-            f"(email {client.email or '—'}). Set zoho_contact_id manually or fix email in Zoho."
+            f"(email {client.email or '—'}) or household peers. "
+            f"Set zoho_contact_id on the billed family member or fix email in Zoho."
         ),
         "contact_id": None,
     }
@@ -169,6 +298,19 @@ def suggest_zoho_contacts_for_client(
                 "score": round(float(score), 3),
                 "reason": reason,
             }
+        )
+
+    # 0) Household peer already linked to Zoho — prefer that shared billing contact.
+    hh = get_household_zoho_mapping(client)
+    if hh and hh.get("reason") == "household_peer":
+        _add(
+            {
+                "contact_id": hh["contact_id"],
+                "contact_name": f"{hh.get('owner_name') or 'Household'} (Zoho)",
+                "email": "",
+            },
+            1.0,
+            "household_peer",
         )
 
     # 1) Exact email
@@ -549,7 +691,11 @@ def pull_zoho_invoices_for_client(
     date_end: Optional[date] = None,
     update_existing: bool = True,
 ) -> Dict[str, Any]:
-    """Pull all Zoho invoices for one client (resolve contact, then filter by customer_id)."""
+    """Pull all Zoho invoices for one client (resolve contact, then filter by customer_id).
+
+    When Zoho is linked on a household peer (e.g. Ajith), invoices attach to that
+    peer — family billing stays under one name.
+    """
     resolved = resolve_zoho_contact_for_client(client)
     if not resolved.get("ok"):
         return {
@@ -557,13 +703,17 @@ def pull_zoho_invoices_for_client(
             "error": resolved.get("error") or "Could not resolve Zoho contact.",
             "resolve": resolved,
         }
+    owner_id = int(resolved.get("mapped_client_id") or client.id)
+    peer_ids = {client.id, owner_id}
+    for p in list_household_peer_clients(client):
+        peer_ids.add(p.id)
     result = pull_zoho_invoices(
         date_start=date_start,
         date_end=date_end,
         user_id=user_id,
-        accessible_client_ids={client.id},
+        accessible_client_ids=peer_ids,
         update_existing=update_existing,
-        force_client_id=client.id,
+        force_client_id=owner_id,
         zoho_customer_id=resolved["contact_id"],
     )
     result["resolve"] = resolved
@@ -634,11 +784,31 @@ def build_zoho_client_mapping_report(
     mapped: List[Dict[str, Any]] = []
     mismatched: List[Dict[str, Any]] = []
     unmapped_clients: List[Dict[str, Any]] = []
+    household_linked: List[Dict[str, Any]] = []
     used_zoho_ids: Set[str] = set()
 
     for cl in clients:
         zid = get_stored_zoho_contact_id(cl)
         if not zid:
+            hh = get_household_zoho_mapping(cl)
+            if hh and hh.get("reason") == "household_peer":
+                zc = by_zoho_id.get(hh["contact_id"])
+                zname = (zc.get("contact_name") if zc else None) or "—"
+                household_linked.append(
+                    {
+                        "client_id": cl.id,
+                        "client_name": cl.name,
+                        "email": cl.email or "—",
+                        "zoho_contact_id": hh["contact_id"],
+                        "zoho_name": zname,
+                        "via_client_id": hh["owner_client_id"],
+                        "via_client_name": hh["owner_name"],
+                        "household_name": hh.get("household_name") or "—",
+                    }
+                )
+                used_zoho_ids.add(hh["contact_id"])
+                continue
+
             sug_id = None
             sug_name = None
             sug_score = 0.0
@@ -731,6 +901,7 @@ def build_zoho_client_mapping_report(
     mapped.sort(key=lambda r: (r["client_name"] or "").lower())
     unmapped_clients.sort(key=lambda r: (r["client_name"] or "").lower())
     mismatched.sort(key=lambda r: (r["client_name"] or "").lower())
+    household_linked.sort(key=lambda r: (r["client_name"] or "").lower())
 
     contact_choices = []
     for zid, zc in sorted(
@@ -755,6 +926,7 @@ def build_zoho_client_mapping_report(
         "zoho_contacts_fetched": len(contacts),
         "mapped": mapped,
         "mismatched": mismatched,
+        "household_linked": household_linked,
         "unmapped_clients": unmapped_clients,
         "unmapped_zoho": unmapped_zoho,
         "contact_choices": contact_choices,
@@ -762,6 +934,7 @@ def build_zoho_client_mapping_report(
         "counts": {
             "mapped": len(mapped),
             "mismatched": len(mismatched),
+            "household_linked": len(household_linked),
             "unmapped_clients": len(unmapped_clients),
             "unmapped_zoho": len(unmapped_zoho),
         },
