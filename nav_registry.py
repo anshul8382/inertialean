@@ -167,6 +167,9 @@ NAV_GROUPS: Tuple[NavGroup, ...] = (
                     active_match=("clients.review_report", "clients.list_review_schedules", "main.list_review_schedules")),
             NavItem("clients.review_cashflow_projection", "Review cashflow", "fas fa-chart-line",
                     active_match=("clients.review_cashflow_projection",)),
+            NavItem("portfolio_discussion.queue", "Portfolio discussion", "fas fa-comments-dollar",
+                    nav_flag="NAV_PORTFOLIO_DISCUSSION_ENABLED",
+                    active_match=("portfolio_discussion.",)),
         ),
     ),
     NavGroup(

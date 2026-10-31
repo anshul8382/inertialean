@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block title %}Weekly Portfolio Discussion{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <div>
+            <h1 class="mb-1 h3"><i class="fas fa-comments-dollar"></i> Weekly Portfolio Discussion</h1>
+            <p class="text-muted mb-0 small">
+                Mix of concern (XIRR &lt; 8% or behind Nifty), aging (hasn’t checked), and random ·
+                up to {{ queue.limit }} · as of {{ today.strftime('%d %b %Y') }}
+            </p>
+        </div>
+    </div>
+
+    {% if queue.migration_required %}
+    <div class="alert alert-warning" role="alert">
+        <strong>Migration required.</strong>
+        Table <code>portfolio_discussion_state</code> is missing — snooze / mark-reviewed / aging will not work until you run
+        <code>python3 migrations/add_portfolio_discussion_state.py</code>.
+        Concern + random picks still use live snapshots where available.
+    </div>
+    {% endif %}
+
+    <p class="small text-muted mb-2">
+        Showing {{ queue.items|length }} client{{ 's' if queue.items|length != 1 else '' }}
+        {% if queue.counts %}
+        ({{ queue.counts.concern }} concern · {{ queue.counts.aging }} aging · {{ queue.counts.random }} random)
+        {% endif %}
+        · {{ queue.total_concerns }} open concern{{ 's' if queue.total_concerns != 1 else '' }} total.
+    </p>
+
+    <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Client</th>
+                    <th>Why</th>
+                    <th class="text-end">XIRR %</th>
+                    <th class="text-end">Nifty %</th>
+                    <th class="text-end">Gap %</th>
+                    <th>Flags</th>
+                    <th>Last checked</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in queue.items %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('portfolio_discussion.workspace', client_id=row.client_id) }}">
+                            {{ row.client_name }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if row.pick_reason == 'concern' %}
+                        <span class="badge text-bg-danger">Concern</span>
+                        {% elif row.pick_reason == 'aging' %}
+                        <span class="badge text-bg-secondary">Aging</span>
+                        {% elif row.pick_reason == 'random' %}
+                        <span class="badge text-bg-info">Random</span>
+                        {% else %}
+                        <span class="badge text-bg-light text-dark">{{ row.pick_reason }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end {% if row.low_xirr %}text-danger fw-semibold{% endif %}">
+                        {% if row.portfolio_xirr_pct is not none %}{{ '%.2f'|format(row.portfolio_xirr_pct) }}{% else %}—{% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% if row.benchmark_xirr_pct is not none %}{{ '%.2f'|format(row.benchmark_xirr_pct) }}{% else %}—{% endif %}
+                    </td>
+                    <td class="text-end {% if row.vs_benchmark %}text-warning fw-semibold{% endif %}">
+                        {% if row.underperformance_pct is not none %}{{ '%.2f'|format(row.underperformance_pct) }}{% else %}—{% endif %}
+                    </td>
+                    <td>
+                        {% if row.low_xirr %}
+                        <span class="badge text-bg-danger">XIRR&lt;8</span>
+                        {% endif %}
+                        {% if row.vs_benchmark %}
+                        <span class="badge text-bg-warning text-dark">vs Nifty</span>
+                        {% endif %}
+                        {% if row.never_checked %}
+                        <span class="badge text-bg-dark">Never</span>
+                        {% endif %}
+                    </td>
+                    <td class="small text-muted">
+                        {% if row.never_checked %}
+                        Never
+                        {% elif row.days_unchecked is not none %}
+                        {{ row.days_unchecked }}d ago
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td class="text-nowrap">
+                        <a class="btn btn-sm btn-outline-primary"
+                           href="{{ url_for('portfolio_discussion.workspace', client_id=row.client_id) }}">
+                            Discuss
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="text-muted text-center py-4">
+                        No clients in the queue right now.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -149,6 +149,21 @@ class ClientGroupMember(db.Model):
     client = db.relationship('Client', backref=db.backref('household_membership', uselist=False))
 
 
+class PortfolioDiscussionState(db.Model):
+    """Snooze / last-reviewed state for Weekly Portfolio Discussion queue."""
+    __tablename__ = 'portfolio_discussion_state'
+
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), primary_key=True)
+    last_reviewed_at = db.Column(db.DateTime, nullable=True)
+    hide_until = db.Column(db.Date, nullable=True, index=True)
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    last_review_note = db.Column(db.Text, nullable=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    client = db.relationship('Client', backref=db.backref('portfolio_discussion_state', uselist=False))
+    reviewer = db.relationship('User', foreign_keys=[reviewed_by])
+
+
 class BniTyNotesState(db.Model):
     """Singleton (id=1): last successful BNI TY Notes email window end (UTC naive)."""
     __tablename__ = 'bni_ty_notes_state'

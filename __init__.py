@@ -485,6 +485,15 @@ def create_app(config_class=ProductionConfig):
     except Exception as _pp_e:
         app.logger.warning("Portfolio performance blueprint not registered: %s", _pp_e)
 
+    app.config["NAV_PORTFOLIO_DISCUSSION_ENABLED"] = False
+    try:
+        from routes.portfolio_discussion import portfolio_discussion_bp
+
+        app.register_blueprint(portfolio_discussion_bp)
+        app.config["NAV_PORTFOLIO_DISCUSSION_ENABLED"] = True
+    except Exception as _pd_e:
+        app.logger.warning("Portfolio discussion blueprint not registered: %s", _pd_e)
+
     app.config["NAV_TASK_ASSIGNMENT_RULES_ENABLED"] = False
     try:
         from routes.task_assignment_rules import task_assignment_rules_bp

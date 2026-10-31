@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Discuss — {{ client.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+        <div>
+            <a href="{{ url_for('portfolio_discussion.queue') }}" class="small text-decoration-none">
+                ← Back to queue
+            </a>
+            <h1 class="mb-1 h3">{{ client.name }}</h1>
+            <p class="text-muted mb-0 small">Weekly portfolio discussion workspace</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a class="btn btn-outline-secondary btn-sm"
+               href="{{ url_for('clients.client_details', client_id=client.id) }}">
+                Open client
+            </a>
+            {% if ctx.table_ready %}
+            <form method="post" action="{{ url_for('portfolio_discussion.mark_reviewed_route', client_id=client.id) }}"
+                  class="d-inline" onsubmit="return confirm('Mark reviewed and hide for 30 days?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-success btn-sm">Mark reviewed (30d)</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not ctx.table_ready %}
+    <div class="alert alert-warning" role="alert">
+        Migration required for snooze / mark-reviewed:
+        <code>python3 migrations/add_portfolio_discussion_state.py</code>
+    </div>
+    {% endif %}
+
+    <div class="row g-3 mb-4">
+        <div class="col-lg-6">
+            <div class="border rounded p-3 h-100">
+                <h2 class="h6 text-uppercase text-muted mb-3">Performance</h2>
+                {% if ctx.snapshot %}
+                <dl class="row mb-0 small">
+                    <dt class="col-6">Portfolio / equity XIRR</dt>
+                    <dd class="col-6 text-end">{{ '%.2f'|format(ctx.snapshot.portfolio_xirr_pct) }}%</dd>
+                    <dt class="col-6">Nifty XIRR</dt>
+                    <dd class="col-6 text-end">{{ '%.2f'|format(ctx.snapshot.benchmark_xirr_pct) }}%</dd>
+                    <dt class="col-6">Gap (Nifty − portfolio)</dt>
+                    <dd class="col-6 text-end">{{ '%.2f'|format(ctx.snapshot.underperformance_pct) }}%</dd>
+                    <dt class="col-6">Comparison</dt>
+                    <dd class="col-6 text-end">{{ ctx.snapshot.comparison_type }}</dd>
+                    <dt class="col-6">Portfolio value</dt>
+                    <dd class="col-6 text-end">
+                        {% if ctx.snapshot.portfolio_current_value is not none %}
+                        ₹{{ '{:,.0f}'.format(ctx.snapshot.portfolio_current_value) }}
+                        {% else %}—{% endif %}
+                    </dd>
+                </dl>
+                {% else %}
+                <p class="text-muted mb-0 small">Insufficient data for underperformance snapshot.</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="border rounded p-3 h-100">
+                <h2 class="h6 text-uppercase text-muted mb-3">Model &amp; allocation</h2>
+                <p class="mb-1 small">
+                    <strong>Asset model:</strong> {{ ctx.asset_model_name or '—' }}
+                </p>
+                <p class="mb-1 small">
+                    <strong>Security model:</strong> {{ ctx.stock_model_name or '—' }}
+                </p>
+                <p class="mb-3 small text-muted">
+                    Assigned:
+                    {% if ctx.assigned_at %}{{ ctx.assigned_at.strftime('%d %b %Y') }}{% else %}—{% endif %}
+                </p>
+                {% if ctx.allocation_summary %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Asset class</th><th class="text-end">Target %</th></tr></thead>
+                        <tbody>
+                            {% for a in ctx.allocation_summary %}
+                            <tr>
+                                <td>{{ a.asset_class }}</td>
+                                <td class="text-end">
+                                    {% if a.target_pct is not none %}{{ '%.1f'|format(a.target_pct) }}{% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted small mb-0">No target allocation on latest assignment.</p>
+                {% endif %}
+                <p class="mt-2 mb-0">
+                    <a class="small" href="{{ url_for('clients.client_details', client_id=client.id) }}#allocation">
+                        Open allocation on client page →
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    {% if ctx.open_tasks %}
+    <div class="mb-4">
+        <h2 class="h6 text-uppercase text-muted mb-2">Open Ops tasks</h2>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead><tr><th>Task</th><th>Assignee</th><th>Deadline</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for t in ctx.open_tasks %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('tasks.view_task', task_id=t.id) }}">{{ t.name }}</a>
+                        </td>
+                        <td>{{ t.assignee.username if t.assignee else '—' }}</td>
+                        <td>{{ t.deadline.strftime('%d %b %Y') if t.deadline else '—' }}</td>
+                        <td>{{ t.status }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('portfolio_discussion.save', client_id=client.id) }}" id="discussion-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="mb-4">
+            <h2 class="h6 text-uppercase text-muted mb-2">Discussion note</h2>
+            <p class="small text-muted">Appended to client background notes with prefix “Portfolio discussion:”.</p>
+            <textarea class="form-control" name="note_text" rows="4"
+                      placeholder="What did you discuss / decide?"></textarea>
+            {% if ctx.note_tail %}
+            <details class="mt-2">
+                <summary class="small text-muted">Recent background notes</summary>
+                <pre class="small bg-light border rounded p-2 mt-1 mb-0" style="white-space: pre-wrap; max-height: 240px; overflow: auto;">{{ ctx.note_tail }}</pre>
+            </details>
+            {% endif %}
+        </div>
+
+        <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h2 class="h6 text-uppercase text-muted mb-0">Create tasks</h2>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="add-task-row">+ Add row</button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle" id="task-rows">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Assignee</th>
+                            <th>Deadline</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr class="task-row">
+                            <td>
+                                <input type="text" class="form-control form-control-sm" name="task_name"
+                                       placeholder="Task name" autocomplete="off">
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm" name="task_assigned_to">
+                                    <option value="0">Unassigned</option>
+                                    {% for u in assignees %}
+                                    <option value="{{ u.id }}">{{ u.username }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <input type="date" class="form-control form-control-sm" name="task_deadline">
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-danger remove-task-row" title="Remove">×</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p class="small text-muted mb-0">Empty name rows are ignored. Default deadline is +7 days if blank.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mb-5">
+            <button type="submit" class="btn btn-primary" name="mark_complete" value="0">
+                Save note &amp; tasks
+            </button>
+            {% if ctx.table_ready %}
+            <button type="submit" class="btn btn-success" name="mark_complete" value="1"
+                    onclick="return confirm('Save and mark reviewed (hide 30 days)?');">
+                Save &amp; mark reviewed
+            </button>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    var tbody = document.querySelector('#task-rows tbody');
+    var addBtn = document.getElementById('add-task-row');
+    if (!tbody || !addBtn) return;
+
+    function bindRemove(btn) {
+        btn.addEventListener('click', function () {
+            var rows = tbody.querySelectorAll('tr.task-row');
+            if (rows.length <= 1) {
+                var row = rows[0];
+                row.querySelectorAll('input').forEach(function (el) { el.value = ''; });
+                var sel = row.querySelector('select');
+                if (sel) sel.selectedIndex = 0;
+                return;
+            }
+            btn.closest('tr').remove();
+        });
+    }
+
+    tbody.querySelectorAll('.remove-task-row').forEach(bindRemove);
+
+    addBtn.addEventListener('click', function () {
+        var proto = tbody.querySelector('tr.task-row');
+        var clone = proto.cloneNode(true);
+        clone.querySelectorAll('input').forEach(function (el) { el.value = ''; });
+        var sel = clone.querySelector('select');
+        if (sel) sel.selectedIndex = 0;
+        tbody.appendChild(clone);
+        bindRemove(clone.querySelector('.remove-task-row'));
+    });
+})();
+</script>
+{% endblock %}

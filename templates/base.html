@@ -188,6 +188,7 @@
     {% set dashboards_nav_active = current_user.is_authenticated and request.endpoint and (
         request.endpoint == 'main.list_monthly_investments' or
         request.endpoint in ('clients.list_review_schedules', 'clients.review_report', 'clients.review_cashflow_projection', 'main.list_review_schedules') or
+        (request.endpoint and request.endpoint.startswith('portfolio_discussion.')) or
         (request.endpoint.startswith('workflows.') and request.endpoint != 'workflows.workflow_dashboard')
     ) %}
     {% block navbar %}
@@ -479,6 +480,11 @@
                             {% if current_user.email and current_user.email|lower == 'anshul@equities4wealth.com' and nav_can('clients.review_cashflow_projection') %}
                             <li><a class="dropdown-item {% if request.endpoint == 'clients.review_cashflow_projection' %}active{% endif %}" href="{{ url_for('clients.review_cashflow_projection') }}">
                                 <i class="fas fa-chart-line"></i> Review cashflow
+                            </a></li>
+                            {% endif %}
+                            {% if current_user.email and current_user.email|lower == 'anshul@equities4wealth.com' and config.get('NAV_PORTFOLIO_DISCUSSION_ENABLED') and nav_can('portfolio_discussion.queue') %}
+                            <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('portfolio_discussion.') %}active{% endif %}" href="{{ url_for('portfolio_discussion.queue') }}">
+                                <i class="fas fa-comments-dollar"></i> Portfolio discussion
                             </a></li>
                             {% endif %}
                         </ul>
