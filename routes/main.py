@@ -98,6 +98,7 @@ _MENU_ENDPOINTS = {
     "corporate_actions.list_actions",
     "account_management.dashboard",
     "account_management.analysis",
+    "account_management.transactions_browse",
     "account_management.heads_list",
     "account_management.upload",
     "campaign_studio.index",

@@ -165,6 +165,126 @@ def fetch_transactions_for_user(user_id: int, date_from: date, date_to: date) ->
     return q.all()
 
 
+def user_transaction_date_bounds(user_id: int) -> Optional[Tuple[date, date]]:
+    """Earliest and latest transaction_date across the user's uploaded statements."""
+    row = (
+        db.session.query(
+            func.min(BankStatementTransaction.transaction_date),
+            func.max(BankStatementTransaction.transaction_date),
+        )
+        .join(BankStatement)
+        .filter(BankStatement.created_by == user_id)
+        .one()
+    )
+    earliest, latest = row[0], row[1]
+    if earliest is None or latest is None:
+        return None
+    return earliest, latest
+
+
+def browse_transactions_for_user(
+    user_id: int,
+    *,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    statement_id: Optional[int] = None,
+    head_id: Optional[int] = None,
+    classified: Optional[str] = None,
+    flow: Optional[str] = None,
+    q: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 100,
+) -> Dict[str, Any]:
+    """
+    Paginated browse of all uploaded bank transactions for a user with basic filters.
+
+    classified: 'yes' | 'no' | None (all)
+    flow: 'credit' | 'debit' | None (all) — credit = deposit>0, debit = withdrawal>0
+    """
+    from sqlalchemy import or_
+
+    page = max(1, int(page or 1))
+    per_page = max(1, min(int(per_page or 100), 500))
+
+    base = BankStatementTransaction.query.join(BankStatement).filter(
+        BankStatement.created_by == user_id
+    )
+    if date_from is not None:
+        base = base.filter(BankStatementTransaction.transaction_date >= date_from)
+    if date_to is not None:
+        base = base.filter(BankStatementTransaction.transaction_date <= date_to)
+    if statement_id is not None:
+        base = base.filter(BankStatementTransaction.bank_statement_id == statement_id)
+    if head_id is not None:
+        base = base.filter(BankStatementTransaction.income_expense_head_id == head_id)
+
+    classified_norm = (classified or "").strip().lower()
+    if classified_norm in ("yes", "classified", "1", "true"):
+        base = base.filter(BankStatementTransaction.income_expense_head_id.isnot(None))
+    elif classified_norm in ("no", "unclassified", "0", "false"):
+        base = base.filter(BankStatementTransaction.income_expense_head_id.is_(None))
+
+    flow_norm = (flow or "").strip().lower()
+    if flow_norm in ("credit", "deposit", "in"):
+        base = base.filter(BankStatementTransaction.deposit_amount > 0)
+    elif flow_norm in ("debit", "withdrawal", "out"):
+        base = base.filter(BankStatementTransaction.withdrawal_amount > 0)
+
+    q_text = (q or "").strip()
+    if q_text:
+        like = f"%{q_text}%"
+        base = base.filter(
+            or_(
+                BankStatementTransaction.description.ilike(like),
+                BankStatementTransaction.description_sanitized.ilike(like),
+                BankStatementTransaction.reference_no.ilike(like),
+            )
+        )
+
+    bounds_row = base.with_entities(
+        func.min(BankStatementTransaction.transaction_date),
+        func.max(BankStatementTransaction.transaction_date),
+        func.count(BankStatementTransaction.id),
+        func.coalesce(func.sum(BankStatementTransaction.deposit_amount), 0),
+        func.coalesce(func.sum(BankStatementTransaction.withdrawal_amount), 0),
+    ).one()
+    filtered_earliest, filtered_latest = bounds_row[0], bounds_row[1]
+    total_count = int(bounds_row[2] or 0)
+    total_credit = float(bounds_row[3] or 0)
+    total_debit = float(bounds_row[4] or 0)
+
+    pages = max(1, (total_count + per_page - 1) // per_page) if total_count else 1
+    if page > pages:
+        page = pages
+    offset = (page - 1) * per_page
+
+    rows = (
+        base.options(
+            joinedload(BankStatementTransaction.bank_statement),
+            joinedload(BankStatementTransaction.income_expense_head),
+        )
+        .order_by(
+            BankStatementTransaction.transaction_date.desc(),
+            BankStatementTransaction.id.desc(),
+        )
+        .offset(offset)
+        .limit(per_page)
+        .all()
+    )
+
+    return {
+        "rows": rows,
+        "total_count": total_count,
+        "page": page,
+        "per_page": per_page,
+        "pages": pages,
+        "filtered_earliest": filtered_earliest,
+        "filtered_latest": filtered_latest,
+        "total_credit": total_credit,
+        "total_debit": total_debit,
+    }
+
+
 def build_csv_bytes(rows: List[BankStatementTransaction], period_label: str) -> bytes:
     """UTF-8 CSV with BOM for Excel; includes classification columns."""
     buf = io.StringIO()

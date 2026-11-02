@@ -6,11 +6,11 @@
 
 | Mac workspace | Server | How to ship |
 |---------------|--------|-------------|
-| **Inertia2026-lean** | **KVM4** `187.127.188.97` `/opt/Inertia2026v1` | `./scripts/deployment/ship_kvm.sh` (**preferred**) |
-| **Inertia2026-lean** | Lean `129.121.133.25` `/opt/Inertia2026v1` | `./scripts/deployment/ship_lean.sh` (sunset ~20 days) |
-| **app 2** | BigRock `https://66.116.199.231/` / `inertiainvest.in` | `deploy_agent.py full-prod` **only from app 2** |
+| **Inertia2026-lean** | **KVM4** `187.127.188.97` `/opt/Inertia2026v1` | **`full-prod` (push) + manual `git pull` on KVM** |
+| **Inertia2026-lean** | Lean `129.121.133.25` `/opt/Inertia2026v1` | `./scripts/deployment/ship_lean.sh` (sunset) |
+| **app 2** | BigRock `https://66.116.199.231/` / `inertiainvest.in` | `deploy_agent.py full-prod` **only from app 2** (separate config) |
 
-**Hard rule:** From this workspace, never ship to BigRock / `66.116.199.231` / `inertiainvest.in`.
+**Hard rule:** From this workspace, never ship to BigRock / `66.116.199.231` / `inertiainvest.in`. Lean’s `.local/deployment-agent/config.json` targets **KVM** and refuses BigRock.
 
 ### KVM4 (active)
 
@@ -20,22 +20,25 @@ scp -i ~/.ssh/inertia_vps scripts/deployment/bootstrap_lean_git.sh anshul@187.12
 ssh -i ~/.ssh/inertia_vps anshul@187.127.188.97 \
   "ORIGIN_URL='git@github.com:anshul8382/inertialean.git' bash /tmp/bootstrap_lean_git.sh"
 
-# Approvals → commit → push origin main → SSH git pull on KVM → restart
+# Preferred after commit + user go-ahead (push only; prod pull is MANUAL):
+DEPLOY_AGENT_CONFIRM=full-prod python3 .local/deployment-agent/deploy_agent.py full-prod
+# Then on KVM (you run):
+#   cd /opt/Inertia2026v1 && git pull --ff-only origin main && sudo systemctl restart inertia-2026v1
+
+# One-shot approvals → commit → push → print manual pull:
 ./scripts/deployment/ship_kvm.sh
 ./scripts/deployment/ship_kvm.sh --message "Describe change"
-./scripts/deployment/ship_kvm.sh --allow-approval-fail   # if VAPT/mobile FAIL but you still ship
-
-# Deploy-only (already pushed):
-./scripts/deployment/deploy_kvm_vps.sh --skip-push --restart-airflow
+# Optional Mac auto-pull (not default): ./scripts/deployment/ship_kvm.sh --auto-deploy
 ```
 
-`deploy_kvm_vps.sh` preserves `.env`, optional pip, restarts `inertia-2026v1` (+ Airflow with `--restart-airflow`).
+**Hard rule:** prod `git pull` is **manual**. Agent/scripts push to GitHub and print pull steps; they do not SSH-pull unless you opt in (`--auto-deploy`) or explicitly ask.
 
 Smoke:
 
 ```bash
 ssh -i ~/.ssh/inertia_vps anshul@187.127.188.97 \
   'curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:5004/api/v1/health'
+# or Tailscale: https://srv1996303.tail394fa8.ts.net/api/v1/health
 ```
 
 ### Lean (legacy parallel)
@@ -45,9 +48,7 @@ ssh -i ~/.ssh/inertia_vps anshul@187.127.188.97 \
 ./scripts/deployment/deploy_lean_vps.sh --skip-push --restart-airflow
 ```
 
-`.local/deployment-agent/` may be symlinked for local MySQL / run-commands docs, but its **`full-prod` target is BigRock — do not use it in this workspace.**
-
-See also `AGENTS.md` § Deploy target.
+See also `AGENTS.md` § Deploy target and `.local/deployment-agent/CURSOR_AGENT.md`.
 
 ### One-off data cleanups (KVM)
 
@@ -62,7 +63,7 @@ Develop SQL on local `inertia_app2025_dev`. Each host has its own MySQL; see `do
 
 | Environment | Host | Directory | Deploy |
 |-------------|------|-----------|--------|
-| **KVM4 (active)** | `187.127.188.97` | `/opt/Inertia2026v1` | `ship_kvm.sh` / `deploy_kvm_vps.sh` |
+| **KVM4 (active)** | `187.127.188.97` | `/opt/Inertia2026v1` | `deploy_agent.py full-prod` / `ship_kvm.sh` / `deploy_kvm_vps.sh` |
 | **Lean VPS (sunset)** | `129.121.133.25` | `/opt/Inertia2026v1` | `ship_lean.sh` / `deploy_lean_vps.sh` |
 
 Never commit `.env` — secrets stay only on each server.

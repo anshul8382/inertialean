@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}All uploaded transactions{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <div>
+            <h1 class="mb-0"><i class="fas fa-list"></i> All uploaded transactions</h1>
+            <p class="text-muted small mb-0 mt-1">Browse every bank line across statements. Filters apply together.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2 mobile-action-stack">
+            <a href="{{ url_for('account_management.dashboard') }}" class="btn btn-outline-secondary">Dashboard</a>
+            <a href="{{ url_for('account_management.analysis') }}" class="btn btn-outline-success">Analysis</a>
+            <a href="{{ url_for('account_management.upload') }}" class="btn btn-primary">Upload</a>
+        </div>
+    </div>
+
+    {% if overall_bounds %}
+    <div class="alert alert-info py-2 mb-3">
+        <strong>Data loaded:</strong>
+        {{ overall_bounds[0].strftime('%d %b %Y') }} → {{ overall_bounds[1].strftime('%d %b %Y') }}
+        <span class="text-muted">(earliest → latest transaction date across all your uploads)</span>
+    </div>
+    {% else %}
+    <div class="alert alert-warning py-2 mb-3">No uploaded transactions yet.</div>
+    {% endif %}
+
+    <div class="card mb-3">
+        <div class="card-header py-2 fw-semibold">Filters</div>
+        <div class="card-body">
+            <form method="get" class="row g-3 align-items-end">
+                <div class="col-6 col-md-3">
+                    <label class="form-label small mb-0" for="browse_from">From</label>
+                    <input type="date" class="form-control" id="browse_from" name="date_from"
+                           value="{{ date_from.isoformat() if date_from else '' }}">
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label small mb-0" for="browse_to">To</label>
+                    <input type="date" class="form-control" id="browse_to" name="date_to"
+                           value="{{ date_to.isoformat() if date_to else '' }}">
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label small mb-0" for="browse_statement">Statement</label>
+                    <select class="form-select" id="browse_statement" name="statement_id">
+                        <option value="">All statements</option>
+                        {% for s in statements %}
+                        <option value="{{ s.id }}" {% if selected_statement_id == s.id %}selected{% endif %}>
+                            {{ s.account_name or 'Unnamed' }}
+                            {% if s.upload_date %} ({{ s.upload_date.strftime('%d %b %Y') }}){% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label small mb-0" for="browse_head">Head</label>
+                    <select class="form-select" id="browse_head" name="head_id">
+                        <option value="">All heads</option>
+                        {% for h in heads %}
+                        <option value="{{ h.id }}" {% if selected_head_id == h.id %}selected{% endif %}>
+                            {{ h.name }} ({{ h.head_type or '—' }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small mb-0" for="browse_classified">Classified</label>
+                    <select class="form-select" id="browse_classified" name="classified">
+                        <option value="" {% if not classified %}selected{% endif %}>All</option>
+                        <option value="yes" {% if classified == 'yes' %}selected{% endif %}>Classified</option>
+                        <option value="no" {% if classified == 'no' %}selected{% endif %}>Unclassified</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label small mb-0" for="browse_flow">Flow</label>
+                    <select class="form-select" id="browse_flow" name="flow">
+                        <option value="" {% if not flow %}selected{% endif %}>All</option>
+                        <option value="credit" {% if flow == 'credit' %}selected{% endif %}>Credit</option>
+                        <option value="debit" {% if flow == 'debit' %}selected{% endif %}>Debit</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-5">
+                    <label class="form-label small mb-0" for="browse_q">Search</label>
+                    <input type="search" class="form-control" id="browse_q" name="q"
+                           value="{{ q }}" placeholder="Description or reference">
+                </div>
+                <div class="col-12 col-md-3 d-flex flex-wrap gap-2">
+                    <button type="submit" class="btn btn-primary flex-grow-1">Apply</button>
+                    <a href="{{ url_for('account_management.transactions_browse', preset='all') }}" class="btn btn-outline-secondary">Clear</a>
+                </div>
+            </form>
+
+            <div class="mt-3">
+                <div class="small text-muted mb-1">Quick ranges</div>
+                <div class="d-flex flex-wrap gap-1">
+                    <a class="btn btn-sm {% if active_preset == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                       href="{{ url_for('account_management.transactions_browse', **preset_link_all) }}">All data</a>
+                    <a class="btn btn-sm {% if active_preset == 'last_90_days' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                       href="{{ url_for('account_management.transactions_browse', **preset_link_90) }}">90 days</a>
+                    <a class="btn btn-sm {% if active_preset == 'last_12_months' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                       href="{{ url_for('account_management.transactions_browse', **preset_link_12m) }}">12 months</a>
+                    <a class="btn btn-sm {% if active_preset == 'fy_current' %}btn-primary{% else %}btn-outline-primary{% endif %}"
+                       href="{{ url_for('account_management.transactions_browse', **preset_link_fy) }}">Current FY</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-2 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="card h-100">
+                <div class="card-body py-2">
+                    <div class="small text-muted">Rows (filter)</div>
+                    <div class="fs-5 mb-0">{{ total_count }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card h-100">
+                <div class="card-body py-2">
+                    <div class="small text-muted">Filtered dates</div>
+                    <div class="fs-6 mb-0">
+                        {% if filtered_earliest and filtered_latest %}
+                        {{ filtered_earliest.strftime('%d %b %Y') }} → {{ filtered_latest.strftime('%d %b %Y') }}
+                        {% else %}—{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card h-100 border-success">
+                <div class="card-body py-2">
+                    <div class="small text-muted">Credits</div>
+                    <div class="fs-6 text-success mb-0">{{ "%.2f"|format(total_credit) }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="card h-100 border-danger">
+                <div class="card-body py-2">
+                    <div class="small text-muted">Debits</div>
+                    <div class="fs-6 text-danger mb-0">{{ "%.2f"|format(total_debit) }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <p class="small text-muted mb-2">Showing {{ period_label }} · page {{ page }} of {{ pages }}</p>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0" data-mobile-table="scroll">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Account / statement</th>
+                            <th>Description</th>
+                            <th class="text-end">Withdrawal</th>
+                            <th class="text-end">Deposit</th>
+                            <th>Head</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in rows %}
+                        <tr>
+                            <td class="text-nowrap">{{ t.transaction_date.strftime('%d %b %Y') if t.transaction_date else '—' }}</td>
+                            <td>
+                                <span class="d-block">{{ t.bank_statement.account_name if t.bank_statement else '—' }}</span>
+                                <small class="text-muted">#{{ t.bank_statement_id }}</small>
+                            </td>
+                            <td>
+                                <span class="d-block">{{ t.description_sanitized or t.description or '—' }}</span>
+                                {% if t.reference_no %}<small class="text-muted">{{ t.reference_no }}</small>{% endif %}
+                            </td>
+                            <td class="text-end text-nowrap {% if t.withdrawal_amount %}text-danger{% endif %}">
+                                {% if t.withdrawal_amount %}{{ "%.2f"|format(t.withdrawal_amount) }}{% else %}—{% endif %}
+                            </td>
+                            <td class="text-end text-nowrap {% if t.deposit_amount %}text-success{% endif %}">
+                                {% if t.deposit_amount %}{{ "%.2f"|format(t.deposit_amount) }}{% else %}—{% endif %}
+                            </td>
+                            <td>
+                                {% if t.income_expense_head %}
+                                <span class="badge bg-secondary">{{ t.income_expense_head.name }}</span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark">Unclassified</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-nowrap">
+                                <a class="btn btn-sm btn-outline-secondary"
+                                   href="{{ url_for('account_management.statement_detail', statement_id=t.bank_statement_id) }}">View</a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">No transactions match these filters.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    {% if pages > 1 %}
+    <nav class="mt-3" aria-label="Transaction pages">
+        <ul class="pagination flex-wrap">
+            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                <a class="page-link" href="{% if page > 1 %}{{ url_for('account_management.transactions_browse', page=page-1, **filter_args) }}{% else %}#{% endif %}">Prev</a>
+            </li>
+            <li class="page-item disabled"><span class="page-link">{{ page }} / {{ pages }}</span></li>
+            <li class="page-item {% if page >= pages %}disabled{% endif %}">
+                <a class="page-link" href="{% if page < pages %}{{ url_for('account_management.transactions_browse', page=page+1, **filter_args) }}{% else %}#{% endif %}">Next</a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

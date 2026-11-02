@@ -1,6 +1,6 @@
 # Security audit (VAPT) report
 
-Generated: 2026-10-31T11:03:01.256715+00:00
+Generated: 2026-11-02T06:11:45.124806+00:00
 Agent: `security_audit_agent` v1.0.0
 
 ## Summary
@@ -9,15 +9,15 @@ Agent: `security_audit_agent` v1.0.0
 |----------|-------|
 | critical | 0 |
 | high | 24 |
-| medium | 30 |
+| medium | 31 |
 | low | 0 |
 | info | 0 |
-| **Total** | **54** |
+| **Total** | **55** |
 
 ## Threat themes
 
 - **EXTERNAL** — External attackers / public internet exposure (28 findings)
-- **INTERNAL** — Insider misuse / employee data theft (26 findings)
+- **INTERNAL** — Insider misuse / employee data theft (27 findings)
 - **COMPLIANCE** — SEBI / financial-data regulatory standards (0 findings)
 - **CONFIG** — Misconfiguration & operational hardening (0 findings)
 
@@ -477,7 +477,7 @@ def download_lead_proposal(
 
 ### `SEC-INT-002` — Export/download endpoint `download_regulatory_client_master_archive` is not audit-logged
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/main.py:1734`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_audit_on_export • **CWE:** CWE-778 • **Location:** `routes/main.py:1739`
 
 Functions named export/download/csv/excel/backup typically return client data in bulk. Without an audit log entry, an internal user downloading the entire client base is invisible.
 
@@ -621,12 +621,24 @@ L77: @client_google_drive_bp.route(; L113: @client_google_drive_bp.route(; L156:
 
 ### `SEC-INT-005` — `routes/distributor.py` has 1 client-scoped route(s) without an explicit access check
 
-**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_client_scope • **CWE:** CWE-639 • **Location:** `routes/distributor.py:333`
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_client_scope • **CWE:** CWE-639 • **Location:** `routes/distributor.py:405`
 
 Routes that take `<int:client_id>` should verify the current user can see that client. Without it, an advisor can read other advisors' clients by guessing IDs.
 
 ```
-L333: @distributor_bp.route("/assign/<int:client_id>", methods=["POST"])
+L405: @distributor_bp.route("/assign/<int:client_id>", methods=["POST"])
+```
+
+**Fix:** Add `@client_access_required` (from `access_control`) to each route, OR add a `before_request` hook on this blueprint that calls `can_access_client(client_id)` and aborts 403 if not. Also call `services.audit_service.log_audit_event('client_view', client_id=client_id)` so internal access is recorded for SEBI.
+
+### `SEC-INT-005` — `routes/portfolio_discussion.py` has 3 client-scoped route(s) without an explicit access check
+
+**Severity:** medium • **Theme:** INTERNAL • **Category:** missing_client_scope • **CWE:** CWE-639 • **Location:** `routes/portfolio_discussion.py:69`
+
+Routes that take `<int:client_id>` should verify the current user can see that client. Without it, an advisor can read other advisors' clients by guessing IDs.
+
+```
+L69: @portfolio_discussion_bp.route("/<int:client_id>", methods=["GET"]); L88: @portfolio_discussion_bp.route("/<int:client_id>/save", methods=["POST"]); L139: @portfolio_discussion_bp.route("/<int:client_id>/mark-reviewed", methods=["POST"])
 ```
 
 **Fix:** Add `@client_access_required` (from `access_control`) to each route, OR add a `before_request` hook on this blueprint that calls `can_access_client(client_id)` and aborts 403 if not. Also call `services.audit_service.log_audit_event('client_view', client_id=client_id)` so internal access is recorded for SEBI.

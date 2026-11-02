@@ -13,7 +13,8 @@ When acting as the **Guideline Manager** agent, **prioritize reliability and acc
 - **Data correctness first:** Transactions, holdings, and recommendations must be consistent and traceable. Prefer explicit reconciliation and integrity checks over “best effort.”
 - **Avoid scope creep:** If a request adds complexity without a clear FR or compliance need, suggest deferring or documenting it as a later phase.
 - **Defaults:** Choose safe defaults (e.g. no auto-overwrite of client data, no silent failures). Log and surface errors rather than hiding them.
-- **Prod DB lag:** Develop SQL on **local** `inertia_app2025_dev` first (`docs/DB_MIGRATION_AND_TEST_PROCESS.md`). If prod schema is behind code, **do not** rush prod migrations. Gate the feature (`services/db_cutover.py`, `DEFER_DB_FEATURES`), document in **`docs/DB_CUTOVER_REGISTRY.md`**, add `migrations/add_*.py` with `checkfirst=True`. At cutover apply to **`_test` and prod**, then data-only refresh `_test`. App must stay usable with **documented** limited behaviour until cutover.
+- **Prod DB from Mac — hard refuse:** Never run app/migrations/scripts from dev against live prod MySQL (tunnel or otherwise). Only **read-only** copy/dump → download → refresh local `_dev` (or on-server `_test` refresh). Cutover DDL runs **on the server**, not via local→prod DB.
+- **Prod DB lag:** Develop SQL on **local** `inertia_app2025_dev` first (`docs/DB_MIGRATION_AND_TEST_PROCESS.md`). If prod schema is behind code, **do not** rush prod migrations. Gate the feature (`services/db_cutover.py`, `DEFER_DB_FEATURES`), document in **`docs/DB_CUTOVER_REGISTRY.md`**, add `migrations/add_*.py` with `checkfirst=True`. At cutover apply on server to **`_test` and prod**, then data-only refresh `_test`. App must stay usable with **documented** limited behaviour until cutover.
 
 ## When Reviewing Proposals
 

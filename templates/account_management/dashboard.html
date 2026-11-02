@@ -25,11 +25,14 @@
                     {% endif %}
                 </button>
             </form>
+            <a href="{{ url_for('account_management.transactions_browse', preset='all') }}" class="btn btn-outline-primary">
+                <i class="fas fa-list"></i> All transactions
+            </a>
             <a href="{{ url_for('account_management.analysis') }}" class="btn btn-outline-success">
                 <i class="fas fa-chart-pie"></i> Analysis by head
             </a>
             <a href="{{ url_for('account_management.heads_list') }}" class="btn btn-outline-secondary">
-                <i class="fas fa-list"></i> Credit/Debit Heads
+                <i class="fas fa-tags"></i> Credit/Debit Heads
             </a>
             <a href="{{ url_for('account_management.upload') }}" class="btn btn-primary">
                 <i class="fas fa-upload"></i> Upload Bank Statement
@@ -79,6 +82,12 @@
                     {% else %}
                     <p class="text-muted mb-0">No bank statements uploaded yet.</p>
                     <a href="{{ url_for('account_management.upload') }}" class="btn btn-primary mt-2">Upload first statement</a>
+                    {% endif %}
+                    {% if statements %}
+                    <p class="small text-muted mt-3 mb-0">
+                        <a href="{{ url_for('account_management.transactions_browse', preset='all') }}">Browse all uploaded transactions</a>
+                        — see earliest → latest date and filter by statement, head, or search.
+                    </p>
                     {% endif %}
                 </div>
             </div>

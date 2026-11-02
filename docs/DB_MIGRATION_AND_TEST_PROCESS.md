@@ -14,9 +14,17 @@ Canonical workflow for schema changes and database environments.
 | **`inertia_app2025`** | Server (prod) | Live production data. |
 | **`inertia_app2025_test`** | Server (same MySQL as prod) | QA / parallel check. Schema kept in sync with prod via the same migrations; **data** refreshed from prod after cutover. |
 
-**Do not** point local `.env` at tunneled prod (`DB_PORT=3307` + `DB_NAME=inertia_app2025`) for routine development. Use local `_dev`.
+### Hard gate (Mac / Cursor)
 
-Local MySQL helper: `./scripts/start_local_mysql.sh` (datadir under `.local/`).
+| From Mac | Allowed? |
+|----------|----------|
+| App / migrations / one-offs with `DB_NAME=inertia_app2025` (tunnel or remote) | **No** |
+| Point local `.env` at tunneled prod for “just checking” | **No** |
+| **Read-only** dump/copy prod → download → refresh **`inertia_app2025_dev`** | **Yes** |
+| Run migrations on prod via **SSH on the server** (or `db-cutover-prod` remote) | **Yes** (cutover only, after approval) |
+| Refresh server `_test` from prod **on the server** (`--data-only`) | **Yes** |
+
+Local MySQL helper: `./scripts/start_local_mysql.sh` (datadir under `.local/`). Day-to-day: always local `_dev`.
 
 ---
 
@@ -52,7 +60,7 @@ When ready to productionize schema (after backup):
 2. Run the **same** migration script(s) on **both** server databases (order matters if scripts depend on each other):
 
    ```bash
-   # On server, from /opt/Inertia2026v1 — or via tunnel with DB_HOST/PORT to server MySQL
+   # ON THE SERVER only (SSH), from /opt/Inertia2026v1 — never from Mac against tunneled prod
    DB_NAME=inertia_app2025_test ./venv/bin/python migrations/add_<feature>.py
    DB_NAME=inertia_app2025      ./venv/bin/python migrations/add_<feature>.py
    ```
@@ -74,21 +82,12 @@ Once both server DBs share the same structure:
 - Structure must already match; this step only replaces row data for shared tables.
 
 ```bash
-# Via SSH tunnel to server MySQL (typical from Mac)
-python3 scripts/utilities/clone_mysql_database.py \
-  --source inertia_app2025 \
-  --target inertia_app2025_test \
-  --host 127.0.0.1 --port 3307 \
-  --data-only \
-  --password '<server inertia_admin password>'
-```
-
-Or on the server (same host for source and target):
-
-```bash
+# Preferred: ON THE SERVER (same host for source and target)
 python3 scripts/utilities/clone_mysql_database.py \
   --source inertia_app2025 --target inertia_app2025_test --data-only
 ```
+
+**Refresh local `_dev` from prod (Mac allowed path):** dump/copy from prod is **read-only**; load only into local `inertia_app2025_dev`. Do not open a writable app session against prod. Prefer dump-on-server → download → import local (see `docs/LOCAL_SETUP.md` / clone helpers).
 
 ### Test-only schema extras
 
@@ -107,7 +106,9 @@ Do **not** full-clone (drop/recreate) test in that case — that would wipe test
 
 | Avoid | Why |
 |-------|-----|
-| Develop against tunneled **prod** | Accidental writes to live data |
+| **Any** Mac script/app against live **prod** MySQL | Accidental writes; hard gate |
+| Develop against tunneled **prod** | Same — use local `_dev` only |
+| Run cutover migrations from Mac via tunnel | Run **on server** instead |
 | `flask db upgrade` / full Alembic on prod | Unsafe; use `migrations/add_*.py` |
 | Migrate only `inertia_app2025` and skip `_test` | Test drifts from prod schema |
 | Full schema clone of test **after** cutover when structure already matches | Prefer data-only; preserves test-only objects |

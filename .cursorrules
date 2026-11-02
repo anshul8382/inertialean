@@ -4,10 +4,11 @@
 
 | Workspace | Server |
 |-----------|--------|
-| **`Inertia2026-lean` (this tree)** | **KVM4** `187.127.188.97` — `./scripts/deployment/ship_kvm.sh` (preferred); Lean `129.121.133.25` — `./scripts/deployment/ship_lean.sh` (sunset) |
-| **`app 2`** | BigRock `https://66.116.199.231/` / `inertiainvest.in` — deployment agent `full-prod` there only |
+| **`Inertia2026-lean` (this tree)** | **KVM4** `187.127.188.97` — `full-prod` (push) + **manual** `git pull` on server; Lean `129.121.133.25` — `ship_lean.sh` (sunset) |
+| **`app 2`** | BigRock `https://66.116.199.231/` / `inertiainvest.in` — its own `deploy_agent.py full-prod` only |
 
-- **Never** deploy this tree to BigRock / `66.116.199.231` / `deploy_agent.py full-prod`.
+- **Never** deploy this tree to BigRock / `66.116.199.231` / `inertiainvest.in`.
+- This tree’s `.local/deployment-agent/` targets **KVM** and refuses BigRock SSH.
 - Refuse any request that would ship `Inertia2026-lean` code to BigRock.
 
 ## Architecture Overview

@@ -5,15 +5,18 @@ alwaysApply: true
 
 # Commit and prod ship (mandatory gate)
 
-This workspace ships to **KVM** (`ship_kvm.sh` → `187.127.188.97`). Never BigRock.
+This workspace ships to **KVM** (`187.127.188.97`). Prefer **`.local/deployment-agent/deploy_agent.py full-prod`** (push only). **Prod `git pull` is manual.** Never BigRock.
 
 ## Hard rules
 
-1. **Do not** `git commit`, `git push`, or run `ship_kvm.sh` / `deploy_kvm_vps.sh` / `ship_lean.sh` unless the user **explicitly** asked to commit and/or move to prod (e.g. “commit and move to KVM”, “ship to prod”).
-2. Fixing a bug, finishing a feature, or “make it work on KVM” is **not** permission to commit or ship.
+1. **Do not** `git commit`, `git push`, or run `full-prod` / `ship_kvm.sh` / `deploy_kvm_vps.sh` / `ship_lean.sh` unless the user **explicitly** asked to commit and/or push (e.g. “commit and push”, “ship to prod”, “full-prod”).
+2. Fixing a bug, finishing a feature, or “make it work on KVM” is **not** permission to commit or push.
 3. **Never** use `SKIP_AGENT_APPROVAL=1` / `--skip-approval` unless the user explicitly allows a bypass in that message.
+4. **Never** point deploy_agent at BigRock (`66.116.199.231`) from this tree.
+5. **Prod pull is manual:** after push, print pull/restart commands and **stop**. Do **not** SSH-auto-pull or run `deploy_kvm_vps.sh` unless the user explicitly asks you to pull/restart on the server in that message.
+6. **No Mac → prod DB:** never run local scripts/Flask/migrations against prod MySQL (tunnel included). Allowed: **read-only** dump/copy → download → refresh local `_dev`. Schema cutover only **on the server**.
 
-## Required sequence (when user asks to commit + move to prod)
+## Required sequence (when user asks to commit + push / ship)
 
 1. **Stage only** relevant files (no secrets). Do **not** commit yet.
 2. Run the agent approval loop:
@@ -21,12 +24,17 @@ This workspace ships to **KVM** (`ship_kvm.sh` → `187.127.188.97`). Never BigR
    python3 scripts/run_agent_approval_loop.py --write-status
    ```
 3. **Report results to the user** (PASS / FAIL / PARTIAL per agent; blockers if any). Propose the commit message. Stop.
-4. **Wait** for an explicit final go-ahead (e.g. “go ahead”, “ship it”, “commit and deploy”).
-5. Only then: commit → push → `./scripts/deployment/ship_kvm.sh` (or the ship command they named) → confirm remote HEAD / health. HUP gunicorn on `:5004` if restart needs sudo.
+4. **Wait** for an explicit final go-ahead (e.g. “go ahead”, “push”, “ship it”).
+5. Only then: commit → push via deployment agent:
+   ```bash
+   DEPLOY_AGENT_CONFIRM=full-prod python3 .local/deployment-agent/deploy_agent.py full-prod
+   ```
+   Show the printed **manual** KVM pull/restart steps. User (or agent only if they ask) runs pull on prod.
+6. After they confirm pull: optional `diagnose-prod` / Tailscale health.
 
-If approval **FAIL**s: do not commit/ship; fix or ask. Do not silently bypass.
+If approval **FAIL**s: do not commit/push; fix or ask. Do not silently bypass.
 
 ## Allowed without ship ask
 
 - Local edits, tests, read-only SSH checks, explaining URLs/APIs.
-- Do **not** reload/restart prod gunicorn “to pick up changes” as a substitute for ship unless they asked to deploy.
+- Do **not** reload/restart prod gunicorn or `git pull` on the server unless they asked.

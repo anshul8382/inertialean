@@ -26,20 +26,21 @@ Consolidated from overlapping rules into **coherent units**:
 
 | Mac workspace | Server | Host | Ship with |
 |---------------|--------|------|-----------|
-| **`Inertia2026-lean` (this tree)** | **KVM4 (active)** | `187.127.188.97` → `/opt/Inertia2026v1` | `./scripts/deployment/ship_kvm.sh` |
+| **`Inertia2026-lean` (this tree)** | **KVM4 (active)** | `187.127.188.97` → `/opt/Inertia2026v1` | **`full-prod` (push) + manual pull on KVM** |
 | **`Inertia2026-lean`** | **Lean (sunset)** | `129.121.133.25` → `/opt/Inertia2026v1` | `./scripts/deployment/ship_lean.sh` |
-| **`app 2`** (separate tree) | **BigRock** | `https://66.116.199.231/` / `inertiainvest.in` | `deploy_agent.py full-prod` from **app 2 only** |
+| **`app 2`** (separate tree) | **BigRock** | `https://66.116.199.231/` / `inertiainvest.in` | `deploy_agent.py full-prod` from **app 2 only** (its own config) |
 
 **Hard rule for this workspace:** never ship to BigRock / `66.116.199.231` / `inertiainvest.in`. Prefer **KVM** for ongoing deploys; Lean remains available until cutover.
 
 | Do | Do **not** (from this tree) |
 |----|------------------------------|
-| `./scripts/deployment/ship_kvm.sh` | `deploy_agent.py full-prod` / `deploy-prod` / `diagnose-prod` |
-| `./scripts/deployment/deploy_kvm_vps.sh` | Any deploy to BigRock / `inertiainvest.in` |
-| `./scripts/deployment/ship_lean.sh` (legacy) | rsync/SCP app code as the normal ship path |
-| Git push → server `git pull` | |
+| `DEPLOY_AGENT_CONFIRM=full-prod … full-prod` then **manual** `git pull` on KVM | Auto SSH-pull / `deploy_kvm_vps` unless user asked |
+| `./scripts/deployment/ship_kvm.sh` (push; no auto-pull) | Pointing deploy_agent at BigRock / `66.116.199.231` |
+| Manual pull + `diagnose-prod` | Any deploy to BigRock / `inertiainvest.in` |
+| `diagnose-prod` / `db-cutover-status` via deploy_agent | rsync/SCP app code as the normal ship path |
+| `./scripts/deployment/ship_lean.sh` (legacy) | |
 
-`.local/deployment-agent/` may be shared via symlink for local MySQL docs — its **prod target is BigRock** and belongs to **app 2** workflows, not Lean/KVM ship.
+`.local/deployment-agent/` in **this** tree is configured for **KVM** (`deploy_mode: local` → `deploy_kvm_vps.sh`). App 2 keeps a separate BigRock-oriented agent config.
 
 **Clone Lean → another server:** `NEW_HOST=anshul@NEW_IP ./scripts/deployment/provision_new_host.sh` — source is Lean only.
 

@@ -12,22 +12,30 @@
 
 | Workspace | Server |
 |-----------|--------|
-| **Inertia2026-lean** | Lean VPS `129.121.133.25` — `./scripts/deployment/ship_lean.sh` |
-| **app 2** | BigRock `https://66.116.199.231/` — `deploy_agent.py full-prod` there only |
+| **Inertia2026-lean** | **KVM4** `187.127.188.97` — `full-prod` (push) + **manual** pull; Lean sunset `ship_lean.sh` |
+| **app 2** | BigRock — its own `deploy_agent` only |
 
-**Never** `full-prod` / BigRock from this tree. See `docs/DEPLOY_WORKFLOW.md`.
+**Never** BigRock from this tree. Prod **git pull** is manual. See `docs/DEPLOY_WORKFLOW.md`, `commit-and-prod-ship.mdc`.
 
 ## Databases and migrations
 
 **Canonical:** **`docs/DB_MIGRATION_AND_TEST_PROCESS.md`**.
 
-1. **Develop SQL on local** `inertia_app2025_dev` (`127.0.0.1:3306`) — not tunneled prod.
-2. Additive scripts only: `migrations/add_*.py` with `checkfirst=True`.
-3. If prod lags: **gate** (`services/db_cutover.py` + `DEFER_DB_FEATURES`) and document in **`docs/DB_CUTOVER_REGISTRY.md`**.
-4. **Cutover:** backup → same migrations on **`inertia_app2025_test` then `inertia_app2025`** → clear defer → restart → mark registry **Completed**.
-5. **After cutover:** refresh `_test` with **prod data only** (`--data-only`). If test has test-only DDL, never full-drop the test DB — data-only only.
+### Hard gate — Mac/dev must not use prod DB
 
-Never `flask db upgrade` on prod. See `.local/deployment-agent/CURSOR_AGENT.md`, `docs/DEPLOY_WORKFLOW.md`.
+1. **No script / Flask / migration / one-off from the Mac may point at prod MySQL** (no `DB_NAME=inertia_app2025` via tunnel/`DB_PORT=3307`, no write tooling against live).
+2. **Allowed from Mac vs prod data (read-only dump path only):** copy/dump prod → download → refresh **local** `inertia_app2025_dev` (or documented clone into `_test` **on the server**). Prod side of that path is **read-only** (mysqldump / clone source).
+3. **Schema cutover on prod** runs **on the server** (SSH session in `/opt/Inertia2026v1`, or `db-cutover-prod` which executes remote) — never “local Python + tunneled prod credentials.”
+4. Day-to-day develop/test: **local only** `inertia_app2025_dev` (`127.0.0.1:3306`).
+
+### Migration process
+
+1. Additive scripts only: `migrations/add_*.py` with `checkfirst=True` — run on **local `_dev` first**.
+2. If prod lags: **gate** (`services/db_cutover.py` + `DEFER_DB_FEATURES`) and document in **`docs/DB_CUTOVER_REGISTRY.md`**.
+3. **Cutover (on server):** backup → same migrations on **`inertia_app2025_test` then `inertia_app2025`** → clear defer → restart → mark registry **Completed**.
+4. **After cutover:** refresh `_test` with **prod data only** (`--data-only`). Prefer running clone **on the server**. If test has test-only DDL, never full-drop the test DB.
+
+Never `flask db upgrade` on prod. See `.local/deployment-agent/CURSOR_AGENT.md`.
 
 ## Preserve (do not regress)
 

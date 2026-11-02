@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# KVM4 ship pipeline (Mac only): agent approvals → commit → push → deploy Hostinger.
+# KVM4 ship pipeline (Mac only): agent approvals → commit → push.
+# Prod git pull is MANUAL (default). Use --auto-deploy only if you want Mac-side
+# deploy_kvm_vps.sh to SSH-pull (discouraged; prefer manual pull on server).
 #
-# Does NOT use BigRock .local/deployment-agent. Never ships to 66.116.199.231.
-# Prefer this over ship_lean.sh while KVM is the active target (Lean sunsets).
+# Preferred Cursor path (after commits): deploy_agent.py full-prod
+#   (push + print manual pull steps; refuses BigRock).
 #
 # Usage:
 #   ./scripts/deployment/ship_kvm.sh
@@ -10,7 +12,7 @@
 #   ./scripts/deployment/ship_kvm.sh --skip-commit
 #   ./scripts/deployment/ship_kvm.sh --skip-approval
 #   ./scripts/deployment/ship_kvm.sh --allow-approval-fail
-#   ./scripts/deployment/ship_kvm.sh --skip-deploy
+#   ./scripts/deployment/ship_kvm.sh --auto-deploy   # optional; not the default
 #
 # Env: KVM_HOST, KVM_SSH_KEY, KVM_BRANCH (same as deploy_kvm_vps.sh)
 #
@@ -24,18 +26,28 @@ cd "$ROOT"
 SKIP_APPROVAL=0
 ALLOW_APPROVAL_FAIL=0
 SKIP_COMMIT=0
-SKIP_DEPLOY=0
+AUTO_DEPLOY=0
 MSG=""
+
+HOST="${KVM_HOST:-anshul@187.127.188.97}"
+APP_DIR="${KVM_APP_DIR:-/opt/Inertia2026v1}"
+SSH_KEY="${KVM_SSH_KEY:-$HOME/.ssh/inertia_vps}"
+BRANCH="${KVM_BRANCH:-main}"
+GUNICORN_UNIT="${KVM_GUNICORN_UNIT:-inertia-2026v1}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-approval) SKIP_APPROVAL=1; shift ;;
     --allow-approval-fail) ALLOW_APPROVAL_FAIL=1; shift ;;
     --skip-commit) SKIP_COMMIT=1; shift ;;
-    --skip-deploy) SKIP_DEPLOY=1; shift ;;
+    --skip-deploy)
+      # Legacy no-op: deploy is already skipped by default
+      shift
+      ;;
+    --auto-deploy) AUTO_DEPLOY=1; shift ;;
     --message|-m) MSG="${2:-}"; shift 2 ;;
     -h|--help)
-      sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *) echo "Unknown: $1" >&2; exit 1 ;;
@@ -43,7 +55,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "=============================================="
-echo " KVM ship: approvals → commit → push → deploy"
+echo " KVM ship: approvals → commit → push"
+echo " (prod pull is MANUAL unless --auto-deploy)"
 echo "=============================================="
 
 # --- 1) Agent approvals ---
@@ -94,14 +107,24 @@ echo ""
 echo "==> git push origin main"
 git push origin HEAD:main
 
-# --- 4) Deploy to KVM ---
-if [[ "$SKIP_DEPLOY" -eq 0 ]]; then
+# --- 4) Prod pull ---
+if [[ "$AUTO_DEPLOY" -eq 1 ]]; then
   echo ""
-  echo "==> Deploy to KVM4 (preserves .env)"
+  echo "==> --auto-deploy: Mac-side pull+restart on KVM"
   bash scripts/deployment/deploy_kvm_vps.sh --skip-push --restart-airflow --allow-dirty
 else
-  echo "==> Skipping deploy (--skip-deploy)"
+  echo ""
+  echo "==> Push complete. PROD PULL IS MANUAL — run on KVM:"
+  echo ""
+  echo "  ssh -i $SSH_KEY -o IdentitiesOnly=yes $HOST"
+  echo "  cd $APP_DIR"
+  echo "  git fetch origin --prune"
+  echo "  git checkout $BRANCH"
+  echo "  git pull --ff-only origin $BRANCH"
+  echo "  sudo systemctl restart $GUNICORN_UNIT"
+  echo "  curl -s -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:5004/api/v1/health"
+  echo ""
 fi
 
 echo ""
-echo "Done. KVM ship complete."
+echo "Done. KVM ship push complete."

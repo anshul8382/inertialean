@@ -16,6 +16,7 @@ from services.bank_statement_service import parse_bank_statement, sanitize_descr
 from services.secure_upload import sanitize_upload_filename
 from services.account_statement_export_service import (
     analyze_classifications,
+    browse_transactions_for_user,
     build_csv_bytes,
     fetch_transactions_for_user,
     list_heads_used_in_period,
@@ -23,6 +24,7 @@ from services.account_statement_export_service import (
     monthwise_flow_for_head,
     parse_custom_range,
     resolve_period,
+    user_transaction_date_bounds,
 )
 from datetime import date, datetime
 from decimal import Decimal
@@ -216,6 +218,136 @@ def analysis():
         export_download_url=export_download_url,
         month_expense_chart=month_expense_chart,
         period_picker_head_id=validated_head_id,
+    )
+
+
+@account_management_bp.route('/transactions')
+@login_required
+def transactions_browse():
+    """Browse all uploaded bank transactions with basic filters."""
+    date_from, date_to, period_label = None, None, "All uploaded data"
+    preset = (request.args.get("preset") or "").strip()
+    date_from_s = request.args.get("date_from")
+    date_to_s = request.args.get("date_to")
+    is_custom_range = False
+    active_preset = ""
+
+    if date_from_s and date_to_s and not preset:
+        resolved = parse_custom_range(date_from_s, date_to_s)
+        if resolved:
+            date_from, date_to, period_label = resolved
+            is_custom_range = True
+        else:
+            flash("Enter a valid date range (from / to).", "error")
+    elif preset and preset not in ("all", "all_data"):
+        resolved = resolve_period(preset)
+        if resolved:
+            date_from, date_to, period_label = resolved
+            active_preset = preset
+        else:
+            flash("Unknown period preset.", "error")
+    else:
+        active_preset = "all"
+
+    statement_id = request.args.get("statement_id", type=int)
+    head_id = request.args.get("head_id", type=int)
+    validated_head_id = head_id if head_id and AccountHead.query.get(head_id) else None
+    validated_statement_id = None
+    if statement_id:
+        stmt = BankStatement.query.filter_by(id=statement_id, created_by=current_user.id).first()
+        if stmt:
+            validated_statement_id = stmt.id
+
+    classified = (request.args.get("classified") or "").strip().lower() or None
+    if classified not in (None, "yes", "no"):
+        classified = None
+    flow = (request.args.get("flow") or "").strip().lower() or None
+    if flow not in (None, "credit", "debit"):
+        flow = None
+    q = (request.args.get("q") or "").strip() or None
+    page = request.args.get("page", 1, type=int) or 1
+
+    result = browse_transactions_for_user(
+        current_user.id,
+        date_from=date_from,
+        date_to=date_to,
+        statement_id=validated_statement_id,
+        head_id=validated_head_id,
+        classified=classified,
+        flow=flow,
+        q=q,
+        page=page,
+        per_page=100,
+    )
+
+    overall_bounds = user_transaction_date_bounds(current_user.id)
+    statements = (
+        BankStatement.query.filter_by(created_by=current_user.id)
+        .order_by(BankStatement.upload_date.desc())
+        .all()
+    )
+    heads = (
+        AccountHead.query.filter(
+            AccountHead.is_active == True,
+            AccountHead.created_by == current_user.id,
+        )
+        .order_by(AccountHead.sort_order, AccountHead.name)
+        .all()
+    )
+
+    filter_args = {}
+    if is_custom_range and date_from and date_to:
+        filter_args["date_from"] = date_from.isoformat()
+        filter_args["date_to"] = date_to.isoformat()
+    elif active_preset and active_preset != "all":
+        filter_args["preset"] = active_preset
+    else:
+        filter_args["preset"] = "all"
+    if validated_statement_id:
+        filter_args["statement_id"] = validated_statement_id
+    if validated_head_id:
+        filter_args["head_id"] = validated_head_id
+    if classified:
+        filter_args["classified"] = classified
+    if flow:
+        filter_args["flow"] = flow
+    if q:
+        filter_args["q"] = q
+
+    def _preset_args(preset_name: str) -> dict:
+        args = {k: v for k, v in filter_args.items() if k not in ("preset", "date_from", "date_to", "page")}
+        args["preset"] = preset_name
+        return args
+
+    return render_template(
+        "account_management/transactions_browse.html",
+        rows=result["rows"],
+        total_count=result["total_count"],
+        page=result["page"],
+        pages=result["pages"],
+        per_page=result["per_page"],
+        filtered_earliest=result["filtered_earliest"],
+        filtered_latest=result["filtered_latest"],
+        total_credit=result["total_credit"],
+        total_debit=result["total_debit"],
+        overall_bounds=overall_bounds,
+        period_label=period_label,
+        date_from=date_from,
+        date_to=date_to,
+        is_custom_range=is_custom_range,
+        active_preset=active_preset,
+        statements=statements,
+        heads=heads,
+        selected_statement_id=validated_statement_id,
+        selected_head_id=validated_head_id,
+        classified=classified or "",
+        flow=flow or "",
+        q=q or "",
+        filter_args=filter_args,
+        preset_link_all=_preset_args("all"),
+        preset_link_90=_preset_args("last_90_days"),
+        preset_link_12m=_preset_args("last_12_months"),
+        preset_link_fy=_preset_args("fy_current"),
     )
 
 
