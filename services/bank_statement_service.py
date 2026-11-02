@@ -49,53 +49,170 @@ COLUMN_ALIASES = {
 }
 
 
+def _et_find(parent: ET.Element, local_name: str, ns: str) -> Optional[ET.Element]:
+    """Find child by local name. Never use `elem or …` — ElementTree elems can be falsy."""
+    el = parent.find(f'{{{ns}}}{local_name}')
+    if el is not None:
+        return el
+    return parent.find(local_name)
+
+
+def _et_findall(parent: ET.Element, local_name: str, ns: str) -> List[ET.Element]:
+    found = parent.findall(f'{{{ns}}}{local_name}')
+    if found:
+        return found
+    return parent.findall(local_name)
+
+
+def _et_attr(elem: ET.Element, local_name: str, ns: str) -> Optional[str]:
+    val = elem.get(f'{{{ns}}}{local_name}')
+    if val is not None:
+        return val
+    return elem.get(local_name)
+
+
+def _cell_text(data_el: Optional[ET.Element]) -> str:
+    if data_el is None:
+        return ''
+    return ''.join(data_el.itertext()).strip()
+
+
+# Header-row scoring: bank statements often have address/account preamble before the table.
+_HEADER_GROUPS = {
+    'date': ('transaction date', 'txn date', 'txn. date', 'value date', 'date'),
+    'description': ('description', 'particular', 'narration', 'remarks', 'details'),
+    'withdrawal': ('withdrawal', 'withdrawals', 'debit', 'dr amount', 'dr'),
+    'deposit': ('deposit', 'deposits', 'credit', 'cr amount', 'cr'),
+    'reference': ('reference', 'cheque', 'chq', 'ref no'),
+    'balance': ('running balance', 'balance', 'closing balance'),
+}
+
+
+def _score_header_row(cells: List[Any]) -> int:
+    """Score how likely a row is the transaction column header (higher is better)."""
+    parts = [re.sub(r'\s+', ' ', str(c).strip().lower()) for c in cells if str(c).strip()]
+    if len(parts) < 2:
+        return 0
+    joined = ' | '.join(parts)
+    # Prefer exact-ish header phrases over accidental substrings in preamble
+    score = 0
+    hit_groups = set()
+    for group, phrases in _HEADER_GROUPS.items():
+        for phrase in phrases:
+            if any(phrase == p or phrase in p for p in parts) or f' {phrase} ' in f' {joined} ':
+                hit_groups.add(group)
+                score += 2 if ' ' in phrase or phrase in (
+                    'transaction date', 'value date', 'running balance', 'withdrawals', 'deposits'
+                ) else 1
+                break
+    # Require at least date + (description or amount columns)
+    if 'date' not in hit_groups:
+        return 0
+    if not (hit_groups & {'description', 'withdrawal', 'deposit', 'reference', 'balance'}):
+        return 0
+    if len(hit_groups) < 2:
+        return 0
+    score += len(hit_groups) * 3
+    # Bonus for classic Yes Bank / Indian stmt layouts
+    if 'withdrawal' in hit_groups and 'deposit' in hit_groups:
+        score += 5
+    if 'description' in hit_groups:
+        score += 3
+    return score
+
+
+def _looks_like_txn_date_cell(val: Any) -> bool:
+    s = str(val or '').strip().lower()
+    if not s:
+        return False
+    return bool(
+        re.match(
+            r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)',
+            s,
+        )
+    )
+
+
+def _dataframe_from_grid(rows_list: List[List[Any]]) -> pd.DataFrame:
+    """
+    Build a statement DataFrame from a raw grid.
+    Accepts files with bank letterhead / account preamble, or a header on row 0,
+    or a headerless sheet that starts with dated transactions.
+    """
+    if not rows_list:
+        return pd.DataFrame()
+    max_cols = max(len(r) for r in rows_list)
+    normalized: List[List[Any]] = []
+    for r in rows_list:
+        row = list(r)
+        while len(row) < max_cols:
+            row.append('')
+        normalized.append(row)
+
+    best_i = 0
+    best_score = -1
+    # Only search early rows for the header (preamble is usually short)
+    scan_limit = min(len(normalized), 80)
+    for i in range(scan_limit):
+        score = _score_header_row(normalized[i])
+        if score > best_score:
+            best_score = score
+            best_i = i
+
+    if best_score >= 8:
+        header = [
+            (str(c).strip() or f'col_{j}') for j, c in enumerate(normalized[best_i])
+        ]
+        # Deduplicate empty/duplicate header labels
+        seen = {}
+        cols = []
+        for h in header:
+            key = h
+            if key in seen:
+                seen[key] += 1
+                key = f'{h}_{seen[h]}'
+            else:
+                seen[h] = 0
+            cols.append(key)
+        return pd.DataFrame(normalized[best_i + 1 :], columns=cols)
+
+    # No clear header: treat as data starting at first date-like row
+    start = 0
+    for i, row in enumerate(normalized):
+        if any(_looks_like_txn_date_cell(c) for c in row[:3]):
+            start = i
+            break
+    return pd.DataFrame(normalized[start:], columns=range(max_cols))
+
+
 def _parse_excel_2003_xml(content: bytes) -> pd.DataFrame:
     """Parse Excel 2003 XML (SpreadsheetML) format. Returns DataFrame."""
     if content.startswith(b'\xef\xbb\xbf'):
         content = content[3:]
     root = ET.fromstring(content)
     ns = 'urn:schemas-microsoft-com:office:spreadsheet'
-    table = root.find(f'.//{{{ns}}}Table') or root.find('.//Table')
+    table = root.find(f'.//{{{ns}}}Table')
+    if table is None:
+        table = root.find('.//Table')
     if table is None:
         return pd.DataFrame()
-    rows_list = []
-    for row_el in table.findall(f'{{{ns}}}Row') or table.findall('Row') or []:
-        row_vals = []
+    rows_list: List[List[Any]] = []
+    for row_el in _et_findall(table, 'Row', ns):
+        row_vals: List[Any] = []
         col_idx = 0
-        for cell in row_el.findall(f'{{{ns}}}Cell') or row_el.findall('Cell') or []:
-            idx_attr = cell.get('{urn:schemas-microsoft-com:office:spreadsheet}Index')
+        for cell in _et_findall(row_el, 'Cell', ns):
+            idx_attr = _et_attr(cell, 'Index', ns)
             if idx_attr:
                 while col_idx < int(idx_attr) - 1:
                     row_vals.append('')
                     col_idx += 1
-            data_el = cell.find(f'{{{ns}}}Data') or cell.find('Data')
-            val = (data_el.text or '').strip() if data_el is not None else ''
+            data_el = _et_find(cell, 'Data', ns)
+            val = _cell_text(data_el)
             row_vals.append(val)
             col_idx += 1
-        if row_vals:
+        if any(str(v).strip() for v in row_vals):
             rows_list.append(row_vals)
-    if not rows_list:
-        return pd.DataFrame()
-    max_cols = max(len(r) for r in rows_list)
-    for r in rows_list:
-        while len(r) < max_cols:
-            r.append('')
-    # Find header row: first row with date/debit/deposit/description-like headers
-    header_keywords = ['date', 'debit', 'credit', 'withdraw', 'deposit', 'particular', 'narration', 'description', 'dr', 'cr', 'ref', 'cheque', 'chq']
-    header_row = 0
-    for i, row in enumerate(rows_list):
-        row_text = ' '.join(str(v).lower() for v in row)
-        if any(kw in row_text for kw in header_keywords):
-            header_row = i
-            break
-    # If row 0 looks like data (starts with date pattern), use generic columns
-    first_cell = str(rows_list[0][0]) if rows_list and rows_list[0] else ''
-    looks_like_date = bool(re.match(r'\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{1,2}\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)', first_cell.lower()))
-    if looks_like_date and header_row == 0:
-        df = pd.DataFrame(rows_list, columns=range(len(rows_list[0]) if rows_list else 0))
-    else:
-        df = pd.DataFrame(rows_list[header_row + 1:], columns=rows_list[header_row] if rows_list else None)
-    return df
+    return _dataframe_from_grid(rows_list)
 
 
 def _normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
@@ -294,20 +411,34 @@ def parse_bank_statement(
 
     try:
         if filename.lower().endswith('.csv'):
-            df = pd.read_csv(BytesIO(file_content), encoding='utf-8', on_bad_lines='skip')
+            # header=None so bank letterhead / preamble rows can be skipped
+            raw_df = pd.read_csv(
+                BytesIO(file_content), encoding='utf-8', on_bad_lines='skip', header=None
+            )
+            df = _dataframe_from_grid(raw_df.fillna('').astype(str).values.tolist())
         elif filename.lower().endswith(('.xlsx', '.xlsm')):
             try:
-                df = pd.read_excel(BytesIO(file_content), engine='openpyxl')
+                raw_df = pd.read_excel(
+                    BytesIO(file_content), engine='openpyxl', header=None
+                )
             except ImportError:
                 errors.append("Excel support requires openpyxl. Install with: pip install openpyxl")
                 return [], errors
+            df = _dataframe_from_grid(raw_df.fillna('').astype(str).values.tolist())
         elif filename.lower().endswith('.xls'):
             # Detect by content: .xls can be xlsx (ZIP), Excel 2003 XML, or legacy binary
             header = file_content[:8] if len(file_content) >= 8 else b''
             if header.startswith(b'PK'):  # ZIP = .xlsx with wrong extension
-                df = pd.read_excel(BytesIO(file_content), engine='openpyxl')
-            elif header.startswith(b'<?xml') or (len(file_content) > 10 and file_content[:3] == b'\xef\xbb\xbf' and file_content[3:10].startswith(b'<?xml')):
-                # Excel 2003 XML (SpreadsheetML)
+                raw_df = pd.read_excel(
+                    BytesIO(file_content), engine='openpyxl', header=None
+                )
+                df = _dataframe_from_grid(raw_df.fillna('').astype(str).values.tolist())
+            elif header.startswith(b'<?xml') or (
+                len(file_content) > 10
+                and file_content[:3] == b'\xef\xbb\xbf'
+                and file_content[3:10].startswith(b'<?xml')
+            ):
+                # Excel 2003 XML (SpreadsheetML) — common Yes Bank export
                 df = _parse_excel_2003_xml(file_content)
                 if df.empty:
                     errors.append("Could not parse Excel 2003 XML. Try saving as .xlsx in Excel.")
@@ -315,12 +446,18 @@ def parse_bank_statement(
             else:
                 # Legacy binary .xls
                 try:
-                    df = pd.read_excel(BytesIO(file_content), engine='xlrd')
+                    raw_df = pd.read_excel(
+                        BytesIO(file_content), engine='xlrd', header=None
+                    )
                 except ImportError:
                     errors.append("Legacy Excel (.xls) support requires xlrd. Install with: pip install xlrd")
                     return [], errors
+                df = _dataframe_from_grid(raw_df.fillna('').astype(str).values.tolist())
         else:
-            df = pd.read_csv(BytesIO(file_content), encoding='utf-8', on_bad_lines='skip')
+            raw_df = pd.read_csv(
+                BytesIO(file_content), encoding='utf-8', on_bad_lines='skip', header=None
+            )
+            df = _dataframe_from_grid(raw_df.fillna('').astype(str).values.tolist())
     except Exception as e:
         errors.append(f"Could not read file: {str(e)}")
         return [], errors

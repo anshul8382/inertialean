@@ -333,6 +333,102 @@ def build_csv_bytes(rows: List[BankStatementTransaction], period_label: str) -> 
     return ("\ufeff" + buf.getvalue()).encode("utf-8")
 
 
+def _shift_date_years(d: date, years: int) -> date:
+    """Shift a calendar date by N years; clamp Feb 29 → Feb 28 when needed."""
+    try:
+        return date(d.year + years, d.month, d.day)
+    except ValueError:
+        # 29 Feb → 28 Feb in non-leap target year
+        return date(d.year + years, d.month, 28)
+
+
+def prior_year_period(
+    date_from: date, date_to: date
+) -> Tuple[date, date, str]:
+    """
+    Same calendar window one year earlier.
+    Example: FY window 2026-04-01 → 2026-06-30 → 2025-04-01 → 2025-06-30.
+    """
+    p_from = _shift_date_years(date_from, -1)
+    p_to = _shift_date_years(date_to, -1)
+    if p_from > p_to:
+        p_from, p_to = p_to, p_from
+    label = f"Same period last year ({p_from:%d %b %Y} – {p_to:%d %b %Y})"
+    return p_from, p_to, label
+
+
+def _pct_change(current: float, prior: float) -> Optional[float]:
+    if prior == 0:
+        return None  # UI shows "new" / "—" when prior is zero
+    return ((current - prior) / abs(prior)) * 100.0
+
+
+def build_yoy_head_rows(
+    current_rows: List[Dict[str, Any]],
+    prior_rows: List[Dict[str, Any]],
+    *,
+    current_uncl_total: float = 0.0,
+    prior_uncl_total: float = 0.0,
+    current_uncl_count: int = 0,
+    prior_uncl_count: int = 0,
+) -> List[Dict[str, Any]]:
+    """Merge this-period and prior-period head breakdowns by head_id (name fallback)."""
+    cur_map: Dict[Any, Dict[str, Any]] = {}
+    for r in current_rows:
+        key = r.get("head_id") if r.get("head_id") is not None else ("name", r.get("name"))
+        cur_map[key] = r
+    pri_map: Dict[Any, Dict[str, Any]] = {}
+    for r in prior_rows:
+        key = r.get("head_id") if r.get("head_id") is not None else ("name", r.get("name"))
+        pri_map[key] = r
+
+    keys = list(dict.fromkeys(list(cur_map.keys()) + list(pri_map.keys())))
+    out: List[Dict[str, Any]] = []
+    for key in keys:
+        c = cur_map.get(key) or {}
+        p = pri_map.get(key) or {}
+        cur_total = float(c.get("total") or 0)
+        pri_total = float(p.get("total") or 0)
+        delta = cur_total - pri_total
+        pct = _pct_change(cur_total, pri_total)
+        out.append(
+            {
+                "head_id": c.get("head_id") if c else p.get("head_id"),
+                "name": c.get("name") or p.get("name") or "—",
+                "head_type": c.get("head_type") or p.get("head_type") or "",
+                "current_total": cur_total,
+                "prior_total": pri_total,
+                "current_count": int(c.get("count") or 0),
+                "prior_count": int(p.get("count") or 0),
+                "delta": delta,
+                "pct_change": pct,
+                "is_new": pri_total == 0 and cur_total > 0,
+                "is_gone": cur_total == 0 and pri_total > 0,
+            }
+        )
+    if current_uncl_total or prior_uncl_total or current_uncl_count or prior_uncl_count:
+        cur_u = float(current_uncl_total or 0)
+        pri_u = float(prior_uncl_total or 0)
+        out.append(
+            {
+                "head_id": None,
+                "name": "Unclassified",
+                "head_type": "",
+                "current_total": cur_u,
+                "prior_total": pri_u,
+                "current_count": int(current_uncl_count or 0),
+                "prior_count": int(prior_uncl_count or 0),
+                "delta": cur_u - pri_u,
+                "pct_change": _pct_change(cur_u, pri_u),
+                "is_new": pri_u == 0 and cur_u > 0,
+                "is_gone": cur_u == 0 and pri_u > 0,
+                "is_unclassified": True,
+            }
+        )
+    out.sort(key=lambda x: (-abs(x["current_total"]), -abs(x["prior_total"]), x["name"]))
+    return out
+
+
 def analyze_classifications(
     user_id: int, date_from: date, date_to: date, head_id: Optional[int] = None
 ) -> Dict[str, Any]:

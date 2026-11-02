@@ -12,17 +12,20 @@ from access_control import user_can_access_account_management
 from extensions import db
 from models import AccountHead, BankStatement, BankStatementTransaction
 from sqlalchemy import func, or_
+from sqlalchemy.orm import joinedload
 from services.bank_statement_service import parse_bank_statement, sanitize_description
 from services.secure_upload import sanitize_upload_filename
 from services.account_statement_export_service import (
     analyze_classifications,
     browse_transactions_for_user,
     build_csv_bytes,
+    build_yoy_head_rows,
     fetch_transactions_for_user,
     list_heads_used_in_period,
     monthwise_debit_expenses_by_head,
     monthwise_flow_for_head,
     parse_custom_range,
+    prior_year_period,
     resolve_period,
     user_transaction_date_bounds,
 )
@@ -154,6 +157,47 @@ def analysis():
     data = analyze_classifications(current_user.id, date_from, date_to, head_id=validated_head_id)
     data['period_label'] = period_label
 
+    prior_from, prior_to, prior_label = prior_year_period(date_from, date_to)
+    prior_data = analyze_classifications(
+        current_user.id, prior_from, prior_to, head_id=validated_head_id
+    )
+    prior_data['period_label'] = prior_label
+
+    yoy_credit_rows = build_yoy_head_rows(
+        data['credit_by_head'],
+        prior_data['credit_by_head'],
+        current_uncl_total=data['unclassified_credit_total'],
+        prior_uncl_total=prior_data['unclassified_credit_total'],
+        current_uncl_count=data['unclassified_credit_count'],
+        prior_uncl_count=prior_data['unclassified_credit_count'],
+    )
+    yoy_debit_rows = build_yoy_head_rows(
+        data['debit_by_head'],
+        prior_data['debit_by_head'],
+        current_uncl_total=data['unclassified_debit_total'],
+        prior_uncl_total=prior_data['unclassified_debit_total'],
+        current_uncl_count=data['unclassified_debit_count'],
+        prior_uncl_count=prior_data['unclassified_debit_count'],
+    )
+
+    def _delta_pct(cur: float, pri: float):
+        if pri == 0:
+            return None
+        return ((cur - pri) / abs(pri)) * 100.0
+
+    yoy_summary = {
+        'prior_from': prior_from,
+        'prior_to': prior_to,
+        'prior_label': prior_label,
+        'credit_delta': data['total_credit'] - prior_data['total_credit'],
+        'debit_delta': data['total_debit'] - prior_data['total_debit'],
+        'net_delta': data['net'] - prior_data['net'],
+        'credit_pct': _delta_pct(data['total_credit'], prior_data['total_credit']),
+        'debit_pct': _delta_pct(data['total_debit'], prior_data['total_debit']),
+        'net_pct': _delta_pct(data['net'], prior_data['net']),
+        'has_prior_data': prior_data['transaction_count'] > 0,
+    }
+
     def pie_segments(by_head: list, uncl_total: float, uncl_count: int):
         labels = [x['name'] for x in by_head]
         values = [x['total'] for x in by_head]
@@ -174,6 +218,16 @@ def analysis():
         data['unclassified_debit_total'],
         data['unclassified_debit_count'],
     )
+    pc_lab, pc_val, pc_cnt = pie_segments(
+        prior_data['credit_by_head'],
+        prior_data['unclassified_credit_total'],
+        prior_data['unclassified_credit_count'],
+    )
+    pd_lab, pd_val, pd_cnt = pie_segments(
+        prior_data['debit_by_head'],
+        prior_data['unclassified_debit_total'],
+        prior_data['unclassified_debit_count'],
+    )
 
     active_preset = (request.args.get('preset') or '').strip()
     if not active_preset and not (request.args.get('date_from') and request.args.get('date_to')):
@@ -191,7 +245,17 @@ def analysis():
     month_expense_chart = monthwise_debit_expenses_by_head(
         current_user.id, date_from, date_to, head_id=validated_head_id
     )
-    head_options = list_heads_used_in_period(current_user.id, date_from, date_to)
+    # Heads used in either this period or prior-year window (so filter still useful for YoY)
+    head_options_now = list_heads_used_in_period(current_user.id, date_from, date_to)
+    head_options_prior = list_heads_used_in_period(current_user.id, prior_from, prior_to)
+    seen_ids = set()
+    head_options = []
+    for h in head_options_now + head_options_prior:
+        if h['id'] in seen_ids:
+            continue
+        seen_ids.add(h['id'])
+        head_options.append(h)
+    head_options.sort(key=lambda x: x['name'].lower())
     head_trend = (
         monthwise_flow_for_head(current_user.id, date_from, date_to, validated_head_id)
         if validated_head_id
@@ -201,6 +265,10 @@ def analysis():
     return render_template(
         'account_management/analysis.html',
         analysis=data,
+        prior_analysis=prior_data,
+        yoy_summary=yoy_summary,
+        yoy_credit_rows=yoy_credit_rows,
+        yoy_debit_rows=yoy_debit_rows,
         period_label=period_label,
         date_from=date_from,
         date_to=date_to,
@@ -214,10 +282,107 @@ def analysis():
         debit_chart_labels=d_lab,
         debit_chart_values=d_val,
         debit_chart_counts=d_cnt,
+        prior_credit_chart_labels=pc_lab,
+        prior_credit_chart_values=pc_val,
+        prior_debit_chart_labels=pd_lab,
+        prior_debit_chart_values=pd_val,
         active_preset=active_preset,
         export_download_url=export_download_url,
         month_expense_chart=month_expense_chart,
         period_picker_head_id=validated_head_id,
+        head_txn_api_url=url_for('account_management.analysis_head_transactions'),
+    )
+
+
+@account_management_bp.route('/analysis/head-transactions')
+@login_required
+def analysis_head_transactions():
+    """JSON: transactions for one classification head (or unclassified) in a date range."""
+    date_from_s = (request.args.get('date_from') or '').strip()
+    date_to_s = (request.args.get('date_to') or '').strip()
+    resolved = parse_custom_range(date_from_s, date_to_s)
+    if not resolved:
+        return jsonify({"ok": False, "error": "Invalid date range."}), 400
+    date_from, date_to, _label = resolved
+
+    flow = (request.args.get('flow') or 'all').strip().lower()
+    if flow not in ('credit', 'debit', 'all'):
+        flow = 'all'
+    unclassified = (request.args.get('unclassified') or '').strip().lower() in (
+        '1', 'true', 'yes',
+    )
+    head_id = request.args.get('head_id', type=int)
+    head_name = 'Unclassified'
+    if not unclassified:
+        if not head_id:
+            return jsonify({"ok": False, "error": "head_id required."}), 400
+        head = AccountHead.query.get(head_id)
+        if not head:
+            return jsonify({"ok": False, "error": "Head not found."}), 404
+        head_name = head.name
+
+    q = (
+        BankStatementTransaction.query.join(BankStatement)
+        .filter(
+            BankStatement.created_by == current_user.id,
+            BankStatementTransaction.transaction_date >= date_from,
+            BankStatementTransaction.transaction_date <= date_to,
+        )
+        .options(joinedload(BankStatementTransaction.bank_statement))
+    )
+    if unclassified:
+        q = q.filter(BankStatementTransaction.income_expense_head_id.is_(None))
+    else:
+        q = q.filter(BankStatementTransaction.income_expense_head_id == head_id)
+
+    if flow == 'credit':
+        q = q.filter(BankStatementTransaction.deposit_amount > 0)
+    elif flow == 'debit':
+        q = q.filter(BankStatementTransaction.withdrawal_amount > 0)
+
+    rows_db = (
+        q.order_by(
+            BankStatementTransaction.transaction_date.desc(),
+            BankStatementTransaction.id.desc(),
+        )
+        .limit(500)
+        .all()
+    )
+    rows = []
+    total_credit = 0.0
+    total_debit = 0.0
+    for t in rows_db:
+        dep = float(t.deposit_amount or 0)
+        wit = float(t.withdrawal_amount or 0)
+        total_credit += dep
+        total_debit += wit
+        stmt = t.bank_statement
+        rows.append(
+            {
+                "id": t.id,
+                "transaction_date": t.transaction_date.isoformat() if t.transaction_date else None,
+                "description": t.description_sanitized or t.description or "",
+                "reference_no": t.reference_no or "",
+                "withdrawal": wit,
+                "deposit": dep,
+                "account_name": (stmt.account_name if stmt else "") or "",
+                "statement_id": t.bank_statement_id,
+            }
+        )
+
+    return jsonify(
+        {
+            "ok": True,
+            "head_name": head_name,
+            "flow": flow,
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+            "count": len(rows),
+            "truncated": len(rows_db) >= 500,
+            "total_credit": total_credit,
+            "total_debit": total_debit,
+            "rows": rows,
+        }
     )
 
 

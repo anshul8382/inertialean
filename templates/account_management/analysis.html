@@ -2,6 +2,13 @@
 
 {% block title %}Statement analysis by head{% endblock %}
 
+{% block extra_css %}
+<style>
+.js-head-txn-row { cursor: pointer; }
+.js-head-txn-row:hover { filter: brightness(0.97); }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-4">
@@ -76,16 +83,24 @@
     </div>
     {% endif %}
 
-    {% if analysis.transaction_count == 0 %}
-    <div class="alert alert-info">No transactions in this period. Upload statements or choose a different range.</div>
+    {% if analysis.transaction_count == 0 and not yoy_summary.has_prior_data %}
+    <div class="alert alert-info">No transactions in this period (or the same window last year). Upload statements or choose a different range.</div>
     {% else %}
 
-    <div class="row g-3 mb-4">
+    <div class="row g-3 mb-3">
         <div class="col-md-3">
             <div class="card border-success h-100">
                 <div class="card-body">
                     <div class="text-muted small">Total credits (deposits)</div>
                     <div class="h4 text-success mb-0">{{ "%.2f"|format(analysis.total_credit) }}</div>
+                    <div class="small text-muted mt-1">
+                        LY: {{ "%.2f"|format(prior_analysis.total_credit) }}
+                        {% if yoy_summary.credit_pct is not none %}
+                        · <span class="{{ 'text-success' if yoy_summary.credit_delta >= 0 else 'text-danger' }}">{{ "%+.1f"|format(yoy_summary.credit_pct) }}%</span>
+                        {% elif analysis.total_credit > 0 and prior_analysis.total_credit == 0 %}
+                        · <span class="text-muted">new</span>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -94,6 +109,14 @@
                 <div class="card-body">
                     <div class="text-muted small">Total debits (withdrawals)</div>
                     <div class="h4 text-danger mb-0">{{ "%.2f"|format(analysis.total_debit) }}</div>
+                    <div class="small text-muted mt-1">
+                        LY: {{ "%.2f"|format(prior_analysis.total_debit) }}
+                        {% if yoy_summary.debit_pct is not none %}
+                        · <span class="{{ 'text-danger' if yoy_summary.debit_delta >= 0 else 'text-success' }}">{{ "%+.1f"|format(yoy_summary.debit_pct) }}%</span>
+                        {% elif analysis.total_debit > 0 and prior_analysis.total_debit == 0 %}
+                        · <span class="text-muted">new</span>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -102,6 +125,12 @@
                 <div class="card-body">
                     <div class="text-muted small">Net (credit − debit)</div>
                     <div class="h4 mb-0 {{ 'text-success' if analysis.net >= 0 else 'text-danger' }}">{{ "%.2f"|format(analysis.net) }}</div>
+                    <div class="small text-muted mt-1">
+                        LY: {{ "%.2f"|format(prior_analysis.net) }}
+                        {% if yoy_summary.net_pct is not none %}
+                        · <span class="{{ 'text-success' if yoy_summary.net_delta >= 0 else 'text-danger' }}">{{ "%+.1f"|format(yoy_summary.net_pct) }}%</span>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -111,7 +140,8 @@
                     <div class="text-muted small">Transactions</div>
                     <div class="h4 mb-0">{{ analysis.transaction_count }}</div>
                     <div class="small text-muted mt-1">
-                        Unclassified lines:
+                        LY: {{ prior_analysis.transaction_count }}
+                        · Unclassified:
                         {{ analysis.unclassified_credit_count + analysis.unclassified_debit_count }}
                     </div>
                 </div>
@@ -119,6 +149,15 @@
         </div>
     </div>
 
+    <div class="alert alert-light border small mb-4">
+        <strong><i class="fas fa-history me-1"></i> Same period last year</strong>
+        — {{ yoy_summary.prior_label }}
+        {% if not yoy_summary.has_prior_data %}
+        <span class="text-muted">(no uploaded lines in that window yet)</span>
+        {% endif %}
+    </div>
+
+    {% if analysis.transaction_count > 0 %}
     {% if head_trend and head_trend.has_data %}
     <div class="card mb-4 border-info">
         <div class="card-header bg-info text-dark py-2">
@@ -155,47 +194,88 @@
         Month-wise expense chart needs at least one month in the selected range with debit transactions.
     </div>
     {% endif %}
+    {% endif %}
 
-    <div class="row g-4 mb-4">
+    <div class="row g-4 mb-4"
+         id="analysis-head-cards"
+         data-api-url="{{ head_txn_api_url }}"
+         data-date-from="{{ date_from.isoformat() }}"
+         data-date-to="{{ date_to.isoformat() }}"
+         data-prior-from="{{ yoy_summary.prior_from.isoformat() }}"
+         data-prior-to="{{ yoy_summary.prior_to.isoformat() }}">
         <div class="col-lg-6">
             <div class="card h-100">
                 <div class="card-header bg-success text-white py-2">
                     <i class="fas fa-arrow-down me-1"></i> Credits by head
+                    <span class="small fw-normal opacity-75 ms-1">(vs same period LY)</span>
                 </div>
                 <div class="card-body">
-                    {% if analysis.total_credit > 0 %}
-                    <div style="max-height: 260px;" class="mb-3"><canvas id="creditByHeadChart"></canvas></div>
-                    {% endif %}
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <div class="small text-muted text-center mb-1">This period</div>
+                            {% if analysis.total_credit > 0 %}
+                            <div style="height: 200px; position: relative;"><canvas id="creditByHeadChart"></canvas></div>
+                            {% else %}
+                            <p class="small text-muted text-center mb-0 py-4">No credits</p>
+                            {% endif %}
+                        </div>
+                        <div class="col-6">
+                            <div class="small text-muted text-center mb-1">Last year</div>
+                            {% if prior_analysis.total_credit > 0 %}
+                            <div style="height: 200px; position: relative;"><canvas id="creditByHeadChartPrior"></canvas></div>
+                            {% else %}
+                            <p class="small text-muted text-center mb-0 py-4">No credits LY</p>
+                            {% endif %}
+                        </div>
+                    </div>
                     <div class="table-responsive">
-                        <table class="table table-sm table-hover mb-0">
+                        <table class="table table-sm table-hover mb-0" data-mobile-table="scroll">
                             <thead class="table-light">
                                 <tr>
                                     <th>Head</th>
-                                    <th class="text-end">#</th>
-                                    <th class="text-end">Amount</th>
-                                    <th class="text-end">% of credits</th>
+                                    <th class="text-end">This period</th>
+                                    <th class="text-end">Last year</th>
+                                    <th class="text-end">Δ</th>
+                                    <th class="text-end">% vs LY</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for row in analysis.credit_by_head %}
-                                <tr>
-                                    <td><span class="badge bg-success me-1">{{ row.head_type or 'credit' }}</span> {{ row.name }}</td>
-                                    <td class="text-end">{{ row.count }}</td>
-                                    <td class="text-end text-success">{{ "%.2f"|format(row.total) }}</td>
-                                    <td class="text-end text-muted">{% if analysis.total_credit > 0 %}{{ "%.1f"|format(100 * row.total / analysis.total_credit) }}%{% else %}–{% endif %}</td>
+                                {% for row in yoy_credit_rows %}
+                                <tr class="js-head-txn-row {{ 'table-warning' if row.get('is_unclassified') else '' }}"
+                                    role="button"
+                                    tabindex="0"
+                                    data-flow="credit"
+                                    data-head-id="{{ row.head_id or '' }}"
+                                    data-unclassified="{{ '1' if row.get('is_unclassified') else '0' }}"
+                                    data-head-name="{{ row.name }}"
+                                    title="Click to view transactions">
+                                    <td>
+                                        <span class="badge bg-success me-1">{{ row.head_type or 'credit' }}</span>
+                                        {{ row.name }}
+                                        {% if row.is_new %}<span class="badge bg-info text-dark">new</span>{% endif %}
+                                        {% if row.is_gone %}<span class="badge bg-secondary">LY only</span>{% endif %}
+                                    </td>
+                                    <td class="text-end text-success">{{ "%.2f"|format(row.current_total) }}</td>
+                                    <td class="text-end text-muted">{{ "%.2f"|format(row.prior_total) }}</td>
+                                    <td class="text-end {{ 'text-success' if row.delta >= 0 else 'text-danger' }}">{{ "%+.2f"|format(row.delta) }}</td>
+                                    <td class="text-end">
+                                        {% if row.pct_change is not none %}
+                                        <span class="fw-semibold {{ 'text-success' if row.pct_change >= 0 else 'text-danger' }}">
+                                            {% if row.pct_change > 0 %}<i class="fas fa-arrow-up fa-xs"></i>{% elif row.pct_change < 0 %}<i class="fas fa-arrow-down fa-xs"></i>{% endif %}
+                                            {{ "%+.1f"|format(row.pct_change) }}%
+                                        </span>
+                                        {% elif row.is_new %}
+                                        <span class="badge bg-info text-dark">new</span>
+                                        {% elif row.is_gone %}
+                                        <span class="text-muted">—</span>
+                                        {% else %}
+                                        <span class="text-muted">0%</span>
+                                        {% endif %}
+                                    </td>
                                 </tr>
+                                {% else %}
+                                <tr><td colspan="5" class="text-muted">No credit heads in either period.</td></tr>
                                 {% endfor %}
-                                {% if analysis.unclassified_credit_total > 0 %}
-                                <tr class="table-warning">
-                                    <td><em>Unclassified</em></td>
-                                    <td class="text-end">{{ analysis.unclassified_credit_count }}</td>
-                                    <td class="text-end">{{ "%.2f"|format(analysis.unclassified_credit_total) }}</td>
-                                    <td class="text-end text-muted">{% if analysis.total_credit > 0 %}{{ "%.1f"|format(100 * analysis.unclassified_credit_total / analysis.total_credit) }}%{% else %}–{% endif %}</td>
-                                </tr>
-                                {% endif %}
-                                {% if not analysis.credit_by_head and analysis.unclassified_credit_total == 0 %}
-                                <tr><td colspan="4" class="text-muted">No credit transactions in period.</td></tr>
-                                {% endif %}
                             </tbody>
                         </table>
                     </div>
@@ -206,41 +286,83 @@
             <div class="card h-100">
                 <div class="card-header bg-danger text-white py-2">
                     <i class="fas fa-arrow-up me-1"></i> Debits by head
+                    <span class="small fw-normal opacity-75 ms-1">(vs same period LY)</span>
                 </div>
                 <div class="card-body">
-                    {% if analysis.total_debit > 0 %}
-                    <div style="max-height: 260px;" class="mb-3"><canvas id="debitByHeadChart"></canvas></div>
-                    {% endif %}
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <div class="small text-muted text-center mb-1">This period</div>
+                            {% if analysis.total_debit > 0 %}
+                            <div style="height: 200px; position: relative;"><canvas id="debitByHeadChart"></canvas></div>
+                            {% else %}
+                            <p class="small text-muted text-center mb-0 py-4">No debits</p>
+                            {% endif %}
+                        </div>
+                        <div class="col-6">
+                            <div class="small text-muted text-center mb-1">Last year</div>
+                            {% if prior_analysis.total_debit > 0 %}
+                            <div style="height: 200px; position: relative;"><canvas id="debitByHeadChartPrior"></canvas></div>
+                            {% else %}
+                            <p class="small text-muted text-center mb-0 py-4">No debits LY</p>
+                            {% endif %}
+                        </div>
+                    </div>
                     <div class="table-responsive">
-                        <table class="table table-sm table-hover mb-0">
+                        <table class="table table-sm table-hover mb-0" data-mobile-table="scroll">
                             <thead class="table-light">
                                 <tr>
                                     <th>Head</th>
-                                    <th class="text-end">#</th>
-                                    <th class="text-end">Amount</th>
-                                    <th class="text-end">% of debits</th>
+                                    <th class="text-end">This period</th>
+                                    <th class="text-end">Last year</th>
+                                    <th class="text-end">Δ</th>
+                                    <th class="text-end">% vs LY</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for row in analysis.debit_by_head %}
-                                <tr>
-                                    <td><span class="badge bg-danger me-1">{{ row.head_type or 'debit' }}</span> {{ row.name }}</td>
-                                    <td class="text-end">{{ row.count }}</td>
-                                    <td class="text-end text-danger">{{ "%.2f"|format(row.total) }}</td>
-                                    <td class="text-end text-muted">{% if analysis.total_debit > 0 %}{{ "%.1f"|format(100 * row.total / analysis.total_debit) }}%{% else %}–{% endif %}</td>
+                                {% for row in yoy_debit_rows %}
+                                {% set is_owner_salary = ('owner' in (row.name or '')|lower) and ('salary' in (row.name or '')|lower) %}
+                                <tr class="js-head-txn-row {{ 'table-warning' if row.get('is_unclassified') else '' }} {{ 'table-success' if is_owner_salary else '' }}"
+                                    role="button"
+                                    tabindex="0"
+                                    data-flow="debit"
+                                    data-head-id="{{ row.head_id or '' }}"
+                                    data-unclassified="{{ '1' if row.get('is_unclassified') else '0' }}"
+                                    data-head-name="{{ row.name }}"
+                                    title="Click to view transactions">
+                                    <td>
+                                        {% if is_owner_salary %}
+                                        <span class="badge bg-success me-1">owner</span>
+                                        {% else %}
+                                        <span class="badge bg-danger me-1">{{ row.head_type or 'debit' }}</span>
+                                        {% endif %}
+                                        <span class="{{ 'text-success fw-semibold' if is_owner_salary else '' }}">{{ row.name }}</span>
+                                        {% if row.is_new %}<span class="badge bg-info text-dark">new</span>{% endif %}
+                                        {% if row.is_gone %}<span class="badge bg-secondary">LY only</span>{% endif %}
+                                    </td>
+                                    <td class="text-end {{ 'text-success' if is_owner_salary else 'text-danger' }}">{{ "%.2f"|format(row.current_total) }}</td>
+                                    <td class="text-end {{ 'text-success' if is_owner_salary else 'text-muted' }}">{{ "%.2f"|format(row.prior_total) }}</td>
+                                    <td class="text-end {{ 'text-danger' if row.delta >= 0 and not is_owner_salary else 'text-success' }}">{{ "%+.2f"|format(row.delta) }}</td>
+                                    <td class="text-end">
+                                        {% if row.pct_change is not none %}
+                                        {# Debits: higher spend = red (worse), except owner salary stays green #}
+                                        {% set pct_up = row.pct_change >= 0 %}
+                                        {% set pct_good = (not pct_up) if not is_owner_salary else pct_up %}
+                                        <span class="fw-semibold {{ 'text-success' if pct_good else 'text-danger' }}">
+                                            {% if row.pct_change > 0 %}<i class="fas fa-arrow-up fa-xs"></i>{% elif row.pct_change < 0 %}<i class="fas fa-arrow-down fa-xs"></i>{% endif %}
+                                            {{ "%+.1f"|format(row.pct_change) }}%
+                                        </span>
+                                        {% elif row.is_new %}
+                                        <span class="badge bg-info text-dark">new</span>
+                                        {% elif row.is_gone %}
+                                        <span class="text-muted">—</span>
+                                        {% else %}
+                                        <span class="text-muted">0%</span>
+                                        {% endif %}
+                                    </td>
                                 </tr>
+                                {% else %}
+                                <tr><td colspan="5" class="text-muted">No debit heads in either period.</td></tr>
                                 {% endfor %}
-                                {% if analysis.unclassified_debit_total > 0 %}
-                                <tr class="table-warning">
-                                    <td><em>Unclassified</em></td>
-                                    <td class="text-end">{{ analysis.unclassified_debit_count }}</td>
-                                    <td class="text-end">{{ "%.2f"|format(analysis.unclassified_debit_total) }}</td>
-                                    <td class="text-end text-muted">{% if analysis.total_debit > 0 %}{{ "%.1f"|format(100 * analysis.unclassified_debit_total / analysis.total_debit) }}%{% else %}–{% endif %}</td>
-                                </tr>
-                                {% endif %}
-                                {% if not analysis.debit_by_head and analysis.unclassified_debit_total == 0 %}
-                                <tr><td colspan="4" class="text-muted">No debit transactions in period.</td></tr>
-                                {% endif %}
                             </tbody>
                         </table>
                     </div>
@@ -249,21 +371,71 @@
         </div>
     </div>
     {% endif %}
+
+    {# Head transactions popup #}
+    <div class="modal fade" id="headTxnModal" tabindex="-1" aria-labelledby="headTxnModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title mb-0" id="headTxnModalLabel">Transactions</h5>
+                        <div class="small text-muted" id="headTxnModalSub"></div>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="headTxnModalStatus" class="small text-muted mb-2">Loading…</div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0" data-mobile-table="scroll">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th class="text-end">Withdrawal</th>
+                                    <th class="text-end">Deposit</th>
+                                    <th>Account</th>
+                                </tr>
+                            </thead>
+                            <tbody id="headTxnModalBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-{% if analysis.transaction_count > 0 %}
+{% if analysis.transaction_count > 0 or yoy_summary.has_prior_data %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const greenColors = ['#198754', '#20c997', '#28a745', '#48d597', '#5cb85c', '#7dcea0', '#2ecc71', '#58d68d'];
     const redColors = ['#dc3545', '#e35d6a', '#c82333', '#bd2130', '#a71d2a', '#e74c3c', '#ec7063', '#f1948a'];
+    const ownerSalaryGreen = '#198754';
 
-    function pieChart(canvasId, labels, data, colors) {
+    function isOwnerSalaryLabel(label) {
+        const s = String(label || '').toLowerCase();
+        return s.indexOf('owner') !== -1 && s.indexOf('salary') !== -1;
+    }
+
+    function debitSliceColors(labels) {
+        return (labels || []).map(function(label, i) {
+            if (isOwnerSalaryLabel(label)) return ownerSalaryGreen;
+            return redColors[i % redColors.length];
+        });
+    }
+
+    function pieChart(canvasId, labels, data, colorsOrFn) {
         const el = document.getElementById(canvasId);
-        if (!el || !data.length || data.reduce((a,b) => a+b, 0) <= 0) return;
-        const bg = labels.map((_, i) => colors[i % colors.length]);
+        if (!el || !data.length || data.reduce(function(a, b) { return a + b; }, 0) <= 0) return;
+        const bg = typeof colorsOrFn === 'function'
+            ? colorsOrFn(labels)
+            : labels.map(function(_, i) { return colorsOrFn[i % colorsOrFn.length]; });
         new Chart(el.getContext('2d'), {
             type: 'doughnut',
             data: {
@@ -278,7 +450,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     tooltip: {
                         callbacks: {
                             label: function(ctx) {
-                                const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
+                                const total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
                                 const v = ctx.raw;
                                 const pct = total ? (v * 100 / total).toFixed(1) : 0;
                                 return ctx.label + ': ' + v.toLocaleString('en-IN', {minimumFractionDigits: 2}) + ' (' + pct + '%)';
@@ -291,7 +463,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     pieChart('creditByHeadChart', {{ credit_chart_labels|tojson }}, {{ credit_chart_values|tojson }}, greenColors);
-    pieChart('debitByHeadChart', {{ debit_chart_labels|tojson }}, {{ debit_chart_values|tojson }}, redColors);
+    pieChart('creditByHeadChartPrior', {{ prior_credit_chart_labels|tojson }}, {{ prior_credit_chart_values|tojson }}, greenColors);
+    pieChart('debitByHeadChart', {{ debit_chart_labels|tojson }}, {{ debit_chart_values|tojson }}, debitSliceColors);
+    pieChart('debitByHeadChartPrior', {{ prior_debit_chart_labels|tojson }}, {{ prior_debit_chart_values|tojson }}, debitSliceColors);
 
     const monthStacked = {{ month_expense_chart|tojson }};
     const ctxMonth = document.getElementById('monthlyExpenseByHeadChart');
@@ -304,7 +478,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     return {
                         label: ds.label,
                         data: ds.data,
-                        backgroundColor: ds.backgroundColor,
+                        backgroundColor: isOwnerSalaryLabel(ds.label) ? ownerSalaryGreen : ds.backgroundColor,
                         borderWidth: 0
                     };
                 })
@@ -378,6 +552,94 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 plugins: { legend: { position: 'bottom' } }
             }
+        });
+    }
+
+    // Click head row → transactions popup (this period)
+    const cards = document.getElementById('analysis-head-cards');
+    const modalEl = document.getElementById('headTxnModal');
+    if (cards && modalEl && typeof bootstrap !== 'undefined') {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        const titleEl = document.getElementById('headTxnModalLabel');
+        const subEl = document.getElementById('headTxnModalSub');
+        const statusEl = document.getElementById('headTxnModalStatus');
+        const bodyEl = document.getElementById('headTxnModalBody');
+        const apiUrl = cards.getAttribute('data-api-url');
+        const dateFrom = cards.getAttribute('data-date-from');
+        const dateTo = cards.getAttribute('data-date-to');
+
+        function fmtAmt(n) {
+            return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function openHeadTxns(row) {
+            const flow = row.getAttribute('data-flow') || 'all';
+            const headId = row.getAttribute('data-head-id') || '';
+            const unclassified = row.getAttribute('data-unclassified') === '1';
+            const headName = row.getAttribute('data-head-name') || 'Head';
+            titleEl.textContent = headName;
+            subEl.textContent = (flow === 'credit' ? 'Credits' : flow === 'debit' ? 'Debits' : 'All')
+                + ' · ' + dateFrom + ' → ' + dateTo;
+            statusEl.textContent = 'Loading…';
+            bodyEl.innerHTML = '';
+            modal.show();
+
+            const params = new URLSearchParams({
+                date_from: dateFrom,
+                date_to: dateTo,
+                flow: flow
+            });
+            if (unclassified) {
+                params.set('unclassified', '1');
+            } else if (headId) {
+                params.set('head_id', headId);
+            } else {
+                statusEl.textContent = 'Cannot load transactions for this row.';
+                return;
+            }
+
+            fetch(apiUrl + '?' + params.toString(), { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (!data || !data.ok) {
+                        statusEl.textContent = (data && data.error) || 'Failed to load.';
+                        return;
+                    }
+                    var bits = [data.count + ' transaction' + (data.count === 1 ? '' : 's')];
+                    if (flow === 'credit' || flow === 'all') bits.push('credits ' + fmtAmt(data.total_credit));
+                    if (flow === 'debit' || flow === 'all') bits.push('debits ' + fmtAmt(data.total_debit));
+                    if (data.truncated) bits.push('showing first 500');
+                    statusEl.textContent = bits.join(' · ');
+                    if (!data.rows || !data.rows.length) {
+                        bodyEl.innerHTML = '<tr><td colspan="5" class="text-muted">No transactions in this period.</td></tr>';
+                        return;
+                    }
+                    bodyEl.innerHTML = data.rows.map(function(t) {
+                        return '<tr>'
+                            + '<td class="text-nowrap">' + (t.transaction_date || '') + '</td>'
+                            + '<td>' + (t.description || '').replace(/</g, '&lt;') + '</td>'
+                            + '<td class="text-end text-danger">' + (t.withdrawal ? fmtAmt(t.withdrawal) : '') + '</td>'
+                            + '<td class="text-end text-success">' + (t.deposit ? fmtAmt(t.deposit) : '') + '</td>'
+                            + '<td class="small text-muted">' + (t.account_name || '').replace(/</g, '&lt;') + '</td>'
+                            + '</tr>';
+                    }).join('');
+                })
+                .catch(function() {
+                    statusEl.textContent = 'Network error loading transactions.';
+                });
+        }
+
+        cards.addEventListener('click', function(ev) {
+            const row = ev.target.closest('.js-head-txn-row');
+            if (!row || !cards.contains(row)) return;
+            openHeadTxns(row);
+        });
+        cards.addEventListener('keydown', function(ev) {
+            if (ev.key !== 'Enter' && ev.key !== ' ') return;
+            const row = ev.target.closest('.js-head-txn-row');
+            if (!row || !cards.contains(row)) return;
+            ev.preventDefault();
+            openHeadTxns(row);
         });
     }
 });
