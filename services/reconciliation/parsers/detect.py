@@ -11,6 +11,7 @@ from services.reconciliation.parsers import (
     broker_shortcode_xlsx,
     cdsl_demat_xlsx,
     client_portfolio_details_xlsx,
+    company_isin_qty_xlsx,
     demat_allocated_tsv,
     groww_xlsx,
     portfolio_holding_statement_xlsx,
@@ -43,6 +44,8 @@ def detect_and_parse(path: Union[str, Path], filename: str = "") -> ParseResult:
                 result = client_portfolio_details_xlsx.parse(path)
             elif portfolio_holding_statement_xlsx.can_parse_rows(rows):
                 result = portfolio_holding_statement_xlsx.parse(path)
+            elif company_isin_qty_xlsx.can_parse_rows(rows):
+                result = company_isin_qty_xlsx.parse(path)
             elif zerodha_kite_xlsx.can_parse_rows(rows):
                 result = zerodha_kite_xlsx.parse(path)
             elif axis_direct_xlsx.can_parse_rows(rows):
@@ -59,6 +62,7 @@ def detect_and_parse(path: Union[str, Path], filename: str = "") -> ParseResult:
                 for parser in (
                     client_portfolio_details_xlsx,
                     portfolio_holding_statement_xlsx,
+                    company_isin_qty_xlsx,
                     zerodha_kite_xlsx,
                     axis_direct_xlsx,
                     groww_xlsx,

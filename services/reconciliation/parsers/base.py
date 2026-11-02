@@ -84,13 +84,21 @@ def iter_xlsx_rows(path: Path, max_rows: Optional[int] = None) -> List[List[str]
                         break
                 col_idx = max(col - 1, 0)
                 t = c.get("t")
-                v = c.find("m:v", NS)
-                if v is None or v.text is None:
-                    val = ""
-                elif t == "s":
-                    val = ss[int(v.text)] if int(v.text) < len(ss) else v.text
+                if t == "inlineStr":
+                    # openpyxl / some exporters: <c t="inlineStr"><is><t>…</t></is></c>
+                    texts = [t_el.text or "" for t_el in c.findall("m:is//m:t", NS)]
+                    if not texts:
+                        texts = [t_el.text or "" for t_el in c.findall(".//m:t", NS)]
+                    val = "".join(texts)
                 else:
-                    val = v.text
+                    v = c.find("m:v", NS)
+                    if v is None or v.text is None:
+                        val = ""
+                    elif t == "s":
+                        val = ss[int(v.text)] if int(v.text) < len(ss) else v.text
+                    else:
+                        # numeric, or t="str" with value in <v>
+                        val = v.text
                 cell_map[col_idx] = str(val)
                 max_col = max(max_col, col_idx)
             if not cell_map:

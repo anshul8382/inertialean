@@ -128,6 +128,18 @@ def test_portfolio_holding_statement_xlsx():
     assert r.as_of and r.as_of.isoformat() == "2026-10-11"
 
 
+def test_company_isin_qty_xlsx():
+    r = detect_and_parse(
+        FIXTURES / "company_isin_qty_sumit.xlsx",
+        filename="Sumit Jain Portfolio (4).xlsx",
+    )
+    assert r.format_id == "company_isin_qty_xlsx"
+    assert len(r.lines) >= 3
+    assert all(ln.isin and ln.qty > 0 for ln in r.lines)
+    assert any(ln.isin == "INE00WC01027" for ln in r.lines)
+    assert any("AFFLE" in (ln.raw_name or "").upper() for ln in r.lines)
+
+
 def test_demat_allocated_tsv_xls():
     r = detect_and_parse(FIXTURES / "demat_allocated_7500013278.xls")
     assert r.format_id == "demat_allocated_tsv"

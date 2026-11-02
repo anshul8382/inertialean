@@ -2732,6 +2732,25 @@ def calculate_worst_performers_from_mtm(mtm_analysis, client_id=None, start_date
         'total_loss': sum(p['value_contribution'] for p in performers if p['value_contribution'] < 0)
     }
 
+def resolve_period_opening_value(
+    reconstructed_start_value: float,
+    period_start: date,
+    first_cashflow_date: date | None,
+) -> float:
+    """
+    Opening capital for period XIRR / Nifty sim.
+
+    Same rule as period XIRR: if the analysis window starts on or before the
+    client's first cashflow calendar day, opening is 0 (cashflows alone fund
+    the period). Otherwise use reconstructed portfolio MTM at period start
+    (mid-period reviews).
+    """
+    opening = float(reconstructed_start_value or 0.0)
+    if first_cashflow_date is not None and period_start <= first_cashflow_date:
+        return 0.0
+    return opening
+
+
 def calculate_period_benchmark_comparison(client_id, start_date, end_date, portfolio_xirr):
     """
     Calculate benchmark comparison for the period
@@ -2757,9 +2776,11 @@ def calculate_period_benchmark_comparison(client_id, start_date, end_date, portf
             logger.warning("NIFTY 50 benchmark not found")
             return {}
 
-        # Portfolio start value for the period (same notion as period XIRR start cashflow)
+        # Reconstructed portfolio MTM at period start (trades/holdings — not cashflows).
+        # Nifty opening must match period XIRR: if period start is on/before first cashflow
+        # day, opening = 0 (cashflows alone). Else mid-period opening = reconstructed MTM.
         start_portfolio = get_client_portfolio_by_date(client_id, start_date)
-        start_value = float(start_portfolio.get('total_value', 0.0) or 0.0)
+        reconstructed_start_value = float(start_portfolio.get('total_value', 0.0) or 0.0)
 
         # Period cashflows (same dates/amounts used for portfolio XIRR in this period)
         start_datetime = datetime.combine(start_date, datetime.min.time())
@@ -2774,12 +2795,41 @@ def calculate_period_benchmark_comparison(client_id, start_date, end_date, portf
         total_withdrawn = sum(float(cf.amount) for cf in period_cashflows if float(cf.amount) > 0)
         net_cashflow = total_invested - total_withdrawn
 
-        # Detect cashflows on the exact start_date (can double count if start_value already includes them)
+        # Normalize dates to date objects (not datetime) for database query and lookup
+        start_date_normalized = start_date.date() if hasattr(start_date, 'date') else start_date
+        end_date_normalized = end_date.date() if hasattr(end_date, 'date') else end_date
+
+        earliest_cf = (
+            Cashflow.query.filter_by(client_id=client_id).order_by(Cashflow.date.asc()).first()
+        )
+        first_cashflow_date = None
+        if earliest_cf and earliest_cf.date is not None:
+            raw_cf = earliest_cf.date
+            if isinstance(raw_cf, datetime):
+                first_cashflow_date = raw_cf.date()
+            elif isinstance(raw_cf, date):
+                first_cashflow_date = raw_cf
+
+        start_value = resolve_period_opening_value(
+            reconstructed_start_value, start_date_normalized, first_cashflow_date
+        )
+        if start_value == 0.0 and reconstructed_start_value > 0:
+            logger.info(
+                "Benchmark: period start %s on or before first cashflow %s; "
+                "Nifty opening ₹0 (cashflows only). Reconstructed portfolio was ₹%s",
+                start_date_normalized,
+                first_cashflow_date,
+                f"{reconstructed_start_value:,.2f}",
+            )
+
+        # Detect cashflows on the exact start_date (can double count if opening already includes them)
         start_date_cashflows = [
             cf for cf in period_cashflows
-            if (cf.date.date() if hasattr(cf.date, 'date') else cf.date) == start_date
+            if (cf.date.date() if hasattr(cf.date, 'date') else cf.date) == start_date_normalized
         ]
-        start_date_cashflow_amount = sum(float(cf.amount) for cf in start_date_cashflows) if start_date_cashflows else 0.0
+        start_date_cashflow_amount = (
+            sum(float(cf.amount) for cf in start_date_cashflows) if start_date_cashflows else 0.0
+        )
         start_date_cashflow_count = len(start_date_cashflows)
         if start_value > 0 and start_date_cashflow_amount != 0:
             logger.warning(
@@ -2788,10 +2838,6 @@ def calculate_period_benchmark_comparison(client_id, start_date, end_date, portf
                 client_id
             )
 
-        # Normalize dates to date objects (not datetime) for database query and lookup
-        start_date_normalized = start_date.date() if hasattr(start_date, 'date') else start_date
-        end_date_normalized = end_date.date() if hasattr(end_date, 'date') else end_date
-        
         # Load benchmark prices for [start_date - 10d, end_date] to allow fallback to closest prior
         price_rows = BenchmarkData.query.filter(
             BenchmarkData.benchmark_id == benchmark.id,
@@ -2899,7 +2945,7 @@ def calculate_period_benchmark_comparison(client_id, start_date, end_date, portf
         benchmark_units = 0.0
         benchmark_cashflow_verification = []
 
-        # 1) Invest start_value at start_date
+        # 1) Invest opening value at start_date (0 when lifetime / before first cashflow)
         if start_value > 0:
             units_added = start_value / start_benchmark_price
             benchmark_units += units_added
@@ -2913,7 +2959,10 @@ def calculate_period_benchmark_comparison(client_id, start_date, end_date, portf
                 'units_removed': 0.0,
                 'cumulative_units': benchmark_units,
                 'cumulative_value': benchmark_units * start_benchmark_price,
-                'description': f'Portfolio start value invested at {start_benchmark_price_date.isoformat() if start_benchmark_price_date else start_date_normalized.isoformat()} price'
+                'description': (
+                    f'Period opening portfolio value invested at '
+                    f'{start_benchmark_price_date.isoformat() if start_benchmark_price_date else start_date_normalized.isoformat()} price'
+                ),
             })
 
         # 2) Apply period cashflows
@@ -3025,7 +3074,16 @@ def calculate_period_benchmark_comparison(client_id, start_date, end_date, portf
             'benchmark_end_price': end_benchmark_price,
             'benchmark_start_price_date': start_benchmark_price_date.isoformat() if start_benchmark_price_date else None,
             'benchmark_end_price_date': end_benchmark_price_date.isoformat() if end_benchmark_price_date else None,
+            # Opening actually used for Nifty units / XIRR (0 when start ≤ first cashflow)
             'benchmark_start_value': start_value,
+            # Holdings MTM at start_date (audit only; may be ignored for lifetime opening)
+            'benchmark_reconstructed_portfolio_start_value': reconstructed_start_value,
+            'benchmark_opening_zeroed_for_lifetime': bool(
+                first_cashflow_date is not None and start_date_normalized <= first_cashflow_date
+            ),
+            'benchmark_first_cashflow_date': (
+                first_cashflow_date.isoformat() if first_cashflow_date else None
+            ),
             'benchmark_end_value': benchmark_end_value,
             'benchmark_gain_loss': benchmark_accumulated_profit,
             'benchmark_gain_loss_percent': (benchmark_accumulated_profit / (start_value + total_invested) * 100) if (start_value + total_invested) > 0 else 0.0,

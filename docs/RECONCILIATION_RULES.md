@@ -132,6 +132,10 @@ return, weight) → Preview → Approve.
 | `groww_holdings_xlsx` | Groww / similar Symbol+ISIN xlsx |
 | `cdsl_demat_xlsx` | Demat holdings with header + ISIN table |
 | `broker_shortcode_xlsx` | Broker short codes + ISIN |
+| `client_portfolio_details_xlsx` | Symbol + Comp. Name + ISIN + Holdings |
+| `portfolio_holding_statement_xlsx` | PORTFOLIO HOLDING STATEMENT (Name + ISIN + Qty) |
+| `company_isin_qty_xlsx` | Company Name + ISIN Code + Qty (+ cost/market value columns) |
+| `demat_allocated_tsv` | Demat allocated TSV/XLS (`Stock Name` + ISIN + Qty) |
 | `angel_dp_pdf` | Angel One DP holding cum transaction PDF (closing balance) |
 
 Contract notes are **not** holdings ingest (optional later for diagnosis).
