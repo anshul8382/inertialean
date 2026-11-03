@@ -1,6 +1,6 @@
 # Dependency vulnerability audit
 
-Generated: 2026-11-02T11:43:40.904294+00:00
+Generated: 2026-11-03T02:36:41.376656+00:00
 Python runtime: 3.11.9
 Scanners: `pip-audit` (Python) + `npm audit --omit=dev` (Capacitor shell)
 

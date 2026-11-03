@@ -1,6 +1,6 @@
 # Agent approval status
 
-Generated: 2026-11-02T11:43:54.150924+00:00
+Generated: 2026-11-03T02:36:55.263213+00:00
 
 | Agent | Status | Detail |
 |-------|--------|--------|
@@ -14,7 +14,7 @@ Generated: 2026-11-02T11:43:54.150924+00:00
 | Mobile Optimiser | PARTIAL | Capacitor shell + mobile-ui stack; Expo scaffold: no; JWT: yes; template audit: 3 high (standalone UIs expected) |
 | Delivery quality | PASS | pytest exit 0 |
 | Delivery quality (functional) | PASS | pytest functional exit 0 |
-| Delivery quality (functional packs) | PASS | exit 0 |
+| Delivery quality (functional packs) | PASS | no impacted modules |
 | Delivery quality (docs) | PASS | core docs present |
 | Live architecture map | PASS | docs/ARCHITECTURE_LIVE.md (live surfaces map) |
 

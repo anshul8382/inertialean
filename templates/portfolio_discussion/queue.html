@@ -23,8 +23,9 @@
     </div>
     {% endif %}
 
+    {% set queue_items = queue['items'] %}
     <p class="small text-muted mb-2">
-        Showing {{ queue.items|length }} client{{ 's' if queue.items|length != 1 else '' }}
+        Showing {{ queue_items|length }} client{{ 's' if queue_items|length != 1 else '' }}
         {% if queue.counts %}
         ({{ queue.counts.concern }} concern · {{ queue.counts.aging }} aging · {{ queue.counts.random }} random)
         {% endif %}
@@ -46,7 +47,7 @@
                 </tr>
             </thead>
             <tbody>
-                {% for row in queue.items %}
+                {% for row in queue_items %}
                 <tr>
                     <td>
                         <a href="{{ url_for('portfolio_discussion.workspace', client_id=row.client_id) }}">
