@@ -601,7 +601,7 @@ class ReviewScheduleForm(FlaskForm):
 
 class ReviewWorkflowForm(FlaskForm):
     review_date = DateField('Review Date', validators=[DataRequired()], format='%Y-%m-%d')
-    # Choices set dynamically in the update route (Due is system-only, not selectable).
+    # Choices set dynamically in the update route (includes Due; system may also set Due on create).
     status = SelectField('Status', choices=[], validators=[DataRequired()])
     notes = TextAreaField('Notes', validators=[Optional(), Length(max=1000)])
     meeting_date = DateTimeField('Meeting Date', validators=[Optional()], format='%Y-%m-%dT%H:%M')

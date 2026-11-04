@@ -175,7 +175,7 @@ def list_review_schedules():
 
     bucket_titles = {
         "current": "Current — in progress (sent / meeting)",
-        "due": "Due — system queue",
+        "due": "Due",
         "priority": "Initiated — in flight",
         "deferred": "Deferred — acked delay",
         "this_month": "Planned this month",
@@ -394,9 +394,9 @@ def recalculate_review_workflows(client_id):
 @handle_errors
 def update_review_workflow(workflow_id):
     from services.review_status_service import (
-        STATUS_DUE,
         STATUS_LABELS,
         ReviewStatusError,
+        allowed_status_values,
         apply_user_status,
         normalize_status,
         user_selectable_choices,
@@ -405,6 +405,7 @@ def update_review_workflow(workflow_id):
     workflow = ReviewWorkflow.query.options(joinedload(ReviewWorkflow.client)).get_or_404(workflow_id)
     client = workflow.client
     status_choices = user_selectable_choices(workflow.status)
+    allowed_statuses = allowed_status_values(workflow.status)
 
     if request.method == "POST":
         rd_raw = request.form.get("review_date")
@@ -455,8 +456,8 @@ def update_review_workflow(workflow_id):
         client=client,
         workflow=workflow,
         status_choices=status_choices,
+        allowed_statuses=allowed_statuses,
         current_status=normalize_status(workflow.status),
-        status_is_due=normalize_status(workflow.status) == STATUS_DUE,
         status_labels=STATUS_LABELS,
     )
 

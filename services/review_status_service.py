@@ -2,13 +2,14 @@
 ReviewWorkflow status lifecycle.
 
 Statuses:
-  due       — system only (set on create); review needs attention
+  due       — needs attention (system default on create; users may also set)
   planned   — user prioritised / scheduled next
-  deferred  — user acked due but delaying before initiate
+  deferred  — user delaying before initiate
   initiated → sent → meeting → closed — work stages
 
-Users never set `due`. System sets it via system_set_due / create default.
-Do not auto-flip planned or deferred back to due.
+System may only set ``due`` (create / sync via system_set_due).
+All statuses including due are user-selectable. Do not auto-flip planned/deferred
+back to due.
 """
 from __future__ import annotations
 
@@ -47,12 +48,14 @@ OPEN_STATUSES: FrozenSet[str] = frozenset(
 
 IN_PROGRESS_STATUSES: FrozenSet[str] = frozenset({STATUS_SENT, STATUS_MEETING})
 
-SYSTEM_ONLY: FrozenSet[str] = frozenset({STATUS_DUE})
+# Only status the system is allowed to write (create/sync). Users may set any status.
+SYSTEM_SETTABLE: FrozenSet[str] = frozenset({STATUS_DUE})
 
-USER_SETTABLE: FrozenSet[str] = frozenset(ALL_STATUSES - SYSTEM_ONLY)
+USER_SETTABLE: FrozenSet[str] = frozenset(ALL_STATUSES)
 
-# Ordered for forms / admin UI (Due is shown as current only, not selectable)
+# Ordered for forms / admin UI (includes Due — user may mark due)
 USER_STATUS_CHOICES = (
+    (STATUS_DUE, "Due"),
     (STATUS_PLANNED, "Planned"),
     (STATUS_DEFERRED, "Deferred"),
     (STATUS_INITIATED, "Initiated"),
@@ -61,7 +64,6 @@ USER_STATUS_CHOICES = (
     (STATUS_CLOSED, "Closed"),
 )
 
-# Display labels including Due for badges / read-only current
 STATUS_LABELS = {
     STATUS_DUE: "Due",
     STATUS_PLANNED: "Planned",
@@ -72,22 +74,37 @@ STATUS_LABELS = {
     STATUS_CLOSED: "Closed",
 }
 
-# Who may move where (user). Closed is always allowed as terminal.
+# Who may move where (user). Closed is terminal.
 _USER_TRANSITIONS = {
     STATUS_DUE: frozenset(
-        {STATUS_PLANNED, STATUS_DEFERRED, STATUS_INITIATED, STATUS_CLOSED}
+        {
+            STATUS_PLANNED,
+            STATUS_DEFERRED,
+            STATUS_INITIATED,
+            STATUS_CLOSED,
+        }
     ),
     STATUS_PLANNED: frozenset(
-        {STATUS_INITIATED, STATUS_DEFERRED, STATUS_CLOSED}
+        {STATUS_DUE, STATUS_INITIATED, STATUS_DEFERRED, STATUS_CLOSED}
     ),
     STATUS_DEFERRED: frozenset(
-        {STATUS_PLANNED, STATUS_INITIATED, STATUS_CLOSED}
+        {STATUS_DUE, STATUS_PLANNED, STATUS_INITIATED, STATUS_CLOSED}
     ),
+    # Existing backlog is often still "initiated"; allow triage to due/planned/deferred.
     STATUS_INITIATED: frozenset(
-        {STATUS_SENT, STATUS_MEETING, STATUS_CLOSED}
+        {
+            STATUS_DUE,
+            STATUS_PLANNED,
+            STATUS_DEFERRED,
+            STATUS_SENT,
+            STATUS_MEETING,
+            STATUS_CLOSED,
+        }
     ),
-    STATUS_SENT: frozenset({STATUS_MEETING, STATUS_CLOSED, STATUS_INITIATED}),
-    STATUS_MEETING: frozenset({STATUS_CLOSED, STATUS_SENT}),
+    STATUS_SENT: frozenset(
+        {STATUS_DUE, STATUS_MEETING, STATUS_CLOSED, STATUS_INITIATED}
+    ),
+    STATUS_MEETING: frozenset({STATUS_DUE, STATUS_CLOSED, STATUS_SENT}),
     STATUS_CLOSED: frozenset(),
 }
 
@@ -111,42 +128,32 @@ def is_closed_status(status: Optional[str]) -> bool:
 def allowed_user_transitions(from_status: Optional[str]) -> Set[str]:
     st = normalize_status(from_status)
     if st not in _USER_TRANSITIONS:
-        # Unknown / legacy: allow any user-settable (except forcing due)
         return set(USER_SETTABLE)
     return set(_USER_TRANSITIONS[st])
 
 
 def user_selectable_choices(current_status: Optional[str] = None):
-    """
-    Form choices for the status dropdown.
-    Never includes `due`. If current is due, only legal next statuses.
-    """
-    current = normalize_status(current_status)
-    if current == STATUS_DUE:
-        allowed = allowed_user_transitions(STATUS_DUE)
-        return [(v, lab) for v, lab in USER_STATUS_CHOICES if v in allowed]
-    if current in OPEN_STATUSES or current == STATUS_CLOSED:
-        allowed = allowed_user_transitions(current)
-        # Always show current if user-settable so the form can round-trip
-        if current in USER_SETTABLE:
-            allowed = allowed | {current}
-        return [(v, lab) for v, lab in USER_STATUS_CHOICES if v in allowed]
+    """Full status dropdown choices (includes Due)."""
     return list(USER_STATUS_CHOICES)
+
+
+def allowed_status_values(current_status: Optional[str] = None) -> Set[str]:
+    """Statuses the user may select from ``current_status`` (includes current)."""
+    current = normalize_status(current_status)
+    allowed = allowed_user_transitions(current)
+    if current in USER_SETTABLE:
+        allowed = allowed | {current}
+    return allowed
 
 
 def apply_user_status(workflow: Any, new_status: str) -> str:
     """
     Apply a user-requested status on workflow (mutates in memory; caller commits).
-    Raises ReviewStatusError if illegal (including any attempt to set due).
-    Returns the normalized new status.
+    Raises ReviewStatusError if illegal. Returns the normalized new status.
     """
     target = normalize_status(new_status)
     if not target:
         raise ReviewStatusError("Status is required.")
-    if target in SYSTEM_ONLY:
-        raise ReviewStatusError(
-            "Status 'due' can only be set by the system, not manually."
-        )
     if target not in USER_SETTABLE:
         raise ReviewStatusError(f"Unknown status: {new_status}")
 
@@ -164,6 +171,6 @@ def apply_user_status(workflow: Any, new_status: str) -> str:
 
 
 def system_set_due(workflow: Any) -> str:
-    """Set status to due (create/sync only). Caller commits."""
+    """System-only write path: set status to due (create/sync). Caller commits."""
     workflow.status = STATUS_DUE
     return STATUS_DUE

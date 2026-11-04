@@ -52,23 +52,18 @@
                         
                         <div class="form-group mb-3">
                             <label for="status" class="form-label">Status</label>
-                            {% if status_is_due %}
-                            <p class="mb-2">
-                                <span class="badge bg-danger text-white">Due</span>
-                                <span class="text-muted small ms-1">Set by the system — choose the next step below.</span>
-                            </p>
-                            {% endif %}
-                            <select class="form-control" id="status" name="status" required>
-                                {% if status_is_due %}
-                                <option value="" disabled selected>Select next status…</option>
-                                {% endif %}
+                            <select class="form-select" id="status" name="status" required>
                                 {% for value, label in status_choices %}
-                                <option value="{{ value }}" {{ 'selected' if (not status_is_due and current_status == value) }}>{{ label }}</option>
+                                <option value="{{ value }}"
+                                    {% if current_status == value %}selected{% endif %}
+                                    {% if value not in allowed_statuses %}disabled{% endif %}>
+                                    {{ label }}{% if value not in allowed_statuses %} — not available from current{% endif %}
+                                </option>
                                 {% endfor %}
                             </select>
                             <small class="form-text text-muted">
                                 Flow: Due → Planned (prioritise) or Deferred (delay) → Initiated → Sent → Meeting → Closed.
-                                Status <strong>Due</strong> cannot be set manually.
+                                You can mark <strong>Due</strong> anytime; the system also sets Due on new reviews. Greyed options are not valid from the current status.
                             </small>
                         </div>
 
