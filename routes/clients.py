@@ -174,14 +174,15 @@ def list_review_schedules():
     upcoming_days = classified["upcoming_days"]
 
     bucket_titles = {
-        "current": "Current — in progress & due",
-        "priority": "Priority — initiated & due",
-        "this_month": "Due this month",
-        "next_month": "Due next month",
+        "current": "Current — in progress (sent / meeting)",
+        "due": "Due — system queue",
+        "priority": "Initiated — in flight",
+        "deferred": "Deferred — acked delay",
+        "this_month": "Planned this month",
+        "next_month": "Planned next month",
         "suggested_close": "Suggested to close — obsolete",
         "date_missing": "Date missing",
-        "due": "Due (in progress + initiated)",
-        "upcoming": "This month + next month",
+        "upcoming": "This month + next month (planned)",
         "open": "Board open reviews (through next month)",
         "all": "All review workflows",
         "schedules": "Active review schedules",
@@ -201,7 +202,9 @@ def list_review_schedules():
 
     board_total = (
         len(classified["current"])
+        + len(classified["due"])
         + len(classified["priority"])
+        + len(classified["deferred"])
         + len(classified["this_month"])
         + len(classified["next_month"])
         + len(classified["suggested_close"])
@@ -215,9 +218,10 @@ def list_review_schedules():
         open_workflows=open_workflows,
         due_workflows=due_workflows,
         upcoming_workflows=upcoming_workflows,
-        overdue_workflows=due_workflows,
+        overdue_workflows=classified.get("due_combined") or due_workflows,
         current_workflows=classified["current"],
         priority_workflows=classified["priority"],
+        deferred_workflows=classified["deferred"],
         this_month_workflows=classified["this_month"],
         next_month_workflows=classified["next_month"],
         suggested_close_workflows=classified["suggested_close"],
@@ -389,8 +393,18 @@ def recalculate_review_workflows(client_id):
 @login_required
 @handle_errors
 def update_review_workflow(workflow_id):
+    from services.review_status_service import (
+        STATUS_DUE,
+        STATUS_LABELS,
+        ReviewStatusError,
+        apply_user_status,
+        normalize_status,
+        user_selectable_choices,
+    )
+
     workflow = ReviewWorkflow.query.options(joinedload(ReviewWorkflow.client)).get_or_404(workflow_id)
     client = workflow.client
+    status_choices = user_selectable_choices(workflow.status)
 
     if request.method == "POST":
         rd_raw = request.form.get("review_date")
@@ -406,8 +420,14 @@ def update_review_workflow(workflow_id):
                 return redirect(
                     url_for("clients.update_review_workflow", workflow_id=workflow_id)
                 )
-        if status in ("initiated", "sent", "meeting", "closed"):
-            workflow.status = status
+        if status:
+            try:
+                apply_user_status(workflow, status)
+            except ReviewStatusError as exc:
+                flash(str(exc), "error")
+                return redirect(
+                    url_for("clients.update_review_workflow", workflow_id=workflow_id)
+                )
         workflow.notes = notes
         workflow.meeting_notes = meeting_notes
         if meeting_raw.strip():
@@ -431,7 +451,13 @@ def update_review_workflow(workflow_id):
         return redirect(url_for("clients.client_review_schedule", client_id=client.id))
 
     return render_template(
-        "update_review_workflow.html", client=client, workflow=workflow
+        "update_review_workflow.html",
+        client=client,
+        workflow=workflow,
+        status_choices=status_choices,
+        current_status=normalize_status(workflow.status),
+        status_is_due=normalize_status(workflow.status) == STATUS_DUE,
+        status_labels=STATUS_LABELS,
     )
 
 
@@ -867,9 +893,11 @@ def client_details(client_id):
     previous_review_workflow = None
     if review_schedule:
         try:
+            from services.review_status_service import OPEN_STATUSES as _OPEN_REVIEWS
+
             next_review_workflow = (
                 ReviewWorkflow.query.filter_by(schedule_id=review_schedule.id)
-                .filter(ReviewWorkflow.status.in_(['initiated', 'sent', 'meeting']))
+                .filter(ReviewWorkflow.status.in_(list(_OPEN_REVIEWS)))
                 .order_by(ReviewWorkflow.review_date.asc())
                 .first()
             )

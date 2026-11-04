@@ -127,13 +127,15 @@ class TaskAssignmentAgent:
 
     def _backfill_review_workflows(self) -> tuple:
         """Assign open ReviewWorkflows to each client's advisor.
-        OpsTask create is a no-op unless REVIEW_CREATE_OPS_TASKS is on.
+        OpsTask create from reviews is hard-stopped (always no-op).
         Returns (workflows_assigned_or_reassigned, ops_tasks_created)."""
+        from services.review_status_service import OPEN_STATUSES
+
         assigned_count = 0
         tasks_count = 0
 
         open_workflows = ReviewWorkflow.query.filter(
-            ReviewWorkflow.status.in_(["initiated", "sent", "meeting"]),
+            ReviewWorkflow.status.in_(list(OPEN_STATUSES)),
         ).all()
         for wf in open_workflows:
             try:
@@ -149,6 +151,7 @@ class TaskAssignmentAgent:
                     ).all():
                         if task.assigned_to != assignee_id:
                             task.assigned_to = assignee_id
+                # create_ops_task_from_review_workflow is hard-stopped (always None)
                 task = create_ops_task_from_review_workflow(
                     wf, assignee_id=assignee_id
                 )

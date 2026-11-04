@@ -1659,7 +1659,8 @@ class ReviewWorkflow(db.Model):
     schedule_id = db.Column(db.Integer, db.ForeignKey('review_schedule.id'), nullable=False)
     client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
     review_date = db.Column(db.Date, nullable=False)
-    status = db.Column(db.String(20), default='initiated')  # 'initiated', 'sent', 'meeting', 'closed'
+    # due (system) → planned | deferred → initiated → sent → meeting → closed
+    status = db.Column(db.String(20), default='due')
     notes = db.Column(db.Text)
     meeting_date = db.Column(db.DateTime)
     meeting_notes = db.Column(db.Text)

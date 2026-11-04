@@ -299,8 +299,10 @@ def dashboard():
         accessible = get_accessible_clients()
         total_clients = len(accessible) if accessible else 0
         active_workflows = Workflow.query.filter(Workflow.stage != 'COMPLETED').count()
+        from services.review_status_service import OPEN_STATUSES as _OPEN_REVIEWS
+
         pending_reviews = ReviewWorkflow.query.filter(
-            ReviewWorkflow.status.in_(['initiated', 'sent', 'meeting'])
+            ReviewWorkflow.status.in_(list(_OPEN_REVIEWS))
         ).count()
     except Exception:
         total_clients = 0

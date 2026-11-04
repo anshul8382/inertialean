@@ -125,7 +125,7 @@ def get_assignee_for_review_status(review_workflow) -> Optional[int]:
     except (TypeError, ValueError) as e:
         logger.warning("Client advisor lookup failed for review assignee: %s", e)
 
-    status = getattr(review_workflow, "status", None) or "initiated"
+    status = getattr(review_workflow, "status", None) or "due"
     for rule in _get_rules():
         if rule.rule_type == "review_status" and rule.match_value == status:
             return rule.assigned_user_id
@@ -147,15 +147,14 @@ def apply_review_assignment(review_workflow) -> bool:
     Call after creating or updating a ReviewWorkflow.
     Returns True if assignment was applied.
 
-    Does not auto-create OpsTasks (REVIEW_CREATE_OPS_TASKS defaults false). The open review
-    is the work item; create_ops_task_from_review_workflow remains for rare explicit enable.
+    Never auto-creates OpsTasks — the open review is the work item. Manual tasks on
+    /tasks/ remain allowed. create_ops_task_from_review_workflow stays gated off and
+    is unused from this path (hard stop for system review→task mirrors).
     """
     try:
         assignee_id = get_assignee_for_review_status(review_workflow)
         if assignee_id:
             review_workflow.assigned_to = assignee_id
-            if review_workflow.status in ('initiated', 'sent', 'meeting'):
-                create_ops_task_from_review_workflow(review_workflow, assignee_id=assignee_id)
             return True
     except Exception as e:
         logger.warning(f"Review assignment failed: {e}")
@@ -487,89 +486,17 @@ def create_ops_task_from_review_workflow(
     workflow: ReviewWorkflow, assignee_id: Optional[int] = None
 ) -> Optional[OpsTask]:
     """
-    Create an OpsTask from an open ReviewWorkflow so it appears in /tasks.
-    Only for status in (initiated, sent, meeting). Skips closed workflows.
-    Skips if an OpsTask already exists for this workflow.
+    Legacy helper: ReviewWorkflow → OpsTask mirror.
 
-    When REVIEW_CREATE_OPS_TASKS is false (default), skips creation — the open review is the
-    work item; users may still create a task manually for tracking.
-    Returns the created OpsTask or None.
+    Hard-stopped: always returns None. System no longer creates review OpsTasks
+    (open review is the work item). REVIEW_CREATE_OPS_TASKS stays false; this
+    path ignores the flag so mirrors cannot be re-enabled by env alone.
+    Manual user-created tasks on /tasks/ remain allowed.
     """
-    if not workflow or not workflow.id:
-        return None
-    try:
-        from services.ops_digest_email_service import review_create_ops_tasks_enabled
-
-        if not review_create_ops_tasks_enabled():
-            logger.debug(
-                "Skipping OpsTask for ReviewWorkflow %s (REVIEW_CREATE_OPS_TASKS off)",
-                workflow.id,
-            )
-            return None
-    except Exception as e:
-        logger.debug("REVIEW_CREATE_OPS_TASKS check failed, skipping OpsTask: %s", e)
-        return None
-    if workflow.status == 'closed':
-        return None
-
-    existing = OpsTask.query.filter_by(review_workflow_id=workflow.id).filter(
-        OpsTask.status.in_(['pending', 'in_progress', 'snoozed'])
-    ).first()
-    if existing:
-        return None
-
-    # Don't create tasks for reviews more than 1 week out - they clutter the list
-    rd = workflow.review_date
-    if isinstance(rd, date):
-        cutoff = (datetime.utcnow() + timedelta(days=MAX_DEADLINE_DAYS)).date()
-        if rd > cutoff:
-            return None
-
-    assignee_id = assignee_id or getattr(workflow, 'assigned_to', None)
-    if not assignee_id:
-        return None
-
-    created_by = assignee_id
-    creator = User.query.get(created_by)
-    if not creator:
-        creator = User.query.filter_by(is_admin=True, is_active=True).first()
-        created_by = creator.id if creator else None
-    if not created_by:
-        return None
-
-    client_name = getattr(workflow.client, 'name', None) or f'Client {workflow.client_id}'
-    name = f"[Review] {client_name} - {workflow.status} ({workflow.review_date})"
-    if len(name) > 200:
-        name = name[:197] + '...'
-
-    # Deadline: review_date end of day, capped at 1 week max (no tasks > 1 week out)
-    rd = workflow.review_date
-    if isinstance(rd, date):
-        deadline = datetime.combine(rd, time(23, 59, 59))
-    else:
-        deadline = datetime.utcnow() + timedelta(days=MAX_DEADLINE_DAYS)
-    max_deadline = datetime.utcnow() + timedelta(days=MAX_DEADLINE_DAYS)
-    if deadline > max_deadline:
-        deadline = max_deadline
-
-    notes = f"Auto-created from ReviewWorkflow #{workflow.id}. Status: {workflow.status}."
-
-    task = OpsTask(
-        name=name,
-        deadline=deadline,
-        assigned_to=assignee_id,
-        created_by=created_by,
-        client_id=workflow.client_id,
-        review_workflow_id=workflow.id,
-        notes=notes,
-        priority='medium',
-        status='pending',
-    )
-    try:
-        with db.session.begin_nested():
-            db.session.add(task)
-            db.session.flush()
-        return task
-    except Exception as e:
-        logger.warning(f"Failed to create OpsTask for review workflow {workflow.id}: {e}")
-        return None
+    del assignee_id  # unused — create disabled
+    if workflow is not None:
+        logger.debug(
+            "Skipping OpsTask for ReviewWorkflow %s (system review→task create disabled)",
+            getattr(workflow, "id", None),
+        )
+    return None

@@ -20,24 +20,31 @@ import re
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
-from zoneinfo import ZoneInfo
 
 logger = logging.getLogger(__name__)
 
 OPEN_DI_STATUSES = ("open", "baseline")
-OPEN_REVIEW_STATUSES = ("initiated", "sent", "meeting")
 OPEN_ALERT_STATUSES = ("active", "acknowledged")
+
+try:
+    from services.review_status_service import OPEN_STATUSES as _REVIEW_OPEN
+
+    OPEN_REVIEW_STATUSES = tuple(sorted(_REVIEW_OPEN))
+except Exception:  # pragma: no cover
+    OPEN_REVIEW_STATUSES = (
+        "due",
+        "planned",
+        "deferred",
+        "initiated",
+        "sent",
+        "meeting",
+    )
 
 # Spec: docs/DAILY_ALERT_REPORT_PRIORITIES.md
 ADVISOR_MAX_ROWS_PER_SECTION = 25
 CONSOLIDATED_MAX_ROWS_PER_SECTION = 40
 REVIEW_ALERT_TYPES = frozenset({"review_overdue", "review_upcoming"})
 LEAD_SLA_ALERT_TYPES = frozenset({"lead_sla"})
-IST = ZoneInfo("Asia/Kolkata")
-# Mon=0 … Sun=6 — Thu/Fri/Sat = 3,4,5
-MEETING_HIGHLIGHT_WEEKDAYS_IST = frozenset({3, 4, 5})
-
-
 def di_create_ops_tasks_enabled() -> bool:
     """Default false — prefer advisor digests over /tasks for DI issues."""
     try:
@@ -274,28 +281,60 @@ def extract_agent_issue_detail(description: Optional[str], max_len: int = 220) -
     return joined
 
 
-def meeting_highlight_today(now: Optional[datetime] = None) -> bool:
-    """True on Thu/Fri/Sat in Asia/Kolkata."""
-    dt = now or datetime.now(IST)
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=ZoneInfo("UTC")).astimezone(IST)
-    else:
-        dt = dt.astimezone(IST)
-    return dt.weekday() in MEETING_HIGHLIGHT_WEEKDAYS_IST
+def extract_service_ticket_detail(alert: Any, max_len: int = 120) -> str:
+    """Prefer ticket subject/detail over generic 'Service Ticket: TKT-…' titles."""
+    desc = (getattr(alert, "description", None) or "").strip()
+    title = (getattr(alert, "title", None) or "").strip()
+    detail = ""
+    if desc:
+        # SLA checker embeds: "... Ticket: {ticket.title}"
+        m = re.search(r"(?i)\bTicket:\s*(.+)$", desc, re.DOTALL)
+        if m:
+            detail = m.group(1).strip()
+        else:
+            detail = " ".join(desc.split())
+    if not detail:
+        detail = title
+    # Still a ticket-number-only title → keep short fallback
+    if re.match(r"(?i)^(service\s+ticket|ticket\s+sla\s+breached|ticket\s+approaching\s+sla)\s*:", detail or ""):
+        detail = title or detail
+    detail = (detail or "—").strip()
+    if len(detail) > max_len:
+        return detail[: max_len - 1] + "…"
+    return detail or "—"
 
 
 def _client_name(alert: Any) -> str:
     try:
         from alert_service import AlertService
 
-        return AlertService._client_name_for_alert_row(alert) or "—"
+        name = AlertService._client_name_for_alert_row(alert)
+        if name and name != "—":
+            return name
     except Exception:
-        c = getattr(alert, "client", None)
-        return getattr(c, "name", None) or "—"
+        pass
+    c = getattr(alert, "client", None)
+    cname = getattr(c, "name", None) if c is not None else None
+    if cname:
+        return cname
+    lead = getattr(alert, "lead", None)
+    lname = getattr(lead, "name", None) if lead is not None else None
+    if lname:
+        return lname
+    # Description often starts with "Lead {name} moved to …"
+    desc = (getattr(alert, "description", None) or "").strip()
+    m = re.match(r"(?i)^Lead\s+(.+?)\s+moved\s+to\b", desc)
+    if m:
+        return m.group(1).strip()
+    return "—"
 
 
 def _advisor_label(alert: Any) -> str:
     adv = _advisor_for_client(getattr(alert, "client", None))
+    if not adv:
+        lead = getattr(alert, "lead", None)
+        if lead is not None:
+            adv = getattr(lead, "user", None)
     if not adv:
         adv = getattr(alert, "assigned_user", None)
     if not adv:
@@ -382,7 +421,6 @@ def build_alert_report_sections_html(
     )
     buckets = _partition_alerts_for_audience(alerts, audience)
     parts: List[str] = []
-    meeting_hot = meeting_highlight_today(now)
 
     def take(key: str) -> Tuple[List[Any], int]:
         full = buckets.get(key) or []
@@ -394,7 +432,7 @@ def build_alert_report_sections_html(
         headers = ["Client"]
         if include_advisor_col:
             headers.append("Advisor")
-        headers.extend(["Severity", "Title", "Aging", "Status"])
+        headers.extend(["Severity", "Ticket detail", "Aging", "Status"])
         rows = []
         for a in chunk:
             row = [_esc(_client_name(a))]
@@ -403,7 +441,7 @@ def build_alert_report_sections_html(
             row.extend(
                 [
                     _esc(getattr(a, "severity", None)),
-                    _esc((getattr(a, "title", None) or "")[:80]),
+                    _esc(extract_service_ticket_detail(a)),
                     _esc(_hours_label(_aging_hours(a))),
                     _esc(getattr(a, "status", None)),
                 ]
@@ -453,50 +491,10 @@ def build_alert_report_sections_html(
             )
         )
 
-    # 3. Meeting not scheduled
-    chunk, total = take("meeting_not_scheduled")
-    if chunk:
-        if meeting_hot:
-            intro = (
-                "<strong>Priority today (Thu–Sat IST):</strong> schedule meetings "
-                "before the weekend so clients are covered."
-            )
-        else:
-            intro = "Clients with no upcoming meeting on the cadence SLA."
-        headers = ["Client"]
-        if include_advisor_col:
-            headers.append("Advisor")
-        headers.extend(["Severity", "Detail", "Since", "Status"])
-        rows = []
-        for a in chunk:
-            detail = (getattr(a, "description", None) or getattr(a, "title", None) or "")[
-                :120
-            ]
-            row = [_esc(_client_name(a))]
-            if include_advisor_col:
-                row.append(_esc(_advisor_label(a)))
-            row.extend(
-                [
-                    _esc(getattr(a, "severity", None)),
-                    _esc(detail),
-                    _esc(_hours_label(_aging_hours(a))),
-                    _esc(getattr(a, "status", None)),
-                ]
-            )
-            rows.append(row)
-        parts.append(
-            _section_block(
-                "3. Meeting not scheduled",
-                intro,
-                headers,
-                rows,
-                total=total,
-                shown=len(chunk),
-                emphasize=meeting_hot,
-            )
-        )
+    # Meeting not scheduled — intentionally omitted from the Daily Alert Report
+    # (alerts may still exist in the Alerts dashboard).
 
-    # 4. Workflow SLA — separate table per stage
+    # 3. Workflow SLA — separate table per stage
     wf_all = buckets.get("workflow_sla") or []
     if wf_all:
         by_stage: Dict[str, List[Any]] = defaultdict(list)
@@ -510,7 +508,7 @@ def build_alert_report_sections_html(
             ),
         )
         stage_blocks = [
-            '<div style="margin:18px 0 8px"><h3 style="margin:0 0 6px">4. Workflow SLA</h3>'
+            '<div style="margin:18px 0 8px"><h3 style="margin:0 0 6px">3. Workflow SLA</h3>'
             '<p style="color:#555;margin:0 0 8px;font-size:13px">'
             "Stage-wise delays — aging is time in (or attributed to) that stage.</p></div>"
         ]
@@ -551,7 +549,7 @@ def build_alert_report_sections_html(
             )
         parts.append("\n".join(stage_blocks))
 
-    # 5. Agent orchestrated — show issue detail
+    # 4. Agent orchestrated — show issue detail
     chunk, total = take("agent_orchestrated")
     if chunk:
         headers = ["Client"]
@@ -574,7 +572,7 @@ def build_alert_report_sections_html(
             rows.append(row)
         parts.append(
             _section_block(
-                "5. Critical / agent-detected issues",
+                "4. Critical / agent-detected issues",
                 "What is wrong — not just that issues were detected.",
                 headers,
                 rows,
@@ -583,7 +581,7 @@ def build_alert_report_sections_html(
             )
         )
 
-    # 6. Other actionable
+    # 5. Other actionable
     chunk, total = take("other")
     if chunk:
         headers = ["Client"]
@@ -606,7 +604,7 @@ def build_alert_report_sections_html(
             rows.append(row)
         parts.append(
             _section_block(
-                "6. Other alerts",
+                "5. Other alerts",
                 "Remaining actionable alerts.",
                 headers,
                 rows,
@@ -615,7 +613,7 @@ def build_alert_report_sections_html(
             )
         )
 
-    # 7. Reviews FYI (bottom)
+    # 6. Reviews FYI (bottom)
     chunk, total = take("reviews_fyi")
     if chunk:
         headers = ["Client"]
@@ -637,7 +635,7 @@ def build_alert_report_sections_html(
             rows.append(row)
         parts.append(
             _section_block(
-                "7. Reviews — for your information",
+                "6. Reviews — for your information",
                 "Informational only — not an urgent ops queue. Plan reviews when capacity allows.",
                 headers,
                 rows,
@@ -646,7 +644,7 @@ def build_alert_report_sections_html(
             )
         )
 
-    # 8. Lead SLA — consolidated only
+    # 7. Lead SLA — consolidated only
     if audience == "consolidated":
         chunk, total = take("lead_sla")
         if chunk:
@@ -670,7 +668,7 @@ def build_alert_report_sections_html(
                 )
             parts.append(
                 _section_block(
-                    "8. Lead SLA (managers / admins)",
+                    "7. Lead SLA (managers / admins)",
                     "Lead pipeline SLA — for manager and admin follow-up.",
                     headers,
                     rows,
@@ -821,9 +819,12 @@ def send_alert_advisor_digests() -> Dict[str, Any]:
     except ImportError:
         from models import Alert as AlertModel  # type: ignore
 
+    from models import Lead
+
     alerts = (
         AlertModel.query.options(
             joinedload(AlertModel.client).joinedload(Client.advisor),
+            joinedload(AlertModel.lead).joinedload(Lead.user),
             joinedload(AlertModel.assigned_user),
         )
         .filter(AlertModel.status.in_(list(OPEN_ALERT_STATUSES)))
@@ -904,7 +905,7 @@ def send_review_workflow_daily_digests() -> Dict[str, Any]:
     """Open ReviewWorkflows: per client-advisor + consolidated manager/admin.
 
     Uses review_list_service classification:
-    current / priority / this_month / next_month / suggested_close / date_missing.
+    current / due / priority / deferred / this_month / next_month / suggested_close / date_missing.
     One primary review per client on the board; obsolete rows listed separately.
     """
     from models import Client, ReviewWorkflow
@@ -922,12 +923,14 @@ def send_review_workflow_daily_digests() -> Dict[str, Any]:
     classified = classify_review_workflows(reviews)
 
     section_defs = [
-        ("current", "1. Current — in progress & due", classified["current"]),
-        ("priority", "2. Priority — initiated & due", classified["priority"]),
-        ("this_month", "3. This month", classified["this_month"]),
-        ("next_month", "4. Next month", classified["next_month"]),
-        ("suggested_close", "5. Suggested to close (obsolete)", classified["suggested_close"]),
-        ("date_missing", "6. Date missing", classified["date_missing"]),
+        ("current", "1. Current — in progress", classified["current"]),
+        ("due", "2. Due", classified["due"]),
+        ("priority", "3. Initiated", classified["priority"]),
+        ("deferred", "4. Deferred (acked delay)", classified["deferred"]),
+        ("this_month", "5. Planned this month", classified["this_month"]),
+        ("next_month", "6. Planned next month", classified["next_month"]),
+        ("suggested_close", "7. Suggested to close (obsolete)", classified["suggested_close"]),
+        ("date_missing", "8. Date missing", classified["date_missing"]),
     ]
 
     def _row(rw) -> List[str]:
@@ -966,9 +969,19 @@ def send_review_workflow_daily_digests() -> Dict[str, Any]:
 
     by_advisor: Dict[int, List[Any]] = defaultdict(list)
     unassigned: List[Any] = []
+    board_keys = (
+        "current",
+        "due",
+        "priority",
+        "deferred",
+        "this_month",
+        "next_month",
+        "suggested_close",
+        "date_missing",
+    )
     board_ids = {
         id(rw)
-        for key in ("current", "priority", "this_month", "next_month", "suggested_close", "date_missing")
+        for key in board_keys
         for rw in classified[key]
     }
     for rw in reviews:
@@ -999,7 +1012,7 @@ def send_review_workflow_daily_digests() -> Dict[str, Any]:
     cons_body = _sections_html(None, for_advisor=False)
     if unassigned:
         cons_body += f"<p>{len(unassigned)} unassigned on board.</p>"
-    board_count = sum(len(classified[k]) for k in ("current", "priority", "this_month", "next_month", "suggested_close", "date_missing"))
+    board_count = sum(len(classified[k]) for k in board_keys)
     cons_html = _wrap(
         "Client reviews — consolidated",
         f"Board rows: {board_count} (open workflows loaded: {len(reviews)}). Advisor emails: {sent}. Horizon through {classified['upcoming_end']}.",
@@ -1017,7 +1030,9 @@ def send_review_workflow_daily_digests() -> Dict[str, Any]:
         "consolidated_sent": cons_ok,
         "unassigned": len(unassigned),
         "current": len(classified["current"]),
+        "due": len(classified["due"]),
         "priority": len(classified["priority"]),
+        "deferred": len(classified["deferred"]),
         "suggested_close": len(classified["suggested_close"]),
         "date_missing": len(classified["date_missing"]),
     }

@@ -339,13 +339,16 @@ class AlertService:
     
     @staticmethod
     def _client_name_for_alert_row(alert):
-        """Resolve display client for an alert (direct client_id or via workflow → monthly_investment)."""
+        """Resolve display name: client, workflow→client, or lead (lead_sla)."""
         try:
             if alert.client:
                 return alert.client.name
             wf = alert.workflow
             if wf and wf.monthly_investment and wf.monthly_investment.client:
                 return wf.monthly_investment.client.name
+            lead = getattr(alert, "lead", None)
+            if lead and getattr(lead, "name", None):
+                return lead.name
         except Exception as ex:
             logger.debug("client name for alert %s: %s", getattr(alert, "id", None), ex)
         return '—'
@@ -976,8 +979,10 @@ class AlertService:
             ).first()
 
             # Overdue workflows (initiated/sent) where review_date < today
+            from services.review_status_service import OPEN_STATUSES as _OPEN_REVIEWS
+
             overdue_workflows = ReviewWorkflow.query.filter(
-                ReviewWorkflow.status.in_(['initiated', 'sent']),
+                ReviewWorkflow.status.in_(list(_OPEN_REVIEWS - {"planned"})),
                 ReviewWorkflow.review_date < today
             ).all()
 
@@ -1021,7 +1026,7 @@ class AlertService:
 
             # Upcoming reviews due within 7 days
             upcoming_workflows = ReviewWorkflow.query.filter(
-                ReviewWorkflow.status.in_(['initiated', 'sent']),
+                ReviewWorkflow.status.in_(["due", "planned", "deferred", "initiated", "sent"]),
                 ReviewWorkflow.review_date >= today,
                 ReviewWorkflow.review_date <= today + timedelta(days=7)
             ).all()

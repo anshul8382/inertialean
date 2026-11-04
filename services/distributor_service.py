@@ -1153,10 +1153,12 @@ def build_distributor_client_detail(client, *, light: bool = False) -> Dict[str,
     ).first()
     previous_review_workflow = None
     next_review_workflow = None
+    from services.review_status_service import OPEN_STATUSES as _OPEN_REVIEWS
+
     if review_schedule:
         next_review_workflow = (
             ReviewWorkflow.query.filter_by(schedule_id=review_schedule.id)
-            .filter(ReviewWorkflow.status.in_(["initiated", "sent", "meeting"]))
+            .filter(ReviewWorkflow.status.in_(list(_OPEN_REVIEWS)))
             .order_by(ReviewWorkflow.review_date.asc())
             .first()
         )
@@ -1174,7 +1176,7 @@ def build_distributor_client_detail(client, *, light: bool = False) -> Dict[str,
         next_review_workflow = (
             ReviewWorkflow.query.filter(
                 ReviewWorkflow.client_id == client_id,
-                ReviewWorkflow.status.in_(["initiated", "sent", "meeting"]),
+                ReviewWorkflow.status.in_(list(_OPEN_REVIEWS)),
             )
             .order_by(ReviewWorkflow.review_date.asc())
             .first()

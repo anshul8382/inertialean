@@ -52,12 +52,24 @@
                         
                         <div class="form-group mb-3">
                             <label for="status" class="form-label">Status</label>
+                            {% if status_is_due %}
+                            <p class="mb-2">
+                                <span class="badge bg-danger text-white">Due</span>
+                                <span class="text-muted small ms-1">Set by the system — choose the next step below.</span>
+                            </p>
+                            {% endif %}
                             <select class="form-control" id="status" name="status" required>
-                                <option value="initiated" {{ 'selected' if workflow.status == 'initiated' }}>Initiated</option>
-                                <option value="sent" {{ 'selected' if workflow.status == 'sent' }}>Review Sent</option>
-                                <option value="meeting" {{ 'selected' if workflow.status == 'meeting' }}>Meeting Scheduled</option>
-                                <option value="closed" {{ 'selected' if workflow.status == 'closed' }}>Closed</option>
+                                {% if status_is_due %}
+                                <option value="" disabled selected>Select next status…</option>
+                                {% endif %}
+                                {% for value, label in status_choices %}
+                                <option value="{{ value }}" {{ 'selected' if (not status_is_due and current_status == value) }}>{{ label }}</option>
+                                {% endfor %}
                             </select>
+                            <small class="form-text text-muted">
+                                Flow: Due → Planned (prioritise) or Deferred (delay) → Initiated → Sent → Meeting → Closed.
+                                Status <strong>Due</strong> cannot be set manually.
+                            </small>
                         </div>
 
                         <div class="form-group mb-3">

@@ -700,10 +700,12 @@ def get_client_review_schedule(client_id):
             }
         
         # Get next review workflow
+        from services.review_status_service import OPEN_STATUSES as _OPEN_REVIEWS
+
         next_review_workflow = ReviewWorkflow.query.filter_by(
             schedule_id=review_schedule.id
         ).filter(
-            ReviewWorkflow.status.in_(['initiated', 'sent', 'meeting'])
+            ReviewWorkflow.status.in_(list(_OPEN_REVIEWS))
         ).order_by(ReviewWorkflow.review_date.asc()).first()
         
         return {

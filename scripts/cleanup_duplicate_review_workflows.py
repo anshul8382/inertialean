@@ -10,7 +10,7 @@ were never cleaned up. They age, clutter the pendency reports, and mirror into O
 Deletes a review only when ALL of these hold:
   * status is not 'closed'
   * it is NOT the keeper for that client (keeper = earliest review_date, lowest id on ties)
-  * status == 'initiated'          — still at the first stage, never advanced
+  * status in ('due', 'initiated') — still at the first stage, never advanced
   * notes / meeting_notes are empty and meeting_date is NULL  — no record of any real work
 
 Anything carrying notes, meeting notes or a meeting date is evidence of real work and is
@@ -47,7 +47,7 @@ from main import create_app
 from models import OpsTask, ReviewWorkflow
 
 OPEN_TASK_STATUSES = ["pending", "in_progress", "snoozed"]
-FIRST_STAGE = "initiated"
+FIRST_STAGES = frozenset({"due", "initiated"})
 
 
 def _blank(value) -> bool:
@@ -57,7 +57,7 @@ def _blank(value) -> bool:
 def _is_safe_to_delete(review: ReviewWorkflow) -> bool:
     """Untouched first-stage row with no record of any work having happened."""
     return (
-        (review.status or "").strip().lower() == FIRST_STAGE
+        (review.status or "").strip().lower() in FIRST_STAGES
         and _blank(review.notes)
         and _blank(review.meeting_notes)
         and review.meeting_date is None
@@ -116,7 +116,7 @@ def main() -> None:
                     marks.append("meeting_notes")
                 if review.meeting_date is not None:
                     marks.append("meeting_date")
-                if (review.status or "").strip().lower() != FIRST_STAGE:
+                if (review.status or "").strip().lower() not in FIRST_STAGES:
                     marks.append(f"status={review.status}")
                 print(
                     f"    review #{review.id} client={review.client_id} "

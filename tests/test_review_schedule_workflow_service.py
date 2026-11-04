@@ -99,7 +99,7 @@ def test_sync_creates_only_first_when_empty(monkeypatch):
     assert n == 1
     assert len(added) == 1
     assert added[0].review_date == date(2025, 7, 12)
-    assert added[0].status == "initiated"
+    assert added[0].status == "due"
 
 
 def test_sync_creates_one_after_closed(monkeypatch):

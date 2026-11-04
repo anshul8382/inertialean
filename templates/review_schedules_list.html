@@ -85,7 +85,7 @@
 {% endmacro %}
 
 {% macro workflow_status_badge(workflow) %}
-<span class="badge status-badge {% if workflow.status == 'closed' %}bg-success{% elif workflow.status == 'meeting' %}bg-warning{% elif workflow.status == 'sent' %}bg-info{% else %}bg-secondary{% endif %} text-white">
+<span class="badge status-badge {% if workflow.status == 'closed' %}bg-success{% elif workflow.status == 'due' %}bg-danger{% elif workflow.status == 'deferred' %}bg-dark{% elif workflow.status == 'planned' %}bg-primary{% elif workflow.status == 'meeting' %}bg-warning text-dark{% elif workflow.status == 'sent' %}bg-info{% elif workflow.status == 'initiated' %}bg-secondary{% else %}bg-secondary{% endif %}{% if workflow.status not in ('meeting',) %} text-white{% endif %}">
     {{ workflow.status|title }}
 </span>
 {% endmacro %}
@@ -159,21 +159,21 @@
   {% include 'partials/mobile/app_header.html' %}
 
   <div class="im-metric-grid mb-3">
-    <a class="im-metric-tile text-decoration-none" href="{{ url_for('clients.list_review_schedules', bucket='current') }}">
-      <span class="im-metric-tile__label">Current</span>
-      <span class="im-metric-tile__value">{{ current_workflows|length }}</span>
+    <a class="im-metric-tile text-decoration-none" href="{{ url_for('clients.list_review_schedules', bucket='due') }}">
+      <span class="im-metric-tile__label">Due</span>
+      <span class="im-metric-tile__value">{{ due_workflows|length }}</span>
+    </a>
+    <a class="im-metric-tile text-decoration-none" href="{{ url_for('clients.list_review_schedules', bucket='deferred') }}">
+      <span class="im-metric-tile__label">Deferred</span>
+      <span class="im-metric-tile__value">{{ deferred_workflows|length }}</span>
     </a>
     <a class="im-metric-tile text-decoration-none" href="{{ url_for('clients.list_review_schedules', bucket='priority') }}">
-      <span class="im-metric-tile__label">Priority</span>
+      <span class="im-metric-tile__label">Initiated</span>
       <span class="im-metric-tile__value">{{ priority_workflows|length }}</span>
     </a>
-    <a class="im-metric-tile text-decoration-none" href="{{ url_for('clients.list_review_schedules', bucket='this_month') }}">
-      <span class="im-metric-tile__label">This mo</span>
-      <span class="im-metric-tile__value">{{ this_month_workflows|length }}</span>
-    </a>
-    <a class="im-metric-tile text-decoration-none" href="{{ url_for('clients.list_review_schedules', bucket='next_month') }}">
-      <span class="im-metric-tile__label">Next mo</span>
-      <span class="im-metric-tile__value">{{ next_month_workflows|length }}</span>
+    <a class="im-metric-tile text-decoration-none" href="{{ url_for('clients.list_review_schedules', bucket='current') }}">
+      <span class="im-metric-tile__label">In prog</span>
+      <span class="im-metric-tile__value">{{ current_workflows|length }}</span>
     </a>
   </div>
 
@@ -221,12 +221,14 @@
   {% else %}
   <p class="small text-muted mb-2">{{ board_total }} on report · through {{ upcoming_end.strftime('%d %b %Y') }}</p>
   {% for section_key, section_label, section_rows in [
-      ('current', '1. Current — in progress & due', current_workflows),
-      ('priority', '2. Priority — initiated & due', priority_workflows),
-      ('this_month', '3. This month', this_month_workflows),
-      ('next_month', '4. Next month', next_month_workflows),
-      ('suggested_close', '5. Suggested to close', suggested_close_workflows),
-      ('date_missing', '6. Date missing', date_missing_workflows),
+      ('current', '1. Current — in progress', current_workflows),
+      ('due', '2. Due', due_workflows),
+      ('priority', '3. Initiated', priority_workflows),
+      ('deferred', '4. Deferred', deferred_workflows),
+      ('this_month', '5. Planned this month', this_month_workflows),
+      ('next_month', '6. Planned next month', next_month_workflows),
+      ('suggested_close', '7. Suggested to close', suggested_close_workflows),
+      ('date_missing', '8. Date missing', date_missing_workflows),
   ] %}
   <p class="small fw-semibold mb-1 mt-3">{{ section_label }} ({{ section_rows|length }})</p>
   <div class="im-list-stack mb-2">
@@ -282,22 +284,44 @@
     <div class="row mb-4 g-3 no-print">
         <div class="col-md-2">
             <a href="{{ url_for('clients.list_review_schedules', bucket='current') }}" class="summary-card-link {% if bucket == 'current' %}active-bucket{% endif %}">
-                <div class="card summary-card bg-danger text-white">
+                <div class="card summary-card bg-warning text-dark">
                     <div class="card-body py-3">
                         <h4 class="card-title mb-0">{{ current_workflows|length }}</h4>
                         <p class="card-text mb-0 small">Current</p>
-                        <small class="opacity-75">In progress &amp; due</small>
+                        <small class="opacity-75">Sent / meeting</small>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('clients.list_review_schedules', bucket='due') }}" class="summary-card-link {% if bucket == 'due' %}active-bucket{% endif %}">
+                <div class="card summary-card bg-danger text-white">
+                    <div class="card-body py-3">
+                        <h4 class="card-title mb-0">{{ due_workflows|length }}</h4>
+                        <p class="card-text mb-0 small">Due</p>
+                        <small class="opacity-75">System queue</small>
                     </div>
                 </div>
             </a>
         </div>
         <div class="col-md-2">
             <a href="{{ url_for('clients.list_review_schedules', bucket='priority') }}" class="summary-card-link {% if bucket == 'priority' %}active-bucket{% endif %}">
-                <div class="card summary-card bg-warning text-dark">
+                <div class="card summary-card bg-secondary text-white">
                     <div class="card-body py-3">
                         <h4 class="card-title mb-0">{{ priority_workflows|length }}</h4>
-                        <p class="card-text mb-0 small">Priority</p>
-                        <small class="opacity-75">Initiated &amp; due</small>
+                        <p class="card-text mb-0 small">Initiated</p>
+                        <small class="opacity-75">In flight</small>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('clients.list_review_schedules', bucket='deferred') }}" class="summary-card-link {% if bucket == 'deferred' %}active-bucket{% endif %}">
+                <div class="card summary-card bg-dark text-white">
+                    <div class="card-body py-3">
+                        <h4 class="card-title mb-0">{{ deferred_workflows|length }}</h4>
+                        <p class="card-text mb-0 small">Deferred</p>
+                        <small class="opacity-75">Acked delay</small>
                     </div>
                 </div>
             </a>
@@ -308,7 +332,7 @@
                     <div class="card-body py-3">
                         <h4 class="card-title mb-0">{{ this_month_workflows|length }}</h4>
                         <p class="card-text mb-0 small">This month</p>
-                        <small class="opacity-75">Through {{ month_end.strftime('%d %b') }}</small>
+                        <small class="opacity-75">Planned · {{ month_end.strftime('%d %b') }}</small>
                     </div>
                 </div>
             </a>
@@ -319,29 +343,7 @@
                     <div class="card-body py-3">
                         <h4 class="card-title mb-0">{{ next_month_workflows|length }}</h4>
                         <p class="card-text mb-0 small">Next month</p>
-                        <small class="opacity-75">Through {{ upcoming_end.strftime('%d %b') }}</small>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-md-2">
-            <a href="{{ url_for('clients.list_review_schedules', bucket='suggested_close') }}" class="summary-card-link {% if bucket == 'suggested_close' %}active-bucket{% endif %}">
-                <div class="card summary-card bg-secondary text-white">
-                    <div class="card-body py-3">
-                        <h4 class="card-title mb-0">{{ suggested_close_workflows|length }}</h4>
-                        <p class="card-text mb-0 small">Close</p>
-                        <small class="opacity-75">Obsolete</small>
-                    </div>
-                </div>
-            </a>
-        </div>
-        <div class="col-md-2">
-            <a href="{{ url_for('clients.list_review_schedules', bucket='date_missing') }}" class="summary-card-link {% if bucket == 'date_missing' %}active-bucket{% endif %}">
-                <div class="card summary-card bg-dark text-white">
-                    <div class="card-body py-3">
-                        <h4 class="card-title mb-0">{{ date_missing_workflows|length }}</h4>
-                        <p class="card-text mb-0 small">No date</p>
-                        <small class="opacity-75">Fix due date</small>
+                        <small class="opacity-75">Planned · {{ upcoming_end.strftime('%d %b') }}</small>
                     </div>
                 </div>
             </a>
@@ -441,24 +443,32 @@
     {% else %}
 
     <div class="card shadow mb-4">
-        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-danger">1. Current — in progress &amp; due ({{ current_workflows|length }})</h6></div>
+        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-warning">1. Current — in progress ({{ current_workflows|length }})</h6></div>
         <div class="card-body">{{ section_table(current_workflows, 'None') }}</div>
     </div>
     <div class="card shadow mb-4">
-        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-warning">2. Priority — initiated &amp; due ({{ priority_workflows|length }})</h6></div>
+        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-danger">2. Due ({{ due_workflows|length }})</h6></div>
+        <div class="card-body">{{ section_table(due_workflows, 'None') }}</div>
+    </div>
+    <div class="card shadow mb-4">
+        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-secondary">3. Initiated ({{ priority_workflows|length }})</h6></div>
         <div class="card-body">{{ section_table(priority_workflows, 'None') }}</div>
     </div>
     <div class="card shadow mb-4">
-        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-info">3. This month ({{ this_month_workflows|length }})</h6></div>
+        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-dark">4. Deferred ({{ deferred_workflows|length }})</h6></div>
+        <div class="card-body">{{ section_table(deferred_workflows, 'None') }}</div>
+    </div>
+    <div class="card shadow mb-4">
+        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-info">5. Planned this month ({{ this_month_workflows|length }})</h6></div>
         <div class="card-body">{{ section_table(this_month_workflows, 'None') }}</div>
     </div>
     <div class="card shadow mb-4">
-        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">4. Next month ({{ next_month_workflows|length }})</h6></div>
+        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-primary">6. Planned next month ({{ next_month_workflows|length }})</h6></div>
         <div class="card-body">{{ section_table(next_month_workflows, 'None') }}</div>
     </div>
     <div class="card shadow mb-4">
         <div class="card-header py-3 d-flex justify-content-between align-items-center">
-            <h6 class="m-0 font-weight-bold text-secondary">5. Suggested to close — obsolete ({{ suggested_close_workflows|length }})</h6>
+            <h6 class="m-0 font-weight-bold text-secondary">7. Suggested to close — obsolete ({{ suggested_close_workflows|length }})</h6>
             <a href="{{ url_for('clients.list_review_schedules', bucket='suggested_close') }}" class="btn btn-sm btn-outline-secondary no-print">Open list</a>
         </div>
         <div class="card-body">{{ section_table(suggested_close_workflows[:25], 'None', show_close_hint=True) }}
@@ -468,7 +478,7 @@
         </div>
     </div>
     <div class="card shadow mb-4">
-        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-dark">6. Date missing ({{ date_missing_workflows|length }})</h6></div>
+        <div class="card-header py-3"><h6 class="m-0 font-weight-bold text-dark">8. Date missing ({{ date_missing_workflows|length }})</h6></div>
         <div class="card-body">{{ section_table(date_missing_workflows, 'None') }}</div>
     </div>
     {% endif %}

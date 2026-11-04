@@ -120,9 +120,11 @@ def _get_agent_stats():
                 DataIntegrityIssue.status.in_(["open", "baseline"]),
                 DataIntegrityIssue.assigned_to.is_(None),
             ).count()
+            from services.review_status_service import OPEN_STATUSES as _OPEN_REVIEWS
+
             unassigned_reviews = ReviewWorkflow.query.filter(
                 ReviewWorkflow.assigned_to.is_(None),
-                ReviewWorkflow.status.in_(["initiated", "sent", "meeting"]),
+                ReviewWorkflow.status.in_(list(_OPEN_REVIEWS)),
             ).count()
             agents[-1]["primary_count"] = unassigned_issues + unassigned_reviews
             agents[-1]["metric_kind"] = "unassigned"

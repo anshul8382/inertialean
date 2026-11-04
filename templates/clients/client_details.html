@@ -1176,7 +1176,7 @@
                             <h6 class="font-weight-bold">Next Review</h6>
                             {% if next_review_workflow %}
                                 <p class="mb-1">{{ next_review_workflow.review_date.strftime('%Y-%m-%d') }}</p>
-                                <span class="badge {% if next_review_workflow.status == 'closed' %}bg-success{% elif next_review_workflow.status == 'meeting' %}bg-warning{% elif next_review_workflow.status == 'sent' %}bg-info{% else %}bg-secondary{% endif %} text-white">
+                                <span class="badge {% if next_review_workflow.status == 'closed' %}bg-success{% elif next_review_workflow.status == 'due' %}bg-danger{% elif next_review_workflow.status == 'deferred' %}bg-dark{% elif next_review_workflow.status == 'planned' %}bg-primary{% elif next_review_workflow.status == 'meeting' %}bg-warning text-dark{% elif next_review_workflow.status == 'sent' %}bg-info{% else %}bg-secondary{% endif %}{% if next_review_workflow.status != 'meeting' %} text-white{% endif %}">
                                     {{ next_review_workflow.status|title }}
                                 </span>
                             {% else %}

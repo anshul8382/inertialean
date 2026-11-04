@@ -13,6 +13,8 @@ from services.review_billing_projection_service import (
     user_may_view_review_cashflow,
 )
 
+pytestmark = pytest.mark.no_app
+
 
 def _wf(
     *,

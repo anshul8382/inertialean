@@ -39,7 +39,9 @@ def _review_would_create_task(wf, get_assignee_for_review_status_fn):
     ).first()
     if existing:
         return False, f"has_open_task:{existing.id}"
-    if wf.status not in ("initiated", "sent", "meeting"):
+    from services.review_status_service import OPEN_STATUSES
+
+    if wf.status not in OPEN_STATUSES:
         return False, f"status_{wf.status}"
     rd = wf.review_date
     if isinstance(rd, date):

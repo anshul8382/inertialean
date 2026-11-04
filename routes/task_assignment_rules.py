@@ -42,7 +42,15 @@ def handle_errors(f):
 
 # Rule type options and match values for dropdowns
 WORKFLOW_STAGES = ['FUNDS', 'RECOS', 'NOTIFY', 'EXEC', 'UPDATE', 'COMPLETED']
-REVIEW_STATUSES = ['initiated', 'sent', 'meeting', 'closed']
+REVIEW_STATUSES = [
+    'due',
+    'planned',
+    'deferred',
+    'initiated',
+    'sent',
+    'meeting',
+    'closed',
+]
 ISSUE_CATEGORIES = [
     'RECOMMENDATION_EXECUTION',
     'RECOMMENDATION_MATCH',

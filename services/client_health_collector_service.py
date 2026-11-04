@@ -240,7 +240,9 @@ def collect_review_pipeline_observations(now: Optional[datetime] = None) -> List
     now = now or datetime.utcnow()
     today = now.date()
     out: List[Dict[str, Any]] = []
-    open_statuses = ("initiated", "sent", "meeting")
+    from services.review_status_service import OPEN_STATUSES
+
+    open_statuses = tuple(OPEN_STATUSES)
     workflows = ReviewWorkflow.query.filter(ReviewWorkflow.status.in_(open_statuses)).all()
 
     for rw in workflows:

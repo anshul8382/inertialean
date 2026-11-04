@@ -658,7 +658,7 @@ See also: `docs/WORKFLOW_SYSTEM_GUIDE.md`.
 3. Select client and period; run analysis.  
 4. Use **Performance email** for client-ready narrative where applicable.  
 5. Log **meeting** when review is discussed.  
-6. Update review workflow status: **initiated → sent → meeting → closed** (where review workflow is used).
+6. Update review workflow status: **Due** (system) → **Planned** (prioritise) or **Deferred** (delay with ack) → **Initiated → Sent → Meeting → Closed**. Only the system sets **Due** (new open reviews start as Due).
 
 ### 16.5 Portfolio rebalancing
 

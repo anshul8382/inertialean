@@ -347,11 +347,12 @@ def _last_contact_for_lead(lead_id: int) -> Optional[date]:
 
 def _infer_misses_review_calls(client_id: int) -> bool:
     from models import ReviewWorkflow
+    from services.review_status_service import OPEN_STATUSES
 
     today = date.today()
     stale = (
         ReviewWorkflow.query.filter_by(client_id=client_id)
-        .filter(ReviewWorkflow.status.in_(("initiated", "sent")))
+        .filter(ReviewWorkflow.status.in_(list(OPEN_STATUSES)))
         .filter(ReviewWorkflow.review_date < today)
         .count()
     )

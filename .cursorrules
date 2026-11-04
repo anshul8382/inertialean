@@ -48,7 +48,7 @@
 ### Task Assignment
 - `TaskAssignmentRule`: rule_type in (`workflow_stage`, `issue_category`, `review_status`), match_value varies
 - Workflow stages: FUNDS, RECOS, NOTIFY, EXEC, UPDATE, COMPLETED
-- Review statuses: initiated, sent, meeting, closed
+- Review statuses: due (system) → planned | deferred → initiated → sent → meeting → closed
 - Use `apply_review_assignment(workflow)` when creating/updating ReviewWorkflow
 - Use `create_ops_task_from_issue()` / `create_ops_task_from_review_workflow()` to create OpsTasks for /tasks/
 - Admin UI: `/admin/task-assignment-rules`

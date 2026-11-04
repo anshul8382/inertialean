@@ -5,7 +5,7 @@ AUM: holdings market value (same approach as Practice Analytics).
 Committed monthly: sum of active MonthlyInvestmentSchedule.planned_amount.
 Growth (MoM): this calendar month vs prior month sum of MonthlyInvestment.planned_amount
 (by investment_date), with a short trend series for display.
-Review pendency: open ReviewWorkflow statuses initiated/sent/meeting.
+Review pendency: open ReviewWorkflow statuses (due/planned/deferred/initiated/sent/meeting).
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from models import (
     User,
 )
 
-OPEN_REVIEW_STATUSES = ("initiated", "sent", "meeting")
+from services.review_status_service import OPEN_STATUSES as OPEN_REVIEW_STATUSES
 TREND_MONTHS = 6
 
 
@@ -146,7 +146,7 @@ def _pending_reviews_by_client(client_ids: List[int]) -> Dict[int, int]:
         db.session.query(ReviewWorkflow.client_id, func.count(ReviewWorkflow.id))
         .filter(
             ReviewWorkflow.client_id.in_(client_ids),
-            ReviewWorkflow.status.in_(OPEN_REVIEW_STATUSES),
+            ReviewWorkflow.status.in_(list(OPEN_REVIEW_STATUSES)),
         )
         .group_by(ReviewWorkflow.client_id)
         .all()

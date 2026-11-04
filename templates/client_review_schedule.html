@@ -159,7 +159,7 @@
                                                 </div>
                                             </td>
                                             <td>
-                                                <span class="badge {% if workflow.status == 'closed' %}bg-success{% elif workflow.status == 'meeting' %}bg-warning{% elif workflow.status == 'sent' %}bg-info{% else %}bg-secondary{% endif %} text-white">
+                                                <span class="badge {% if workflow.status == 'closed' %}bg-success{% elif workflow.status == 'due' %}bg-danger{% elif workflow.status == 'deferred' %}bg-dark{% elif workflow.status == 'planned' %}bg-primary{% elif workflow.status == 'meeting' %}bg-warning text-dark{% elif workflow.status == 'sent' %}bg-info{% else %}bg-secondary{% endif %}{% if workflow.status != 'meeting' %} text-white{% endif %}">
                                                     {{ workflow.status|title }}
                                                 </span>
                                             </td>

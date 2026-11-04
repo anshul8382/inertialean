@@ -83,11 +83,13 @@ def sync_missing_workflows(schedule, user_id: int, horizon_months: int = 24) -> 
     if target in existing_dates:
         return 0
 
+    from services.review_status_service import STATUS_DUE
+
     rw = ReviewWorkflow(
         schedule_id=schedule.id,
         client_id=schedule.client_id,
         review_date=target,
-        status="initiated",
+        status=STATUS_DUE,  # system-only start; user moves to planned / deferred / initiated
         created_by=user_id,
     )
     db.session.add(rw)

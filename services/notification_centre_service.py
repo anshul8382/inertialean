@@ -501,11 +501,16 @@ def _from_distributor_events(user, now: datetime) -> List[NotificationItem]:
         )
 
     # 2) Review status — one card per client (latest open review)
+    from services.review_status_service import OPEN_STATUSES as _OPEN_REVIEWS
+
     reviews = ReviewWorkflow.query.filter(
         ReviewWorkflow.client_id.in_(client_ids),
-        ReviewWorkflow.status.in_(["initiated", "sent", "meeting"]),
+        ReviewWorkflow.status.in_(list(_OPEN_REVIEWS)),
     ).all()
     status_labels = {
+        "due": "Review due",
+        "planned": "Review planned",
+        "deferred": "Review deferred",
         "initiated": "Review initiated",
         "sent": "Review pack sent",
         "meeting": "Review meeting scheduled / in progress",
@@ -1131,9 +1136,13 @@ def _from_reviews(user, now: datetime, *, scope: str = "mine") -> List[Notificat
 
     out: List[NotificationItem] = []
     today = now.date()
+    from services.review_status_service import OPEN_STATUSES as _OPEN_REVIEWS
+
     open_rows = ReviewWorkflow.query.filter(
-        ReviewWorkflow.status.in_(["initiated", "sent", "meeting", "planned"])
+        ReviewWorkflow.status.in_(list(_OPEN_REVIEWS))
     ).all()
+    # C1 overdue: due/deferred/work stages (not planned — that is C2)
+    _c1_statuses = frozenset({"due", "deferred", "initiated", "sent", "meeting"})
     for rw in open_rows:
         client = Client.query.get(rw.client_id)
         if client and hasattr(client, "is_active") and not client.is_active:
@@ -1171,7 +1180,11 @@ def _from_reviews(user, now: datetime, *, scope: str = "mine") -> List[Notificat
                         )
                     )
 
-        if days_until is not None and days_until <= 0 and status != "closed":
+        if (
+            days_until is not None
+            and days_until <= 0
+            and status in _c1_statuses
+        ):
             if _visible_to_user(user, assignee, "C1", scope=scope):
                 out.append(
                     NotificationItem(
@@ -1190,7 +1203,7 @@ def _from_reviews(user, now: datetime, *, scope: str = "mine") -> List[Notificat
                         facts={"review_id": rw.id, "status": status, "days_until": days_until},
                     )
                 )
-        elif days_until is not None and 0 < days_until <= 30 and status in ("planned", "initiated"):
+        elif days_until is not None and 0 < days_until <= 30 and status == "planned":
             if _visible_to_user(user, assignee, "C2", scope=scope):
                 out.append(
                     NotificationItem(

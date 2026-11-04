@@ -10,7 +10,7 @@ from calendar import monthrange
 from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
 
-OPEN_STATUSES = frozenset({"initiated", "sent", "meeting"})
+from services.review_status_service import OPEN_STATUSES
 ALLOWED_EMAIL = "anshul@equities4wealth.com"
 HORIZON_MONTHS = 12
 

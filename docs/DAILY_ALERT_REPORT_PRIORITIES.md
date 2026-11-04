@@ -16,14 +16,17 @@ Empty sections are **omitted** (data-driven layout). No LLM.
 
 ## Section order (both audiences)
 
-1. **Service tickets** (`alert_type=service_ticket`) — start of report  
+1. **Service tickets** (`alert_type=service_ticket`) — start of report; column shows **ticket detail** (subject/description), not the generic `Service Ticket: TKT-…` title  
 2. **Payment delays** (`billing` + `invoice_payment_delay`, or title starts with `Payment Delay`) — always near top  
-3. **Meeting not scheduled** (`communication` + `meeting_cadence`) — stronger callout on **Thu / Fri / Sat** (IST) so meetings can still be booked  
-4. **Workflow SLA** — **separate table per stage**; columns include client, advisor, stage, aging in stage, SLA hours, severity  
-5. **Agent / critical issues** (`agent_orchestrated`) — must show **what** the issue is (from description / issue lines), not only “Critical Issues Detected for …”  
-6. **Other actionable** (recommendation, portfolio, etc. — everything not classified below)  
-7. **Reviews (FYI only)** (`review_overdue`, `review_upcoming`) — bottom; intro: “For your information”  
-8. **Lead SLA** (`lead_sla`) — **consolidated (manager/admin) only**; never on advisor digests  
+3. **Workflow SLA** — **separate table per stage**; columns include client, advisor, stage, aging in stage, SLA hours, severity  
+4. **Agent / critical issues** (`agent_orchestrated`) — must show **what** the issue is (from description / issue lines), not only “Critical Issues Detected for …”  
+5. **Other actionable** (recommendation, portfolio, etc. — everything not classified below)  
+6. **Reviews (FYI only)** (`review_overdue`, `review_upcoming`) — bottom; intro: “For your information”  
+7. **Lead SLA** (`lead_sla`) — **consolidated (manager/admin) only**; never on advisor digests; **Lead / client** column must resolve `alert.lead.name` (these alerts often have no `client_id`)
+
+### Removed from this report
+
+- **Meeting not scheduled** (`communication` + `meeting_cadence` / title `Meeting Not Scheduled`) — **not shown** on Daily Alert Report (advisor or consolidated). Alerts may still exist in the Alerts dashboard / SLA checkers; they are simply omitted from this email layout.
 
 ---
 
@@ -31,11 +34,12 @@ Empty sections are **omitted** (data-driven layout). No LLM.
 
 | Alert family | Advisor digest | Consolidated |
 |--------------|----------------|--------------|
-| Service tickets, payment, meeting, workflow SLA, agent, other | Yes (their book) | Yes |
-| Reviews (FYI) | Yes, last section | Yes, last before lead SLA / after other |
+| Service tickets, payment, workflow SLA, agent, other | Yes (their book) | Yes |
+| Meeting not scheduled | **No** (omitted) | **No** (omitted) |
+| Reviews (FYI) | Yes, last section before lead SLA | Yes, last before lead SLA / after other |
 | Lead SLA | **No** | **Yes** |
 
-Advisor grouping = client’s `advisor_id` (book ownership), same as task assignment.
+Advisor grouping = client’s `advisor_id` (book ownership), same as task assignment. Lead SLA rows group/display via `lead.user` / alert assignee when there is no client.
 
 ---
 
@@ -53,28 +57,29 @@ Aging prefers `current_delay` (hours on alert); else derive from workflow `updat
 
 Issue detail = first meaningful issue lines from `description` (orchestrator embeds issue messages), truncated for email.
 
-### Service tickets / payment / meeting / other
+### Service tickets
+
+| Client | Advisor* | Severity | Ticket detail | Aging | Status |
+
+Ticket detail = subject/body from alert `description` (e.g. text after `Ticket:` on SLA breach, or create-time `{title} - {description}`), **not** the ticket-number-only alert title.
+
+### Payment / other
 
 | Client | Advisor* | Severity | Title / summary | Aging or notes | Status |
 
 \*Advisor column on consolidated only (advisor mail already scoped).
+
+### Lead SLA (consolidated)
+
+| Lead / client | Advisor | Severity | Title | Status |
+
+Name from `alert.lead.name` (fallback: parse `Lead {name} moved to …` from description). Advisor from `lead.user` then alert assignee.
 
 ### Reviews FYI
 
 | Client | Advisor* | Type | Title | Status |
 
 Soft wording; not treated as a fire drill.
-
----
-
-## Weekday rule — Meeting Not Scheduled
-
-When local date is **Thursday, Friday, or Saturday** (Asia/Kolkata):
-
-- Section heading notes urgency (schedule this week / before weekend).  
-- Optional visual emphasis (e.g. amber intro).
-
-Other days: still include the section if rows exist; normal priority after payment.
 
 ---
 
@@ -103,4 +108,4 @@ If truncated, footer: “Showing N of M … view Alerts dashboard.”
 2. Ask Cursor to update `services/ops_digest_email_service.py` (and tests) to match.  
 3. Smoke: trigger `daily_alert_report` or call `send_alert_advisor_digests()` in app context.  
 
-**Last aligned with code:** 2026-09-18
+**Last aligned with code:** 2026-11-04

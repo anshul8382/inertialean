@@ -10,7 +10,7 @@ globs: services/task_assignment_service.py,agents/task_assignment_agent.py,route
 - match_value: varies by type
   - workflow_stage: FUNDS, RECOS, NOTIFY, EXEC, UPDATE, COMPLETED
   - issue_category: PORTFOLIO_PERFORMANCE, RECOMMENDATION_MATCH, CASHFLOW, etc.
-  - review_status: initiated, sent, meeting, closed
+  - review_status: due, planned, deferred, initiated, sent, meeting, closed
 
 ## Service Functions
 - `get_assignee_for_workflow_stage(workflow)` – monthly investment workflows
@@ -18,7 +18,7 @@ globs: services/task_assignment_service.py,agents/task_assignment_agent.py,route
 - `get_assignee_for_review_status(workflow)` – ReviewWorkflow
 - `apply_review_assignment(workflow)` – sets assigned_to (OpsTask create gated off by default)
 - `create_ops_task_from_issue(issue)` – DataIntegrityIssue → OpsTask (`DI_CREATE_OPS_TASKS`, default false)
-- `create_ops_task_from_review_workflow(workflow)` – ReviewWorkflow → OpsTask (`REVIEW_CREATE_OPS_TASKS`, default false)
+- `create_ops_task_from_review_workflow(workflow)` – hard-stopped (always None); open review is the work item
 
 ## OpsTask Links
 - `data_integrity_issue_id` – when created from DataIntegrityIssue
