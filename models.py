@@ -189,7 +189,7 @@ class SecurityAllocation(db.Model):
 class Security(db.Model):
     __tablename__ = 'security'
     id = db.Column(db.Integer, primary_key=True)
-    symbol = db.Column(db.String(20), nullable=False)
+    symbol = db.Column(db.String(50), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     asset_class_id = db.Column(db.Integer, db.ForeignKey('asset_class.id'), nullable=False)
     security_type = db.Column(db.String(50), nullable=False)

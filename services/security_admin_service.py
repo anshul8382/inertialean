@@ -23,11 +23,28 @@ def build_securities_list_context() -> dict[str, Any]:
     return {"securities": securities, "daily_update": daily_update, "today": datetime.now()}
 
 
+# Match DB columns on `security` (see models.Security).
+_SECURITY_SYMBOL_MAX = 50
+_SECURITY_NAME_MAX = 100
+
+
 def create_security_from_add_form(form: Any, user_id: int) -> tuple[bool, str | None]:
     symbol = (form.get("symbol") or "").strip().upper()
     name = (form.get("name") or "").strip()
     if not symbol or not name:
         return False, "Symbol and name are required."
+    if len(symbol) > _SECURITY_SYMBOL_MAX:
+        return (
+            False,
+            f"Symbol must be at most {_SECURITY_SYMBOL_MAX} characters "
+            f"(got {len(symbol)}). For mutual funds use a short code "
+            f"(e.g. scheme code / abbreviated ticker), not the full name.",
+        )
+    if len(name) > _SECURITY_NAME_MAX:
+        return (
+            False,
+            f"Name must be at most {_SECURITY_NAME_MAX} characters (got {len(name)}).",
+        )
     try:
         asset_class_id = int(form.get("asset_class_id") or 0)
     except (TypeError, ValueError):
@@ -75,6 +92,17 @@ def create_security_from_add_form(form: Any, user_id: int) -> tuple[bool, str | 
     except IntegrityError as e:
         db.session.rollback()
         return False, str(e) or "Could not save security (duplicate or constraint)."
+    except Exception as e:
+        # e.g. MySQL DataError "Data too long for column 'symbol'"
+        db.session.rollback()
+        msg = str(e.orig) if getattr(e, "orig", None) else str(e)
+        if "Data too long" in msg or "1406" in msg:
+            return (
+                False,
+                f"Symbol/name too long for the database "
+                f"(symbol max {_SECURITY_SYMBOL_MAX}, name max {_SECURITY_NAME_MAX}).",
+            )
+        return False, msg or "Could not save security."
     return True, None
 
 

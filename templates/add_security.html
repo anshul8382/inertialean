@@ -16,12 +16,17 @@
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <label for="symbol" class="form-label">Symbol</label>
-                        <input type="text" class="form-control" id="symbol" name="symbol" required>
+                        <input type="text" class="form-control" id="symbol" name="symbol"
+                               maxlength="50" required
+                               placeholder="e.g. RELIANCE or MF scheme code / ISIN">
+                        <small class="form-text text-muted">Max 50 characters (ticker, scheme code, or ISIN).</small>
                     </div>
                     
                     <div class="col-md-6 mb-3">
                         <label for="name" class="form-label">Name</label>
-                        <input type="text" class="form-control" id="name" name="name" required>
+                        <input type="text" class="form-control" id="name" name="name"
+                               maxlength="100" required>
+                        <small class="form-text text-muted">Max 100 characters.</small>
                     </div>
                 </div>
 

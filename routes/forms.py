@@ -268,7 +268,7 @@ class SecurityModelForm(FlaskForm):
         self.asset_class_id.choices = [(ac.id, ac.name) for ac in AssetClass.query.order_by(AssetClass.name).all()]
 
 class SecurityForm(FlaskForm):
-    symbol = StringField('Symbol', validators=[DataRequired(), Length(min=1, max=20)])
+    symbol = StringField('Symbol', validators=[DataRequired(), Length(min=1, max=50)])
     name = StringField('Name', validators=[DataRequired(), Length(min=2, max=100)])
     type = SelectField('Type', choices=[
         ('STOCK', 'Stock'),
