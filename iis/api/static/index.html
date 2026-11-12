@@ -1,0 +1,2194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <title>IIS — Research Assistant v0.5.38</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --surface2: #eef2f7;
+      --border: #d5dee9;
+      --text: #152033;
+      --muted: #5b6b82;
+      --accent: #2563eb;
+      --accent-dim: #dbeafe;
+      --green: #059669;
+      --yellow: #b45309;
+      --red: #dc2626;
+      --radius: 10px;
+      --shadow: 0 1px 2px rgba(21,32,51,0.06), 0 8px 24px rgba(21,32,51,0.06);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Header */
+    header {
+      height: 52px;
+      padding: 0 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+    }
+    header h1 { font-size: 0.95rem; font-weight: 600; letter-spacing: -0.02em; }
+    header h1 span { color: var(--muted); font-weight: 400; }
+    .header-badges { display: flex; gap: 0.5rem; align-items: center; }
+    .badge {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      background: var(--surface2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .badge.ok { color: var(--green); border-color: #a7f3d0; background: #ecfdf5; }
+    .badge.warn { color: var(--yellow); border-color: #fde68a; background: #fffbeb; }
+
+    /* Layout */
+    .app {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      height: calc(100vh - 52px);
+    }
+
+    /* Sidebar — lean context rail */
+    .sidebar {
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: inset -1px 0 0 var(--border);
+    }
+    .sidebar-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .section-label {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+
+    /* Left-panel coach: ask for useful uploads while waiting / during analysis */
+    .sidebar.session-active .pre-session { display: none !important; }
+    .sidebar:not(.session-active) .session-tools { display: none !important; }
+    .side-activity {
+      display: flex; flex-direction: column; gap: 0.35rem;
+      max-height: 160px; overflow-y: auto;
+      margin-bottom: 0.25rem;
+    }
+    .side-activity-item {
+      font-size: 0.72rem; line-height: 1.4; color: var(--muted);
+      padding: 0.4rem 0.5rem; border-radius: 6px;
+      background: var(--surface2); border-left: 3px solid var(--border);
+    }
+    .side-activity-item.ok { border-left-color: var(--green); color: var(--text); }
+    .side-activity-item.warn { border-left-color: var(--yellow); }
+    .side-activity-item.err { border-left-color: var(--red); color: var(--text); }
+    .side-activity-item strong { color: var(--text); font-weight: 600; }
+    .side-notes textarea {
+      width: 100%; min-height: 140px; resize: vertical;
+      font-size: 0.78rem; line-height: 1.45;
+      padding: 0.55rem 0.6rem; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--surface2); color: var(--text);
+      font-family: inherit;
+    }
+    .side-notes .notes-meta {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 0.65rem; color: var(--muted); margin-top: 0.3rem;
+    }
+    .side-asks-box {
+      font-size: 0.72rem; line-height: 1.45; color: var(--text);
+      padding: 0.5rem 0.55rem; border-radius: 8px;
+      border: 1px solid rgba(180, 83, 9, 0.35); background: #fffbeb;
+      max-height: 180px; overflow-y: auto;
+    }
+    .side-asks-box ol { margin: 0.25rem 0 0 1rem; padding: 0; }
+    .side-asks-box li { margin: 0.25rem 0; }
+    .side-asks-box.hidden { display: none !important; }
+    .helpful-asks {
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+    .ask-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface2);
+      padding: 0.65rem 0.7rem;
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: var(--text);
+    }
+    .ask-card.priority {
+      border-color: #93c5fd;
+      background: #eff6ff;
+    }
+    .ask-card.desirable {
+      border-color: #fcd34d;
+      background: #fffbeb;
+    }
+    .ask-card .ask-title {
+      font-weight: 650;
+      font-size: 0.8rem;
+      margin-bottom: 0.25rem;
+      color: var(--text);
+    }
+    .ask-card .ask-body { color: var(--muted); }
+    .ask-card ul {
+      margin: 0.35rem 0 0 1rem;
+      padding: 0;
+      color: var(--text);
+    }
+    .ask-card li { margin: 0.15rem 0; }
+    .ask-card .ask-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-top: 0.5rem;
+    }
+    .ask-card .ask-actions button {
+      font-size: 0.72rem;
+      padding: 0.35rem 0.55rem;
+      font-weight: 550;
+    }
+    .peer-name-box {
+      margin-top: 0.45rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .peer-name-box input {
+      width: 100%;
+      font-size: 0.78rem;
+      padding: 0.45rem 0.55rem;
+    }
+    #helpful-asks-section.analyzing .section-label::after {
+      content: " · while you wait";
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 500;
+      color: var(--accent);
+    }
+
+    input, textarea, button, select {
+      font: inherit;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      padding: 0.55rem 0.75rem;
+    }
+    input:focus, textarea:focus { outline: 2px solid var(--accent-dim); border-color: var(--accent); }
+    button {
+      cursor: pointer;
+      background: var(--accent);
+      border-color: var(--accent);
+      font-weight: 500;
+      transition: opacity 0.15s;
+    }
+    button:hover:not(:disabled) { opacity: 0.9; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    button.ghost { background: transparent; border-color: var(--border); color: var(--muted); }
+    button.ghost:hover:not(:disabled) { background: var(--surface2); color: var(--text); }
+    button.success { background: var(--green); border-color: var(--green); color: #fff; }
+    button.block { width: 100%; }
+    button.primary-approve { background: var(--green); border-color: var(--green); color: #fff; }
+
+    /* Drop zone */
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem 1rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--accent);
+      background: rgba(79, 140, 255, 0.06);
+    }
+    .dropzone-icon { font-size: 1.5rem; margin-bottom: 0.4rem; }
+    .dropzone p { font-size: 0.82rem; color: var(--muted); line-height: 1.4; }
+    .dropzone strong { color: var(--text); display: block; font-size: 0.85rem; margin-bottom: 0.25rem; }
+    .dropzone-hint { font-size: 0.72rem; color: var(--muted); margin-top: 0.5rem; }
+
+    /* Workspace mode tabs */
+    .workspace-tabs {
+      display: flex;
+      gap: 0.25rem;
+      padding: 0.45rem 1.25rem 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .workspace-tabs.visible { display: flex; }
+    .workspace-tabs button {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      color: var(--muted);
+      padding: 0.45rem 0.85rem;
+      font-size: 0.8rem;
+      font-weight: 500;
+    }
+    .workspace-tabs button.active {
+      color: var(--text);
+      border-bottom-color: var(--accent);
+      opacity: 1;
+    }
+    .workspace-tabs button .tab-badge {
+      font-size: 0.65rem;
+      margin-left: 0.35rem;
+      padding: 0.05rem 0.35rem;
+      border-radius: 999px;
+      background: rgba(251,191,36,0.2);
+      color: #fbbf24;
+    }
+    .workspace-tabs button .tab-badge.ok {
+      background: rgba(52,211,153,0.15);
+      color: var(--green);
+    }
+
+    /* Center upload hero — docs-first: use most of the middle pane on Files */
+    .center-upload {
+      padding: 1rem 1.25rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(79,140,255,0.07), transparent 70%);
+      flex: 1 1 auto;
+      overflow-y: auto;
+      min-height: 0;
+      max-height: none;
+    }
+    .center-upload.hidden { display: none; }
+    body.tab-files .center-upload { flex: 1 1 auto; }
+
+    /* Review / report / stage panels — expand fully in reading-mode (chat log hidden) */
+    .review-workspace {
+      display: none;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .review-workspace.visible { display: flex; }
+    .report-workspace,
+    .page-workspace {
+      display: none;
+      flex-direction: column;
+      flex: 1 1 auto;
+      min-height: 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .report-workspace.visible,
+    .page-workspace.visible { display: flex; }
+    .page-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.15rem 1.5rem 2.5rem;
+      font-size: 0.95rem;
+      line-height: 1.65;
+      max-width: min(960px, 100%);
+    }
+    .page-body h2 { font-size: 1.2rem; margin: 0 0 0.75rem; }
+    .page-body h3 { font-size: 1rem; margin: 1.1rem 0 0.4rem; color: var(--accent); }
+    .page-body .lead { font-size: 1rem; color: var(--text); margin-bottom: 1rem; }
+    .page-body .meta-list { list-style: none; margin: 0 0 1rem; padding: 0; }
+    .page-body .meta-list li {
+      padding: 0.55rem 0; border-bottom: 1px solid var(--border); font-size: 0.95rem;
+    }
+    .workspace-tabs button.ws-dyn:not(.hidden) { display: inline-flex; align-items: center; }
+    .workspace-tabs button.hidden { display: none !important; }
+    .workspace-tabs button.has-new::after {
+      content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+      margin-left: 0.35rem;
+    }
+    .report-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding: 0.65rem 1.25rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .report-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .report-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 1.1rem 1.35rem 2.5rem;
+      font-size: 0.95rem;
+      line-height: 1.65;
+      width: 100%;
+      max-width: none;
+      box-sizing: border-box;
+    }
+    .report-body .report-md { max-width: none; width: 100%; }
+    .report-body h1 { font-size: 1.35rem; margin: 0.35rem 0 0.75rem; font-weight: 700; letter-spacing: -0.02em; }
+    .report-body h2 { font-size: 1.08rem; margin: 1.35rem 0 0.55rem; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 0.35rem; font-weight: 650; }
+    .report-body h3 { font-size: 0.95rem; margin: 1rem 0 0.4rem; color: var(--accent); font-weight: 600; }
+    .report-body p { color: var(--text); margin: 0.4rem 0 0.65rem; max-width: none; }
+    /* Full-width dual reading: Pipeline | divider | Direct LLM */
+    .report-compare-split {
+      display: flex;
+      flex: 1 1 auto;
+      min-height: 0;
+      width: 100%;
+      align-items: stretch;
+    }
+    .report-compare-pane {
+      flex: 1 1 50%;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .report-compare-pane .pane-label {
+      flex-shrink: 0;
+      padding: 0.45rem 1.1rem;
+      font-size: 0.78rem;
+      font-weight: 650;
+      letter-spacing: 0.02em;
+      color: var(--muted);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .report-compare-pane .pane-label strong { color: var(--text); }
+    .report-compare-pane .report-body {
+      flex: 1 1 auto;
+      padding: 0.9rem 1.1rem 2rem;
+    }
+    .report-compare-divider {
+      flex: 0 0 1px;
+      width: 1px;
+      align-self: stretch;
+      background: var(--border);
+      position: relative;
+    }
+    .report-compare-divider::after {
+      content: '';
+      position: absolute;
+      top: 0; bottom: 0; left: -3px;
+      width: 7px;
+      cursor: col-resize;
+    }
+    @media (max-width: 900px) {
+      .report-compare-split { flex-direction: column; }
+      .report-compare-divider {
+        width: 100%;
+        height: 1px;
+        flex-basis: 1px;
+      }
+      .report-compare-pane { flex: 1 1 auto; max-height: 50%; }
+    }
+    .report-body li { color: var(--text); margin: 0.2rem 0; }
+    .report-body strong { color: var(--text); }
+    .report-body .md-table-wrap { overflow-x: auto; margin: 0.65rem 0 1rem; }
+    .report-body .md-table {
+      width: 100%; border-collapse: collapse; font-size: 0.86rem;
+      border: 1px solid var(--border); border-radius: 8px;
+    }
+    .report-body .md-table th {
+      text-align: left; padding: 0.55rem 0.7rem; background: var(--surface2, rgba(255,255,255,0.04));
+      border-bottom: 1px solid var(--border); font-weight: 600; color: var(--text); white-space: nowrap;
+    }
+    .report-body .md-table td {
+      padding: 0.5rem 0.7rem; border-bottom: 1px solid var(--border); color: var(--text);
+      vertical-align: top;
+    }
+    .report-body .md-table tr:last-child td { border-bottom: none; }
+    .report-body .md-table tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+    .src-ref-btn {
+      display: inline-flex; align-items: center; vertical-align: baseline;
+      margin-left: 0.2rem; padding: 0 0.35rem; height: 1.15em;
+      font-size: 0.68rem; font-weight: 600; letter-spacing: 0.02em;
+      color: var(--muted); background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 4px; cursor: pointer; line-height: 1;
+    }
+    .src-ref-btn:hover, .src-ref-btn[aria-expanded="true"] {
+      color: var(--accent); border-color: var(--accent); background: var(--accent-dim);
+    }
+    .src-ref-pop {
+      position: fixed; z-index: 40; width: min(360px, calc(100vw - 1.5rem));
+      max-height: min(42vh, 320px); overflow: auto;
+      padding: 0.75rem 0.85rem; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: var(--shadow); font-size: 0.8rem; line-height: 1.45;
+      color: var(--text); display: none;
+    }
+    .src-ref-pop.open { display: block; }
+    .src-ref-pop .src-ref-h {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      gap: 0.5rem; margin-bottom: 0.45rem;
+    }
+    .src-ref-pop .src-ref-title {
+      font-size: 0.72rem; font-weight: 650; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .src-ref-pop .src-ref-close {
+      border: none; background: transparent; color: var(--muted);
+      cursor: pointer; font-size: 1rem; line-height: 1; padding: 0 0.15rem;
+    }
+    .src-ref-pop .src-ref-body { white-space: pre-wrap; word-break: break-word; color: var(--text); }
+    .proposal-chip-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.45rem 0 0.25rem; }
+    .proposal-chip {
+      display: flex; flex-direction: column; gap: 0.35rem; align-items: flex-start;
+      padding: 0.5rem 0.65rem; border: 1px solid var(--border); border-radius: 8px;
+      background: var(--surface); max-width: 100%;
+    }
+    .proposal-chip .pt { font-size: 0.78rem; color: var(--text); }
+    .proposal-chip .pa { display: flex; gap: 0.35rem; }
+    .proposal-chip button { font-size: 0.72rem; padding: 0.25rem 0.55rem; cursor: pointer; }
+    .peer-upload-box {
+      margin: 0.75rem 0 1rem; padding: 0.75rem 0.85rem; border: 1px dashed rgba(79,140,255,0.4);
+      border-radius: 10px; background: rgba(79,140,255,0.04);
+    }
+    .peer-upload-box input[type="text"] { width: 100%; margin: 0.35rem 0 0.5rem; }
+    .report-body blockquote {
+      margin: 0.5rem 0;
+      padding: 0.5rem 0.75rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(79,140,255,0.08);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .report-body table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.5rem 0 0.85rem;
+      font-size: 0.78rem;
+    }
+    .report-body th, .report-body td {
+      border: 1px solid var(--border);
+      padding: 0.35rem 0.5rem;
+      text-align: left;
+    }
+    .report-body th { background: var(--surface2); color: var(--text); }
+    .report-body tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+    .report-body ul { margin: 0.35rem 0 0.75rem 1.1rem; }
+    .review-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      padding: 0.65rem 1.25rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .review-subtabs { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+    .review-subtabs button {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.75rem;
+      padding: 0.35rem 0.7rem;
+    }
+    .review-subtabs button.active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: rgba(79,140,255,0.12);
+      opacity: 1;
+    }
+    .review-actions { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+    .review-actions button.primary-approve {
+      background: #065f46;
+      border-color: var(--green);
+      color: #ecfdf5;
+      font-weight: 600;
+      padding: 0.45rem 0.9rem;
+    }
+    .review-actions button.primary-approve:disabled {
+      opacity: 0.45;
+    }
+    .review-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem 1.25rem 1.25rem;
+      min-height: 120px;
+    }
+    .review-ask {
+      flex-shrink: 0;
+      padding: 0.55rem 1.25rem 0.75rem;
+      border-top: 1px dashed var(--border);
+      background: rgba(79,140,255,0.04);
+    }
+    .review-ask-label { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.4rem; }
+    .review-hero {
+      display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;
+      margin-bottom: 0.85rem;
+    }
+    .review-hero h3 { margin: 0; font-size: 1rem; font-weight: 650; }
+    .review-hero p { margin: 0.25rem 0 0; font-size: 0.78rem; color: var(--muted); line-height: 1.45; }
+    .review-status {
+      font-size: 0.72rem; padding: 0.2rem 0.55rem; border-radius: 999px;
+      border: 1px solid var(--border); color: var(--muted); white-space: nowrap;
+    }
+    .review-status.pending { color: #fbbf24; border-color: rgba(251,191,36,0.4); }
+    .review-status.approved { color: var(--green); border-color: rgba(52,211,153,0.4); }
+    .history-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin: 0.5rem 0 1rem; }
+    .history-table th, .history-table td {
+      padding: 0.4rem 0.5rem; border-bottom: 1px solid rgba(42,52,72,0.55); text-align: right;
+    }
+    .history-table th:first-child, .history-table td:first-child { text-align: left; }
+    .history-table th { color: var(--muted); font-weight: 500; font-size: 0.7rem; }
+    .assumption-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.65rem;
+      margin: 0.75rem 0;
+    }
+    .assumption-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.65rem 0.75rem;
+    }
+    .assumption-card.needs { border-color: rgba(251,191,36,0.45); }
+    .assumption-card label { display: block; font-size: 0.72rem; color: var(--muted); margin-bottom: 0.35rem; }
+    .assumption-card input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); padding: 0.4rem 0.5rem; font-size: 0.9rem;
+    }
+    .assumption-card .rationale { font-size: 0.65rem; color: var(--muted); margin-top: 0.35rem; line-height: 1.35; }
+    .flag-list { display: flex; flex-direction: column; gap: 0.45rem; }
+    .flag-item {
+      font-size: 0.78rem; padding: 0.65rem 0.75rem; border-radius: 8px;
+      border: 1px solid var(--border); background: var(--surface);
+    }
+    .flag-item.review { border-color: rgba(251,191,36,0.45); }
+    .flag-item.warn { border-color: rgba(248,113,113,0.35); }
+    .flag-item.clickable { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+    .flag-item.clickable:hover { border-color: var(--accent); background: rgba(79,140,255,0.08); }
+    .flag-item .flag-head { font-weight: 600; font-size: 0.84rem; margin-bottom: 0.3rem; color: var(--text); }
+    .flag-item .flag-body { color: var(--muted); line-height: 1.45; margin: 0; }
+    .flag-item .flag-verify { font-size: 0.68rem; color: var(--muted); margin-top: 0.4rem; }
+    .flag-item .flag-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.5rem; }
+    .brief-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.85rem 1rem;
+      margin-bottom: 0.75rem;
+    }
+    .brief-block h4 {
+      margin: 0 0 0.45rem;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .brief-block ul { margin: 0; padding-left: 1.1rem; }
+    .brief-block li { margin: 0.28rem 0; font-size: 0.84rem; line-height: 1.45; }
+    .brief-narrative {
+      font-size: 0.9rem;
+      line-height: 1.55;
+      margin: 0.35rem 0 0.85rem;
+    }
+    .brief-sources {
+      display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.35rem;
+    }
+    .brief-source {
+      font-size: 0.68rem;
+      padding: 0.2rem 0.45rem;
+      border-radius: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .brief-source b { color: var(--text); font-weight: 500; margin-right: 0.25rem; }
+    .brief-next {
+      display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+      padding: 0.85rem 1rem;
+      border-radius: 12px;
+      border: 1px solid rgba(79,140,255,0.4);
+      background: rgba(79,140,255,0.1);
+      margin-top: 0.5rem;
+    }
+    .brief-next strong { display: block; font-size: 0.9rem; margin-bottom: 0.2rem; }
+    .brief-next p { margin: 0; font-size: 0.78rem; color: var(--muted); }
+    .step-rail {
+      display: flex; gap: 0.35rem; flex-wrap: wrap; align-items: center;
+    }
+    .step-rail button {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.72rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 999px;
+    }
+    .step-rail button .n {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 1.15rem; height: 1.15rem; border-radius: 999px;
+      background: rgba(255,255,255,0.06); font-size: 0.65rem; margin-right: 0.3rem;
+    }
+    .step-rail button.active {
+      color: var(--text);
+      border-color: var(--accent);
+      background: rgba(79,140,255,0.14);
+      opacity: 1;
+    }
+    .step-rail button.done { color: var(--green); border-color: rgba(52,211,153,0.35); }
+    .step-rail button:disabled { opacity: 0.35; }
+    .center-upload-head {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 1rem;
+      margin-bottom: 0.65rem;
+    }
+    .center-upload-head h2 { margin: 0; font-size: 1.05rem; font-weight: 650; }
+    .center-upload-head p { margin: 0; font-size: 0.78rem; color: var(--muted); }
+    .dropzone.dropzone-hero {
+      padding: 1.5rem 1.25rem 1.35rem;
+      border-width: 2px;
+      border-radius: 12px;
+      background: var(--surface);
+    }
+    .dropzone.dropzone-hero .dropzone-icon { font-size: 2rem; }
+    .dropzone.dropzone-hero strong { font-size: 1rem; margin-bottom: 0.35rem; }
+    .readiness-panel {
+      margin: 0.85rem 0 0.35rem;
+      padding: 0.75rem 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(14, 116, 144, 0.06), transparent);
+      text-align: left;
+    }
+    .readiness-panel[hidden] { display: none !important; }
+    .readiness-head {
+      display: flex; justify-content: space-between; align-items: baseline;
+      gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0.4rem;
+    }
+    .readiness-list, .readiness-queue {
+      margin: 0.25rem 0 0 1.1rem; padding: 0;
+      font-size: 0.86rem; line-height: 1.45;
+    }
+    .readiness-list li { margin: 0.2rem 0; }
+    .readiness-list .rd-add {
+      margin-left: 0.4rem; font-size: 0.78rem;
+      color: var(--accent); background: none; border: none;
+      cursor: pointer; text-decoration: underline; padding: 0;
+    }
+    .readiness-foot {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 0.5rem; margin-top: 0.45rem; font-size: 0.78rem;
+    }
+    .readiness-foot .linkish {
+      background: none; border: none; color: var(--accent);
+      cursor: pointer; text-decoration: underline; font-size: 0.78rem; padding: 0;
+    }
+    .need-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.45rem;
+      margin-top: 0.85rem;
+      text-align: left;
+    }
+    @media (max-width: 900px) { .need-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 560px) { .need-grid { grid-template-columns: 1fr; } }
+    .need-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.55rem 0.65rem;
+      background: var(--bg);
+      font-size: 0.75rem;
+      line-height: 1.4;
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .need-card .need-add {
+      margin-top: auto;
+      align-self: stretch;
+      font-size: 0.72rem;
+      padding: 0.35rem 0.5rem;
+      background: transparent;
+      border: 1px dashed var(--border);
+      color: var(--accent);
+      cursor: pointer;
+      border-radius: 6px;
+    }
+    .need-card .need-add:hover {
+      border-color: var(--accent);
+      background: rgba(79,140,255,0.08);
+    }
+    .need-card.dragover-section {
+      border-color: var(--accent);
+      background: rgba(79,140,255,0.1);
+    }
+    .need-card b { display: block; color: var(--text); font-size: 0.78rem; margin-bottom: 0.15rem; }
+    .need-card .tag {
+      display: inline-block; margin-top: 0.3rem; font-size: 0.68rem;
+      padding: 0.1rem 0.35rem; border-radius: 4px;
+      background: rgba(79,140,255,0.12); color: var(--accent);
+    }
+    .need-card .tag.req { background: rgba(46,204,113,0.15); color: #6ee7a0; }
+    .need-card .tag.opt { background: rgba(255,255,255,0.06); color: var(--muted); }
+    .need-card.has-files { border-color: rgba(52,211,153,0.45); background: rgba(52,211,153,0.06); }
+    .need-card.has-queued { border-color: rgba(79,140,255,0.5); background: rgba(79,140,255,0.08); }
+    .center-session-cta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      margin: 0.65rem 0 0.85rem;
+      padding: 0.7rem 0.85rem;
+      border-radius: 10px;
+      border: 1px solid rgba(52, 211, 153, 0.4);
+      background: rgba(52, 211, 153, 0.08);
+    }
+    .center-session-cta.hidden { display: none !important; }
+    .center-session-cta strong { font-size: 0.88rem; }
+    .center-session-cta button {
+      flex-shrink: 0;
+      background: var(--green);
+      border-color: #059669;
+      color: #042f1e;
+      font-weight: 600;
+    }
+    .need-files {
+      margin-top: 0.4rem;
+      display: flex; flex-direction: column; gap: 0.2rem;
+      max-height: 11.5rem;
+      overflow-y: auto;
+    }
+    .need-file-more {
+      font-size: 0.68rem;
+      color: var(--accent);
+      background: transparent;
+      border: none;
+      padding: 0.2rem 0.35rem;
+      text-align: left;
+      cursor: pointer;
+    }
+    .need-file {
+      font-size: 0.7rem;
+      color: var(--text);
+      display: flex; align-items: center; gap: 0.35rem;
+      padding: 0.2rem 0.35rem;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.25);
+    }
+    .need-file .nf-status {
+      font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em;
+      padding: 0.05rem 0.3rem; border-radius: 3px; flex-shrink: 0;
+    }
+    .need-file .nf-status.queued { background: rgba(79,140,255,0.25); color: var(--accent); }
+    .need-file .nf-status.saved { background: rgba(52,211,153,0.2); color: #6ee7a0; }
+    .need-file .nf-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+    .need-file .nf-move {
+      font-size: 0.65rem;
+      padding: 0.12rem 0.25rem;
+      max-width: 7.5rem;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .need-empty { margin-top: 0.35rem; font-size: 0.68rem; color: var(--muted); font-style: italic; }
+    .classify-banner {
+      margin-top: 0.65rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid rgba(79,140,255,0.35);
+      background: rgba(79,140,255,0.08);
+      font-size: 0.78rem;
+      color: var(--text);
+      line-height: 1.45;
+      display: none;
+    }
+    .classify-banner.visible { display: block; }
+    .classify-banner strong { color: var(--accent); }
+    .drive-banner {
+      display: none;
+      margin: 0.5rem 1.25rem 0;
+      padding: 0.55rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid rgba(251, 191, 36, 0.45);
+      background: rgba(251, 191, 36, 0.1);
+      font-size: 0.78rem;
+      line-height: 1.45;
+      color: var(--text);
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .drive-banner.visible { display: flex; }
+    .drive-banner code { font-size: 0.72rem; background: rgba(0,0,0,0.25); padding: 0.1rem 0.35rem; border-radius: 4px; }
+    .drive-banner button { flex-shrink: 0; }
+    .center-pending {
+      margin: 0.65rem 0 0;
+      display: none;
+      gap: 0.5rem;
+      align-items: stretch;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      padding: 0.65rem 0.75rem;
+      border-radius: 10px;
+      border: 1px solid rgba(79,140,255,0.45);
+      background: rgba(20, 26, 36, 0.96);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    }
+    .center-pending.visible { display: flex; flex-direction: column; }
+    .center-pending .file-list { max-height: 100px; overflow-y: auto; }
+    .center-pending-actions { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+    .center-pending-actions button#btn-upload-center {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      min-width: 200px;
+      padding: 0.7rem 1.1rem;
+    }
+    .file-item .section-tag {
+      font-size: 0.62rem; color: var(--accent); background: rgba(79,140,255,0.12);
+      padding: 0.1rem 0.35rem; border-radius: 4px; flex-shrink: 0; max-width: 9rem;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+
+    /* File list */
+    .file-list { display: flex; flex-direction: column; gap: 0.35rem; }
+    .library-inv { font-size: 0.78rem; line-height: 1.5; color: var(--text); }
+    .library-inv .lib-row { margin-bottom: 0.5rem; }
+    .library-inv .lib-label { color: var(--muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.2rem; }
+    .lib-tag { display: inline-block; padding: 0.12rem 0.4rem; margin: 0.1rem 0.15rem 0.1rem 0; border-radius: 4px; font-size: 0.72rem; background: rgba(79,140,255,0.12); color: var(--accent); }
+    .lib-tag.ciq { background: rgba(46,204,113,0.12); color: #6ee7a0; }
+    .lib-periods { color: var(--muted); font-size: 0.72rem; margin-top: 0.25rem; }
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.45rem 0.6rem;
+      background: var(--surface2);
+      border-radius: 6px;
+      font-size: 0.78rem;
+      border: 1px solid var(--border);
+    }
+    .file-item .icon { font-size: 1rem; flex-shrink: 0; }
+    .file-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-item .remove {
+      background: none; border: none; color: var(--muted);
+      padding: 0 0.3rem; font-size: 1rem; line-height: 1; cursor: pointer;
+    }
+    .file-item .remove:hover { color: var(--red); }
+
+    /* Steps */
+    .steps { display: flex; flex-direction: column; gap: 0.35rem; }
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .step-dot {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.65rem; flex-shrink: 0;
+    }
+    .step.done { color: var(--text); }
+    .step.done .step-dot { background: var(--green); border-color: var(--green); color: #000; }
+    .step.active { color: var(--accent); }
+    .step.active .step-dot { border-color: var(--accent); color: var(--accent); }
+
+    /* Session list */
+    .session-list { display: flex; flex-direction: column; gap: 0.35rem; max-height: 120px; overflow-y: auto; }
+    .session-item {
+      padding: 0.5rem 0.65rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: 0.78rem;
+      transition: background 0.1s;
+    }
+    .session-item:hover { background: var(--surface2); }
+    .session-item.active { border-color: var(--accent); background: rgba(79,140,255,0.08); }
+    .session-item .sub { color: var(--muted); font-size: 0.7rem; margin-top: 0.15rem; }
+
+    .saved-companies { display: flex; flex-direction: column; gap: 0.35rem; max-height: 220px; overflow-y: auto; }
+    .saved-co {
+      padding: 0.45rem 0.6rem; border-radius: 6px; border: 1px solid var(--border);
+      cursor: pointer; font-size: 0.78rem; background: var(--surface2);
+      text-align: left; width: 100%; font-family: inherit; color: inherit;
+    }
+    .saved-co:hover { border-color: var(--accent); }
+    .saved-co .sub { color: var(--muted); font-size: 0.68rem; margin-top: 0.15rem; }
+
+    .company-suggest-wrap { position: relative; flex: 1; min-width: 12rem; }
+    .company-suggest-wrap input { width: 100%; }
+    .company-suggest {
+      display: none; position: absolute; left: 0; right: 0; top: calc(100% + 4px);
+      z-index: 40; max-height: 240px; overflow-y: auto;
+      background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+    }
+    .company-suggest.open { display: block; }
+    .company-suggest button {
+      display: block; width: 100%; text-align: left; padding: 0.55rem 0.7rem;
+      border: 0; border-bottom: 1px solid var(--border); background: transparent;
+      color: var(--text); font: inherit; cursor: pointer;
+    }
+    .company-suggest button:last-child { border-bottom: 0; }
+    .company-suggest button:hover,
+    .company-suggest button.active { background: rgba(79,140,255,0.12); }
+    .company-suggest .sg-name { font-size: 0.85rem; font-weight: 600; }
+    .company-suggest .sg-sub { font-size: 0.7rem; color: var(--muted); margin-top: 0.12rem; }
+    .company-suggest .sg-empty { padding: 0.65rem 0.7rem; font-size: 0.78rem; color: var(--muted); }
+
+    .company-preview-box {
+      border: 1px solid var(--border); border-radius: 8px; padding: 0.55rem 0.6rem;
+      font-size: 0.78rem; background: var(--surface2); margin-bottom: 0.5rem;
+    }
+    .company-preview-box .cp-title { font-weight: 600; margin-bottom: 0.35rem; }
+    .company-preview-box .cp-row { margin: 0.25rem 0; color: var(--muted); font-size: 0.72rem; }
+    .company-preview-box .cp-row strong { color: var(--text); }
+    .company-preview-box .cp-missing { color: var(--yellow); font-size: 0.72rem; margin-top: 0.35rem; }
+    .company-preview-box .cp-empty { color: var(--muted); font-style: italic; }
+
+    /* Gates accordion */
+    .gates-toggle {
+      display: flex; justify-content: space-between; align-items: center;
+      cursor: pointer; padding: 0.4rem 0;
+      font-size: 0.78rem; color: var(--muted);
+    }
+    .gates-panel { display: none; flex-direction: column; gap: 0.5rem; }
+    .gates-panel.open { display: flex; }
+    .gate-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.6rem;
+      font-size: 0.75rem;
+    }
+    .gate-header { display: flex; justify-content: space-between; margin-bottom: 0.4rem; }
+    .gate-status { font-weight: 600; text-transform: capitalize; }
+    .gate-status.pending { color: var(--yellow); }
+    .gate-status.approved { color: var(--green); }
+    .gate-actions { display: flex; gap: 0.35rem; margin-top: 0.4rem; flex-wrap: wrap; }
+    .gate-actions button { flex: 1; padding: 0.35rem; font-size: 0.72rem; min-width: 4.5rem; }
+    .gate-preview { margin-top: 0.45rem; border-top: 1px solid var(--border); padding-top: 0.45rem; }
+    .gate-preview table { width: 100%; border-collapse: collapse; font-size: 0.68rem; }
+    .gate-preview th, .gate-preview td { padding: 0.2rem 0.15rem; text-align: left; vertical-align: middle; }
+    .gate-preview td.num { text-align: right; }
+    .gate-preview .assumption-input {
+      width: 3.2rem; padding: 0.15rem 0.25rem; font-size: 0.68rem;
+      background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; color: var(--text);
+    }
+    .gate-kpi { display: flex; justify-content: space-between; margin: 0.25rem 0; font-size: 0.7rem; }
+    .gate-kpi strong { color: var(--accent); }
+    .gate-rationale { color: var(--muted); font-size: 0.62rem; margin-top: 0.15rem; }
+    .valuation-review { margin: 0.5rem 0; }
+    .valuation-review-item {
+      border: 1px solid var(--border); border-radius: 6px; padding: 0.45rem 0.5rem;
+      margin-bottom: 0.4rem; font-size: 0.68rem; background: var(--surface2);
+    }
+    .valuation-review-item.needs-input { border-color: var(--yellow); }
+    .valuation-review-item .vr-head { font-weight: 600; margin-bottom: 0.2rem; }
+    .valuation-review-item .vr-obs { color: var(--muted); font-size: 0.62rem; margin: 0.25rem 0; }
+    .valuation-review-item .vr-q { margin-top: 0.3rem; }
+    .valuation-review-item .vr-chat { color: var(--accent); font-size: 0.62rem; margin-top: 0.25rem; }
+    .assumption-needs-input { color: var(--yellow); }
+    .gate-expand { cursor: pointer; color: var(--muted); font-size: 0.65rem; margin-top: 0.25rem; }
+
+    /* Chat area */
+    .chat-area {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .chat-header {
+      padding: 0.75rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+      min-height: 48px;
+    }
+    .chat-title { font-size: 0.9rem; font-weight: 500; }
+    .chat-meta { font-size: 0.75rem; color: var(--muted); }
+    .chat-log {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      background: var(--bg);
+    }
+
+    /* Messages — wide & readable */
+    .msg { max-width: 96%; display: flex; flex-direction: column; gap: 0.35rem; width: 100%; }
+    .msg.user { align-self: flex-end; align-items: flex-end; max-width: 72%; width: auto; }
+    .msg.bot { align-self: stretch; }
+    .msg-bubble {
+      padding: 1rem 1.15rem;
+      border-radius: 14px;
+      font-size: 0.95rem;
+      line-height: 1.65;
+      word-break: break-word;
+      box-shadow: var(--shadow);
+    }
+    .msg.bot .msg-bubble {
+      white-space: normal;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 4px;
+    }
+    .msg.bot .msg-bubble.md p { margin: 0.35rem 0; }
+    .msg.bot .msg-bubble.md h1, .msg.bot .msg-bubble.md h2, .msg.bot .msg-bubble.md h3 {
+      margin: 0.75rem 0 0.35rem; font-size: 1.05rem; color: var(--text);
+    }
+    .msg.bot .msg-bubble.md ul { margin: 0.4rem 0 0.4rem 1.1rem; }
+    .msg.bot .msg-bubble.md table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 0.5rem 0; }
+    .msg.bot .msg-bubble.md th, .msg.bot .msg-bubble.md td {
+      border-bottom: 1px solid var(--border); padding: 0.35rem 0.45rem; text-align: left;
+    }
+    .msg.user .msg-bubble { background: var(--accent-dim); border-bottom-right-radius: 4px; white-space: pre-wrap; }
+    .msg.system .msg-bubble {
+      background: #f8fafc; border: 1px solid var(--border); color: var(--muted);
+      font-size: 0.88rem; box-shadow: none; white-space: normal; line-height: 1.55;
+    }
+    .msg.system .msg-bubble.md p { margin: 0.2rem 0; color: var(--muted); }
+    .msg.system .msg-bubble.md p:first-child { margin-top: 0; }
+    .msg.system .msg-bubble.md p:last-child { margin-bottom: 0; }
+    .msg.system .msg-bubble.md strong { color: var(--text); font-weight: 600; }
+    .msg.system .msg-bubble.md code {
+      font-size: 0.82em; background: var(--surface2); padding: 0.05rem 0.3rem; border-radius: 4px;
+      color: var(--text);
+    }
+    .msg.system .msg-bubble.md ul, .msg.system .msg-bubble.md ol {
+      margin: 0.35rem 0 0.35rem 1.15rem; color: var(--muted);
+    }
+    .msg.system .msg-bubble.md li { margin: 0.15rem 0; }
+    .msg.bot .msg-bubble.loading {
+      font-size: 1rem; padding: 1.1rem 1.25rem; border-color: #93c5fd; background: #eff6ff; color: var(--text);
+    }
+
+    /* Analyze progress / reading room */
+    .progress-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem 1.15rem;
+      box-shadow: var(--shadow);
+      margin: 0.25rem 0 0.75rem;
+    }
+    .progress-panel h4 { font-size: 0.95rem; margin-bottom: 0.35rem; }
+    .progress-bar {
+      height: 8px; border-radius: 999px; background: var(--surface2); overflow: hidden; margin: 0.55rem 0 0.75rem;
+    }
+    .progress-bar > span {
+      display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #2563eb, #38bdf8);
+      transition: width 0.4s ease;
+    }
+    .progress-stage { font-size: 0.88rem; color: var(--text); margin-bottom: 0.75rem; }
+    .progress-stage .muted { color: var(--muted); font-size: 0.8rem; }
+    .reading-grid { display: grid; gap: 0.65rem; max-height: 42vh; overflow-y: auto; }
+    .reading-card {
+      border: 1px solid var(--border); border-radius: 10px; padding: 0.7rem 0.85rem; background: #f8fafc;
+    }
+    .reading-card .rk {
+      font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 0.2rem;
+    }
+    .reading-card .rt { font-weight: 600; font-size: 0.88rem; margin-bottom: 0.25rem; }
+    .reading-card .rb { font-size: 0.84rem; line-height: 1.5; color: var(--text); white-space: pre-wrap; }
+    .msg-tier {
+      font-size: 0.68rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .msg-tier.approved { color: var(--green); border-color: #065f46; }
+    .msg-tier.extracted { color: var(--yellow); border-color: #78350f; }
+    .msg-tier.external { color: var(--red); border-color: #7f1d1d; }
+    .msg-tier.agent { color: #67e8f9; border-color: #164e63; }
+
+    /* Structured financial cards */
+    .fin-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.1rem;
+      min-width: min(100%, 520px);
+      box-shadow: var(--shadow);
+    }
+    .fin-card-head { margin-bottom: 0.85rem; }
+    .fin-card-title { font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em; }
+    .fin-card-sub { font-size: 0.72rem; color: var(--muted); margin-top: 0.15rem; }
+    .fin-kpis {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+      gap: 0.55rem;
+      margin-bottom: 1rem;
+    }
+    .fin-kpi {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      padding: 0.55rem 0.65rem;
+    }
+    .fin-kpi.highlight { border-color: #93c5fd; background: #dbeafe; }
+    .fin-kpi-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .fin-kpi-value { font-size: 1.05rem; font-weight: 600; margin-top: 0.2rem; color: #1d4ed8; }
+    .fin-section { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 0.75rem 0 0.45rem; }
+    .fin-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .fin-table th {
+      text-align: left;
+      font-weight: 500;
+      color: var(--muted);
+      padding: 0.35rem 0.5rem 0.35rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.72rem;
+    }
+    .fin-table td { padding: 0.45rem 0.5rem 0.45rem 0; border-bottom: 1px solid rgba(42,52,72,0.5); }
+    .fin-table tr:last-child td { border-bottom: none; }
+    .fin-table .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 500; }
+    .fin-table .est { color: #93c5fd; }
+    .yoy-bar-wrap { display: flex; align-items: center; gap: 0.4rem; justify-content: flex-end; }
+    .yoy-bar {
+      height: 6px;
+      border-radius: 3px;
+      background: linear-gradient(90deg, #4f8cff, #67e8f9);
+      min-width: 4px;
+      max-width: 64px;
+    }
+    .yoy-val { font-size: 0.75rem; color: var(--green); min-width: 3.2rem; text-align: right; }
+    .yoy-val.muted { color: var(--muted); }
+    .msg-note { font-size: 0.72rem; color: var(--muted); margin-top: 0.35rem; line-height: 1.4; }
+
+    .side-details { border-top: 1px solid var(--border); padding-top: 0.75rem; }
+    .side-details summary { margin-bottom: 0.45rem; }
+    .side-details[open] summary { color: var(--accent); }
+
+    .msg.overview { max-width: 96%; align-self: stretch; width: 100%; }
+    .msg.overview .msg-bubble { width: 100%; padding: 1rem 1.15rem; }
+    .overview-intro { font-size: 0.875rem; line-height: 1.55; margin-bottom: 1rem; color: var(--text); }
+    .overview-grid { display: flex; flex-direction: column; gap: 1rem; }
+    .overview-foot { font-size: 0.8rem; color: var(--muted); margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px dashed var(--border); }
+
+    /* Welcome / how-to */
+    .welcome {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      text-align: left;
+      padding: 1.5rem 1.75rem 2rem;
+      gap: 1rem;
+      overflow-y: auto;
+      max-width: 720px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .welcome h2 { font-size: 1.35rem; font-weight: 650; letter-spacing: -0.02em; }
+    .welcome .lead { color: var(--muted); font-size: 0.9rem; line-height: 1.55; margin: 0; }
+    .welcome-note {
+      font-size: 0.8rem;
+      color: var(--muted);
+      background: rgba(79,140,255,0.08);
+      border: 1px solid rgba(79,140,255,0.22);
+      border-radius: 8px;
+      padding: 0.65rem 0.85rem;
+      line-height: 1.45;
+    }
+    .howto-grid { display: flex; flex-direction: column; gap: 0.55rem; }
+    .howto-card {
+      display: grid;
+      grid-template-columns: 2rem 1fr;
+      gap: 0.65rem;
+      padding: 0.75rem 0.85rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+    }
+    .howto-num {
+      width: 2rem; height: 2rem;
+      border-radius: 8px;
+      background: rgba(79,140,255,0.15);
+      color: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 0.85rem;
+    }
+    .howto-card h3 { margin: 0 0 0.2rem; font-size: 0.88rem; font-weight: 600; }
+    .howto-card p { margin: 0; font-size: 0.78rem; color: var(--muted); line-height: 1.45; }
+    .howto-card strong { color: var(--text); font-weight: 600; }
+    .feature-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+    }
+    @media (max-width: 720px) { .feature-row { grid-template-columns: 1fr; } }
+    .feature-pill {
+      font-size: 0.75rem;
+      color: var(--muted);
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      padding: 0.55rem 0.7rem;
+      line-height: 1.4;
+    }
+    .feature-pill b { color: var(--text); display: block; margin-bottom: 0.15rem; font-size: 0.78rem; }
+    .prompt-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-start; max-width: 100%; }
+    .chip {
+      padding: 0.4rem 0.75rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-size: 0.78rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--text); background: rgba(79,140,255,0.08); }
+    .step-hint {
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.35;
+      margin: 0.25rem 0 0.55rem;
+      font-weight: 400;
+    }
+
+    /* Chat input */
+    .chat-input-bar {
+      padding: 1rem 1.25rem;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      display: flex;
+      gap: 0.6rem;
+      align-items: flex-end;
+    }
+    .chat-input-bar textarea {
+      flex: 1;
+      resize: none;
+      min-height: 44px;
+      max-height: 120px;
+      line-height: 1.4;
+      padding: 0.65rem 0.85rem;
+    }
+    .chat-input-bar button { padding: 0.65rem 1.1rem; align-self: flex-end; }
+
+    .loading { display: inline-block; animation: pulse 1s infinite; color: var(--muted); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    .hidden { display: none !important; }
+
+    /* Login */
+    .overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.88);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200;
+    }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.75rem;
+      width: 340px;
+      display: flex; flex-direction: column; gap: 0.75rem;
+    }
+    .login-card h2 { font-size: 1.1rem; }
+    .login-error { color: var(--red); font-size: 0.8rem; }
+
+    .sidebar-toggle {
+      display: none;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      padding: 0.3rem 0.65rem;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+    .center-company-row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      align-items: stretch;
+    }
+    .center-company-row input { flex: 1; }
+    .center-company-row button { white-space: nowrap; min-width: 110px; }
+
+    @media (max-width: 900px) {
+      .app { grid-template-columns: 1fr; }
+      .sidebar {
+        display: none;
+        position: fixed;
+        inset: 52px 0 0 0;
+        z-index: 40;
+        width: min(340px, 92vw);
+        box-shadow: 8px 0 32px rgba(0,0,0,0.45);
+      }
+      .sidebar.open { display: flex; }
+      .sidebar-toggle { display: inline-flex; }
+    }
+  
+    /* Chat: compact on Files so upload area breathes; hidden on reading tabs */
+    .chat-log {
+      flex: 0 1 auto !important;
+      min-height: 0 !important;
+      max-height: min(28vh, 280px);
+    }
+    body.tab-files .chat-log {
+      flex: 0 1 auto !important;
+      max-height: min(22vh, 220px);
+    }
+    .msg.bot, .msg.system { max-width: min(920px, 100%); }
+    .msg .fin-card { max-width: 100%; }
+
+    /* Widen chat: full conversation pane; sidebar + workspace collapse */
+    .chat-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      flex-shrink: 0;
+    }
+    .chat-size-btn {
+      font-size: 0.72rem;
+      padding: 0.3rem 0.65rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .chat-size-btn:hover { border-color: var(--accent); color: var(--accent); }
+    body.chat-wide .chat-size-btn {
+      background: var(--accent-dim);
+      border-color: #93c5fd;
+      color: var(--accent);
+      font-weight: 600;
+    }
+    body.chat-wide .app {
+      grid-template-columns: 0 1fr;
+    }
+    body.chat-wide .sidebar {
+      overflow: hidden;
+      border: none;
+      opacity: 0;
+      pointer-events: none;
+    }
+    body.chat-wide #chat-log {
+      display: flex !important;
+      flex: 1 1 auto !important;
+      max-height: none !important;
+      min-height: 0 !important;
+      padding: 1.25rem clamp(1rem, 4vw, 2.5rem) 1.5rem;
+    }
+    body.chat-wide .center-upload,
+    body.chat-wide .review-workspace,
+    body.chat-wide .report-workspace,
+    body.chat-wide .page-workspace,
+    body.chat-wide .reading-answers {
+      display: none !important;
+    }
+    body.chat-wide .msg,
+    body.chat-wide .msg.bot,
+    body.chat-wide .msg.system {
+      max-width: min(1080px, 100%);
+    }
+    body.chat-wide .msg.user {
+      max-width: min(720px, 78%);
+    }
+    body.chat-wide .chat-input-bar {
+      padding: 0.85rem clamp(1rem, 4vw, 2.5rem) 1.1rem;
+    }
+    body.chat-wide .chat-input-bar textarea {
+      max-height: 160px;
+    }
+    body.chat-wide .chat-header {
+      padding-left: clamp(1rem, 4vw, 2.5rem);
+      padding-right: clamp(1rem, 4vw, 2.5rem);
+    }
+    body.chat-wide .workspace-tabs {
+      padding-left: clamp(0.75rem, 3vw, 2rem);
+      padding-right: clamp(0.75rem, 3vw, 2rem);
+    }
+
+    /* Reading tabs: full middle pane; answers dock replaces chat wall */
+    body.reading-mode:not(.chat-wide) #chat-log { display: none !important; }
+    body.reading-mode .report-workspace.visible,
+    body.reading-mode .page-workspace.visible,
+    body.reading-mode .review-workspace.visible {
+      flex: 1 1 auto !important;
+      max-height: none !important;
+      min-height: 0;
+    }
+    body.reading-mode .chat-input-bar {
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .reading-answers {
+      display: none;
+      flex-direction: column;
+      gap: 0.35rem;
+      max-height: min(26vh, 220px);
+      overflow-y: auto;
+      padding: 0.55rem 1.15rem;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+    body.reading-mode .reading-answers:not(.hidden) { display: flex; }
+    .reading-answers .msg { max-width: 100%; font-size: 0.85rem; }
+    .reading-answers .msg.user { align-self: flex-end; color: var(--muted); }
+    .kv-row {
+      display: grid; grid-template-columns: 1fr auto; gap: 0.25rem 0.75rem;
+      padding: 0.4rem 0; border-bottom: 1px solid var(--border); font-size: 0.85rem;
+      align-items: baseline;
+    }
+    .kv-row .muted { grid-column: 1 / -1; }
+    .force-row { padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
+    .side-missing-box {
+      margin: 0.25rem 0 0.5rem; max-height: 180px; overflow-y: auto;
+    }
+    .side-missing-box.hidden { display: none !important; }
+    button.has-new::after {
+      content: ''; display: inline-block; width: 7px; height: 7px; margin-left: 5px;
+      border-radius: 50%; background: var(--accent); vertical-align: middle;
+    }
+    #btn-analyze:not(:disabled), #btn-review-analyze:not(:disabled) {
+      background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600;
+    }
+    .center-pending.has-files,
+    .center-pending.visible { display: flex; flex-direction: column; }
+
+    /* Analysis progress UI */
+    .prog-panel { max-width: 720px; }
+    .prog-head {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      gap: 1rem; margin-bottom: 0.75rem;
+    }
+    .prog-status { font-size: 1rem; font-weight: 600; color: var(--text); }
+    .prog-sub { font-size: 0.8rem; margin-top: 0.2rem; }
+    .prog-pct {
+      font-size: 1.35rem; font-weight: 700; color: var(--accent);
+      font-variant-numeric: tabular-nums; min-width: 3.2rem; text-align: right;
+    }
+    .prog-bar {
+      height: 10px; border-radius: 999px; background: rgba(255,255,255,0.08);
+      overflow: hidden; border: 1px solid var(--border); margin-bottom: 1rem;
+    }
+    .prog-bar-fill {
+      height: 100%; width: 0%; border-radius: inherit;
+      background: linear-gradient(90deg, #3b82f6, #60a5fa, #93c5fd);
+      transition: width 0.45s ease;
+      background-size: 200% 100%;
+      animation: prog-shine 1.6s linear infinite;
+    }
+    .prog-bar-fill.done {
+      background: var(--green, #34d399);
+      animation: none;
+    }
+    .prog-bar-fill.err {
+      background: var(--red, #f87171);
+      animation: none;
+    }
+    @keyframes prog-shine {
+      0% { background-position: 100% 0; }
+      100% { background-position: -100% 0; }
+    }
+    .prog-stages {
+      list-style: none; margin: 0 0 1.1rem; padding: 0;
+      display: grid; gap: 0.35rem;
+    }
+    .prog-module {
+      margin: 0 0 0.85rem;
+      padding: 0.65rem 0.8rem;
+      border-radius: 8px;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      background: rgba(59, 130, 246, 0.08);
+      font-size: 0.88rem;
+      line-height: 1.35;
+    }
+    .prog-module strong { color: var(--text); font-weight: 650; }
+    .prog-module .pm-phase { color: var(--accent); font-weight: 600; }
+    .prog-module .pm-hive {
+      color: #0369a1; font-weight: 700; font-size: 0.78rem;
+      background: #e0f2fe; border: 1px solid #7dd3fc; border-radius: 4px; padding: 0.05rem 0.35rem;
+    }
+    .prog-module .pm-python {
+      color: #3f6212; font-weight: 700; font-size: 0.78rem;
+      background: #ecfccb; border: 1px solid #bef264; border-radius: 4px; padding: 0.05rem 0.35rem;
+    }
+    .prog-module .pm-elapsed { color: var(--muted); font-size: 0.8rem; margin-top: 0.2rem; }
+    .prog-llm {
+      margin: 0 0 0.85rem;
+      padding: 0.55rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,0.12);
+      font-size: 0.8rem;
+    }
+    .prog-llm-head {
+      display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+    }
+    .prog-llm-stats { color: var(--text); font-weight: 550; }
+    .prog-llm-cloud {
+      margin-top: 0.35rem; font-size: 0.75rem; line-height: 1.45;
+      display: flex; flex-wrap: wrap; gap: 0.35rem 0.55rem;
+    }
+    .prog-llm-cloud .chip {
+      display: inline-block; padding: 0.12rem 0.45rem; border-radius: 999px;
+      border: 1px solid var(--border); background: rgba(255,255,255,0.04);
+      white-space: nowrap;
+    }
+    .prog-llm-cloud .chip.active { border-color: rgba(59,130,246,0.5); color: var(--accent); }
+    button.ghost.danger { color: #f87171; border-color: rgba(248,113,113,0.35); }
+    button.ghost.danger:hover { background: rgba(248,113,113,0.12); }
+    .prog-stages li {
+      display: flex; align-items: flex-start; gap: 0.55rem;
+      font-size: 0.82rem; color: var(--muted);
+      padding: 0.35rem 0.45rem; border-radius: 6px;
+    }
+    .prog-stages li .stage-text { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+    .prog-stages li .stage-detail {
+      font-size: 0.72rem; color: var(--accent); opacity: 0.95;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 36rem;
+    }
+    .prog-stages li .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(255,255,255,0.18); margin-top: 0.35rem;
+    }
+    .prog-stages li.done { color: var(--text); }
+    .prog-stages li.done .dot { background: var(--green, #34d399); }
+    .prog-stages li.active {
+      color: var(--text); background: rgba(79,140,255,0.1);
+      font-weight: 550;
+    }
+    .prog-stages li.active .dot {
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(79,140,255,0.25);
+    }
+    .prog-stages li.pending { opacity: 0.55; }
+    .prog-prompts {
+      margin-top: 0.5rem; padding: 0.75rem 0.85rem;
+      border: 1px dashed rgba(79,140,255,0.35); border-radius: 10px;
+      background: rgba(79,140,255,0.04);
+    }
+    .prog-prompts-title { font-size: 0.78rem; font-weight: 650; color: var(--text); }
+    .prog-prompt-row { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .prog-prompt-row button {
+      font-size: 0.75rem; padding: 0.35rem 0.65rem;
+      border-radius: 6px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); cursor: pointer;
+    }
+    .prog-prompt-row button:hover { border-color: var(--accent); color: var(--accent); }
+    .prog-excerpt {
+      margin-top: 0.85rem; font-size: 0.8rem; line-height: 1.5;
+      padding: 0.65rem 0.75rem; border-left: 3px solid var(--border);
+      max-height: 6rem; overflow: hidden;
+    }
+    .analyze-strip {
+      display: none; flex-direction: column; gap: 0.35rem;
+      padding: 0.45rem 1rem 0.55rem;
+      border-bottom: 1px solid var(--border);
+      background: rgba(20, 26, 36, 0.96);
+    }
+    .analyze-strip:not(.hidden) { display: flex; }
+    .analyze-strip-bar {
+      height: 5px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden;
+    }
+    .analyze-strip-fill {
+      height: 100%; width: 0%; background: linear-gradient(90deg, #3b82f6, #60a5fa);
+      transition: width 0.4s ease;
+      animation: prog-shine 1.6s linear infinite;
+      background-size: 200% 100%;
+    }
+    .analyze-strip-meta {
+      display: flex; align-items: center; gap: 0.65rem; flex-wrap: wrap;
+      font-size: 0.78rem; color: var(--muted);
+    }
+    .analyze-strip-meta #analyze-strip-label { color: var(--text); flex: 1; min-width: 10rem; }
+    body.tab-progress #progress-workspace .page-body {
+      max-width: min(760px, 100%);
+    }
+    .files-detail-prompts {
+      margin: 0.85rem 0 0; padding: 0.75rem 0.85rem;
+      border: 1px solid var(--border); border-radius: 10px;
+    }
+    .files-detail-prompts h3 {
+      margin: 0 0 0.35rem; font-size: 0.85rem; font-weight: 650;
+    }
+    .files-detail-prompts .prompt-chips { margin-top: 0.45rem; }
+
+  </style>
+</head>
+<body>
+
+  <!-- Login overlay -->
+  <div id="login-overlay" class="overlay hidden">
+    <div class="login-card">
+      <h2>Sign in to IIS</h2>
+      <p class="muted" style="font-size:0.78rem;margin:0 0 0.65rem">
+        Auth is optional while the server runs with guest access. Default admin:
+        <code>admin@iis.local</code> / <code>changeme</code>
+      </p>
+      <input id="login-email" type="email" placeholder="Email" autocomplete="username" />
+      <input id="login-password" type="password" placeholder="Password" autocomplete="current-password" />
+      <input id="login-name" placeholder="Name (register only)" />
+      <div style="display:flex;gap:0.5rem">
+        <button id="btn-login" style="flex:1">Login</button>
+        <button class="ghost" id="btn-register" style="flex:1">Register</button>
+      </div>
+      <div style="display:flex;gap:0.5rem;margin-top:0.5rem">
+        <button type="button" class="ghost" id="btn-logout" style="flex:1">Sign out</button>
+        <button type="button" class="ghost" id="btn-login-dismiss" style="flex:1">Close</button>
+      </div>
+      <p id="login-error" class="login-error"></p>
+    </div>
+  </div>
+
+  <header>
+    <div style="display:flex;align-items:center;gap:0.65rem">
+      <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Open menu">Menu</button>
+      <h1>IIS <span>Research Assistant</span></h1>
+    </div>
+    <div class="header-badges">
+      <span class="badge" id="ollama-badge">Ollama …</span>
+      <button type="button" class="badge" id="user-badge" title="Sign in / account" style="cursor:pointer;border:1px solid var(--border);background:var(--surface2);font:inherit">Account</button>
+    </div>
+  </header>
+
+  <div class="app">
+    <!-- LEFT: setup (pre-session) · notes + status (during analysis) -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-scroll">
+
+        <!-- ── Before a session is open: pick from saved; type name in center ── -->
+        <div class="pre-session" id="company-step">
+          <div class="section-label">Start here</div>
+          <p class="step-hint">Type the company in the <strong>center</strong> (autocomplete), or pick a saved profile below.</p>
+          <!-- Hidden mirror input kept for JS compatibility -->
+          <input id="company-input" type="text" class="hidden" tabindex="-1" aria-hidden="true" />
+          <button id="btn-company-continue" type="button" class="hidden" tabindex="-1" aria-hidden="true">Next</button>
+        </div>
+
+        <div class="pre-session" id="saved-companies-section">
+          <div class="section-label">Saved / recent</div>
+          <div class="saved-companies" id="saved-companies-list">
+            <div class="muted" style="font-size:0.75rem">Loading…</div>
+          </div>
+        </div>
+
+        <div class="pre-session hidden" id="company-preview-section">
+          <div class="section-label">On file for this company</div>
+          <p class="step-hint">Use <strong>Open research session</strong> in the center to continue.</p>
+          <div id="company-preview" class="company-preview-box"></div>
+          <button id="btn-open-research" type="button" class="hidden" tabindex="-1" aria-hidden="true">Open research session</button>
+        </div>
+
+        <div class="pre-session hidden" id="upload-workflow">
+          <div class="section-label">Upload status</div>
+          <p class="step-hint">Drop files in the <strong>center panel</strong>.</p>
+          <div id="pending-section" class="hidden">
+            <div class="section-label">Queued (<span id="pending-count">0</span>)</div>
+            <div class="file-list" id="pending-files"></div>
+          </div>
+          <button id="btn-upload" class="ghost block hidden" style="margin-top:0.35rem">Upload &amp; Process</button>
+        </div>
+
+        <!-- ── Active research session: notes + activity ── -->
+        <div class="session-tools" id="session-tools">
+          <div class="section-label">Now researching</div>
+          <div id="side-company-label" style="font-size:0.88rem;font-weight:600;margin-bottom:0.55rem">—</div>
+
+          <div class="section-label">Status</div>
+          <div class="side-activity" id="side-activity" aria-live="polite">
+            <div class="side-activity-item muted">No status yet</div>
+          </div>
+
+          <div class="section-label" style="margin-top:0.65rem">Analyst notes</div>
+          <p class="step-hint">Your working notes for this company — saved automatically and used in analysis / chat.</p>
+          <div class="side-notes">
+            <textarea id="analyst-notes" placeholder="e.g. Focus on OTR mix, treat FY26 capex as expansion, confirm peers before comparing…"></textarea>
+            <div class="notes-meta"><span id="notes-save-state">—</span><span>company-scoped</span></div>
+          </div>
+
+          <div class="section-label" style="margin-top:0.65rem">Missing documents</div>
+          <div class="side-missing-box hidden" id="side-missing-docs"></div>
+          <p class="step-hint" id="side-missing-empty">Core docs look complete — add more anytime on Files</p>
+
+          <div class="section-label" style="margin-top:0.65rem">Needs from you</div>
+          <div class="side-asks-box hidden" id="side-asks"></div>
+          <p class="step-hint" id="side-asks-empty">Nothing pending</p>
+
+          <div class="peer-name-box" style="margin-top:0.45rem">
+            <input id="peer-names-input" type="text" placeholder="Add peers: MRF, Apollo Tyres" />
+            <button type="button" id="btn-peer-names" class="ghost block">Save peers</button>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:0.4rem;margin-top:0.75rem">
+            <button class="block" id="btn-analyze" disabled>Run Analysis → Full Report</button>
+            <button class="ghost block" id="btn-note" disabled>Regenerate report</button>
+            <button class="ghost block" id="btn-new-research">New company</button>
+          </div>
+        </div>
+
+        <!-- Hidden legacy containers (still updated by JS) -->
+        <div class="hidden" id="library-section"><div id="library-inventory" class="library-inv"></div></div>
+        <div class="hidden" id="uploaded-section"><div class="file-list" id="uploaded-files"></div></div>
+        <div class="hidden" id="helpful-asks-section">
+          <div id="helpful-asks-label"></div>
+          <div id="helpful-asks-hint"></div>
+          <div id="helpful-asks" class="helpful-asks"></div>
+        </div>
+        <button id="btn-reingest" class="hidden" disabled>Reload</button>
+        <button id="btn-drive-push-side" class="hidden" type="button">Drive</button>
+
+        <div class="hidden" id="steps" aria-hidden="true">
+          <div class="step" id="step-company"></div>
+          <div class="step" id="step-upload"></div>
+          <div class="step" id="step-ingest"></div>
+          <div class="step" id="step-review"></div>
+          <div class="step" id="step-analyze"></div>
+          <div class="step" id="step-chat"></div>
+        </div>
+
+        <!-- Overnight batch: attach CIQ / AR / concalls now, run unattended -->
+        <details class="side-details" id="overnight-panel">
+          <summary class="section-label" style="cursor:pointer;list-style:none">Overnight batch (≤10)</summary>
+          <p class="step-hint">
+            Attach <strong>CIQ Financials/Estimates</strong>, <strong>AR</strong>, and <strong>multiple concalls</strong> per company now.
+            Start overnight — system runs them one-by-one; reports ready in the morning.
+          </p>
+          <input id="overnight-company" type="text" class="block" placeholder="Company name" />
+          <input id="overnight-files" type="file" multiple accept=".xls,.xlsx,.pdf,.png,.jpg,.jpeg,.webp" style="margin-top:0.4rem;font-size:0.75rem;width:100%" />
+          <p class="step-hint" id="overnight-file-hint" style="margin-top:0.25rem">No files selected</p>
+          <div style="display:flex;flex-direction:column;gap:0.35rem;margin-top:0.45rem">
+            <button type="button" class="block" id="btn-overnight-add">Add company + files to queue</button>
+            <button type="button" class="block" id="btn-overnight-start">Start overnight run</button>
+            <button type="button" class="ghost block" id="btn-overnight-stop">Stop after current</button>
+            <button type="button" class="ghost block" id="btn-overnight-clear">Clear finished</button>
+          </div>
+          <div id="overnight-status" class="step-hint" style="margin-top:0.5rem"></div>
+          <div id="overnight-list" class="session-list" style="margin-top:0.35rem"></div>
+        </details>
+
+        <details class="side-details">
+          <summary class="section-label" style="cursor:pointer;list-style:none">Advanced · checkpoints</summary>
+          <p class="step-hint">Informational only — analysis does not wait for approval.</p>
+          <div class="gates-panel" id="gates-panel"></div>
+        </details>
+
+        <details class="side-details" open>
+          <summary class="section-label" style="cursor:pointer;list-style:none">Recent sessions</summary>
+          <div class="session-list" id="session-list"></div>
+        </details>
+
+      </div>
+    </aside>
+
+    <!-- RIGHT: Chat -->
+    <main class="chat-area">
+      <div class="chat-header">
+        <div>
+          <div class="chat-title" id="chat-title">New Research</div>
+          <div class="chat-meta" id="chat-meta">Name the company in the sidebar, then drop all research files in the center</div>
+        </div>
+        <div class="chat-header-actions">
+          <div id="market-pill" class="badge hidden"></div>
+          <button type="button" class="chat-size-btn" id="btn-chat-wide" aria-pressed="false" title="Widen chat for long answers">Widen chat</button>
+        </div>
+      </div>
+      <div class="drive-banner" id="drive-banner">
+        <div>
+          <strong>Google Drive not connected</strong> — files are saved locally only.
+          In Terminal run <code>iis drive auth</code>, then click Sync.
+        </div>
+        <button type="button" id="btn-drive-push" class="ghost">Sync to Drive</button>
+      </div>
+
+      <div class="workspace-tabs" id="workspace-tabs">
+        <button type="button" data-ws-tab="files" id="tab-files" class="active">Files</button>
+        <button type="button" data-ws-tab="library" id="tab-library" class="ws-dyn hidden">Library</button>
+        <button type="button" data-ws-tab="review" id="tab-review">
+          Brief <span class="tab-badge" id="tab-review-badge" style="display:none">…</span>
+        </button>
+        <button type="button" data-ws-tab="flags" id="tab-flags" class="ws-dyn hidden">Flags</button>
+        <button type="button" data-ws-tab="guidance" id="tab-guidance" class="ws-dyn hidden">Guidance</button>
+        <button type="button" data-ws-tab="peers" id="tab-peers" class="ws-dyn hidden">Peers</button>
+        <button type="button" data-ws-tab="valuation" id="tab-valuation" class="ws-dyn hidden">Valuation</button>
+        <button type="button" data-ws-tab="progress" id="tab-progress" class="ws-dyn hidden">Progress</button>
+        <button type="button" data-ws-tab="report" id="tab-report">Report</button>
+        <button type="button" data-ws-tab="direct" id="tab-direct" class="ws-dyn hidden">Compare</button>
+      </div>
+
+      <!-- Compact bar while analysis runs (visible across tabs) -->
+      <div class="analyze-strip hidden" id="analyze-strip">
+        <div class="analyze-strip-bar"><div class="analyze-strip-fill" id="analyze-strip-fill"></div></div>
+        <div class="analyze-strip-meta">
+          <span id="analyze-strip-label">Analyzing…</span>
+          <button type="button" class="ghost" id="btn-analyze-strip-progress" style="font-size:0.72rem">Open Progress</button>
+          <button type="button" class="ghost" id="btn-analyze-strip-files" style="font-size:0.72rem">Add docs</button>
+        </div>
+      </div>
+
+      <!-- Primary upload: center of the app -->
+      <div class="center-upload" id="center-upload">
+        <div class="center-upload-head">
+          <div>
+            <h2>1. Company → 2. Drop research files</h2>
+            <p id="center-upload-hint">Type a company (autocomplete from saved profiles / recent sessions), Continue, then open research or drop files.</p>
+          </div>
+        </div>
+        <div class="center-company-row">
+          <div class="company-suggest-wrap">
+            <input id="company-input-center" type="text" placeholder="Company name — type to see saved profiles…" autocomplete="off" spellcheck="false" />
+            <div class="company-suggest" id="company-suggest" role="listbox" aria-label="Company suggestions"></div>
+          </div>
+          <button type="button" id="btn-company-continue-center">Continue</button>
+        </div>
+        <div class="center-session-cta hidden" id="center-session-cta">
+          <div>
+            <strong id="center-session-cta-title">Company ready</strong>
+            <p class="muted" id="center-session-cta-meta" style="font-size:0.78rem;margin-top:0.15rem"></p>
+          </div>
+          <button type="button" id="btn-open-research-center">Open research session</button>
+        </div>
+        <!-- Sticky upload bar: always under company row when files are queued -->
+        <div class="center-pending" id="center-pending">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap">
+            <div>
+              <div class="section-label" style="margin:0">Files queued — ready to save</div>
+              <span class="muted" style="font-size:0.75rem" id="center-pending-label"></span>
+            </div>
+            <div class="center-pending-actions">
+              <button id="btn-upload-center" type="button">Upload &amp; Process</button>
+            </div>
+          </div>
+          <div class="file-list" id="center-pending-files"></div>
+        </div>
+        <div class="dropzone dropzone-hero" id="dropzone" tabindex="0" role="button" aria-label="Drop research files">
+          <div class="dropzone-icon">📂</div>
+          <strong>Drop all files together — we sort them into sections</strong>
+          <p>Financials, Estimates, ARs, concalls, presentations, brokerage, screenshots. Prefer a section? Use <em>+ Add files…</em> on a card below.</p>
+          <div class="dropzone-hint">.xls · .xlsx · .pdf · .png · .jpg · .webp — multi-select OK</div>
+        </div>
+        <div class="readiness-panel" id="readiness-panel" hidden>
+          <div class="readiness-head">
+            <strong>Next uploads</strong>
+            <span class="muted" id="readiness-have"></span>
+          </div>
+          <ol class="readiness-list" id="readiness-active"></ol>
+          <div class="readiness-foot">
+            <span class="muted" id="readiness-later"></span>
+            <button type="button" class="linkish" id="btn-readiness-all" hidden>Show all gaps</button>
+          </div>
+          <ol class="readiness-queue muted" id="readiness-queue" hidden></ol>
+        </div>
+        <div class="need-grid" id="need-grid" style="margin-top:0.85rem">
+          <div class="need-card" data-section="ciq_financials" data-accept=".xls,.xlsx">
+            <b>Capital IQ — Financials</b>
+            Annual + Quarterly workbooks (2 files)
+            <span class="tag req">Required · multi</span>
+            <div class="need-files" data-files></div>
+            <div class="need-empty" data-empty>None yet — add Annual and Quarterly</div>
+            <button type="button" class="need-add" data-add-section="ciq_financials">+ Add files…</button>
+          </div>
+          <div class="need-card" data-section="ciq_estimates" data-accept=".xls,.xlsx">
+            <b>Capital IQ — Estimates</b>
+            One Estimates workbook
+            <span class="tag req">Recommended · multi</span>
+            <div class="need-files" data-files></div>
+            <div class="need-empty" data-empty>None yet — add Estimates export</div>
+            <button type="button" class="need-add" data-add-section="ciq_estimates">+ Add files…</button>
+          </div>
+          <div class="need-card" data-section="annual_report" data-accept=".pdf">
+            <b>Annual report PDFs</b>
+            Several years OK
+            <span class="tag req">Recommended · multi</span>
+            <div class="need-files" data-files></div>
+            <div class="need-empty" data-empty>None yet — add one or more</div>
+            <button type="button" class="need-add" data-add-section="annual_report">+ Add files…</button>
+          </div>
+          <div class="need-card" data-section="concall" data-accept=".pdf">
+            <b>Concalls / transcripts</b>
+            Many quarters OK
+            <span class="tag opt">Optional · multi</span>
+            <div class="need-files" data-files></div>
+            <div class="need-empty" data-empty>None yet — add one or more</div>
+            <button type="button" class="need-add" data-add-section="concall">+ Add files…</button>
+          </div>
+          <div class="need-card" data-section="presentation" data-accept=".pdf">
+            <b>Investor presentations</b>
+            Multiple decks OK
+            <span class="tag opt">Optional · multi</span>
+            <div class="need-files" data-files></div>
+            <div class="need-empty" data-empty>None yet — add one or more</div>
+            <button type="button" class="need-add" data-add-section="presentation">+ Add files…</button>
+          </div>
+          <div class="need-card" data-section="brokerage" data-accept=".pdf">
+            <b>Brokerage reports</b>
+            Multiple notes OK
+            <span class="tag opt">Optional · multi</span>
+            <div class="need-files" data-files></div>
+            <div class="need-empty" data-empty>None yet — add one or more</div>
+            <button type="button" class="need-add" data-add-section="brokerage">+ Add files…</button>
+          </div>
+          <div class="need-card" data-section="screenshot" data-accept=".png,.jpg,.jpeg,.webp,.gif,.pdf">
+            <b>Screenshots</b>
+            Many images OK
+            <span class="tag opt">Helpful · multi</span>
+            <div class="need-files" data-files></div>
+            <div class="need-empty" data-empty>None yet — add one or more</div>
+            <button type="button" class="need-add" data-add-section="screenshot">+ Add files…</button>
+          </div>
+        </div>
+        <input type="file" id="file-input" multiple accept=".xls,.xlsx,.pdf,.png,.jpg,.jpeg,.webp,.gif" class="hidden" />
+        <input type="file" id="file-input-section" multiple class="hidden" />
+        <div class="classify-banner" id="classify-banner"></div>
+        <div class="files-detail-prompts" id="files-detail-prompts">
+          <h3>Add more anytime</h3>
+          <p class="muted" style="font-size:0.78rem;margin:0">Drop more Capital IQ / AR / concalls above, or tell the system what to dig into:</p>
+          <div class="prompt-chips" id="files-detail-chips">
+            <span class="chip" data-prompt="What documents are still missing for a solid initiating note?">What's missing?</span>
+            <span class="chip" data-prompt="Focus next on segment mix, clients, and capacity from the annual report">Segment / clients</span>
+            <span class="chip" data-prompt="Pull guidance and management commentary from concalls">Guidance &amp; concalls</span>
+            <span class="chip" data-prompt="Compare broker estimates vs Capital IQ consensus when brokerage PDFs are available">Broker vs CIQ</span>
+            <span class="chip" data-prompt="Ignore optional docs for now and proceed with what we have">Ignore extras for now</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center review: guided steps Brief → Financials → Assumptions -->
+      <div class="review-workspace" id="review-workspace">
+        <div class="review-toolbar">
+          <div class="step-rail" id="review-subtabs">
+            <button type="button" data-review-tab="brief" class="active"><span class="n">1</span>Brief</button>
+            <button type="button" data-review-tab="financials"><span class="n">2</span>Financials</button>
+            <button type="button" data-review-tab="assumptions"><span class="n">3</span>Assumptions</button>
+            <button type="button" data-review-tab="flags"><span class="n">!</span>Flags</button>
+          </div>
+          <div class="review-actions">
+            <button type="button" class="ghost" id="btn-review-refresh">Refresh</button>
+            <!-- Analyze lives in the left panel once a session is open -->
+            <button type="button" class="ghost hidden" id="btn-review-analyze" tabindex="-1" aria-hidden="true">Run Analysis</button>
+            <button type="button" class="primary-approve" id="btn-approve-center">Next</button>
+          </div>
+        </div>
+        <div class="review-body" id="review-body">
+          <p class="muted" style="font-size:0.85rem">Load a company session to start the brief.</p>
+        </div>
+        <div class="review-ask">
+          <div class="review-ask-label">Ask anytime — answers appear below this panel</div>
+          <div class="prompt-chips" id="review-chips">
+            <span class="chip" data-prompt="Brief me on this company like an equity analyst kickoff memo">Kickoff memo</span>
+            <span class="chip" data-prompt="What files did we use and what did we extract from each?">What did we use?</span>
+            <span class="chip" data-prompt="Summarize the latest year P&amp;L in plain English">Summarize P&amp;L</span>
+            <span class="chip" data-prompt="What data flags should I review in the numbers?">Review flags</span>
+            <span class="chip" data-prompt="Set WACC to 11% and show updated fair value">Tweak valuation</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Full-page stage panels (open as analysis / lookups complete) -->
+      <div class="page-workspace" id="library-workspace">
+        <div class="report-toolbar"><strong>Library on file</strong><span class="muted" style="font-size:0.75rem;margin-left:0.5rem">Saved under this company — no re-upload needed</span></div>
+        <div class="page-body" id="library-page-body"><p class="muted">Continue with a company name to see saved packs.</p></div>
+      </div>
+      <div class="page-workspace" id="flags-workspace">
+        <div class="report-toolbar"><strong>Data flags</strong><span class="muted" style="font-size:0.75rem;margin-left:0.5rem">Python checks — not an approval gate</span></div>
+        <div class="page-body" id="flags-page-body"><p class="muted">Flags appear after data is loaded / analysis runs.</p></div>
+      </div>
+      <div class="page-workspace" id="guidance-workspace">
+        <div class="report-toolbar"><strong>Guidance &amp; concalls</strong></div>
+        <div class="page-body" id="guidance-page-body"><p class="muted">Filled during the full analysis pass.</p></div>
+      </div>
+      <div class="page-workspace" id="peers-workspace">
+        <div class="report-toolbar">
+          <strong>Peers</strong>
+          <span class="muted" style="font-size:0.75rem;margin-left:0.5rem">Confirm peers, upload their files, update report</span>
+          <button type="button" class="ghost" id="btn-update-report" style="margin-left:auto;font-size:0.75rem">Update report</button>
+        </div>
+        <div class="page-body" id="peers-page-body"><p class="muted">Peer suggestions appear after analysis.</p></div>
+      </div>
+      <div class="page-workspace" id="valuation-workspace">
+        <div class="report-toolbar"><strong>Valuation</strong><span class="muted" style="font-size:0.75rem;margin-left:0.5rem">Edit in chat anytime — no approval step</span></div>
+        <div class="page-body" id="valuation-page-body"><p class="muted">DCF preview after Run Analysis.</p></div>
+      </div>
+      <div class="page-workspace" id="progress-workspace">
+        <div class="report-toolbar">
+          <strong>Analysis progress</strong>
+          <span class="muted" style="font-size:0.75rem;margin-left:0.5rem" id="progress-toolbar-hint">Live stages — Files tab stays free for more docs</span>
+        </div>
+        <div class="page-body" id="progress-page-body">
+          <div class="prog-panel" id="prog-panel">
+            <div class="prog-head">
+              <div>
+                <div class="prog-status" id="prog-status">Idle — start Run Analysis when ready</div>
+                <div class="prog-sub muted" id="prog-sub">Upload Capital IQ / AR / concalls on Files, then run a full pass.</div>
+              </div>
+              <div class="prog-pct" id="prog-pct">0%</div>
+            </div>
+            <div class="prog-bar" aria-hidden="true">
+              <div class="prog-bar-fill" id="prog-bar-fill" style="width:0%"></div>
+            </div>
+            <div class="prog-module" id="prog-module" style="display:none"></div>
+            <div class="prog-llm" id="prog-llm" style="display:none">
+              <div class="prog-llm-head">
+                <div class="prog-llm-stats" id="prog-llm-stats"></div>
+                <button type="button" class="ghost danger" id="btn-abort-analyze" style="display:none" title="Force stop analysis">Abort</button>
+              </div>
+              <div class="prog-llm-cloud muted" id="prog-llm-cloud"></div>
+            </div>
+            <ol class="prog-stages" id="prog-stages"></ol>
+            <div class="prog-prompts" id="prog-prompts">
+              <div class="prog-prompts-title">While this runs — optional</div>
+              <p class="muted" style="font-size:0.8rem;margin:0.25rem 0 0.55rem">Middle Files tab stays open for more uploads. Or ignore and wait for the report.</p>
+              <div class="prog-prompt-row" id="prog-prompt-row"></div>
+            </div>
+            <div class="prog-excerpt muted" id="prog-excerpt" style="display:none"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Research report (Layer 1 brief + Layer 2 full) -->
+      <div class="report-workspace" id="report-workspace">
+        <div class="report-toolbar">
+          <div>
+            <strong>Research report</strong>
+            <span class="muted" style="font-size:0.75rem;margin-left:0.5rem">Pipeline: Python packs + analyst tools</span>
+          </div>
+          <div class="report-actions">
+            <button type="button" class="ghost" id="btn-report-regen">Regenerate</button>
+            <button type="button" class="ghost" id="btn-report-finalize">Finalize to Word</button>
+          </div>
+        </div>
+        <div class="report-body" id="report-body">
+          <p class="muted" style="font-size:0.85rem">After <strong>Run Analysis → Full Report</strong>, the write-up appears here (saved on the session). Refine later via chat.</p>
+        </div>
+      </div>
+
+      <!-- Full-width compare: Pipeline Report | divider | Direct LLM -->
+      <div class="report-workspace" id="direct-workspace">
+        <div class="report-toolbar">
+          <div>
+            <strong>Two reports</strong>
+            <span class="muted" style="font-size:0.75rem;margin-left:0.5rem">Left: retrieval + LLM · Right: Direct LLM (raw PDFs) — side by side</span>
+          </div>
+          <div class="report-actions">
+            <button type="button" class="ghost" id="btn-direct-regen">Re-run Direct LLM</button>
+          </div>
+        </div>
+        <div id="direct-compare" class="prog-llm" style="display:none;margin:0.65rem 1rem 0"></div>
+        <div class="report-compare-split" id="report-compare-split">
+          <div class="report-compare-pane">
+            <div class="pane-label"><strong>A · Retrieval + LLM</strong> — packs / tools / analyst (same as Report tab)</div>
+            <div class="report-body" id="compare-pipeline-body">
+              <p class="muted">Pipeline report loads here after Analyze.</p>
+            </div>
+          </div>
+          <div class="report-compare-divider" aria-hidden="true"></div>
+          <div class="report-compare-pane">
+            <div class="pane-label"><strong>B · Direct LLM</strong> — raw PDF page images + write guidelines only</div>
+            <div class="report-body" id="direct-body">
+              <p class="muted">Separate path: uploads sent as page images (no retrieval). Runs after Analyze.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-log" id="chat-log">
+        <div class="welcome" id="welcome">
+          <h2>How research works here</h2>
+          <p class="lead">Capital IQ is only a data source. Upload files → <strong>one full analysis pass</strong> (no approval gates) → read the report on this UI → then chat to ask questions or change assumptions.</p>
+
+          <div class="howto-grid">
+            <div class="howto-card">
+              <div class="howto-num">1</div>
+              <div>
+                <h3>Download from Capital IQ</h3>
+                <p><strong>Financials.xls</strong> (required) and <strong>Estimates.xls</strong> (recommended). Add AR / concall / presentation PDFs and screenshots of CIQ screens if useful.</p>
+              </div>
+            </div>
+            <div class="howto-card">
+              <div class="howto-num">2</div>
+              <div>
+                <h3>Name company → drop everything in the center</h3>
+                <p>Sidebar step 1, then use the big drop zone above. Files are saved to your company library (and Google Drive when configured).</p>
+              </div>
+            </div>
+            <div class="howto-card">
+              <div class="howto-num">3</div>
+              <div>
+                <h3>One full pass → then chat</h3>
+                <p><strong>Run Analysis → Full Report</strong> (no interruptions). Read it in the Report tab, then ask questions or change assumptions in chat and regenerate.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="feature-row">
+            <div class="feature-pill"><b>Main source</b>Your Capital IQ Excel uploads</div>
+            <div class="feature-pill"><b>Live price</b>Price sheet → NSE/BSE feed</div>
+            <div class="feature-pill"><b>Screenshots</b>Upload them so we can guide with images</div>
+            <div class="feature-pill"><b>Library</b>Reuse files next time — no re-upload</div>
+          </div>
+
+          <p class="lead" style="margin-top:0.25rem;font-size:0.8rem">After data is loaded, try asking:</p>
+          <div class="prompt-chips">
+            <span class="chip" data-prompt="What was total revenue last year?">Revenue</span>
+            <span class="chip" data-prompt="What is jewellery segment revenue?">Segments</span>
+            <span class="chip" data-prompt="What is consensus target price?">Target price</span>
+            <span class="chip" data-prompt="What is forward NTM P/E?">Forward P/E</span>
+            <span class="chip" data-prompt="Show guidance track record">Guidance vs actual</span>
+            <span class="chip" data-prompt="Show data red flags">Red flags</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="reading-answers hidden" id="reading-answers" aria-live="polite">
+        <div class="muted" style="font-size:0.7rem">Recent answers</div>
+        <div id="reading-answers-list"></div>
+      </div>
+      <div class="chat-input-bar">
+        <textarea id="chat-input" rows="1" placeholder="Ask about uploaded data…" disabled></textarea>
+        <button id="btn-send" disabled>Send</button>
+      </div>
+    </main>
+  </div>
+  <div id="src-ref-pop" class="src-ref-pop" role="dialog" aria-label="Source excerpt" hidden>
+    <div class="src-ref-h">
+      <div class="src-ref-title" id="src-ref-title">Source</div>
+      <button type="button" class="src-ref-close" id="src-ref-close" aria-label="Close">×</button>
+    </div>
+    <div class="src-ref-body" id="src-ref-body"></div>
+  </div>
+  <script src="iis-boot.js"></script>
+  <script src="static/app.js?v=0.5.39"></script>
+</body>
+</html>

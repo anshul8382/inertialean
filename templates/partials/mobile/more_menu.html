@@ -80,6 +80,11 @@
       <i class="fas fa-plus-circle"></i> New Service Ticket
     </a>
     {% endif %}
+    {% if config.get('NAV_IIS_ENABLED') and nav_can('iis_gateway.proxy') %}
+    <a href="{{ url_for('iis_gateway.proxy', path='') }}" class="im-more-menu__link">
+      <i class="fas fa-chart-line"></i> Equity research (IIS)
+    </a>
+    {% endif %}
     {% if (current_user.is_manager or has_route_access('main.practice_analytics')) and nav_can('main.practice_analytics') %}
     <a href="{{ url_for('main.practice_analytics') }}" class="im-more-menu__link">
       <i class="fas fa-chart-pie"></i> Practice Analytics

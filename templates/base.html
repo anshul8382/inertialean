@@ -290,7 +290,7 @@
                     <!-- Advisor -->
                     {% if nav_group_visible('advisor') %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('tasks.') or request.endpoint.startswith('tickets.') or request.endpoint in ('main.practice_analytics', 'main.regulatory_client_master')) %}active{% endif %}" href="#" id="advisorDropdown" role="button" data-bs-toggle="dropdown" data-bs-popper="static" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle {% if request.endpoint and (request.endpoint.startswith('tasks.') or request.endpoint.startswith('tickets.') or request.endpoint.startswith('iis_gateway.') or request.endpoint in ('main.practice_analytics', 'main.regulatory_client_master')) %}active{% endif %}" href="#" id="advisorDropdown" role="button" data-bs-toggle="dropdown" data-bs-popper="static" aria-expanded="false">
                             <i class="fas fa-user-tie"></i> Advisor
                         </a>
                         <ul class="dropdown-menu">
@@ -328,6 +328,12 @@
                             {% if nav_can('client_google_drive.list_client_drive_folders') %}
                             <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('client_google_drive.') %}active{% endif %}" href="{{ url_for('client_google_drive.list_client_drive_folders') }}">
                                 <i class="fab fa-google-drive"></i> Client Drive folders
+                            </a></li>
+                            {% endif %}
+                            {% if config.get('NAV_IIS_ENABLED') and nav_can('iis_gateway.proxy') %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item {% if request.endpoint and request.endpoint.startswith('iis_gateway.') %}active{% endif %}" href="{{ url_for('iis_gateway.proxy', path='') }}">
+                                <i class="fas fa-chart-line"></i> Equity research (IIS)
                             </a></li>
                             {% endif %}
                         </ul>

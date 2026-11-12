@@ -84,6 +84,13 @@ NAV_GROUPS: Tuple[NavGroup, ...] = (
                 "fab fa-google-drive",
                 active_match=("client_google_drive.",),
             ),
+            NavItem(
+                "iis_gateway.proxy",
+                "Equity research (IIS)",
+                "fas fa-chart-line",
+                nav_flag="NAV_IIS_ENABLED",
+                active_match=("iis_gateway.",),
+            ),
         ),
     ),
     NavGroup(

@@ -552,6 +552,7 @@ def check_csrf_exempts(agent: SecurityAuditAgent) -> List[Finding]:
         ("__init__.py", "public_contact_bp"),
         ("__init__.py", "auth_api_bp"),
         ("__init__.py", "leegality_bp"),  # HMAC mac on payload; no browser session
+        ("__init__.py", "iis_bp"),  # /iis proxy; session login_required + SSO header
         ("api/v2/transactions.py", "transactions_v2_bp"),  # JWT + auth_guard guards it
     }
     for path in agent.py_files():

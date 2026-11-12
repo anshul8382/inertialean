@@ -1,0 +1,22 @@
+[Unit]
+Description=IIS equity research (FastAPI) for Inertia
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=anshul
+Group=anshul
+WorkingDirectory=/opt/Inertia2026v1
+Environment=PATH=/opt/Inertia2026v1/venv/bin:/usr/bin
+EnvironmentFile=-/opt/Inertia2026v1/.env
+Environment=IIS_PUBLIC_BASE_PATH=/iis
+Environment=IIS_INERTIA_AUTH_ONLY=true
+Environment=IIS_AUTH_REQUIRED=true
+# Prefer IIS_SSO_SECRET from .env; fall back is handled in app if unset
+ExecStart=/opt/Inertia2026v1/venv/bin/python -m uvicorn iis.api.app:app --host 127.0.0.1 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

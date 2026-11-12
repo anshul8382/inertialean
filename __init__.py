@@ -467,6 +467,24 @@ def create_app(config_class=ProductionConfig):
         except Exception as _fp_e:
             app.logger.warning("Financial planning blueprint not registered: %s", _fp_e)
 
+    # IIS (equity research FastAPI) — proxied under /iis when IIS_ENABLED=true
+    app.config["NAV_IIS_ENABLED"] = False
+    app.config["IIS_UPSTREAM"] = os.environ.get("IIS_UPSTREAM", "http://127.0.0.1:8080")
+    app.config["IIS_SSO_TTL_SEC"] = int(os.environ.get("IIS_SSO_TTL_SEC", "3600") or 3600)
+    if os.environ.get("IIS_ENABLED", "").lower() in ("true", "1", "yes"):
+        try:
+            from routes.iis_gateway import iis_bp
+
+            app.register_blueprint(iis_bp)
+            csrf.exempt(iis_bp)  # proxied JSON/multipart API; gated by @login_required + SSO
+            app.config["NAV_IIS_ENABLED"] = True
+            app.logger.info(
+                "IIS gateway registered at /iis → %s",
+                app.config.get("IIS_UPSTREAM"),
+            )
+        except Exception as _iis_e:
+            app.logger.warning("IIS gateway not registered: %s", _iis_e)
+
     app.config["NAV_PARRVA_ENABLED"] = False
     try:
         from routes.parrva import parrva_bp
