@@ -140,6 +140,15 @@ def test_company_isin_qty_xlsx():
     assert any("AFFLE" in (ln.raw_name or "").upper() for ln in r.lines)
 
 
+
+def test_demat_allocated_xlsx():
+    r = detect_and_parse(FIXTURES / "demat_allocated_8509253663.xlsx")
+    assert r.format_id == "demat_allocated_xlsx"
+    assert len(r.lines) >= 3
+    assert any(ln.isin == "INE040A01034" for ln in r.lines)
+    assert any(ln.broker_code == "HDFBAN" for ln in r.lines)
+
+
 def test_demat_allocated_tsv_xls():
     r = detect_and_parse(FIXTURES / "demat_allocated_7500013278.xls")
     assert r.format_id == "demat_allocated_tsv"

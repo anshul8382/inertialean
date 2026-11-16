@@ -135,7 +135,8 @@ return, weight) → Preview → Approve.
 | `client_portfolio_details_xlsx` | Symbol + Comp. Name + ISIN + Holdings |
 | `portfolio_holding_statement_xlsx` | PORTFOLIO HOLDING STATEMENT (Name + ISIN + Qty) |
 | `company_isin_qty_xlsx` | Company Name + ISIN Code + Qty (+ cost/market value columns) |
-| `demat_allocated_tsv` | Demat allocated TSV/XLS (`Stock Name` + ISIN + Qty) |
+| `demat_allocated_tsv` | Demat allocated TSV/misnamed `.xls` (`Stock Name` + ISIN + Allocated Quantity) |
+| `demat_allocated_xlsx` | Same columns as real `.xlsx` (e.g. `8509253663_Demat.xlsx`) |
 | `angel_dp_pdf` | Angel One DP holding cum transaction PDF (closing balance) |
 
 Contract notes are **not** holdings ingest (optional later for diagnosis).

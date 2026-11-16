@@ -1,7 +1,8 @@
-"""Demat holdings as TSV/CSV often misnamed ``.xls``.
+"""Demat holdings: Stock Name | Stock | ISIN | Allocated Quantity | …
 
-Header: Stock Name | Stock | ISIN | Allocated Quantity | …
-(e.g. ``7500013278_Demat.xls`` — ICICI Direct-style short Stock codes).
+Supports:
+- TSV/CSV often misnamed ``.xls`` (e.g. ``7500013278_Demat.xls``)
+- Real OOXML ``.xlsx`` with the same columns (e.g. ``8509253663_Demat.xlsx``)
 """
 from __future__ import annotations
 
@@ -13,6 +14,8 @@ from typing import List, Sequence, Union
 from services.reconciliation.parsers.base import (
     ParseResult,
     StagingLine,
+    find_header_row,
+    iter_xlsx_rows,
     norm_header,
     normalize_isin,
     parse_qty,
@@ -38,10 +41,18 @@ def looks_like_demat_allocated_text(text: str) -> bool:
     return "allocated quantity" in head and "isin" in head and "stock" in head
 
 
+def can_parse_rows(rows) -> bool:
+    """True for OOXML demat allocated sheets (header often on row 0)."""
+    blob = " ".join(" ".join(str(c) for c in r) for r in rows[:8]).lower()
+    return "allocated quantity" in blob and "isin" in blob and (
+        "stock name" in blob or ("stock" in blob and "market value" in blob)
+    )
+
+
 def can_parse_path(path: Path) -> bool:
     try:
-        # Small peek — these exports are tiny text files
         raw = path.read_bytes()[:400]
+        # Real xlsx — handled via can_parse_rows in detect.py
         if raw[:2] == b"PK" or raw[:8] == b"\xd0\xcf\x11\xe0":
             return False
         text = raw.decode("utf-8", errors="replace")
@@ -50,11 +61,22 @@ def can_parse_path(path: Path) -> bool:
         return False
 
 
-def _parse_rows(rows: Sequence[Sequence[str]]) -> ParseResult:
+def _parse_rows(rows: Sequence[Sequence[str]], *, format_id: str = "demat_allocated_tsv") -> ParseResult:
     if not rows:
         raise ValueError("Empty demat allocated file")
-    header = [norm_header(c) for c in rows[0]]
-    mapping = {h: i for i, h in enumerate(header) if h}
+    # Header may not be row 0 on some exports; prefer exact allocated-quantity header
+    try:
+        hdr_i, mapping = find_header_row(rows, ["isin", "allocated quantity"])
+    except ValueError:
+        header = [norm_header(c) for c in rows[0]]
+        mapping = {h: i for i, h in enumerate(header) if h}
+        hdr_i = 0
+        if "isin" not in mapping or (
+            "allocated quantity" not in mapping
+            and "quantity" not in mapping
+            and "qty" not in mapping
+        ):
+            raise ValueError("Demat allocated needs ISIN and Allocated Quantity")
 
     def col(*names):
         for n in names:
@@ -67,12 +89,13 @@ def _parse_rows(rows: Sequence[Sequence[str]]) -> ParseResult:
     c_isin = col("isin")
     c_qty = col("allocated quantity", "quantity", "qty")
     if c_isin is None or c_qty is None:
-        raise ValueError("Demat allocated TSV needs ISIN and Allocated Quantity")
+        raise ValueError("Demat allocated needs ISIN and Allocated Quantity")
 
     lines = []
-    for row in rows[1:]:
+    for row in rows[hdr_i + 1 :]:
         if not row or not any(str(c).strip() for c in row):
             continue
+
         def cell(idx):
             if idx is None or idx >= len(row):
                 return ""
@@ -103,7 +126,7 @@ def _parse_rows(rows: Sequence[Sequence[str]]) -> ParseResult:
     if not lines:
         raise ValueError("No demat allocated holdings lines found")
     return ParseResult(
-        format_id="demat_allocated_tsv",
+        format_id=format_id,
         lines=lines,
         as_of=None,
         as_of_source=None,
@@ -118,15 +141,22 @@ def _parse_rows(rows: Sequence[Sequence[str]]) -> ParseResult:
 
 def parse(path: Union[str, Path]) -> ParseResult:
     path = Path(path)
+    raw = path.read_bytes()[:8]
+    # Real Excel OOXML
+    if raw[:2] == b"PK":
+        rows = iter_xlsx_rows(path)
+        if not can_parse_rows(rows[:8] if rows else []):
+            raise ValueError("Not a demat allocated-quantity xlsx")
+        return _parse_rows(rows, format_id="demat_allocated_xlsx")
+
     text = _read_text(path)
     if not looks_like_demat_allocated_text(text):
         raise ValueError("Not a demat allocated-quantity TSV")
-    # Prefer tab; fall back to csv sniff
     sample = text[:2048]
     try:
         dialect = csv.Sniffer().sniff(sample, delimiters="\t,;")
     except csv.Error:
         dialect = csv.excel_tab
     reader = csv.reader(io.StringIO(text), dialect)
-    rows: List[List[str]] = [list(r) for r in reader]
-    return _parse_rows(rows)
+    rows = [list(r) for r in reader]
+    return _parse_rows(rows, format_id="demat_allocated_tsv")

@@ -40,7 +40,9 @@ def detect_and_parse(path: Union[str, Path], filename: str = "") -> ParseResult:
             result = demat_allocated_tsv.parse(path)
         else:
             rows = iter_xlsx_rows(path, max_rows=25)
-            if client_portfolio_details_xlsx.can_parse_rows(rows):
+            if demat_allocated_tsv.can_parse_rows(rows):
+                result = demat_allocated_tsv.parse(path)
+            elif client_portfolio_details_xlsx.can_parse_rows(rows):
                 result = client_portfolio_details_xlsx.parse(path)
             elif portfolio_holding_statement_xlsx.can_parse_rows(rows):
                 result = portfolio_holding_statement_xlsx.parse(path)
@@ -60,6 +62,7 @@ def detect_and_parse(path: Union[str, Path], filename: str = "") -> ParseResult:
                 # try full parse in priority order
                 last_exc: Optional[Exception] = None
                 for parser in (
+                    demat_allocated_tsv,
                     client_portfolio_details_xlsx,
                     portfolio_holding_statement_xlsx,
                     company_isin_qty_xlsx,
