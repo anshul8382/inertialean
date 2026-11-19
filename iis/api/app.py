@@ -92,10 +92,7 @@ def _session_summary(session) -> dict[str, Any]:
             for a in session.assumptions
         ],
         "valuation": session.valuation.model_dump() if session.valuation else None,
-        "has_research_report": bool(
-            (session.research_report_md and len(session.research_report_md) > 200)
-            or session.research_report_path
-        ),
+        "has_research_report": _session_has_research_report(session),
         "research_report_path": session.research_report_path,
         "has_direct_llm_report": bool(
             (getattr(session, "direct_llm_report_md", None) or "")
@@ -159,9 +156,14 @@ async def iis_boot_js():
 
     base = (settings.public_base_path or "").rstrip("/")
     auth_only = "true" if settings.inertia_auth_only else "false"
+    # Prefer explicit IIS_APP_HOME_URL; else "/" when proxied under Inertia.
+    home = (settings.app_home_url or "").strip()
+    if not home and (base == "/iis" or base.endswith("/iis") or settings.inertia_auth_only):
+        home = "/"
     body = (
         f"window.IIS_BASE={base!r};\n"
         f"window.IIS_INERTIA_AUTH_ONLY={auth_only};\n"
+        f"window.IIS_APP_HOME={home!r};\n"
     )
     return Response(body, media_type="application/javascript", headers={"Cache-Control": "no-cache"})
 
@@ -490,7 +492,10 @@ async def process_files(
     section_keys = _parse_sections_form(sections, len(files))
 
     for uf in files:
-        dest = session_dir / uf.filename
+        name = Path(uf.filename or "upload.bin").name
+        if not name or name in (".", ".."):
+            name = "upload.bin"
+        dest = session_dir / name
         dest.write_bytes(await uf.read())
         saved.append(str(dest))
 
@@ -531,7 +536,8 @@ async def start_research(
 ):
     """Create a session, upload files, and ingest — one-shot research start."""
     owner = user.id if settings.auth_required else None
-    session = orch.create_session(company, owner_id=owner)
+    # When files are attached, skip Drive pull on create so upload isn't blocked / timed out.
+    session = orch.create_session(company, owner_id=owner, pull_drive=not bool(files))
 
     if files:
         session_dir = UPLOAD_DIR / session.id
@@ -539,7 +545,10 @@ async def start_research(
         saved: list[str] = []
         section_keys = _parse_sections_form(sections, len(files))
         for uf in files:
-            dest = session_dir / uf.filename
+            name = Path(uf.filename or "upload.bin").name
+            if not name or name in (".", ".."):
+                name = "upload.bin"
+            dest = session_dir / name
             dest.write_bytes(await uf.read())
             saved.append(str(dest))
         kinds = {
@@ -547,12 +556,15 @@ async def start_research(
             for p, s in zip(saved, section_keys)
             if s and s in _UI_SECTION_TO_KIND
         }
-        orch.upload_files(session.id, saved, owner_id=owner, file_kinds=kinds)
-        session = orch.ingest(session.id, owner_id=owner)
-        session = orch.get_session(session.id, owner_id=owner)
-        if not session.financial_line_items and saved:
+        try:
+            orch.upload_files(session.id, saved, owner_id=owner, file_kinds=kinds)
             session = orch.ingest(session.id, owner_id=owner)
             session = orch.get_session(session.id, owner_id=owner)
+            if not session.financial_line_items and saved:
+                session = orch.ingest(session.id, owner_id=owner)
+                session = orch.get_session(session.id, owner_id=owner)
+        except Exception as e:
+            raise HTTPException(400, f"Upload/ingest failed: {e}") from e
     else:
         # No new uploads — load persisted company library (already-saved companies)
         session = orch.get_session(session.id, owner_id=owner)
@@ -1320,29 +1332,57 @@ async def generate_note(session_id: str, user: User = Depends(get_current_user))
     }
 
 
+def _session_has_research_report(session) -> bool:
+    md = session.research_report_md or ""
+    if len(md) > 200:
+        return True
+    from iis.storage.paths import find_company_research_report, resolve_iis_path
+
+    if resolve_iis_path(session.research_report_path):
+        return True
+    return find_company_research_report(getattr(session, "company_key", None)) is not None
+
+
 def _report_markdown(session) -> tuple[str | None, str | None]:
-    """Prefer in-memory md; fall back to research_report_path on disk."""
+    """Prefer in-memory md; fall back to path (incl. Mac→server remap) or company reports/."""
+    from iis.storage.paths import find_company_research_report, resolve_iis_path
+
     md = session.research_report_md
     path = session.research_report_path
     if md and len(md.strip()) > 50:
+        # Still rewrite broken absolute paths when we can
+        resolved = resolve_iis_path(path)
+        if resolved and str(resolved) != path:
+            session.research_report_path = str(resolved)
+            try:
+                orch.store.save(session)
+            except Exception:
+                pass
+            path = str(resolved)
         return md, path
-    if path:
-        try:
-            from pathlib import Path
 
-            p = Path(path)
-            if p.is_file():
-                text = p.read_text(encoding="utf-8")
-                if text.strip():
-                    # Hydrate session so later calls / has_research_report work
-                    session.research_report_md = text
-                    try:
-                        orch.store.save(session)
-                    except Exception:
-                        pass
-                    return text, path
+    candidates = []
+    resolved = resolve_iis_path(path)
+    if resolved:
+        candidates.append(resolved)
+    company_hit = find_company_research_report(getattr(session, "company_key", None))
+    if company_hit and company_hit not in candidates:
+        candidates.append(company_hit)
+
+    for p in candidates:
+        try:
+            text = p.read_text(encoding="utf-8")
+            if not text.strip():
+                continue
+            session.research_report_md = text
+            session.research_report_path = str(p)
+            try:
+                orch.store.save(session)
+            except Exception:
+                pass
+            return text, str(p)
         except Exception:
-            pass
+            continue
     return md, path
 
 
@@ -1363,24 +1403,24 @@ async def get_research_report(session_id: str, user: User = Depends(get_current_
 
 
 def _direct_report_markdown(session) -> tuple[str | None, str | None]:
+    from iis.storage.paths import resolve_iis_path
+
     md = getattr(session, "direct_llm_report_md", None)
     path = getattr(session, "direct_llm_report_path", None)
     if md and len(md.strip()) > 50:
         return md, path
-    if path:
+    resolved = resolve_iis_path(path)
+    if resolved:
         try:
-            from pathlib import Path
-
-            p = Path(path)
-            if p.is_file():
-                text = p.read_text(encoding="utf-8")
-                if text.strip():
-                    session.direct_llm_report_md = text
-                    try:
-                        orch.store.save(session)
-                    except Exception:
-                        pass
-                    return text, path
+            text = resolved.read_text(encoding="utf-8")
+            if text.strip():
+                session.direct_llm_report_md = text
+                session.direct_llm_report_path = str(resolved)
+                try:
+                    orch.store.save(session)
+                except Exception:
+                    pass
+                return text, str(resolved)
         except Exception:
             pass
     return md, path

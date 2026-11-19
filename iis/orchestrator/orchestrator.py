@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -20,8 +21,11 @@ from iis.models.session import ResearchSession
 from iis.jobs.runner import AnalysisJobRunner
 from iis.review.gates import gate_preview
 from iis.storage.session_store import get_session_store
+from iis.storage.paths import find_company_research_report
 from iis.library.detect import company_key_from_info
 from iis.library.store import get_company_library_store
+
+logger = logging.getLogger(__name__)
 
 
 class Orchestrator:
@@ -38,7 +42,13 @@ class Orchestrator:
         self.note_agent = ResearchNoteAgent(self.llm)
         self.uia = UserInteractionAgent(self.llm)
 
-    def create_session(self, company_hint: str | None = None, owner_id: str | None = None) -> ResearchSession:
+    def create_session(
+        self,
+        company_hint: str | None = None,
+        owner_id: str | None = None,
+        *,
+        pull_drive: bool = True,
+    ) -> ResearchSession:
         session = ResearchSession(owner_id=owner_id)
         session.init_gates()
         if company_hint:
@@ -49,8 +59,16 @@ class Orchestrator:
             get_company_library_store().sync_to_session(session)
             from iis.library.reload import reload_company_from_disk
 
-            reload_summary = reload_company_from_disk(session, pull_drive=True)
-            session.add_event(EventType.PARSE, details={"auto_reload": reload_summary})
+            try:
+                reload_summary = reload_company_from_disk(session, pull_drive=pull_drive)
+                session.add_event(EventType.PARSE, details={"auto_reload": reload_summary})
+            except Exception as e:
+                # Never block Upload & Process on Drive / disk scan failures
+                logger.warning("create_session reload failed for %s: %s", company_hint, e)
+                session.add_event(
+                    EventType.PARSE,
+                    details={"auto_reload_error": str(e), "pull_drive": pull_drive},
+                )
         session.add_event(EventType.UPLOAD, details={"company_hint": company_hint, "owner_id": owner_id})
         self.store.save(session)
         return session
@@ -467,6 +485,7 @@ class Orchestrator:
                     "has_research_report": bool(
                         (s.research_report_md and len(s.research_report_md) > 200)
                         or s.research_report_path
+                        or find_company_research_report(s.company_key)
                     ),
                 }
             )

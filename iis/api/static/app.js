@@ -9,10 +9,22 @@
   let apiToken = localStorage.getItem('iis_token') || '';
   const IIS_BASE = String(window.IIS_BASE || '').replace(/\/$/, '');
   const IIS_INERTIA_AUTH_ONLY = !!window.IIS_INERTIA_AUTH_ONLY;
+  const IIS_APP_HOME = String(window.IIS_APP_HOME || '').trim();
   function apiUrl(path) {
     if (!path) return IIS_BASE || '/';
     if (/^https?:\/\//i.test(path)) return path;
     return IIS_BASE + path;
+  }
+  function wireBackToInertia() {
+    const home = IIS_APP_HOME
+      || ((IIS_BASE === '/iis' || IIS_BASE.endsWith('/iis') || IIS_INERTIA_AUTH_ONLY) ? '/' : '');
+    if (!home) return;
+    ['back-to-inertia', 'back-to-inertia-sidebar'].forEach((id) => {
+      const el = $(id);
+      if (!el) return;
+      el.href = home;
+      el.classList.add('visible');
+    });
   }
   let authRequired = false;
   let isProcessing = false;
@@ -40,6 +52,27 @@
   };
 
   // ── API ──────────────────────────────────────────────────────────
+  function formatApiError(status, statusText, raw, parsed) {
+    if (status === 413) {
+      return 'Upload too large for the server limit (try under ~100MB total, or upload fewer files).';
+    }
+    if (status === 503) {
+      const hint = (raw || '').trim();
+      if (/IIS backend is not running/i.test(hint)) {
+        return 'IIS backend is not running — start it (./scripts/run_iis_dev.sh) and retry.';
+      }
+      return hint.slice(0, 240) || 'IIS service unavailable (503)';
+    }
+    const detail = parsed && (parsed.detail ?? parsed.message ?? parsed.error);
+    if (typeof detail === 'string' && detail.trim()) return detail.trim();
+    if (detail != null) {
+      try { return JSON.stringify(detail); } catch (_) { /* ignore */ }
+    }
+    const text = (raw || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (text) return text.slice(0, 280);
+    return `${status} ${statusText || 'Request failed'}`.trim();
+  }
+
   async function api(path, opts = {}) {
     const headers = {};
     if (opts.body && !(opts.body instanceof FormData)) headers['Content-Type'] = 'application/json';
@@ -58,8 +91,10 @@
       throw new Error('Authentication required');
     }
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail));
+      const raw = await res.text().catch(() => '');
+      let parsed = null;
+      try { parsed = raw ? JSON.parse(raw) : null; } catch (_) { parsed = null; }
+      throw new Error(formatApiError(res.status, res.statusText, raw, parsed));
     }
     return res.json();
   }
@@ -2595,6 +2630,8 @@
         fd.append('sections', JSON.stringify(sectionsSnapshot));
         try {
           s = await api(`/api/sessions/${currentSession}/process`, { method: 'POST', body: fd });
+          // process returns { uploaded, session }
+          if (s && s.session && !s.id) s = s.session;
         } catch (e) {
           const fd2 = new FormData();
           filesSnapshot.forEach((f) => fd2.append('files', f));
@@ -2602,6 +2639,9 @@
           await api(`/api/sessions/${currentSession}/upload`, { method: 'POST', body: fd2 });
           s = await api(`/api/sessions/${currentSession}/ingest`, { method: 'POST' });
         }
+      }
+      if (!s || !s.id) {
+        throw new Error('Upload finished but no session was returned — check IIS backend logs.');
       }
       pendingFiles = [];
       pendingSections = [];
@@ -2778,12 +2818,26 @@
     if (READING_TABS.has(workspaceTab)) {
       appendReadingAnswer(`<div class="msg-bubble">${renderedUser}</div>`, 'user');
     }
+    let pending = null;
+    if (log) {
+      pending = document.createElement('div');
+      pending.className = 'msg bot muted';
+      pending.textContent = 'Thinking… (Hive may take up to a minute)';
+      log.appendChild(pending);
+      log.scrollTop = log.scrollHeight;
+    }
     try {
       const r = await api(`/api/sessions/${currentSession}/chat`, {
         method: 'POST',
         body: { question: text },
       });
-      const reply = renderMarkdown(r.reply || r.answer || r.message || r.response || JSON.stringify(r));
+      const rawAnswer = r.reply || r.answer || r.message || r.response || '';
+      if (pending) pending.remove();
+      if (!String(rawAnswer).trim()) {
+        addSystem('Chat returned an empty answer — try again, or open the **Report** tab.');
+        return;
+      }
+      const reply = renderMarkdown(rawAnswer);
       if (log) {
         const bot = document.createElement('div');
         bot.className = 'msg bot';
@@ -2796,6 +2850,7 @@
       await handleChatHandoff(r);
       if (r.session) await applySession(r.session);
     } catch (e) {
+      if (pending) pending.remove();
       addSystem('Chat error: ' + e.message);
     }
   }
@@ -2807,14 +2862,21 @@
       authRequired = !!h.auth_required;
       const ob = $('ollama-badge');
       if (ob) {
-        // Prefer Hive status if present
-        if (h.hive || h.llm) {
-          ob.textContent = (h.hive || h.llm) ? 'LLM ✓' : 'LLM offline';
-          ob.className = 'badge ' + ((h.hive || h.llm) ? 'ok' : 'warn');
+        const provider = String(h.llm_provider || '').toLowerCase();
+        const ok = !!(h.llm || h.hive || h.ollama);
+        if (provider === 'hive' || provider === 'thehive' || provider === 'thehive.ai') {
+          ob.textContent = ok ? 'Hive ✓' : 'Hive offline';
+          ob.title = ok
+            ? 'Hive LLM connected'
+            : 'Set IIS_HIVE_API_KEY in .env (Ollama is not used on this host)';
+        } else if (provider === 'ollama') {
+          ob.textContent = ok ? 'Ollama ✓' : 'Ollama offline';
+          ob.title = 'Local Ollama';
         } else {
-          ob.textContent = h.ollama ? 'Ollama ✓' : 'Ollama offline';
-          ob.className = 'badge ' + (h.ollama ? 'ok' : 'warn');
+          ob.textContent = ok ? 'LLM ✓' : 'LLM offline';
+          ob.title = provider ? `Provider: ${provider}` : 'LLM';
         }
+        ob.className = 'badge ' + (ok ? 'ok' : 'warn');
       }
       if (authRequired && !apiToken && !IIS_INERTIA_AUTH_ONLY) {
         setUserBadge('Sign in');
@@ -2881,6 +2943,7 @@
   }
 
   function wireUi() {
+    wireBackToInertia();
     $('user-badge')?.addEventListener('click', () => showLogin());
     $('btn-login')?.addEventListener('click', (e) => { e.preventDefault(); doLogin(); });
     $('btn-register')?.addEventListener('click', (e) => { e.preventDefault(); doRegister(); });

@@ -59,7 +59,8 @@ class Config:
     
     # File upload settings
     UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
+    # 100MB — IIS Capital IQ packs + PDFs proxy through Flask /iis (was 16MB; caused silent 413).
+    MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", 100 * 1024 * 1024))
     
     # Email configuration - Gmail SMTP (main.py overwrites these from .env; no hardcoded password)
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
@@ -71,8 +72,7 @@ class Config:
     MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', 'anshul@equities4wealth.com')
     WEBSITE_CONTACT_API_KEY = os.environ.get('WEBSITE_CONTACT_API_KEY', '')
 
-    # Parallel Lean VPS: set EMAIL_SOURCE_TAG=Lean server so DAG/app mail is distinguishable.
-    # Leave empty on BigRock production.
+    # Optional parallel-host mail prefix. Empty on the single prod server (no [KVM]/Lean] tags).
     EMAIL_SOURCE_TAG = os.environ.get('EMAIL_SOURCE_TAG', '').strip()
     # When false (default), DataIntegrityIssue does not create OpsTasks — advisor digests instead.
     DI_CREATE_OPS_TASKS = os.environ.get('DI_CREATE_OPS_TASKS', 'false').lower() in (

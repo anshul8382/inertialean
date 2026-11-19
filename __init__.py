@@ -202,7 +202,24 @@ def create_app(config_class=ProductionConfig):
     def forbidden_error(error):
         flash('You do not have permission to access this page.', 'error')
         return redirect(url_for('main.dashboard'))
-    
+
+    @app.errorhandler(413)
+    def request_entity_too_large(error):
+        # IIS uploads Capital IQ packs through /iis — return JSON the UI can show.
+        path = (request.path or "")
+        if path.startswith("/iis") or path.startswith("/api/"):
+            from flask import jsonify
+
+            max_mb = int((app.config.get("MAX_CONTENT_LENGTH") or 0) / (1024 * 1024)) or 100
+            return jsonify({
+                "detail": (
+                    f"Upload too large (server limit ~{max_mb}MB). "
+                    "Upload fewer/smaller files, or raise MAX_CONTENT_LENGTH."
+                )
+            }), 413
+        flash("File too large for upload.", "error")
+        return redirect(request.referrer or url_for("main.dashboard")), 413
+
     # Configure CSRF
     app.config['WTF_CSRF_ENABLED'] = True
     app.config['WTF_CSRF_SECRET_KEY'] = app.config['SECRET_KEY']
@@ -469,7 +486,8 @@ def create_app(config_class=ProductionConfig):
 
     # IIS (equity research FastAPI) — proxied under /iis when IIS_ENABLED=true
     app.config["NAV_IIS_ENABLED"] = False
-    app.config["IIS_UPSTREAM"] = os.environ.get("IIS_UPSTREAM", "http://127.0.0.1:8080")
+    # KVM: Airflow owns :8080 — default IIS upstream is :8090 (override with IIS_UPSTREAM).
+    app.config["IIS_UPSTREAM"] = os.environ.get("IIS_UPSTREAM", "http://127.0.0.1:8090")
     app.config["IIS_SSO_TTL_SEC"] = int(os.environ.get("IIS_SSO_TTL_SEC", "3600") or 3600)
     if os.environ.get("IIS_ENABLED", "").lower() in ("true", "1", "yes"):
         try:

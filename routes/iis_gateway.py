@@ -1,6 +1,6 @@
 """IIS gateway — Inertia session → SSO → proxy to local FastAPI IIS.
 
-Enable with IIS_ENABLED=true. Upstream defaults to http://127.0.0.1:8080.
+Enable with IIS_ENABLED=true. Upstream defaults to http://127.0.0.1:8090 (KVM; Airflow uses 8080).
 All /iis/* traffic requires an authenticated Inertia user (and normal 2FA).
 """
 from __future__ import annotations
@@ -32,7 +32,7 @@ _HOP_BY_HOP = {
 
 
 def _upstream() -> str:
-    return (current_app.config.get("IIS_UPSTREAM") or os.environ.get("IIS_UPSTREAM") or "http://127.0.0.1:8080").rstrip(
+    return (current_app.config.get("IIS_UPSTREAM") or os.environ.get("IIS_UPSTREAM") or "http://127.0.0.1:8090").rstrip(
         "/"
     )
 
